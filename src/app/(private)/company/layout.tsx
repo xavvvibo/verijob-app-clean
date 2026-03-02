@@ -1,23 +1,32 @@
 import { redirect } from "next/navigation";
-import { createServerSupabaseClient } from "@/utils/supabase/server";
+import { headers } from "next/headers";
 
-export default async function CompanyLayout({ children }: { children: React.ReactNode }) {
-  const supabase = await createServerSupabaseClient();
-  const { data: au } = await supabase.auth.getUser();
+type Props = { children: React.ReactNode };
 
-  if (!au.user) redirect("/login");
+function getOrigin() {
+  if (process.env.NEXT_PUBLIC_APP_ORIGIN) return process.env.NEXT_PUBLIC_APP_ORIGIN;
+  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  return "http://localhost:3000";
+}
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", au.user.id)
-    .maybeSingle();
+export default async function CompanyLayout({ children }: Props) {
+  const h = await headers();
+  const cookie = h.get("cookie") ?? "";
 
-  const role = (profile?.role || "").toLowerCase();
+  const res = await fetch(`${getOrigin()}/api/auth/me`, {
+    method: "GET",
+    headers: { cookie },
+    cache: "no-store",
+  });
 
-  if (role !== "company" && role !== "owner") {
-    redirect("/dashboard");
-  }
+  if (!res.ok) redirect("/login");
+
+  const json = await res.json().catch(() => null);
+  const profile = json?.profile;
+
+  // Ajusta aquí solo lo imprescindible para company area
+  if (!profile?.onboarding_completed) redirect("/onboarding");
+  if (!profile?.active_company_id) redirect("/dashboard");
 
   return <>{children}</>;
 }
