@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { Suspense } from "react";
 import "./globals.css";
 import Ga4Client from "@/components/analytics/Ga4Client";
 
@@ -22,7 +23,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="es">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        <Ga4Client />
+        <Suspense fallback={null}>
+          <Ga4Client />
+        </Suspense>
         {children}
       </body>
     </html>

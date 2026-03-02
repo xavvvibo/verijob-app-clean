@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 const STORAGE_KEY = "vj_cookie_consent_v1";
 
@@ -39,17 +39,22 @@ function loadScriptOnce(src: string, id: string) {
   document.head.appendChild(s);
 }
 
-function safePageView(path: string) {
+function safePageView() {
   if (!hasAnalyticsConsent()) return;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const w = window as any;
   if (typeof w.gtag !== "function") return;
+
+  const path =
+    typeof window !== "undefined"
+      ? `${window.location.pathname}${window.location.search || ""}`
+      : "";
+
   w.gtag("event", "page_view", { page_path: path });
 }
 
 export default function Ga4Client() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   // Bootstrap GA4 (solo prod + con consentimiento)
   useEffect(() => {
@@ -59,6 +64,7 @@ export default function Ga4Client() {
 
     const apply = () => {
       if (!hasAnalyticsConsent()) return;
+
       loadScriptOnce(
         `https://www.googletagmanager.com/gtag/js?id=${measurementId}`,
         "vj-ga4"
@@ -97,13 +103,12 @@ export default function Ga4Client() {
     };
   }, []);
 
-  // page_view en cambios de ruta
+  // page_view en cambios de ruta (sin useSearchParams para evitar prerender crash)
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") return;
-    const qs = searchParams?.toString();
-    const path = qs ? `${pathname}?${qs}` : pathname;
-    safePageView(path);
-  }, [pathname, searchParams]);
+    if (!pathname) return;
+    safePageView();
+  }, [pathname]);
 
   return null;
 }
