@@ -5,6 +5,17 @@ import { usePathname } from "next/navigation";
 
 const STORAGE_KEY = "vj_cookie_consent_v1";
 
+// F10: ID canónico (override por env si está embebida)
+const GA4_ID_FALLBACK = "G-QM2BPM7J3C";
+
+function getMeasurementId() {
+  // En cliente, process.env ya viene embebido en build si existe.
+  // Si Vercel no lo está inyectando, usamos fallback fijo.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const envId = (process as any)?.env?.NEXT_PUBLIC_GA4_ID as string | undefined;
+  return envId || GA4_ID_FALLBACK;
+}
+
 function hasAnalyticsConsent(): boolean {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -56,11 +67,11 @@ function safePageView() {
 export default function Ga4Client() {
   const pathname = usePathname();
 
-  // Bootstrap GA4 (solo prod + con consentimiento)
   useEffect(() => {
-    const measurementId = process.env.NEXT_PUBLIC_GA4_ID;
-    if (!measurementId) return;
     if (process.env.NODE_ENV !== "production") return;
+
+    const measurementId = getMeasurementId();
+    if (!measurementId) return;
 
     const apply = () => {
       if (!hasAnalyticsConsent()) return;
@@ -77,7 +88,6 @@ export default function Ga4Client() {
     const onConsent = () => apply();
     window.addEventListener("vj:consent-updated", onConsent);
 
-    // Evento mínimo: clicks a signup con role
     const onClickCapture = (ev: MouseEvent) => {
       const t = ev.target as HTMLElement | null;
       const a = t?.closest?.("a") as HTMLAnchorElement | null;
@@ -103,7 +113,6 @@ export default function Ga4Client() {
     };
   }, []);
 
-  // page_view en cambios de ruta (sin useSearchParams para evitar prerender crash)
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") return;
     if (!pathname) return;
