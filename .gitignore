@@ -40,3 +40,4 @@ FUENTES_VERIJOB/
 
 app__backup__*/
 scripts/hardening-scan.sh
+.env*.local
