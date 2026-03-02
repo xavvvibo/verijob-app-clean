@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 
 const STORAGE_KEY = "vj_cookie_consent_v1";
 
@@ -16,7 +17,6 @@ function hasAnalyticsConsent(): boolean {
 }
 
 function ensureGtag(measurementId: string) {
-  // Minimal gtag bootstrap
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const w = window as any;
   w.dataLayer = w.dataLayer || [];
@@ -39,26 +39,39 @@ function loadScriptOnce(src: string, id: string) {
   document.head.appendChild(s);
 }
 
+function safePageView(path: string) {
+  if (!hasAnalyticsConsent()) return;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const w = window as any;
+  if (typeof w.gtag !== "function") return;
+  w.gtag("event", "page_view", { page_path: path });
+}
+
 export default function Ga4Client() {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Bootstrap GA4 (solo prod + con consentimiento)
   useEffect(() => {
     const measurementId = process.env.NEXT_PUBLIC_GA4_ID;
     if (!measurementId) return;
+    if (process.env.NODE_ENV !== "production") return;
 
     const apply = () => {
       if (!hasAnalyticsConsent()) return;
-
-      loadScriptOnce(`https://www.googletagmanager.com/gtag/js?id=${measurementId}`, "vj-ga4");
+      loadScriptOnce(
+        `https://www.googletagmanager.com/gtag/js?id=${measurementId}`,
+        "vj-ga4"
+      );
       ensureGtag(measurementId);
     };
 
-    // 1) aplicar al cargar
     apply();
 
-    // 2) aplicar cuando el usuario cambie consentimiento
     const onConsent = () => apply();
     window.addEventListener("vj:consent-updated", onConsent);
 
-    // 3) Eventos mínimos: clicks a signup con role
+    // Evento mínimo: clicks a signup con role
     const onClickCapture = (ev: MouseEvent) => {
       const t = ev.target as HTMLElement | null;
       const a = t?.closest?.("a") as HTMLAnchorElement | null;
@@ -69,15 +82,11 @@ export default function Ga4Client() {
       if (!m) return;
 
       if (!hasAnalyticsConsent()) return;
-
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const w = window as any;
       if (typeof w.gtag !== "function") return;
 
-      w.gtag("event", "signup_click", {
-        role: m[1],
-        href,
-      });
+      w.gtag("event", "signup_click", { role: m[1], href });
     };
 
     document.addEventListener("click", onClickCapture, true);
@@ -87,6 +96,14 @@ export default function Ga4Client() {
       document.removeEventListener("click", onClickCapture, true);
     };
   }, []);
+
+  // page_view en cambios de ruta
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "production") return;
+    const qs = searchParams?.toString();
+    const path = qs ? `${pathname}?${qs}` : pathname;
+    safePageView(path);
+  }, [pathname, searchParams]);
 
   return null;
 }
