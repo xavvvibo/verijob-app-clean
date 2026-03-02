@@ -3,17 +3,19 @@ import { headers } from "next/headers";
 
 type Props = { children: React.ReactNode };
 
-function getOrigin() {
-  if (process.env.NEXT_PUBLIC_APP_ORIGIN) return process.env.NEXT_PUBLIC_APP_ORIGIN;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return "http://localhost:3000";
+function originFromHeaders(h: Headers) {
+  const proto = h.get("x-forwarded-proto") || "https";
+  const host = h.get("x-forwarded-host") || h.get("host");
+  if (!host) return "https://app.verijob.es";
+  return `${proto}://${host}`;
 }
 
 export default async function CompanyLayout({ children }: Props) {
   const h = await headers();
+  const origin = originFromHeaders(h);
   const cookie = h.get("cookie") ?? "";
 
-  const res = await fetch(`${getOrigin()}/api/auth/me`, {
+  const res = await fetch(`${origin}/api/auth/me`, {
     method: "GET",
     headers: { cookie },
     cache: "no-store",
@@ -21,10 +23,13 @@ export default async function CompanyLayout({ children }: Props) {
 
   if (!res.ok) redirect("/login");
 
-  const json = await res.json().catch(() => null);
-  const profile = json?.profile;
+  const json: any = await res.json().catch(() => ({}));
+  const profile =
+    json?.profile ??
+    json?.data?.profile ??
+    json?.user?.profile ??
+    json;
 
-  // Ajusta aquí solo lo imprescindible para company area
   if (!profile?.onboarding_completed) redirect("/onboarding");
   if (!profile?.active_company_id) redirect("/dashboard");
 
