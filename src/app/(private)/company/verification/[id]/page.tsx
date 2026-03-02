@@ -27,15 +27,30 @@ function Badge({ status }: { status: string }) {
 export default function CompanyVerificationDetailPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
-  const id = params.id;
+  const [id, setId] = useState<string>("");
 
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<number | null>(null);
   const [data, setData] = useState<Summary | null>(null);
 
+  // Next16 params Promise -> resolve en client
   useEffect(() => {
+    let alive = true;
+    (async () => {
+      const p = await params;
+      if (!alive) return;
+      setId(p.id);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [params]);
+
+  useEffect(() => {
+    if (!id) return;
+
     let alive = true;
 
     (async () => {
@@ -67,7 +82,6 @@ export default function CompanyVerificationDetailPage({
     };
   }, [id]);
 
-  // UX: no access = 404 screen (sin redirect)
   if (!loading && (status === 404 || status === 401)) {
     return (
       <div className="max-w-3xl mx-auto p-6 space-y-4">
@@ -90,10 +104,7 @@ export default function CompanyVerificationDetailPage({
           Ha ocurrido un error cargando la verificación.
         </p>
         <div className="flex gap-4">
-          <button
-            className="text-sm underline"
-            onClick={() => location.reload()}
-          >
+          <button className="text-sm underline" onClick={() => location.reload()}>
             Reintentar
           </button>
           <Link href="/company/requests" className="text-sm underline">
@@ -122,7 +133,7 @@ export default function CompanyVerificationDetailPage({
 
   const statusEffective = data.is_revoked
     ? "revoked"
-    : (data.status_effective || data.status || "pending");
+    : String(data.status_effective || data.status || "pending");
 
   return (
     <div className="max-w-4xl mx-auto p-6 space-y-6">
@@ -142,7 +153,7 @@ export default function CompanyVerificationDetailPage({
             </div>
           </div>
 
-          <Badge status={String(statusEffective)} />
+          <Badge status={statusEffective} />
         </div>
 
         <div className="grid grid-cols-2 gap-4 text-sm">
@@ -172,16 +183,10 @@ export default function CompanyVerificationDetailPage({
       )}
 
       <div className="flex gap-4">
-        <Link
-          href={`/api/verification/${id}/summary`}
-          className="text-sm underline"
-        >
+        <Link href={`/api/verification/${id}/summary`} className="text-sm underline">
           Ver JSON resumen
         </Link>
-        <Link
-          href={`/company/verification/${id}/evidences`}
-          className="text-sm underline"
-        >
+        <Link href={`/company/verification/${id}/evidences`} className="text-sm underline">
           Ver evidencias
         </Link>
       </div>
