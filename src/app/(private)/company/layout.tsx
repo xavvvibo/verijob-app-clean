@@ -1,37 +1,26 @@
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
+import { createServerSupabaseClient } from "@/utils/supabase/server";
 
 type Props = { children: React.ReactNode };
 
-function originFromHeaders(h: Headers) {
-  const proto = h.get("x-forwarded-proto") || "https";
-  const host = h.get("x-forwarded-host") || h.get("host");
-  if (!host) return "https://app.verijob.es";
-  return `${proto}://${host}`;
-}
+export const dynamic = "force-dynamic";
 
 export default async function CompanyLayout({ children }: Props) {
-  const h = await headers();
-  const origin = originFromHeaders(h);
-  const cookie = h.get("cookie") ?? "";
+  const supabase = await createServerSupabaseClient();
 
-  const res = await fetch(`${origin}/api/auth/me`, {
-    method: "GET",
-    headers: { cookie },
-    cache: "no-store",
-  });
+  const { data: au } = await supabase.auth.getUser();
+  if (!au.user) redirect("/login");
 
-  if (!res.ok) redirect("/login");
-
-  const json: any = await res.json().catch(() => ({}));
-  const profile =
-    json?.profile ??
-    json?.data?.profile ??
-    json?.user?.profile ??
-    json;
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("onboarding_completed, active_company_id")
+    .eq("id", au.user.id)
+    .maybeSingle();
 
   if (!profile?.onboarding_completed) redirect("/onboarding");
-  if (!profile?.active_company_id) redirect("/dashboard");
+
+  // IMPORTANTE: nunca redirigir a /dashboard desde /company
+  if (!profile?.active_company_id) redirect("/company/reuse");
 
   return <>{children}</>;
 }
