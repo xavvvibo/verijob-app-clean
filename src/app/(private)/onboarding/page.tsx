@@ -3,11 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import { vjEvents } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
 
 function isStrongEnough(pw: string) {
-  // mínimo razonable sin complicarlo (ajustable luego)
   return (pw || "").length >= 8;
 }
 
@@ -29,7 +29,6 @@ export default function OnboardingPage() {
       setErr(null);
       setLoading(true);
 
-      // 1) sesión obligatoria
       const { data: au } = await supabase.auth.getUser();
       const user = au.user;
 
@@ -38,16 +37,13 @@ export default function OnboardingPage() {
         return;
       }
 
-      // 2) si ya completó onboarding -> dashboard
       const { data: profile, error: pErr } = await supabase
         .from("profiles")
         .select("id, onboarding_completed")
         .eq("id", user.id)
         .maybeSingle();
 
-      // Si no existe profile todavía, no rebotamos: dejaremos que el submit lo marque
       if (pErr) {
-        // no bloqueamos, pero mostramos error si fuese crítico
         if (!cancelled) setErr("No se pudo leer tu perfil. Intenta recargar.");
       } else if (profile?.onboarding_completed) {
         if (!cancelled) router.replace("/dashboard");
@@ -78,7 +74,6 @@ export default function OnboardingPage() {
 
     setSaving(true);
     try {
-      // sesión obligatoria
       const { data: au } = await supabase.auth.getUser();
       const user = au.user;
       if (!user) {
@@ -86,18 +81,17 @@ export default function OnboardingPage() {
         return;
       }
 
-      // 3) set password
       const { error: upErr } = await supabase.auth.updateUser({ password: pw });
       if (upErr) throw upErr;
 
-      // 4) marcar onboarding como completado (si la fila existe)
-      // si no existe, el upsert dependerá de constraints; preferimos update best-effort
       await supabase
         .from("profiles")
         .update({ onboarding_completed: true })
         .eq("id", user.id);
 
-      // 5) salida limpia: dashboard
+      // ✅ F10 evento: onboarding completado
+      vjEvents.onboarding_completed("candidate");
+
       router.replace("/dashboard");
       router.refresh();
     } catch (e: any) {
@@ -128,7 +122,9 @@ export default function OnboardingPage() {
           <div style={{ opacity: 0.7, marginTop: 16 }}>Cargando…</div>
         ) : (
           <form onSubmit={onSubmit} style={{ marginTop: 16 }}>
-            <label style={{ display: "block", fontSize: 13, marginBottom: 6 }}>Contraseña</label>
+            <label style={{ display: "block", fontSize: 13, marginBottom: 6 }}>
+              Contraseña
+            </label>
             <input
               type="password"
               value={pw}
@@ -143,7 +139,9 @@ export default function OnboardingPage() {
               }}
             />
 
-            <label style={{ display: "block", fontSize: 13, marginBottom: 6 }}>Repite contraseña</label>
+            <label style={{ display: "block", fontSize: 13, marginBottom: 6 }}>
+              Repite contraseña
+            </label>
             <input
               type="password"
               value={pw2}
@@ -159,7 +157,15 @@ export default function OnboardingPage() {
             />
 
             {err ? (
-              <div style={{ background: "#fff1f1", border: "1px solid #ffd1d1", padding: 10, borderRadius: 10, marginBottom: 12 }}>
+              <div
+                style={{
+                  background: "#fff1f1",
+                  border: "1px solid #ffd1d1",
+                  padding: 10,
+                  borderRadius: 10,
+                  marginBottom: 12,
+                }}
+              >
                 <div style={{ color: "#a40000", fontSize: 13 }}>{err}</div>
               </div>
             ) : null}
