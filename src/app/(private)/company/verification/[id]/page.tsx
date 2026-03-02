@@ -1,106 +1,139 @@
-import { createClient } from "@/utils/supabase/server";
-import { redirect } from "next/navigation";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { createServerClient } from "@/utils/supabase/server";
 
-export default async function CompanyVerificationDetail(
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const { id } = await params;
+export default async function CompanyVerificationDetail({
+  params,
+}: {
+  params: { id: string };
+}) {
+  const supabase = createServerClient();
 
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
+  // 1. Auth
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
+  if (!user) notFound();
+
+  // 2. Profile (role + active_company_id)
   const { data: profile } = await supabase
     .from("profiles")
-    .select("active_company_id, onboarding_completed")
+    .select("role, active_company_id")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
-  if (!profile?.onboarding_completed) redirect("/onboarding");
-  if (!profile?.active_company_id) redirect("/dashboard");
+  if (!profile || profile.role !== "company" || !profile.active_company_id) {
+    notFound();
+  }
 
-  const { data } = await supabase
+  // 3. Fetch verification summary
+  const { data: summary } = await supabase
     .from("verification_summary")
     .select("*")
-    .eq("verification_id", id)
-    .eq("company_id", profile.active_company_id)
-    .single();
+    .eq("verification_id", params.id)
+    .maybeSingle();
 
-  if (!data) redirect("/company/requests");
+  if (!summary) notFound();
 
-  const canReuse =
-    data.status_effective === "verified" &&
-    data.is_revoked === false;
+  // 4. HARD GUARD → company ownership
+  if (summary.company_id !== profile.active_company_id) {
+    notFound();
+  }
+
+  const statusEffective =
+    summary.is_revoked
+      ? "revoked"
+      : summary.status_effective || summary.status;
+
+  function statusBadge(status: string) {
+    const map: Record<string, string> = {
+      approved: "bg-green-100 text-green-800",
+      verified: "bg-green-100 text-green-800",
+      rejected: "bg-red-100 text-red-800",
+      pending: "bg-yellow-100 text-yellow-800",
+      revoked: "bg-gray-200 text-gray-800",
+    };
+    return map[status] || "bg-gray-100 text-gray-700";
+  }
 
   return (
-    <div style={{ padding: 32, maxWidth: 900 }}>
-      <h1 style={{ fontSize: 24, marginBottom: 12 }}>
-        Verificación {data.verification_id.slice(0, 8)}
-      </h1>
-
-      <div style={{
-        display: "inline-block",
-        padding: "6px 12px",
-        borderRadius: 8,
-        fontWeight: 600,
-        marginBottom: 20,
-        background:
-          data.status_effective === "verified" ? "#DCFCE7" :
-          data.status_effective === "reviewing" ? "#FEF9C3" :
-          data.status_effective === "revoked" ? "#FEE2E2" :
-          "#E5E7EB"
-      }}>
-        Estado: {data.status_effective}
+    <div className="max-w-4xl mx-auto p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">
+          Detalle de verificación
+        </h1>
+        <Link
+          href="/company/requests"
+          className="text-sm underline text-gray-600"
+        >
+          ← Volver a solicitudes
+        </Link>
       </div>
 
-      {data.is_revoked && (
-        <div style={{
-          marginBottom: 20,
-          padding: 16,
-          borderRadius: 8,
-          background: "#FEE2E2",
-          border: "1px solid #FCA5A5"
-        }}>
-          <strong>Verificación revocada</strong>
-          <div style={{ marginTop: 8 }}>
-            Motivo: {data.revoked_reason || "No especificado"}
+      <div className="border rounded-xl p-6 space-y-4 shadow-sm bg-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-sm text-gray-500">
+              Empresa
+            </div>
+            <div className="font-medium">
+              {summary.company_name_freeform}
+            </div>
+          </div>
+
+          <span
+            className={`px-3 py-1 text-xs font-medium rounded-full ${statusBadge(
+              statusEffective
+            )}`}
+          >
+            {statusEffective?.toUpperCase()}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <div className="text-gray-500">Posición</div>
+            <div>{summary.position}</div>
           </div>
           <div>
-            Fecha: {data.revoked_at}
+            <div className="text-gray-500">Periodo</div>
+            <div>
+              {summary.start_date} — {summary.end_date || "Actual"}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {summary.is_revoked && (
+        <div className="border border-gray-300 bg-gray-50 rounded-xl p-4 space-y-2">
+          <div className="font-semibold text-gray-800">
+            Verificación revocada
+          </div>
+          <div className="text-sm text-gray-600">
+            Motivo: {summary.revoked_reason || "No especificado"}
+          </div>
+          <div className="text-xs text-gray-500">
+            Revocada en: {summary.revoked_at}
           </div>
         </div>
       )}
 
-      <div style={{ marginBottom: 24 }}>
-        <h3>Datos principales</h3>
-        <p><strong>Puesto:</strong> {data.position || "-"}</p>
-        <p><strong>Inicio:</strong> {data.start_date || "-"}</p>
-        <p><strong>Fin:</strong> {data.end_date || "-"}</p>
-        <p><strong>Nivel:</strong> {data.verification_level}</p>
-      </div>
+      <div className="flex gap-4">
+        <Link
+          href={`/api/verification/${params.id}/summary`}
+          className="text-sm underline"
+        >
+          Ver JSON resumen
+        </Link>
 
-      <div style={{ marginBottom: 24 }}>
-        <h3>Evidencias</h3>
-        <p>{data.evidence_count} documentos asociados</p>
+        <Link
+          href={`/company/verification/${params.id}/evidences`}
+          className="text-sm underline"
+        >
+          Ver evidencias
+        </Link>
       </div>
-
-      {canReuse && (
-        <form action="/api/company/reuse" method="POST">
-          <input type="hidden" name="verification_id" value={data.verification_id} />
-          <button
-            style={{
-              padding: "10px 18px",
-              borderRadius: 8,
-              background: "#111827",
-              color: "white",
-              border: "none",
-              cursor: "pointer"
-            }}
-          >
-            Reutilizar verificación
-          </button>
-        </form>
-      )}
     </div>
   );
 }
