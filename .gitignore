@@ -1,0 +1,42 @@
+node_modules
+.next
+dist
+out
+.vercel
+
+# env / secrets
+.env
+.env.*
+*_env_*
+**/*_env_*
+**/.env*
+**/*secret*
+**/*key*
+**/*token*
+**/*service_role*
+**/*stripe*
+
+# backups / basura
+*.bak
+*.bak.*
+*.bak_*
+*.bk_*
+_bk_*
+**/*.bak
+**/*.bak.*
+**/*.bak_*
+**/*.bk_*
+**/_bk_*
+
+# caches / trash
+_trash_*
+**/_trash_*
+**/dev/cache/**
+**/.turbo/**
+**/turbopack/**
+
+# fuentes / dumps (no deben ir en el repo app)
+FUENTES_VERIJOB/
+
+app__backup__*/
+scripts/hardening-scan.sh
