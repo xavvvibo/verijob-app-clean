@@ -49,7 +49,7 @@ function CallbackInner() {
 
       const supabase = createClient(url, key);
 
-      // 1) Si hay code, usa PKCE exchange
+      // PKCE code flow
       if (code) {
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (error) {
@@ -60,15 +60,21 @@ function CallbackInner() {
         return;
       }
 
-      // 2) Si hay tokens en hash (tu caso), setSession
+      // Hash tokens flow -> set cookies via server endpoint (para SSR)
       if (tokens) {
-        const { error } = await supabase.auth.setSession(tokens);
-        if (error) {
-          setFailDebug(`setSession_failed&err=${encodeURIComponent(error.message)}&${diag}`);
+        const r = await fetch("/api/auth/session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(tokens),
+        });
+
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          setFailDebug(`session_cookie_failed&err=${encodeURIComponent(j?.error || "unknown")}&${diag}`);
           return;
         }
 
-        // Limpia hash para que no se re-procese si refrescas
+        // Limpia hash para evitar re-proceso
         if (typeof window !== "undefined" && window.location.hash) {
           history.replaceState(null, "", window.location.pathname + window.location.search);
         }
