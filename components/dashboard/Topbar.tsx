@@ -31,6 +31,7 @@ export default function Topbar({ role, name }: { role: string; name: string }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
           <div style={{ fontWeight: 800, color: "var(--vj-ink)" }}>Dashboard</div>
+          <div style={{ fontSize: 11, opacity: 0.55, marginTop: 2 }}>TB-v1</div>
           <div className="vj-muted" style={{ fontSize: 13 }}>
             {name} · <span style={{ color: "var(--vj-brand)", fontWeight: 700 }}>{role}</span>
           </div>
