@@ -1,24 +1,23 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
-
-export const dynamic = "force-dynamic";
+import { createServerSupabaseClient } from "@/utils/supabase/server";
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
-  const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/dashboard";
+  const url = new URL(request.url);
+  const origin = url.origin;
 
-  if (!code) {
-    return NextResponse.redirect(`${origin}/login?error=missing_code`);
-  }
+  const code = url.searchParams.get("code");
+  const next = url.searchParams.get("next") ?? "/dashboard";
 
-  const supabase = await createClient();
+  const supabase = await createServerSupabaseClient();
+
+  // Si ya hay sesión, NO muestres error aunque venga basura en la URL
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) return NextResponse.redirect(new URL(next, origin));
+
+  if (!code) return NextResponse.redirect(new URL("/login?error=auth_failed", origin));
 
   const { error } = await supabase.auth.exchangeCodeForSession(code);
+  if (error) return NextResponse.redirect(new URL("/login?error=auth_failed", origin));
 
-  if (error) {
-    return NextResponse.redirect(`${origin}/login?error=auth_failed`);
-  }
-
-  return NextResponse.redirect(`${origin}${next}`);
+  return NextResponse.redirect(new URL(next, origin));
 }
