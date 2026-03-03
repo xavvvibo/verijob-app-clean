@@ -15,6 +15,16 @@ function s(v: any) {
   return String(v ?? "").trim();
 }
 
+function supaErr(e: any) {
+  if (!e) return null;
+  return {
+    message: e.message,
+    code: e.code,
+    details: e.details,
+    hint: e.hint,
+  };
+}
+
 export async function POST(req: Request) {
   const supabase = await createClient();
   const { data: au } = await supabase.auth.getUser();
@@ -40,37 +50,51 @@ export async function POST(req: Request) {
   if (!position) return json(400, { error: "Falta position" });
   if (!start_date) return json(400, { error: "Falta start_date" });
 
-  // Service-role para evitar sorpresas de RLS (guardado por auth en API)
-  const service = createServiceRoleClient();
+  try {
+    // Service-role para evitar sorpresas de RLS
+    const service = createServiceRoleClient();
 
-  // 1) employment_records
-  const { data: er, error: erErr } = await service
-    .from("employment_records")
-    .insert({
-      candidate_id: user.id,
-      company_name_freeform,
-      position,
-      start_date,
-      end_date,
-    })
-    .select("id")
-    .single();
+    // 1) employment_records
+    const { data: er, error: erErr } = await service
+      .from("employment_records")
+      .insert({
+        candidate_id: user.id,
+        company_name_freeform,
+        position,
+        start_date,
+        end_date,
+      })
+      .select("id")
+      .single();
 
-  if (erErr) return json(400, { error: "Insert employment_records failed", details: erErr });
+    if (erErr) {
+      return json(400, {
+        error: "Insert employment_records failed",
+        debug: supaErr(erErr),
+      });
+    }
 
-  // 2) verification_requests
-  const { data: vr, error: vrErr } = await service
-    .from("verification_requests")
-    .insert({
-      employment_record_id: er.id,
-      requested_by: user.id,
-      status: "pending",
-      submitted_at: new Date().toISOString(),
-    })
-    .select("id")
-    .single();
+    // 2) verification_requests
+    const { data: vr, error: vrErr } = await service
+      .from("verification_requests")
+      .insert({
+        employment_record_id: er.id,
+        requested_by: user.id,
+        status: "pending",
+        submitted_at: new Date().toISOString(),
+      })
+      .select("id")
+      .single();
 
-  if (vrErr) return json(400, { error: "Insert verification_requests failed", details: vrErr });
+    if (vrErr) {
+      return json(400, {
+        error: "Insert verification_requests failed",
+        debug: supaErr(vrErr),
+      });
+    }
 
-  return json(200, { ok: true, verification_id: vr.id, employment_record_id: er.id });
+    return json(200, { ok: true, verification_id: vr.id, employment_record_id: er.id });
+  } catch (e: any) {
+    return json(500, { error: "Server exception", debug: String(e?.message || e) });
+  }
 }
