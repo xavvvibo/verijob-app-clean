@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { vjEvents } from "@/lib/analytics";
 
 export default function SignupClient() {
   const [email, setEmail] = useState("");
@@ -26,6 +27,9 @@ export default function SignupClient() {
         return;
       }
 
+      // ✅ F10 evento: signup (en nuestro flujo actual = magic link enviado)
+      vjEvents.signup("candidate");
+
       setMsg("Enlace enviado. Revisa tu email.");
     } catch {
       setMsg("Error inesperado enviando enlace");
@@ -37,7 +41,9 @@ export default function SignupClient() {
   return (
     <form onSubmit={submit} style={{ padding: 24, maxWidth: 420 }}>
       <h1 style={{ margin: 0, fontSize: 22 }}>Crear cuenta</h1>
-      <p style={{ marginTop: 8, color: "#444" }}>Te enviaremos un enlace para confirmar.</p>
+      <p style={{ marginTop: 8, color: "#444" }}>
+        Te enviaremos un enlace para confirmar.
+      </p>
 
       <div style={{ marginTop: 14 }}>
         <input
@@ -46,7 +52,12 @@ export default function SignupClient() {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="tu@email.com"
           required
-          style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
+          style={{
+            width: "100%",
+            padding: 10,
+            borderRadius: 10,
+            border: "1px solid #ccc",
+          }}
         />
       </div>
 
@@ -65,7 +76,9 @@ export default function SignupClient() {
         {loading ? "Enviando…" : "Enviar magic link"}
       </button>
 
-      {msg && <p style={{ marginTop: 12, fontSize: 13, color: "#333" }}>{msg}</p>}
+      {msg && (
+        <p style={{ marginTop: 12, fontSize: 13, color: "#333" }}>{msg}</p>
+      )}
     </form>
   );
 }

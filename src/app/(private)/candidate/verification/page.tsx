@@ -1,15 +1,10 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { trackEvent } from "@/lib/analytics";
 
-const ALLOWED_MIME = [
-  "application/pdf",
-  "image/jpeg",
-  "image/png",
-];
-
+const ALLOWED_MIME = ["application/pdf", "image/jpeg", "image/png"];
 const MAX_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
 
 type UploadItem = {
@@ -19,19 +14,13 @@ type UploadItem = {
 };
 
 export default function CandidateVerificationPage() {
-  const supabase = useMemo(() => createClient(), []);
+  useMemo(() => createClient(), []); // mantenemos el client listo (aunque aquí no lo uses aún)
   const [files, setFiles] = useState<UploadItem[]>([]);
   const [globalError, setGlobalError] = useState<string | null>(null);
 
   function validateFile(file: File): string | null {
-    if (!ALLOWED_MIME.includes(file.type)) {
-      return "Tipo no permitido. Solo PDF, JPG o PNG.";
-    }
-
-    if (file.size > MAX_SIZE_BYTES) {
-      return "Archivo demasiado grande. Máximo 10MB.";
-    }
-
+    if (!ALLOWED_MIME.includes(file.type)) return "Tipo no permitido. Solo PDF, JPG o PNG.";
+    if (file.size > MAX_SIZE_BYTES) return "Archivo demasiado grande. Máximo 10MB.";
     return null;
   }
 
@@ -39,25 +28,15 @@ export default function CandidateVerificationPage() {
     if (!selected) return;
 
     setGlobalError(null);
-
     const newItems: UploadItem[] = [];
 
     for (const file of Array.from(selected)) {
       const validationError = validateFile(file);
-
       if (validationError) {
-        newItems.push({
-          file,
-          status: "error",
-          error: validationError,
-        });
+        newItems.push({ file, status: "error", error: validationError });
         continue;
       }
-
-      newItems.push({
-        file,
-        status: "queued",
-      });
+      newItems.push({ file, status: "queued" });
     }
 
     setFiles((prev) => [...prev, ...newItems]);
@@ -82,7 +61,7 @@ export default function CandidateVerificationPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Error creando URL subida");
       }
 
@@ -90,30 +69,31 @@ export default function CandidateVerificationPage() {
 
       const uploadRes = await fetch(signedUrl, {
         method: "PUT",
-        headers: {
-          "Content-Type": item.file.type,
-        },
+        headers: { "Content-Type": item.file.type },
         body: item.file,
       });
 
-      if (!uploadRes.ok) {
-        throw new Error("Error subiendo archivo");
-      }
+      if (!uploadRes.ok) throw new Error("Error subiendo archivo");
 
       updated[index].status = "uploaded";
       setFiles([...updated]);
+
+      // ✅ F10 evento: evidence_uploaded (por ahora sin verification_id; añadiremos ID cuando el flujo lo exponga)
+      trackEvent("evidence_uploaded", {
+        file_name: item.file.name,
+        file_type: item.file.type,
+        file_size: item.file.size,
+      });
     } catch (err: any) {
       updated[index].status = "error";
-      updated[index].error = err.message;
+      updated[index].error = err?.message || "Error";
       setFiles([...updated]);
     }
   }
 
   return (
     <div className="max-w-2xl mx-auto py-10">
-      <h1 className="text-2xl font-semibold mb-6">
-        Subir evidencias
-      </h1>
+      <h1 className="text-2xl font-semibold mb-6">Subir evidencias</h1>
 
       <input
         type="file"
@@ -123,52 +103,30 @@ export default function CandidateVerificationPage() {
         className="mb-6"
       />
 
-      {globalError && (
-        <div className="text-red-600 mb-4">{globalError}</div>
-      )}
+      {globalError && <div className="text-red-600 mb-4">{globalError}</div>}
 
       <div className="space-y-4">
         {files.map((item, index) => (
-          <div
-            key={index}
-            className="border p-4 rounded flex justify-between items-center"
-          >
+          <div key={index} className="border p-4 rounded flex justify-between items-center">
             <div>
               <div className="font-medium">{item.file.name}</div>
               <div className="text-sm text-gray-500">
                 {(item.file.size / 1024 / 1024).toFixed(2)} MB
               </div>
-              {item.error && (
-                <div className="text-sm text-red-600 mt-1">
-                  {item.error}
-                </div>
-              )}
+              {item.error && <div className="text-sm text-red-600 mt-1">{item.error}</div>}
             </div>
 
             {item.status === "queued" && (
-              <button
-                onClick={() => uploadFile(item, index)}
-                className="px-4 py-2 bg-black text-white rounded"
-              >
+              <button onClick={() => uploadFile(item, index)} className="px-4 py-2 bg-black text-white rounded">
                 Subir
               </button>
             )}
 
-            {item.status === "uploading" && (
-              <span className="text-sm">Subiendo...</span>
-            )}
+            {item.status === "uploading" && <span className="text-sm">Subiendo...</span>}
 
-            {item.status === "uploaded" && (
-              <span className="text-green-600 text-sm">
-                Subido
-              </span>
-            )}
+            {item.status === "uploaded" && <span className="text-green-600 text-sm">Subido</span>}
 
-            {item.status === "error" && !item.error && (
-              <span className="text-red-600 text-sm">
-                Error
-              </span>
-            )}
+            {item.status === "error" && !item.error && <span className="text-red-600 text-sm">Error</span>}
           </div>
         ))}
       </div>

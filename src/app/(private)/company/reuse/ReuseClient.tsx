@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import { vjEvents } from "@/lib/analytics";
 
 type PublicResponse = {
   verification_id: string;
@@ -32,12 +33,12 @@ export default function ReuseClient() {
           return;
         }
 
-        // Si esta pantalla requiere sesión, lo comprobamos aquí.
-        // (Si NO quieres sesión, dime y lo cambio)
         const supabase = createClient();
         const { data: au } = await supabase.auth.getUser();
         if (!au.user) {
-          router.replace(`/login?next=/company/reuse?id=${encodeURIComponent(verificationId)}`);
+          router.replace(
+            `/login?next=/company/reuse?id=${encodeURIComponent(verificationId)}`
+          );
           return;
         }
 
@@ -51,6 +52,9 @@ export default function ReuseClient() {
         if (!res.ok) {
           throw new Error(json?.error || "No se pudo generar el link reutilizable");
         }
+
+        // ✅ F10 evento: reuse_imported (source_verification_id)
+        vjEvents.reuse_imported(verificationId);
 
         if (!cancelled) setData(json);
       } catch (e: any) {
@@ -76,15 +80,16 @@ export default function ReuseClient() {
         <div className="text-sm text-red-600">{err}</div>
       ) : data ? (
         <div className="space-y-2">
-          <div className="text-sm text-gray-700">
-            Enlace público generado:
-          </div>
-          <a className="text-sm underline" href={data.url} target="_blank" rel="noreferrer">
+          <div className="text-sm text-gray-700">Enlace público generado:</div>
+          <a
+            className="text-sm underline"
+            href={data.url}
+            target="_blank"
+            rel="noreferrer"
+          >
             {data.url}
           </a>
-          <div className="text-xs text-gray-500">
-            Token: {data.token}
-          </div>
+          <div className="text-xs text-gray-500">Token: {data.token}</div>
         </div>
       ) : (
         <div className="text-sm text-gray-600">Sin datos.</div>
