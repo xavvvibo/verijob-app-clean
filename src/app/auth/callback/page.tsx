@@ -42,6 +42,7 @@ function CallbackInner() {
         `has_hash_tokens=${tokens ? "1" : "0"}`,
         `has_env_url=${url ? "1" : "0"}`,
         `has_env_key=${key ? "1" : "0"}`,
+        `code_len=${code ? String(code.length) : "0"}`,
         `next=${encodeURIComponent(next)}`,
       ].join("&");
 
@@ -57,7 +58,8 @@ function CallbackInner() {
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
-            setDebug(`exchange_failed&${diag}`);
+            const e = `exchange_failed&err=${encodeURIComponent(String(error.message || error))}&${diag}`;
+            setDebug(e);
             setStatus("fail");
             return;
           }
@@ -69,7 +71,8 @@ function CallbackInner() {
         if (tokens) {
           const { error } = await supabase.auth.setSession(tokens);
           if (error) {
-            setDebug(`setSession_failed&${diag}`);
+            const e = `setSession_failed&err=${encodeURIComponent(String(error.message || error))}&${diag}`;
+            setDebug(e);
             setStatus("fail");
             return;
           }
@@ -80,8 +83,8 @@ function CallbackInner() {
 
         setDebug(`no_code_no_hash&${diag}`);
         setStatus("fail");
-      } catch {
-        setDebug(`unexpected&${diag}`);
+      } catch (err) {
+        setDebug(`unexpected&err=${encodeURIComponent(String(err))}&${diag}`);
         setStatus("fail");
       }
     };
@@ -95,9 +98,7 @@ function CallbackInner() {
       <div className="min-h-[60vh] flex items-center justify-center p-6">
         <div className="max-w-xl w-full rounded-lg border border-gray-200 bg-white p-4 text-sm">
           <div className="font-medium mb-2">Auth callback: fallo</div>
-          <div className="text-gray-600 mb-3">
-            Copia este debug y pégamelo tal cual:
-          </div>
+          <div className="text-gray-600 mb-3">Copia este debug y pégamelo tal cual:</div>
           <pre className="rounded bg-gray-50 p-3 overflow-auto border border-gray-200">{debug}</pre>
           <div className="mt-4 flex gap-3">
             <button
