@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { createBrowserClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 
 function LoginInner() {
   const searchParams = useSearchParams();
@@ -14,11 +14,11 @@ function LoginInner() {
   const errorParam = searchParams.get("error");
   const debugParam = searchParams.get("debug");
 
-  const redirectTo = useMemo(() => {
-    const origin =
-      typeof window !== "undefined" ? window.location.origin : "https://app.verijob.es";
-    return `${origin}/auth/callback?next=%2Fdashboard`;
+  const origin = useMemo(() => {
+    return typeof window !== "undefined" ? window.location.origin : "https://app.verijob.es";
   }, []);
+
+  const redirectTo = useMemo(() => `${origin}/auth/callback?next=%2Fdashboard`, [origin]);
 
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -26,16 +26,14 @@ function LoginInner() {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
       process.env.NEXT_PUBLIC_SUPABASE_KEY ||
       "";
-    return createBrowserClient(url, key);
+    return createClient(url, key);
   }, []);
 
   useEffect(() => {
-    // Si venimos con error, resetea estados
     if (errorParam) {
       setSent(false);
       setBusy(false);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [errorParam]);
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -51,7 +49,6 @@ function LoginInner() {
 
     setBusy(true);
     try {
-      // CLAVE: iniciar PKCE en ESTE navegador (guarda code_verifier)
       const { error } = await supabase.auth.signInWithOtp({
         email: v,
         options: { emailRedirectTo: redirectTo },
