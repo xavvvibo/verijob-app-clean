@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { createClient } from "@/utils/supabase/browser";
 
 export default function LoginClient() {
   const sp = useSearchParams();
@@ -25,15 +26,16 @@ export default function LoginClient() {
 
     setLoading(true);
     try {
-      const res = await fetch("/api/auth/magic-link", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email: v, next }),
+      const supabase = createClient();
+      const redirectTo = `${location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+
+      const { error } = await supabase.auth.signInWithOtp({
+        email: v,
+        options: { emailRedirectTo: redirectTo },
       });
 
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(json?.error ?? "No se pudo enviar el enlace.");
+      if (error) {
+        setError(error.message);
         return;
       }
 
@@ -74,7 +76,7 @@ export default function LoginClient() {
 
           {sent ? (
             <div className="rounded-xl bg-green-50 border border-green-100 p-3 text-sm text-green-700">
-              Enlace enviado. Abre tu email en este mismo navegador y completa el acceso.
+              Enlace enviado. Abre el email en este mismo navegador y completa el acceso.
             </div>
           ) : null}
 
