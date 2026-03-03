@@ -44,8 +44,7 @@ function RingNoNumber({ score }: { score: number }) {
         />
       </svg>
 
-      {/* Sin número: solo nivel + microcopy */}
-      <div className="absolute text-center px-6">
+      <div className="absolute text-center px-8">
         <div className={`inline-flex px-3 py-1 rounded-full border text-xs font-semibold ${tone.badge}`}>
           {tone.label}
         </div>
@@ -62,16 +61,18 @@ function Card({
   subtitle,
   right,
   children,
+  className = "",
 }: {
   title?: string;
   subtitle?: string;
   right?: React.ReactNode;
   children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-3xl shadow-sm">
+    <div className={`bg-white border border-gray-200 rounded-3xl shadow-sm ${className}`}>
       {(title || subtitle || right) ? (
-        <div className="px-6 pt-6 flex items-start justify-between gap-4">
+        <div className="px-7 pt-7 flex items-start justify-between gap-4">
           <div>
             {title ? <div className="text-sm font-semibold text-gray-900">{title}</div> : null}
             {subtitle ? <div className="mt-1 text-sm text-gray-500">{subtitle}</div> : null}
@@ -79,19 +80,16 @@ function Card({
           {right ? <div className="shrink-0">{right}</div> : null}
         </div>
       ) : null}
-      <div className={(title || subtitle || right) ? "px-6 pb-6 pt-4" : "p-6"}>
-        {children}
-      </div>
+      <div className={(title || subtitle || right) ? "px-7 pb-7 pt-4" : "p-7"}>{children}</div>
     </div>
   );
 }
 
-function Stat({ label, value, hint }: { label: string; value: any; hint?: string }) {
+function Stat({ label, value }: { label: string; value: any }) {
   return (
     <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
       <div className="text-xs text-gray-500">{label}</div>
       <div className="mt-2 text-2xl font-semibold text-gray-900 tabular-nums">{value}</div>
-      {hint ? <div className="mt-2 text-xs text-gray-500">{hint}</div> : null}
     </div>
   );
 }
@@ -111,32 +109,19 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
-function ActionCard({
-  title,
-  desc,
-  cta,
-  tone = "primary",
-}: {
-  title: string;
-  desc: string;
-  cta: string;
-  tone?: "primary" | "ghost";
-}) {
-  const btn =
-    tone === "primary"
-      ? "bg-blue-600 text-white hover:bg-blue-700"
-      : "border border-gray-300 text-gray-700 hover:bg-gray-50";
-
+function PrimaryButton({ children }: { children: React.ReactNode }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm flex items-start justify-between gap-5">
-      <div>
-        <div className="text-sm font-semibold text-gray-900">{title}</div>
-        <div className="mt-2 text-sm text-gray-500">{desc}</div>
-      </div>
-      <button className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${btn}`}>
-        {cta}
-      </button>
-    </div>
+    <button className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition">
+      {children}
+    </button>
+  );
+}
+
+function SecondaryButton({ children }: { children: React.ReactNode }) {
+  return (
+    <button className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50 transition">
+      {children}
+    </button>
   );
 }
 
@@ -168,14 +153,14 @@ export default function CandidateOverview() {
         if (!cancelled) setLoadingProfile(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+
+    return () => { cancelled = true; };
   }, []);
 
-  // MOCK PRO (siguiente paso: conectamos a verification_summary real)
+  // Mock pro (siguiente paso: conectar a verification_summary real)
   const score = 82;
-  const stats = { active: 3, pending: 1, views30d: 18, shares30d: 5, avgValidation: "2.8 días" };
+  const metrics = { active: 3, pending: 1, views30d: 18, shares30d: 5, avgValidation: "2.8 días" };
+
   const experiences = [
     { company: "Restaurante Central", role: "Camarero", dates: "2023 — 2025", status: "Verificado" },
     { company: "Hotel Sol", role: "Ayudante de sala", dates: "2022 — 2023", status: "En revisión" },
@@ -188,7 +173,7 @@ export default function CandidateOverview() {
 
   const headline = useMemo(() => {
     if (score >= 85) return "Perfil listo para procesos de selección exigentes.";
-    if (score >= 70) return "Muy buen nivel. Completa 1 verificación más para subir al máximo.";
+    if (score >= 70) return "Buen nivel. Completa 1 verificación más para subir al máximo.";
     if (score >= 40) return "Ya estás verificado. Consolidemos con evidencias consistentes.";
     return "Empieza por tu experiencia más reciente.";
   }, [score]);
@@ -202,7 +187,7 @@ export default function CandidateOverview() {
       <div className="relative px-8 py-10">
         <div className="max-w-7xl mx-auto space-y-10">
 
-          {/* Header “company-like” */}
+          {/* HEADER (limpio, como company) */}
           <div className="flex flex-col lg:flex-row items-start justify-between gap-6">
             <div>
               <div className="text-sm text-gray-500">Dashboard candidato</div>
@@ -216,76 +201,81 @@ export default function CandidateOverview() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3">
-              <button className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition">
-                Añadir verificación
-              </button>
-              <button className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50 transition">
-                Compartir perfil
-              </button>
-              <button className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50 transition">
-                CV verificado (próximo)
-              </button>
+              <PrimaryButton>Añadir verificación</PrimaryButton>
+              <SecondaryButton>Compartir perfil</SecondaryButton>
+              <SecondaryButton>CV verificado (próximo)</SecondaryButton>
             </div>
           </div>
 
-          {/* Hero: Ring + Identidad + Next best action */}
-          <Card>
-            <div className="p-8 lg:p-10 grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-              <div className="lg:col-span-7">
-                <RingNoNumber score={score} />
-              </div>
+          {/* HERO centrado (identidad + scoring + CTA) */}
+          <Card className="overflow-hidden">
+            <div className="p-8 lg:p-10">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
 
-              <div className="lg:col-span-5 space-y-6">
-                <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
-                  <div className="text-sm font-semibold text-gray-900">Identidad</div>
-                  <div className="mt-4">
-                    <AvatarUploader
-                      currentUrl={profile.avatar_url ?? null}
-                      fallbackName={name}
-                      onUpdated={(url) => setProfile((p) => ({ ...p, avatar_url: url }))}
-                    />
+                <div className="lg:col-span-5 flex flex-col items-center lg:items-start">
+                  <RingNoNumber score={score} />
+                </div>
+
+                <div className="lg:col-span-7 space-y-6">
+                  <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
+                    <div className="text-sm font-semibold text-gray-900">Identidad</div>
+                    <div className="mt-4">
+                      <AvatarUploader
+                        currentUrl={profile.avatar_url ?? null}
+                        fallbackName={name}
+                        onUpdated={(url) => setProfile((p) => ({ ...p, avatar_url: url }))}
+                      />
+                    </div>
+                    <div className="mt-4 text-sm text-gray-600">
+                      Tip: una foto profesional + titular claro aumenta la confianza y prepara el CV verificado.
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6">
+                      <div className="text-sm font-semibold text-blue-900">Siguiente mejor acción</div>
+                      <div className="mt-2 text-sm text-blue-700">
+                        Añade una experiencia reciente y 1 evidencia. Es lo que más mejora tu score.
+                      </div>
+                      <div className="mt-4">
+                        <PrimaryButton>Empezar</PrimaryButton>
+                      </div>
+                    </div>
+
+                    <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
+                      <div className="text-sm font-semibold text-gray-900">Checklist</div>
+                      <ul className="mt-3 text-sm text-gray-600 space-y-2">
+                        <li>• Foto profesional</li>
+                        <li>• 1 verificación nueva</li>
+                        <li>• 1 evidencia por experiencia</li>
+                        <li>• Compartir enlace a empresa</li>
+                      </ul>
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-3">
-                  <div className="text-sm font-semibold text-gray-900">Acciones recomendadas</div>
-                  <ActionCard
-                    title="Añade una verificación reciente"
-                    desc="Es la acción que más aumenta tu credibilidad. Ideal: 1 verificación + 1 evidencia."
-                    cta="Añadir verificación"
-                    tone="primary"
-                  />
-                  <ActionCard
-                    title="Comparte tu perfil"
-                    desc="Acelera validación enviando un enlace seguro a la empresa."
-                    cta="Compartir"
-                    tone="ghost"
-                  />
-                </div>
               </div>
             </div>
           </Card>
 
-          {/* KPI strip como company */}
+          {/* KPI STRIP (compacto, organizado) */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
-            <Stat label="Verificaciones activas" value={stats.active} hint="En tu perfil" />
-            <Stat label="Pendientes" value={stats.pending} hint="En revisión" />
-            <Stat label="Vistas (30d)" value={stats.views30d} hint="Interés reciente" />
-            <Stat label="Shares (30d)" value={stats.shares30d} hint="Enlaces activos" />
-            <Stat label="Tiempo medio" value={stats.avgValidation} hint="Histórico" />
+            <Stat label="Activas" value={metrics.active} />
+            <Stat label="Pendientes" value={metrics.pending} />
+            <Stat label="Vistas (30d)" value={metrics.views30d} />
+            <Stat label="Shares (30d)" value={metrics.shares30d} />
+            <Stat label="T. medio" value={metrics.avgValidation} />
           </div>
 
-          {/* Panel principal: Experiencias (cards premium) */}
+          {/* EXPERIENCIA (bloque principal, con aire) */}
           <div className="flex items-end justify-between gap-6">
             <div>
               <div className="text-xl font-semibold text-gray-900">Experiencia verificable</div>
               <div className="mt-1 text-sm text-gray-500">
-                Presentación clara para ti y potente para compartir con empresas.
+                Ordenado y claro. Ideal para compartir con empresas.
               </div>
             </div>
-            <button className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50 transition">
-              Ver todas
-            </button>
+            <SecondaryButton>Ver todas</SecondaryButton>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -301,29 +291,33 @@ export default function CandidateOverview() {
                 </div>
 
                 <div className="mt-6 flex flex-wrap gap-3">
-                  <button className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition">
-                    Ver detalle
-                  </button>
-                  <button className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50 transition">
-                    Añadir evidencia
-                  </button>
+                  <PrimaryButton>Ver detalle</PrimaryButton>
+                  <SecondaryButton>Añadir evidencia</SecondaryButton>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Footer CTA */}
-          <Card>
-            <div className="p-7 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-              <div>
-                <div className="text-lg font-semibold text-gray-900">CV verificado (siguiente nivel)</div>
-                <div className="mt-1 text-sm text-gray-500">
-                  Generaremos un PDF “Verificado por Verijob” con tu foto y experiencias confirmadas.
-                </div>
+          {/* ACCIONES ESTRATÉGICAS (ordenadas, sin competir con el hero) */}
+          <Card title="Acciones" subtitle="Lo que más impacta tu credibilidad">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
+                <div className="text-sm font-semibold text-gray-900">Añadir verificación</div>
+                <div className="mt-2 text-sm text-gray-600">Nueva experiencia o empleo reciente.</div>
+                <div className="mt-4"><PrimaryButton>Crear</PrimaryButton></div>
               </div>
-              <button className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50 transition">
-                Activar CV (próximo)
-              </button>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
+                <div className="text-sm font-semibold text-gray-900">Compartir perfil</div>
+                <div className="mt-2 text-sm text-gray-600">Enlace seguro para empresas.</div>
+                <div className="mt-4"><SecondaryButton>Compartir</SecondaryButton></div>
+              </div>
+
+              <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
+                <div className="text-sm font-semibold text-gray-900">CV verificado</div>
+                <div className="mt-2 text-sm text-gray-600">PDF con foto + verificación.</div>
+                <div className="mt-4"><SecondaryButton>Activar (próximo)</SecondaryButton></div>
+              </div>
             </div>
           </Card>
 
