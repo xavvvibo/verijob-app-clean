@@ -11,14 +11,19 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     const run = async () => {
       const next = searchParams.get("next") ?? "/dashboard";
+      const code = searchParams.get("code");
+
+      if (!code) {
+        router.replace("/login?error=auth_failed");
+        return;
+      }
 
       const supabase = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       );
 
-      // Magic link / OAuth suelen volver con tokens en el hash. Esto los captura y persiste sesión.
-      const { error } = await supabase.auth.getSessionFromUrl({ storeSession: true });
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
       if (error) {
         router.replace("/login?error=auth_failed");
         return;
