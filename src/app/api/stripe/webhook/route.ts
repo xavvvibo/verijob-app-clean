@@ -9,7 +9,9 @@ export async function POST(req: Request) {
   });
 
   const body = await req.text();
-  const sig = headers().get("stripe-signature");
+
+  const headersList = await headers();
+  const sig = headersList.get("stripe-signature");
 
   if (!sig) {
     return NextResponse.json({ error: "No signature" }, { status: 400 });
