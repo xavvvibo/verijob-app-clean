@@ -1,71 +1,108 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 export default function LoginClient() {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  async function submit(e: React.FormEvent) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
     setMsg(null);
 
+    if (!supabaseUrl || !supabaseAnonKey) {
+      setMsg("Faltan variables NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY.");
+      return;
+    }
+
+    setLoading(true);
     try {
-      const res = await fetch("/api/auth/magic-link", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, next: "/dashboard" }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-
-      if (!res.ok) {
-        setMsg(`Error enviando enlace (${data?.error ?? "unknown"})`);
-        return;
-      }
-
-      setMsg("Enlace enviado. Revisa tu email.");
-    } catch {
-      setMsg("Error inesperado enviando enlace");
+      const supabase = createClient(supabaseUrl, supabaseAnonKey);
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      // Refresh to let server-side auth guards pick up the session
+      window.location.href = "/dashboard";
+    } catch (err: any) {
+      setMsg(err?.message ?? "Error de login");
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <form onSubmit={submit} style={{ padding: 24, maxWidth: 420 }}>
-      <h1 style={{ margin: 0, fontSize: 22 }}>Entrar</h1>
-      <p style={{ marginTop: 8, color: "#444" }}>Te enviaremos un enlace de acceso.</p>
-
-      <div style={{ marginTop: 14 }}>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="tu@email.com"
-          required
-          style={{ width: "100%", padding: 10, borderRadius: 10, border: "1px solid #ccc" }}
-        />
+    <div style={{ maxWidth: 420, margin: "0 auto", padding: "48px 16px" }}>
+      <div style={{ fontSize: 22, fontWeight: 900, letterSpacing: "-0.02em" }}>Iniciar sesión</div>
+      <div style={{ marginTop: 6, fontSize: 13, fontWeight: 700, color: "rgba(100,116,139,1)" }}>
+        Acceso a Verijob
       </div>
 
-      <button
-        type="submit"
-        disabled={loading}
-        style={{
-          marginTop: 12,
-          padding: "10px 12px",
-          borderRadius: 10,
-          border: "1px solid #111",
-          background: "#111",
-          color: "#fff",
-        }}
-      >
-        {loading ? "Enviando…" : "Enviar magic link"}
-      </button>
+      <form onSubmit={onSubmit} style={{ marginTop: 18, display: "grid", gap: 10 }}>
+        <label style={{ display: "grid", gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 900, color: "rgba(100,116,139,1)", textTransform: "uppercase", letterSpacing: ".08em" }}>
+            Email
+          </span>
+          <input
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            type="email"
+            required
+            style={{
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid rgba(148,163,184,0.25)",
+              fontWeight: 800,
+              outline: "none",
+            }}
+          />
+        </label>
 
-      {msg && <p style={{ marginTop: 12, fontSize: 13, color: "#333" }}>{msg}</p>}
-    </form>
+        <label style={{ display: "grid", gap: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 900, color: "rgba(100,116,139,1)", textTransform: "uppercase", letterSpacing: ".08em" }}>
+            Contraseña
+          </span>
+          <input
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            type="password"
+            required
+            style={{
+              padding: "10px 12px",
+              borderRadius: 12,
+              border: "1px solid rgba(148,163,184,0.25)",
+              fontWeight: 800,
+              outline: "none",
+            }}
+          />
+        </label>
+
+        <button
+          type="submit"
+          disabled={loading}
+          style={{
+            marginTop: 6,
+            padding: "10px 12px",
+            borderRadius: 12,
+            border: 0,
+            color: "white",
+            fontWeight: 950,
+            cursor: "pointer",
+            background: "linear-gradient(90deg, #1d4ed8 0%, #4f46e5 70%, #6d28d9 100%)",
+            opacity: loading ? 0.7 : 1,
+          }}
+        >
+          {loading ? "Entrando..." : "Entrar"}
+        </button>
+
+        {msg ? (
+          <div style={{ marginTop: 6, fontSize: 13, fontWeight: 800, color: "rgba(185,28,28,1)" }}>{msg}</div>
+        ) : null}
+      </form>
+    </div>
   );
 }

@@ -48,9 +48,14 @@ export async function POST(req: Request) {
         expand: ["items.data.price"],
       });
 
+      // Stripe SDK may return Subscription or a wrapped Response<Subscription> depending on version/helpers.
+      const subAny: any = subscription as any;
+      const sub: any = subAny?.data ?? subAny;
+
+      const cpe: unknown = sub?.current_period_end;
       const periodEnd =
-        typeof subscription.current_period_end === "number"
-          ? new Date(subscription.current_period_end * 1000)
+        typeof cpe === "number"
+          ? new Date(cpe * 1000)
           : null;
 
       const priceId =
@@ -88,9 +93,14 @@ export async function POST(req: Request) {
         expand: ["items.data.price"],
       });
 
+      // Stripe SDK may return Subscription or a wrapped Response<Subscription> depending on version/helpers.
+      const subAny: any = subscription as any;
+      const sub: any = subAny?.data ?? subAny;
+
+      const cpe: unknown = sub?.current_period_end;
       const periodEnd =
-        typeof subscription.current_period_end === "number"
-          ? new Date(subscription.current_period_end * 1000)
+        typeof cpe === "number"
+          ? new Date(cpe * 1000)
           : null;
 
       const priceId =

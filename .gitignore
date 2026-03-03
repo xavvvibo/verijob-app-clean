@@ -41,3 +41,12 @@ FUENTES_VERIJOB/
 app__backup__*/
 scripts/hardening-scan.sh
 .env*.local
+
+# Allow committing Stripe API routes
+!src/app/api/stripe/
+!src/app/api/stripe/**
+
+# ---- Stripe API routes (ensure not ignored) ----
+!src/app/api/stripe/
+!src/app/api/stripe/**
+# -----------------------------------------------
