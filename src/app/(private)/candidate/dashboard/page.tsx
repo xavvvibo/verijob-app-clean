@@ -1,6 +1,5 @@
-import React from "react";
-import CandidateDashboardV4 from "../dashboard-v4/page";
+import { redirect } from "next/navigation";
 
-export default function CandidateDashboardPage() {
-  return <CandidateDashboardV4 />;
+export default function CandidateDashboardLegacy() {
+  redirect("/candidate/overview");
 }
