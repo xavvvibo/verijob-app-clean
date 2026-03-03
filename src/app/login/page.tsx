@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
 
-export default function LoginPage() {
+function LoginInner() {
   const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
@@ -29,6 +29,15 @@ export default function LoginPage() {
     return createBrowserClient(url, key);
   }, []);
 
+  useEffect(() => {
+    // Si venimos con error, resetea estados
+    if (errorParam) {
+      setSent(false);
+      setBusy(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [errorParam]);
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
@@ -42,12 +51,10 @@ export default function LoginPage() {
 
     setBusy(true);
     try {
-      // CLAVE: iniciar el flujo PKCE en ESTE navegador para que se guarde el code_verifier
+      // CLAVE: iniciar PKCE en ESTE navegador (guarda code_verifier)
       const { error } = await supabase.auth.signInWithOtp({
         email: v,
-        options: {
-          emailRedirectTo: redirectTo,
-        },
+        options: { emailRedirectTo: redirectTo },
       });
 
       if (error) {
@@ -67,17 +74,13 @@ export default function LoginPage() {
     <div className="min-h-[70vh] flex items-center justify-center p-6">
       <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-6">
         <h1 className="text-xl font-semibold">Acceso</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Te enviaremos un enlace mágico por email.
-        </p>
+        <p className="mt-1 text-sm text-gray-600">Te enviaremos un enlace mágico por email.</p>
 
         {errorParam && (
           <div className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             Error de autenticación. Vuelve a solicitar el enlace.
             {debugParam ? (
-              <div className="mt-2 text-xs text-red-600 break-words">
-                debug: {debugParam}
-              </div>
+              <div className="mt-2 text-xs text-red-600 break-words">debug: {debugParam}</div>
             ) : null}
           </div>
         )}
@@ -119,5 +122,19 @@ export default function LoginPage() {
         </form>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-[70vh] flex items-center justify-center p-6 text-sm text-gray-600">
+          Cargando…
+        </div>
+      }
+    >
+      <LoginInner />
+    </Suspense>
   );
 }
