@@ -3,67 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import AvatarUploader from "@/components/profile/AvatarUploader";
 import { createClient } from "@/utils/supabase/browser";
-
-function TrustRing({ score }: { score: number }) {
-  const radius = 90;
-  const stroke = 14;
-  const normalized = radius - stroke * 0.5;
-  const circumference = normalized * 2 * Math.PI;
-  const offset = circumference - (score / 100) * circumference;
-
-  const color =
-    score >= 85 ? "stroke-green-600" :
-    score >= 70 ? "stroke-green-500" :
-    score >= 40 ? "stroke-blue-600" :
-    "stroke-gray-400";
-
-  return (
-    <div className="relative w-64 h-64 flex items-center justify-center">
-      <svg height="220" width="220" className="rotate-[-90deg]">
-        <circle stroke="#e5e7eb" fill="transparent" strokeWidth={stroke} r={normalized} cx="110" cy="110" />
-        <circle
-          strokeLinecap="round"
-          className={`${color} transition-all duration-700`}
-          fill="transparent"
-          strokeWidth={stroke}
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
-          r={normalized}
-          cx="110"
-          cy="110"
-        />
-      </svg>
-
-      <div className="absolute text-center">
-        <div className="text-4xl font-semibold text-gray-900">{score}%</div>
-        <div className="text-sm text-gray-500 mt-1">Nivel de confianza</div>
-      </div>
-    </div>
-  );
-}
-
-function ProgressBar({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <div className="flex justify-between text-xs text-gray-500 mb-1">
-        <span>{label}</span>
-        <span>{value}%</span>
-      </div>
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div className="h-full bg-blue-600 transition-all duration-500" style={{ width: `${value}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: any }) {
-  return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="text-2xl font-semibold text-gray-900 mt-2">{value}</div>
-    </div>
-  );
-}
+import TrustRingPro from "@/components/candidate/TrustRingPro";
+import CredibilitySparkline from "@/components/candidate/CredibilitySparkline";
 
 type ProfileLite = {
   full_name?: string | null;
@@ -72,22 +13,127 @@ type ProfileLite = {
   avatar_url?: string | null;
 };
 
-export default function CandidateOverview() {
-  // Score y métricas: hoy mock (en el siguiente paso lo conectamos a verification_summary)
-  const score = 82;
-  const breakdown = { real: 40, approved: 30, valid: 30 };
-  const stats = { active: 3, pending: 1, shared: 5, views: 18, avgValidation: "2.8 días" };
-  const experiences = [
-    { company: "Restaurante Central", role: "Camarero", status: "Verificado" },
-    { company: "Hotel Sol", role: "Ayudante de sala", status: "En revisión" },
-  ];
+function StatCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: any;
+  hint?: string;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="text-2xl font-semibold text-gray-900 mt-2 tabular-nums">{value}</div>
+      {hint ? <div className="text-xs text-gray-500 mt-2">{hint}</div> : null}
+    </div>
+  );
+}
 
+function Pill({ children }: { children: React.ReactNode }) {
+  return (
+    <span className="inline-flex items-center px-3 py-1 rounded-full border border-gray-200 bg-white text-xs text-gray-700">
+      {children}
+    </span>
+  );
+}
+
+function SectionTitle({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div className="flex items-end justify-between gap-6">
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900">{title}</h2>
+        {subtitle ? <p className="text-sm text-gray-500 mt-1">{subtitle}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const s = status.toLowerCase();
+  const cls =
+    s.includes("verif") ? "bg-green-50 text-green-700 border-green-100" :
+    s.includes("revis") || s.includes("pend") ? "bg-amber-50 text-amber-700 border-amber-100" :
+    s.includes("rech") ? "bg-red-50 text-red-700 border-red-100" :
+    "bg-gray-50 text-gray-700 border-gray-200";
+
+  return (
+    <span className={`inline-flex items-center px-3 py-1 rounded-full border text-xs font-medium ${cls}`}>
+      {status}
+    </span>
+  );
+}
+
+function ActionCard({
+  title,
+  desc,
+  cta,
+  onClick,
+  tone = "primary",
+}: {
+  title: string;
+  desc: string;
+  cta: string;
+  onClick?: () => void;
+  tone?: "primary" | "ghost";
+}) {
+  const btn =
+    tone === "primary"
+      ? "bg-blue-600 text-white hover:bg-blue-700"
+      : "border border-gray-300 text-gray-700 hover:bg-gray-50";
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm flex items-start justify-between gap-6">
+      <div>
+        <div className="text-sm font-semibold text-gray-900">{title}</div>
+        <div className="text-sm text-gray-500 mt-2">{desc}</div>
+      </div>
+      <button
+        onClick={onClick}
+        className={`px-4 py-2 rounded-xl text-sm font-medium transition ${btn}`}
+      >
+        {cta}
+      </button>
+    </div>
+  );
+}
+
+export default function CandidateOverview() {
+  // Perfil real
   const [profile, setProfile] = useState<ProfileLite>({
     full_name: "Candidato",
     title: "Profesional",
     location: "España",
     avatar_url: null,
   });
+  const [loadingProfile, setLoadingProfile] = useState(true);
+
+  // Datos “producto” (por ahora mock bien presentado; luego lo conectamos a verification_summary)
+  const score = 86; // subimos a demo “wow”
+  const breakdown = { real: 46, approved: 32, valid: 22 };
+  const stats = {
+    active: 4,
+    pending: 1,
+    shared: 7,
+    views: 31,
+    avgValidation: "2.1 días",
+    companiesVerified: 3,
+  };
+
+  const credibilityTrend = [62, 64, 63, 66, 69, 71, 73, 74, 76, 78, 80, 82, 83, 84, 86];
+
+  const experiences = [
+    { company: "Restaurante Central", role: "Camarero", dates: "2023 — 2025", status: "Verificado", confidence: "Alta" },
+    { company: "Hotel Sol", role: "Ayudante de sala", dates: "2022 — 2023", status: "En revisión", confidence: "Media" },
+    { company: "Cafetería Plaza", role: "Barista", dates: "2020 — 2022", status: "Verificado", confidence: "Alta" },
+  ];
+
+  const activity = [
+    { when: "Hoy", what: "Tu perfil fue consultado por una empresa", tone: "good" as const },
+    { when: "Ayer", what: "Nueva evidencia subida en Hotel Sol", tone: "warn" as const },
+    { when: "Hace 3 días", what: "Restaurante Central confirmó tu experiencia", tone: "good" as const },
+  ];
 
   useEffect(() => {
     let cancelled = false;
@@ -97,20 +143,15 @@ export default function CandidateOverview() {
         const { data: au } = await supabase.auth.getUser();
         if (!au.user) return;
 
-        // Ajusta nombres si tu schema difiere:
-        // - full_name / name
-        // - title / headline
-        // - location
         const { data, error } = await supabase
           .from("profiles")
           .select("full_name, title, location, avatar_url")
           .eq("id", au.user.id)
           .maybeSingle();
 
-        if (error) return;
-        if (!cancelled && data) setProfile(data as ProfileLite);
-      } catch {
-        // no-op
+        if (!cancelled && !error && data) setProfile(data as ProfileLite);
+      } finally {
+        if (!cancelled) setLoadingProfile(false);
       }
     })();
 
@@ -119,101 +160,252 @@ export default function CandidateOverview() {
     };
   }, []);
 
-  const level = useMemo(() => {
-    if (score >= 85) return "Profesional validado";
-    if (score >= 70) return "Alta confianza";
-    if (score >= 40) return "Verificado";
-    return "Inicial";
+  const name = profile.full_name ?? "Candidato";
+  const title = profile.title ?? "Profesional";
+  const location = profile.location ?? "España";
+
+  const headline = useMemo(() => {
+    // Microcopy “premium” según score (demo-ready)
+    if (score >= 85) return "Perfil listo para compartir en procesos de selección exigentes.";
+    if (score >= 70) return "Estás muy cerca del nivel máximo. Completa 1 verificación más.";
+    return "Empieza por tu experiencia más reciente para elevar tu credibilidad.";
   }, [score]);
 
+  const nextActions = useMemo(() => {
+    const a: Array<{ t: string; d: string; c: string; tone?: "primary" | "ghost" }> = [];
+    if (!profile.avatar_url) {
+      a.push({
+        t: "Completa tu identidad profesional",
+        d: "Sube una foto profesional. Aumenta confianza y prepara tu CV verificado.",
+        c: "Subir foto",
+        tone: "primary",
+      });
+    }
+    a.push({
+      t: "Añade tu experiencia más reciente",
+      d: "Una verificación adicional suele subir tu score entre 4–8 puntos.",
+      c: "Añadir verificación",
+      tone: "primary",
+    });
+    a.push({
+      t: "Comparte tu perfil verificado",
+      d: "Comparte un enlace seguro con una empresa para acelerar validación.",
+      c: "Compartir",
+      tone: "ghost",
+    });
+    return a.slice(0, 3);
+  }, [profile.avatar_url]);
+
   return (
-    <div className="min-h-screen bg-gray-50 px-8 py-10">
-      <div className="max-w-7xl mx-auto space-y-12">
-        {/* HERO */}
-        <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-10 flex flex-col lg:flex-row gap-12 items-center">
-          <TrustRing score={score} />
+    <div className="min-h-screen bg-gray-50">
+      {/* Background subtle (enterprise, no gradient agresivo) */}
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="h-72 bg-gradient-to-b from-blue-50/60 to-transparent" />
+      </div>
 
-          <div className="flex-1 space-y-6">
-            <div className="flex flex-col gap-6">
-              <AvatarUploader
-                currentUrl={profile.avatar_url ?? null}
-                fallbackName={profile.full_name ?? "Candidato"}
-                onUpdated={(url) => setProfile((p) => ({ ...p, avatar_url: url }))}
-              />
+      <div className="relative px-8 py-10">
+        <div className="max-w-7xl mx-auto space-y-12">
 
-              <div>
-                <h1 className="text-3xl font-semibold text-gray-900">{profile.full_name ?? "Candidato"}</h1>
-                <p className="text-gray-500">{profile.title ?? "Profesional"}</p>
-                <p className="text-gray-400 text-sm">{profile.location ?? "España"}</p>
+          {/* TOP identity row */}
+          <div className="flex flex-col lg:flex-row items-start justify-between gap-6">
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Pill>Identidad profesional</Pill>
+                <Pill>Perfil verificable</Pill>
+                <Pill>Listo para CV</Pill>
+              </div>
+              <div className="text-sm text-gray-600">
+                {headline}
               </div>
             </div>
 
-            <div className="inline-flex px-4 py-2 rounded-full bg-green-50 text-green-700 text-sm font-medium">
-              {level}
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-4 pt-4">
-              <ProgressBar label="R · Experiencias reales" value={breakdown.real} />
-              <ProgressBar label="A · Aprobaciones" value={breakdown.approved} />
-              <ProgressBar label="V · Vigencia" value={breakdown.valid} />
-            </div>
-
-            <div className="flex flex-wrap gap-4 pt-6">
-              <button className="px-6 py-3 rounded-xl bg-blue-600 text-white font-medium hover:bg-blue-700 transition">
-                Añadir verificación
-              </button>
-              <button className="px-6 py-3 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-100 transition">
+            <div className="flex items-center gap-3">
+              <button className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition">
                 Compartir perfil
               </button>
-              <button className="px-6 py-3 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-100 transition">
-                Editar perfil
-              </button>
-              <button className="px-6 py-3 rounded-xl border border-gray-300 text-gray-700 font-medium hover:bg-gray-100 transition">
-                Descargar CV verificado (próximo)
+              <button
+                className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition"
+                title="Siguiente fase: CV PDF verificado desde Verijob"
+              >
+                Descargar CV (próximo)
               </button>
             </div>
           </div>
-        </div>
 
-        {/* HOW TO IMPROVE */}
-        <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6">
-          <div className="text-blue-800 font-medium">Cómo mejorar tu perfil</div>
-          <ul className="mt-3 text-sm text-blue-700 space-y-1">
-            <li>✔ Añade tu experiencia más reciente</li>
-            <li>✔ Completa tu fotografía profesional</li>
-            <li>✔ Comparte tu perfil con 2 empresas</li>
-          </ul>
-        </div>
+          {/* HERO */}
+          <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-10">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
 
-        {/* STATS */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-          <Stat label="Verificaciones activas" value={stats.active} />
-          <Stat label="Pendientes" value={stats.pending} />
-          <Stat label="Perfil compartido" value={stats.shared} />
-          <Stat label="Visualizaciones" value={stats.views} />
-          <Stat label="Tiempo medio validación" value={stats.avgValidation} />
-        </div>
+              <div className="lg:col-span-7">
+                <TrustRingPro score={score} breakdown={breakdown} />
+                <div className="mt-8 bg-gray-50 border border-gray-200 rounded-2xl p-6">
+                  <CredibilitySparkline points={credibilityTrend} />
+                </div>
+              </div>
 
-        {/* EXPERIENCES */}
-        <div className="space-y-6">
-          <h2 className="text-xl font-semibold text-gray-900">Experiencia profesional verificada</h2>
+              <div className="lg:col-span-5 space-y-6">
+                <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
+                  <div className="text-sm font-semibold text-gray-900">Tu perfil</div>
+                  <div className="mt-4">
+                    <AvatarUploader
+                      currentUrl={profile.avatar_url ?? null}
+                      fallbackName={name}
+                      onUpdated={(url) => setProfile((p) => ({ ...p, avatar_url: url }))}
+                    />
+                  </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            {experiences.map((exp, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
-                <div className="text-lg font-medium text-gray-900">{exp.company}</div>
-                <div className="text-sm text-gray-500 mt-1">{exp.role}</div>
+                  <div className="mt-6">
+                    <div className="text-2xl font-semibold text-gray-900">
+                      {loadingProfile ? "Cargando…" : name}
+                    </div>
+                    <div className="text-sm text-gray-600 mt-1">{title}</div>
+                    <div className="text-xs text-gray-500 mt-1">{location}</div>
+                  </div>
 
-                <div className="mt-4 text-sm font-medium">
-                  <span className={exp.status === "Verificado" ? "text-green-600" : "text-amber-600"}>
-                    {exp.status}
-                  </span>
+                  <div className="mt-6 grid grid-cols-2 gap-3">
+                    <div className="bg-white border border-gray-200 rounded-xl p-4">
+                      <div className="text-xs text-gray-500">Empresas verificadas</div>
+                      <div className="text-lg font-semibold text-gray-900 mt-1 tabular-nums">
+                        {stats.companiesVerified}
+                      </div>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-xl p-4">
+                      <div className="text-xs text-gray-500">Tiempo medio</div>
+                      <div className="text-lg font-semibold text-gray-900 mt-1 tabular-nums">
+                        {stats.avgValidation}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <button className="mt-4 text-blue-600 text-sm hover:underline">Ver detalle</button>
+                <div className="space-y-3">
+                  <div className="text-sm font-semibold text-gray-900">Acciones recomendadas</div>
+                  <div className="space-y-3">
+                    {nextActions.map((a, idx) => (
+                      <ActionCard
+                        key={idx}
+                        title={a.t}
+                        desc={a.d}
+                        cta={a.c}
+                        tone={a.tone}
+                        onClick={() => {
+                          // Hook: luego conectamos a modals/flows reales
+                          console.log("action:", a.t);
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
               </div>
-            ))}
+
+            </div>
           </div>
+
+          {/* STATS */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+            <StatCard label="Verificaciones activas" value={stats.active} hint="Experiencias ya en tu perfil" />
+            <StatCard label="Pendientes" value={stats.pending} hint="En proceso de confirmación" />
+            <StatCard label="Compartidos activos" value={stats.shared} hint="Enlaces enviados a empresas" />
+            <StatCard label="Visualizaciones" value={stats.views} hint="Interés reciente (30 días)" />
+            <StatCard label="Tiempo medio validación" value={stats.avgValidation} hint="Basado en tu historial" />
+          </div>
+
+          {/* EXPERIENCE */}
+          <div className="space-y-6">
+            <SectionTitle
+              title="Experiencia verificada"
+              subtitle="Una vista profesional: clara para ti y potente para compartir."
+            />
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Timeline */}
+              <div className="lg:col-span-2 space-y-4">
+                {experiences.map((exp, i) => (
+                  <div key={i} className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                    <div className="flex items-start justify-between gap-6">
+                      <div>
+                        <div className="text-lg font-semibold text-gray-900">{exp.company}</div>
+                        <div className="text-sm text-gray-600 mt-1">{exp.role}</div>
+                        <div className="text-xs text-gray-500 mt-2">{exp.dates}</div>
+                      </div>
+                      <div className="flex flex-col items-end gap-2">
+                        <StatusBadge status={exp.status} />
+                        <Pill>Confianza: {exp.confidence}</Pill>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 flex flex-wrap gap-3">
+                      <button className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition">
+                        Ver detalle
+                      </button>
+                      <button className="px-4 py-2 rounded-xl border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition">
+                        Añadir evidencia
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Activity */}
+              <div className="space-y-4">
+                <div className="bg-white rounded-2xl border border-gray-200 p-6 shadow-sm">
+                  <div className="text-sm font-semibold text-gray-900">Actividad</div>
+                  <div className="mt-4 space-y-3">
+                    {activity.map((a, i) => {
+                      const dot =
+                        a.tone === "good" ? "bg-green-500" :
+                        a.tone === "warn" ? "bg-amber-500" :
+                        "bg-gray-400";
+                      return (
+                        <div key={i} className="flex gap-3">
+                          <div className="mt-1.5">
+                            <span className={`inline-block w-2.5 h-2.5 rounded-full ${dot}`} />
+                          </div>
+                          <div>
+                            <div className="text-xs text-gray-500">{a.when}</div>
+                            <div className="text-sm text-gray-700">{a.what}</div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-5">
+                    <button className="text-blue-600 text-sm font-medium hover:underline">
+                      Ver historial completo
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6">
+                  <div className="text-sm font-semibold text-blue-900">Modo selección</div>
+                  <div className="text-sm text-blue-700 mt-2">
+                    Comparte tu perfil para que una empresa valide más rápido sin pedir documentos por WhatsApp.
+                  </div>
+                  <button className="mt-4 px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition">
+                    Compartir ahora
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* FOOTER CTA */}
+          <div className="bg-white rounded-3xl border border-gray-200 shadow-sm p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div>
+              <div className="text-lg font-semibold text-gray-900">Tu CV verificable está a un paso</div>
+              <div className="text-sm text-gray-500 mt-1">
+                En la siguiente mejora, generaremos un CV PDF “Verificado por Verijob” con tu foto y experiencias confirmadas.
+              </div>
+            </div>
+            <button
+              className="px-5 py-3 rounded-xl border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition"
+              title="Siguiente fase"
+            >
+              Activar CV verificado (próximo)
+            </button>
+          </div>
+
         </div>
       </div>
     </div>
