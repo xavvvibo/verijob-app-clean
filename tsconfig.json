@@ -40,6 +40,9 @@
     "node_modules",
     "app__backup__20260223_005339",
     "app__backup__*",
-    "**/app__backup__*"
+    "**/app__backup__*",
+    "src/_disabled_routes/**",
+    "src/_disabled_routes",
+    "src/_disabled_routes/**/*"
   ]
 }

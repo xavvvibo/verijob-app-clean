@@ -1,31 +1,30 @@
-import type { Metadata } from "next";
+import { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { noindex } from "../_seo/noindex";
-import { createServerSupabaseClient } from "@/utils/supabase/server";
+import { createClient } from "@/utils/supabase/server";
+import Sidebar from "./_components/layout/Sidebar";
+import Topbar from "./_components/layout/Topbar";
 
-export const metadata: Metadata = noindex;
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+export default async function PrivateLayout({ children }: { children: ReactNode }) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
 
-type Props = { children: React.ReactNode };
-
-export default async function PrivateLayout({ children }: Props) {
-  const supabase = await createServerSupabaseClient();
-  const { data: au } = await supabase.auth.getUser();
-
-  if (!au.user) {
-    redirect("/login");
-  }
+  if (!user) redirect("/login");
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("onboarding_completed")
-    .eq("id", au.user.id)
-    .maybeSingle();
+    .select("role, onboarding_completed")
+    .eq("id", user.id)
+    .single();
 
-  if (!profile?.onboarding_completed) {
-    redirect("/onboarding");
-  }
+  if (!profile?.onboarding_completed) redirect("/onboarding");
 
-  return <>{children}</>;
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", minHeight: "100vh", background: "#F8FAFC" }}>
+      <Sidebar role={profile.role} />
+      <div>
+        <Topbar />
+        <main style={{ padding: "32px" }}>{children}</main>
+      </div>
+    </div>
+  );
 }

@@ -1,132 +1,113 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import React, { useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-function parseHashTokens() {
-  const hash = typeof window !== "undefined" ? window.location.hash : "";
-  if (!hash || !hash.startsWith("#")) return null;
+export default function AuthCallbackPage() {
+  const [status, setStatus] = useState<"working" | "fail">("working");
+  const [debug, setDebug] = useState<string>("");
 
-  const params = new URLSearchParams(hash.slice(1));
-  const access_token = params.get("access_token") || "";
-  const refresh_token = params.get("refresh_token") || "";
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!access_token || !refresh_token) return null;
-  return { access_token, refresh_token };
-}
+  const supabase = useMemo(() => {
+    if (!supabaseUrl || !supabaseAnonKey) return null;
+    return createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        flowType: "pkce",
+        detectSessionInUrl: true,
+      },
+    });
+  }, [supabaseUrl, supabaseAnonKey]);
 
-function CallbackInner() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [failDebug, setFailDebug] = useState<string | null>(null);
-
-  const next = useMemo(() => searchParams.get("next") ?? "/dashboard", [searchParams]);
-  const code = useMemo(() => searchParams.get("code"), [searchParams]);
-
-  useEffect(() => {
-    const run = async () => {
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-      const key =
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
-        process.env.NEXT_PUBLIC_SUPABASE_KEY ||
-        "";
-
-      const tokens = parseHashTokens();
-
-      const diag = [
-        `has_code=${code ? "1" : "0"}`,
-        `has_hash_tokens=${tokens ? "1" : "0"}`,
-        `has_env_url=${url ? "1" : "0"}`,
-        `has_env_key=${key ? "1" : "0"}`,
-        `next=${encodeURIComponent(next)}`,
-      ].join("&");
-
-      if (!url || !key) {
-        setFailDebug(`missing_env&${diag}`);
-        return;
-      }
-
-      const supabase = createClient(url, key);
-
-      // PKCE code flow
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) {
-          setFailDebug(`exchange_failed&err=${encodeURIComponent(error.message)}&${diag}`);
-          return;
-        }
-        router.replace(next);
-        return;
-      }
-
-      // Hash tokens flow -> set cookies via server endpoint (para SSR)
-      if (tokens) {
-        const r = await fetch("/api/auth/session", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify(tokens),
-        });
-
-        if (!r.ok) {
-          const j = await r.json().catch(() => ({}));
-          setFailDebug(`session_cookie_failed&err=${encodeURIComponent(j?.error || "unknown")}&${diag}`);
-          return;
-        }
-
-        // Limpia hash para evitar re-proceso
-        if (typeof window !== "undefined" && window.location.hash) {
-          history.replaceState(null, "", window.location.pathname + window.location.search);
-        }
-
-        router.replace(next);
-        return;
-      }
-
-      setFailDebug(`no_code_no_hash&${diag}`);
-    };
-
-    run();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  if (failDebug) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center p-6">
-        <div className="max-w-xl w-full rounded-lg border border-gray-200 bg-white p-4 text-sm">
-          <div className="font-medium mb-2">Auth callback: fallo</div>
-          <div className="text-gray-600 mb-3">Copia este debug y pégamelo tal cual:</div>
-          <pre className="rounded bg-gray-50 p-3 overflow-auto border border-gray-200">{failDebug}</pre>
-          <div className="mt-4">
-            <button
-              className="rounded border px-3 py-2"
-              onClick={() => router.replace(`/login?error=auth_failed&debug=${encodeURIComponent(failDebug)}`)}
-            >
-              Ir a login
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+  function parseHashTokens() {
+    const h = (window.location.hash || "").replace(/^#/, "");
+    const params = new URLSearchParams(h);
+    const access_token = params.get("access_token") || undefined;
+    const refresh_token = params.get("refresh_token") || undefined;
+    return { access_token, refresh_token, has: Boolean(access_token && refresh_token) };
   }
 
-  return (
-    <div className="min-h-[50vh] flex items-center justify-center text-sm text-gray-600">
-      Verificando acceso…
-    </div>
-  );
-}
+  async function setSsrCookies(access_token?: string, refresh_token?: string) {
+    const res = await fetch("/api/auth/session", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ access_token, refresh_token }),
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body?.error || "No se pudo fijar la sesión (cookies)");
+  }
 
-export default function AuthCallbackPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-[50vh] flex items-center justify-center text-sm text-gray-600">
-          Verificando acceso…
-        </div>
+  useEffect(() => {
+    (async () => {
+      try {
+        const url = new URL(window.location.href);
+        const code = url.searchParams.get("code");
+        const next = url.searchParams.get("next") || "/dashboard";
+
+        const hasEnvUrl = Boolean(supabaseUrl);
+        const hasEnvKey = Boolean(supabaseAnonKey);
+        const hasCode = Boolean(code);
+
+        const hash = parseHashTokens();
+        const hasHashTokens = hash.has;
+
+        if (!supabase || !hasEnvUrl || !hasEnvKey) {
+          setStatus("fail");
+          setDebug(`missing_env&has_env_url=${hasEnvUrl ? 1 : 0}&has_env_key=${hasEnvKey ? 1 : 0}&next=${encodeURIComponent(next)}`);
+          return;
+        }
+
+        // Path A: PKCE code in query
+        if (code) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error || !data?.session) {
+            setStatus("fail");
+            setDebug(
+              `exchange_failed&err=${encodeURIComponent(error?.message || "no_session")}` +
+                `&has_code=${hasCode ? 1 : 0}` +
+                `&has_hash_tokens=${hasHashTokens ? 1 : 0}` +
+                `&has_env_url=${hasEnvUrl ? 1 : 0}` +
+                `&has_env_key=${hasEnvKey ? 1 : 0}` +
+                `&next=${encodeURIComponent(next)}`
+            );
+            return;
+          }
+
+          await setSsrCookies(data.session.access_token, data.session.refresh_token);
+          window.location.replace(next);
+          return;
+        }
+
+        // Path B: implicit/hash tokens
+        if (hasHashTokens) {
+          await setSsrCookies(hash.access_token, hash.refresh_token);
+          // clean URL hash
+          window.history.replaceState({}, document.title, `${url.pathname}?next=${encodeURIComponent(next)}`);
+          window.location.replace(next);
+          return;
+        }
+
+        setStatus("fail");
+        setDebug(`missing_code&has_code=0&has_hash_tokens=0&next=${encodeURIComponent(next)}`);
+      } catch (e: any) {
+        setStatus("fail");
+        setDebug(`callback_exception&err=${encodeURIComponent(e?.message || "unknown")}`);
       }
-    >
-      <CallbackInner />
-    </Suspense>
+    })();
+  }, [supabase, supabaseUrl, supabaseAnonKey]);
+
+  return (
+    <div style={{ padding: 40 }}>
+      {status === "working" && <div>Autenticando…</div>}
+      {status === "fail" && (
+        <div>
+          <div style={{ fontWeight: 900, marginBottom: 10 }}>Auth callback: fallo</div>
+          <div style={{ marginBottom: 10 }}>Copia este debug y pégamelo tal cual:</div>
+          <pre style={{ padding: 12, background: "#f8fafc", border: "1px solid #e5e7eb", borderRadius: 12 }}>{debug}</pre>
+          <a href="/login" style={{ display: "inline-block", marginTop: 12 }}>Ir a login</a>
+        </div>
+      )}
+    </div>
   );
 }
