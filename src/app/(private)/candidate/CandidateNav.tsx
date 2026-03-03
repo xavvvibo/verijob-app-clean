@@ -32,6 +32,19 @@ export default function CandidateNav() {
           </Link>
         );
       })}
+
+      <div className="pt-2 mt-2 border-t border-gray-200" />
+
+      <Link
+        href="/logout"
+        className={[
+          "block rounded-md px-3 py-2 text-sm transition border",
+          "bg-white border-gray-200 hover:bg-gray-50",
+          "text-red-600",
+        ].join(" ")}
+      >
+        Cerrar sesión
+      </Link>
     </nav>
   );
 }
