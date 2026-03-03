@@ -3,7 +3,7 @@ import { ui } from "../tokens";
 
 export function Card({ title, right, children }: { title?: string; right?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className={`${ui.card} ${ui.radius} ${ui.shadow} border ${ui.border}`}>
+    <section className={`${ui.card} ${ui.radiusClass} ${ui.shadow} border ${ui.border}`}>
       {(title || right) && (
         <header className="px-6 pt-5 pb-3 flex items-start justify-between gap-4">
           <div className="text-base font-extrabold text-slate-900">{title}</div>

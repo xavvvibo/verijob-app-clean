@@ -50,3 +50,8 @@ scripts/hardening-scan.sh
 !src/app/api/stripe/
 !src/app/api/stripe/**
 # -----------------------------------------------
+
+# ---- Allow committing shared UI prototype components used in prod build ----
+!src/components/_ui/
+!src/components/_ui/**
+# --------------------------------------------------------------------------
