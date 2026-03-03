@@ -4,7 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const ROUTE_VERSION = "candidate-verification-create-v4-no-status-default";
+const ROUTE_VERSION = "candidate-verification-create-v5-companyid-on-vr";
 
 function json(status: number, body: any) {
   const res = NextResponse.json({ ...body, route_version: ROUTE_VERSION }, { status });
@@ -71,12 +71,14 @@ export async function POST(req: Request) {
 
   if (erErr) return json(400, { error: "Insert employment_records failed", debug: erErr });
 
-  // 2) Insert verification_requests (SIN status -> default DB)
+  // 2) Insert verification_requests (company_id NOT NULL)
   const { data: vr, error: vrErr } = await supabase
     .from("verification_requests")
     .insert({
+      company_id,
       employment_record_id: er.id,
       requested_by: user.id,
+      // status: NO (default DB)
     })
     .select("id")
     .single();
