@@ -38,7 +38,7 @@ export default function Topbar() {
           </a>
 
           <Link
-            href={inCompany ? "/company/dashboard" : "/candidate/overview"}
+            href={inCompany ? "/company/dashboard-v4" : "/candidate/overview"}
             className="inline-flex rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
           >
             Ir al contexto

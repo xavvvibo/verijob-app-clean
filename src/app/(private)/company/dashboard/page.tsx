@@ -1,6 +1,5 @@
-import React from "react";
-import CompanyDashboardV4 from "../dashboard-v4/page";
-
-export default function CompanyDashboardPage() {
-  return <CompanyDashboardV4 />;
+import { redirect } from "next/navigation";
+export const dynamic = "force-dynamic";
+export default function CompanyDashboardAlias() {
+  redirect("/company/dashboard-v4");
 }

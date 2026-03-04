@@ -1,3 +1,5 @@
-import Dashboard from "./dashboard/page";
-
-export default Dashboard;
+import { redirect } from "next/navigation";
+export const dynamic = "force-dynamic";
+export default function CompanyIndex() {
+  redirect("/company/dashboard-v4");
+}

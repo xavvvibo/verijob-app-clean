@@ -79,7 +79,7 @@ export default function Sidebar(_props: Props) {
   ];
 
   const companyNav: NavItem[] = [
-    { label: "Dashboard", href: "/company/dashboard", match: "exact" },
+    { label: "Dashboard", href: "/company/dashboard-v4", match: "exact" },
     { label: "Solicitudes", href: "/company/requests", match: "exact" },
     { label: "Reutilización", href: "/company/reuse", match: "exact" },
   ];
