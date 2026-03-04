@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import PublicCvLinkButton from "@/components/public/PublicCvLinkButton";
 import { createClient } from "@/utils/supabase/browser";
 import AvatarUploader from "@/components/profile/AvatarUploader";
 
@@ -382,6 +383,7 @@ const [rows, setRows] = useState<VerificationRow[]>([]);
                       >
                         Ver
                       </button>
+                      <PublicCvLinkButton verificationId={v.verification_id} />
                     </div>
                   </div>
                 ))}
@@ -393,3 +395,5 @@ const [rows, setRows] = useState<VerificationRow[]>([]);
     </div>
   );
 }
+
+// deploy-trigger-overview 2026-03-04T09:24:13Z
