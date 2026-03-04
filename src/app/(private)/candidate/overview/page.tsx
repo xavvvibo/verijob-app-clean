@@ -28,6 +28,22 @@ type VerificationRow = {
   revoked_at?: string | null;
 };
 
+type TimelineItem = {
+  source: "cv" | "verification";
+  verification_id?: string;
+  company: string | null;
+  position: string | null;
+  start: string | null;
+  end: string | null;
+  status?: string | null;
+  company_confirmed?: boolean | null;
+  evidence_count?: number | null;
+  actions_count?: number | null;
+  is_revoked?: boolean | null;
+  revoked_at?: string | null;
+  missing_fields?: string[];
+};
+
 function clamp(n: number, a = 0, b = 100) {
   return Math.max(a, Math.min(b, n));
 }
@@ -115,7 +131,15 @@ function Stat({ label, value }: { label: string; value: any }) {
   );
 }
 
-function StatusPill({ status }: { status: string }) {
+function StatusPill({ status, revoked }: { status: string; revoked?: boolean }) {
+  if (revoked) {
+    return (
+      <span className="inline-flex px-3 py-1 rounded-full border text-xs font-semibold bg-red-50 text-red-700 border-red-100">
+        Revocada
+      </span>
+    );
+  }
+
   const s = (status || "").toLowerCase();
   const cls =
     s.includes("approved") || s.includes("verified") ? "bg-green-50 text-green-700 border-green-100" :
@@ -170,11 +194,9 @@ function computeScore(verifications: VerificationRow[]) {
   const V = total > 0 ? confirmed / total : 0;
   const A = total > 0 ? Math.min(1, evidences / (total * 2)) : 0;
 
-  // R/A/V ponderado (demo-ready y defendible)
   const score = Math.round((R * 0.5 + V * 0.3 + A * 0.2) * 100);
 
-  // progreso perfil (mínimo, realista): nombre + actividad + verificación
-  const profileCompletionBase = 0; // se suma luego con profile
+  const profileCompletionBase = 0;
   const completion = clamp(
     profileCompletionBase +
       (total > 0 ? 40 : 0) +
@@ -187,6 +209,15 @@ function computeScore(verifications: VerificationRow[]) {
   return { total, verified, confirmed, evidences, score, completion };
 }
 
+function fmtRange(start: string | null, end: string | null) {
+  const s = start ? String(start).slice(0, 10) : null;
+  const e = end ? String(end).slice(0, 10) : null;
+  if (s && e) return `${s} → ${e}`;
+  if (s && !e) return `${s} → Actualidad`;
+  if (!s && e) return `Hasta ${e}`;
+  return "Fechas no disponibles";
+}
+
 export default function CandidateOverview() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<ProfileLite | null>(null);
@@ -195,6 +226,7 @@ export default function CandidateOverview() {
   const [reuseCompanies, setReuseCompanies] = useState<number>(0);
   const [rows, setRows] = useState<VerificationRow[]>([]);
   const [trustScore, setTrustScore] = useState<number | null>(null);
+  const [timeline, setTimeline] = useState<TimelineItem[]>([]);
 
   const [err, setErr] = useState<string | null>(null);
 
@@ -232,7 +264,6 @@ export default function CandidateOverview() {
         if (!alive) return;
         setProfile((p || null) as ProfileLite | null);
 
-        // Reuse events (empresas que reutilizan tus verificaciones)
         const verificationIds = (data ?? []).map((r: any) => r.verification_id).filter(Boolean);
         if (verificationIds.length) {
           const { data: reData, error: reErr } = await supabase
@@ -253,14 +284,17 @@ export default function CandidateOverview() {
         setRows((data || []) as VerificationRow[]);
         setErr(null);
 
-        // Trust Score (servidor): no bloquea UI
         try {
           const r = await fetch("/api/candidate/trust-score");
           const j = await r.json();
           if (alive && typeof j?.trust_score === "number") setTrustScore(j.trust_score);
-        } catch {
-          // noop
-        }
+        } catch {}
+
+        try {
+          const r2 = await fetch("/api/candidate/timeline");
+          const j2 = await r2.json();
+          if (alive && Array.isArray(j2?.items)) setTimeline(j2.items as TimelineItem[]);
+        } catch {}
 
       } catch (e: any) {
         if (!alive) return;
@@ -371,6 +405,57 @@ export default function CandidateOverview() {
           </div>
 
           <Card
+            title="Timeline verificada"
+            subtitle="CV + verificaciones (señales reales)"
+            right={<span className="text-xs text-gray-500">{timeline.length} items</span>}
+          >
+            {timeline.length === 0 ? (
+              <div className="text-sm text-gray-600">
+                Aún no hay timeline. Sube tu CV o crea verificaciones para construir tu historial.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {timeline.slice(0, 8).map((t, idx) => (
+                  <div key={(t.verification_id || "") + idx} className="flex items-start justify-between gap-4 border border-gray-200 rounded-2xl p-4">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-gray-900 truncate">
+                        {(t.position || "Puesto")} · {(t.company || "Empresa")}
+                      </div>
+                      <div className="mt-1 text-xs text-gray-500">
+                        {fmtRange(t.start, t.end)}
+                        {t.source === "verification" ? ` · Evidencias: ${t.evidence_count || 0}` : ""}
+                        {t.missing_fields && t.missing_fields.length ? " · ⚠ datos incompletos" : ""}
+                      </div>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-3">
+                      {t.source === "verification" ? (
+                        <>
+                          <StatusPill status={(t.status || "—")} revoked={!!t.is_revoked} />
+                          {t.verification_id ? (
+                            <>
+                              <button
+                                className="text-sm font-semibold text-blue-600 hover:text-blue-700"
+                                onClick={() => (window.location.href = `/candidate/verification/${t.verification_id}`)}
+                              >
+                                Ver
+                              </button>
+                              <PublicCvLinkButton verificationId={t.verification_id} />
+                            </>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span className="inline-flex px-3 py-1 rounded-full border text-xs font-semibold bg-gray-50 text-gray-700 border-gray-200">
+                          CV
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          <Card
             title="Actividad reciente"
             subtitle="Tus últimas verificaciones"
           >
@@ -392,7 +477,7 @@ export default function CandidateOverview() {
                       </div>
                     </div>
                     <div className="shrink-0 flex items-center gap-3">
-                      <StatusPill status={(v.status || "—")} />
+                      <StatusPill status={(v.status || "—")} revoked={!!v.is_revoked} />
                       <button
                         className="text-sm font-semibold text-blue-600 hover:text-blue-700"
                         onClick={() => (window.location.href = `/candidate/verification/${v.verification_id}`)}
