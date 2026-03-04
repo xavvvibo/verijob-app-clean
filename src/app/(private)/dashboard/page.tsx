@@ -4,7 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function DashboardEntry() {
+export default async function DashboardRouter() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -13,16 +13,12 @@ export default async function DashboardEntry() {
     .from("profiles")
     .select("role, onboarding_completed")
     .eq("id", user.id)
-    .maybeSingle();
+    .single();
 
   if (!profile?.onboarding_completed) redirect("/onboarding");
 
-  const role = profile?.role ?? "candidate";
-
-  // Ajusta si tu enum de role usa otros valores.
-  if (role === "company" || role === "admin" || role === "recruiter" || role === "reviewer") {
-    redirect("/company/dashboard");
-  }
-
+  const r = String(profile?.role || "").toLowerCase();
+  if (r === "owner") redirect("/owner/overview");
+  if (r === "company") redirect("/company/dashboard");
   redirect("/candidate/overview");
 }
