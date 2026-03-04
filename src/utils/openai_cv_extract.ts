@@ -1,106 +1,89 @@
-import { z } from "zod";
+/**
+ * Helper legacy (por compat) — mismo contrato que cv/openaiExtract.ts.
+ * Mantenerlo alineado evita 400s si alguna ruta antigua lo usa.
+ */
+type ExtractOut = {
+  result: unknown;
+  model?: string | null;
+  tokensIn?: number | null;
+  tokensOut?: number | null;
+};
 
-const ExperienceSchema = z.object({
-  company_name: z.string().min(1),
-  role_title: z.string().min(1),
-  start_date: z.string().nullable().optional(),  // "YYYY-MM" o "YYYY-MM-DD"
-  end_date: z.string().nullable().optional(),
-  location: z.string().nullable().optional(),
-  description: z.string().nullable().optional(),
-  skills: z.array(z.string()).optional().default([]),
-  confidence: z.number().min(0).max(1).optional().default(0.5),
-});
+function pickOutputText(json: any): string {
+  if (typeof json?.output_text === "string" && json.output_text.length > 0) return json.output_text;
 
-export type CvExperience = z.infer<typeof ExperienceSchema>;
+  const out = json?.output;
+  if (Array.isArray(out)) {
+    const parts: string[] = [];
+    for (const item of out) {
+      const content = item?.content;
+      if (Array.isArray(content)) {
+        for (const c of content) {
+          if (c?.type === "output_text" && typeof c?.text === "string") parts.push(c.text);
+        }
+      }
+    }
+    if (parts.length) return parts.join("\n");
+  }
+  return "";
+}
 
-const CvExtractSchema = z.object({
-  full_name: z.string().nullable().optional(),
-  email: z.string().nullable().optional(),
-  phone: z.string().nullable().optional(),
-  headline: z.string().nullable().optional(),
-  experiences: z.array(ExperienceSchema).default([]),
-});
+function pickUsage(json: any): { inTok: number | null; outTok: number | null } {
+  const u = json?.usage;
+  const inTok =
+    typeof u?.input_tokens === "number" ? u.input_tokens :
+    typeof u?.prompt_tokens === "number" ? u.prompt_tokens :
+    null;
+  const outTok =
+    typeof u?.output_tokens === "number" ? u.output_tokens :
+    typeof u?.completion_tokens === "number" ? u.completion_tokens :
+    null;
+  return { inTok, outTok };
+}
 
-export type CvExtractResult = z.infer<typeof CvExtractSchema>;
-
-export async function extractStructuredFromCvText(cvText: string): Promise<{ result: CvExtractResult; tokensIn?: number; tokensOut?: number; model?: string; raw?: any; }> {
+export async function extractStructuredFromCvText(cvText: string): Promise<ExtractOut> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) throw new Error("Missing OPENAI_API_KEY");
 
   const model = process.env.CV_PARSE_MODEL || "gpt-4.1-mini";
 
-  const prompt = [
-    "Eres un parser de CV para un producto de credenciales laborales verificadas.",
-    "Extrae EXPERIENCIAS LABORALES y datos básicos. Devuelve SOLO JSON válido sin markdown.",
-    "Reglas:",
-    "- Si no conoces una fecha, usa null.",
-    "- start_date/end_date en formato 'YYYY-MM' si es posible; si solo hay año, usa 'YYYY-01'.",
-    "- confidence 0..1 según claridad del CV.",
-    "",
-    "Formato JSON:",
-    "{",
-    "  full_name: string|null,",
-    "  email: string|null,",
-    "  phone: string|null,",
-    "  headline: string|null,",
-    "  experiences: [",
-    "    { company_name, role_title, start_date, end_date, location, description, skills[], confidence }",
-    "  ]",
-    "}",
-  ].join("\n");
-
-  const body = {
+  const payload = {
     model,
-    response_format: { type: "json_object" },
     input: [
-      {
-        role: "system",
-        content: prompt,
-      },
-      {
-        role: "user",
-        content: cvText.slice(0, 180000),
-      },
+      { role: "user", content: [{ type: "input_text", text: cvText }] },
     ],
+    response_format: { type: "json_object" },
   };
 
   const r = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
-      "content-type": "application/json",
-      "authorization": `Bearer ${apiKey}`,
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify(payload),
   });
 
-  const json = await r.json();
-  if (!r.ok) {
-    const msg = json?.error?.message || `OpenAI error (${r.status})`;
-    throw new Error(msg);
+  const txt = await r.text();
+  if (!r.ok) throw new Error(`OpenAI error ${r.status}: ${txt}`);
+
+  const json = JSON.parse(txt);
+  const { inTok, outTok } = pickUsage(json);
+
+  const outText = pickOutputText(json).trim();
+  let result: any = null;
+
+  if (outText) {
+    try { result = JSON.parse(outText); }
+    catch { result = { raw: outText }; }
+  } else {
+    result = { raw: json };
   }
 
-  // responses API devuelve output_text; aquí buscamos el texto JSON final
-  const outText =
-    json?.output?.map((o: any) => o?.content?.map((c: any) => c?.text).filter(Boolean).join("")).filter(Boolean).join("\n")
-    || json?.output_text
-    || "";
-
-  let parsed: any;
-  try {
-    parsed = JSON.parse(outText);
-  } catch {
-    // fallback: algunos modelos devuelven el json dentro de otros campos
-    parsed = json;
-  }
-
-  const result = CvExtractSchema.parse(parsed);
-
-  const usage = json?.usage || {};
   return {
     result,
-    tokensIn: usage?.input_tokens,
-    tokensOut: usage?.output_tokens,
-    model,
-    raw: json,
+    model: json?.model ?? model,
+    tokensIn: inTok,
+    tokensOut: outTok,
   };
 }
