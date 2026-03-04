@@ -8,8 +8,8 @@ export async function extractCvTextFromBuffer(buf: Buffer, mimeType?: string | n
 
   if (mt.includes("pdf") || mt === "application/pdf") {
     try {
-      // pdf-parse en CJS (estable en Node/Vercel)
-      const pdfParse: any = require("pdf-parse");
+      const mod: any = require("pdf-parse");
+      const pdfParse = mod?.default || mod;
       const out = await pdfParse(buf);
       return String(out?.text || "").trim();
     } catch (e: any) {

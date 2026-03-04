@@ -14,7 +14,7 @@ export async function GET(_req: Request, ctx: any) {
 
   const { data, error } = await supabase
     .from("cv_parse_jobs")
-    .select("id,status,error,started_at,finished_at,result_json,model,tokens_in,tokens_out,created_at")
+    .select("id,status,error,started_at,finished_at,result_json,model,tokens_in,tokens_out,created_at,cv_upload_id")
     .eq("id", id)
     .maybeSingle();
 
