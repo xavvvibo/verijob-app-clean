@@ -4,7 +4,10 @@ import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 
 export const runtime = "nodejs";
 
-export async function GET(_: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, ctx: any) {
+  const id = String(ctx?.params?.id || "");
+  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
   const user = auth?.user;
@@ -15,7 +18,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
   const { data: job, error } = await admin
     .from("cv_parse_jobs")
     .select("id,user_id,status,error,model,tokens_in,tokens_out,result_json,created_at,started_at,finished_at")
-    .eq("id", params.id)
+    .eq("id", id)
     .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
