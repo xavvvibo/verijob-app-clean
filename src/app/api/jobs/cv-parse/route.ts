@@ -19,34 +19,69 @@ function getServiceSupabase() {
   return createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-export async function GET() {
-  // NO imports pesados aquí; debe responder siempre
-  return NextResponse.json({ ok: true, route: "/api/jobs/cv-parse", runtime: "nodejs", methods: ["POST"] });
+export async function GET(req: Request) {
+  const u = new URL(req.url);
+  const debug = u.searchParams.get("debug");
+
+  if (!debug) {
+    return NextResponse.json({ ok: true, route: "/api/jobs/cv-parse", runtime: "nodejs", methods: ["POST"], hint: "add ?debug=1" });
+  }
+
+  try {
+    const supabase = getServiceSupabase();
+
+    const { count, error: cErr } = await supabase
+      .from("cv_parse_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "queued");
+
+    if (cErr) return NextResponse.json({ error: "count_failed", details: cErr.message }, { status: 500 });
+
+    const { data: first, error: fErr } = await supabase
+      .from("cv_parse_jobs")
+      .select("id,cv_upload_id,status,created_at")
+      .eq("status", "queued")
+      .order("created_at", { ascending: true })
+      .limit(1);
+
+    if (fErr) return NextResponse.json({ error: "pick_failed", details: fErr.message }, { status: 500 });
+
+    return NextResponse.json({ ok: true, queued_count: count ?? 0, first: first?.[0] ?? null });
+  } catch (e: any) {
+    return NextResponse.json({ error: "debug_failed", details: String(e?.message || e) }, { status: 500 });
+  }
 }
 
 export async function POST(req: Request) {
   try {
     if (!requireJobSecret(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-    // Imports dinámicos para evitar crash al cargar la route
-    const [{ extractCvTextFromBuffer }, { extractStructuredFromCvText }] = await Promise.all([
-      import("@/utils/cv/extractText"),
-      import("@/utils/cv/openaiExtract"),
-    ]);
-
     const supabase = getServiceSupabase();
 
-    const { data: jobs, error: pickErr } = await supabase
+    let forcedJobId: string | null = null;
+    try {
+      const body = await req.json().catch(() => null);
+      if (body && typeof body.job_id === "string" && body.job_id.length > 10) forcedJobId = body.job_id;
+    } catch {}
+
+    const jobQuery = supabase
       .from("cv_parse_jobs")
-      .select("id,cv_upload_id,created_at")
-      .eq("status", "queued")
+      .select("id,cv_upload_id,status,created_at")
       .order("created_at", { ascending: true })
       .limit(1);
 
+    const { data: jobs, error: pickErr } = forcedJobId
+      ? await jobQuery.eq("id", forcedJobId)
+      : await jobQuery.eq("status", "queued");
+
     if (pickErr) return NextResponse.json({ error: "pick_failed", details: pickErr.message }, { status: 400 });
-    if (!jobs || jobs.length === 0) return NextResponse.json({ ok: true, message: "no_jobs" });
+    if (!jobs || jobs.length === 0) return NextResponse.json({ ok: true, message: forcedJobId ? "job_not_found" : "no_jobs" });
 
     const job = jobs[0];
+
+    if (forcedJobId && job.status !== "queued") {
+      // si forzamos job_id y está en otro estado, lo ponemos en processing igualmente
+    }
 
     const { error: markErr } = await supabase
       .from("cv_parse_jobs")
@@ -54,6 +89,11 @@ export async function POST(req: Request) {
       .eq("id", job.id);
 
     if (markErr) return NextResponse.json({ error: "mark_processing_failed", details: markErr.message }, { status: 400 });
+
+    const [{ extractCvTextFromBuffer }, { extractStructuredFromCvText }] = await Promise.all([
+      import("@/utils/cv/extractText"),
+      import("@/utils/cv/openaiExtract"),
+    ]);
 
     const { data: upload, error: upErr } = await supabase
       .from("cv_uploads")
