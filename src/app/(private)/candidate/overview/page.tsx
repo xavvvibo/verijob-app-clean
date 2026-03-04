@@ -301,6 +301,7 @@ export default function CandidateOverview() {
         <div className="flex flex-col items-end gap-4 shrink-0">
           <AvatarUploader
             currentUrl={profile?.avatar_url ?? ""}
+            fallbackName={profile?.full_name ?? "Candidato"}
           />
           <div className={`inline-flex px-3 py-1 rounded-full border text-xs font-semibold ${tone.badge}`}>
             {tone.label}
