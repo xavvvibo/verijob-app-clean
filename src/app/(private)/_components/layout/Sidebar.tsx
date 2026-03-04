@@ -3,124 +3,70 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-type NavItem = {
-  label: string;
-  href: string;
-  match?: "exact" | "prefix";
-};
-
 type Props = {
-  // Se pasa desde (private)/layout.tsx. Lo aceptamos para evitar fallo TS.
-  // (Ahora mismo no lo necesitamos para pintar el menú.)
-  role?: any;
+  role?: string;
 };
 
-function isActive(pathname: string, item: NavItem) {
-  const mode = item.match ?? "prefix";
-  if (mode === "exact") return pathname === item.href;
-  return pathname === item.href || pathname.startsWith(item.href + "/");
-}
-
-function Item({ item }: { item: NavItem }) {
+function Item({ href, label }: { href: string; label: string }) {
   const pathname = usePathname() || "/";
-  const active = isActive(pathname, item);
+  const active = pathname === href || pathname.startsWith(href + "/");
 
   return (
     <Link
-      href={item.href}
+      href={href}
       className={[
-        "flex items-center gap-2 rounded-xl px-3 py-2 text-sm transition",
-        active
-          ? "bg-slate-900 text-white shadow-sm"
-          : "text-slate-700 hover:bg-slate-100 hover:text-slate-900",
+        "flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold",
+        active ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"
       ].join(" ")}
     >
-      <span
-        className={[
-          "inline-block h-2 w-2 rounded-full",
-          active ? "bg-white" : "bg-slate-300",
-        ].join(" ")}
-      />
-      <span className="font-medium">{item.label}</span>
+      <span className={["h-2 w-2 rounded-full", active ? "bg-white" : "bg-slate-300"].join(" ")} />
+      {label}
     </Link>
   );
 }
 
-function Section({ title, items }: { title: string; items: NavItem[] }) {
-  return (
-    <div className="space-y-2">
-      <div className="px-1 text-xs font-semibold uppercase tracking-wide text-slate-500">
-        {title}
-      </div>
-      <div className="space-y-1">
-        {items.map((it) => (
-          <Item key={it.href} item={it} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export default function Sidebar(_props: Props) {
-  const pathname = usePathname() || "/";
-  const inCandidate = pathname === "/candidate" || pathname.startsWith("/candidate/");
-  const inCompany = pathname === "/company" || pathname.startsWith("/company/");
-  const inDashboard = pathname === "/dashboard" || pathname.startsWith("/dashboard/");
-
-  // Rutas reales (inventario confirmado)
-  const candidateNav: NavItem[] = [
-    { label: "Dashboard", href: "/candidate/overview", match: "exact" },
-    { label: "Perfil", href: "/candidate/profile" },
-    { label: "CV & Experiencias", href: "/candidate/experience" },
-    { label: "Evidencias", href: "/candidate/evidence" },
-    { label: "Verificaciones", href: "/candidate/verifications" },
-    { label: "CV público", href: "/candidate/profile-share", match: "exact" },
-    { label: "Ajustes", href: "/candidate/settings", match: "exact" },
-  ];
-
-  const companyNav: NavItem[] = [
-    { label: "Dashboard", href: "/company/dashboard-v4", match: "exact" },
-    { label: "Solicitudes", href: "/company/requests", match: "exact" },
-    { label: "Reutilización", href: "/company/reuse", match: "exact" },
-  ];
-
-  const topLinks: NavItem[] = [{ label: "Inicio", href: "/dashboard", match: "exact" }];
-
-  const showCandidate = inCandidate && !inCompany;
-  const showCompany = inCompany && !inCandidate;
+export default function Sidebar({ role = "candidate" }: Props) {
+  const isCompany = role === "company" || role === "admin" || role === "recruiter" || role === "reviewer";
 
   return (
-    <aside className="h-full w-[260px] shrink-0 border-r border-slate-200 bg-white">
-      <div className="flex h-full flex-col gap-6 p-4">
-        {/* BRAND HEADER (logo más grande) */}
-        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3">
-          <div className="h-12 w-12 overflow-hidden rounded-2xl bg-slate-100">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/brand/logo.png"
-              alt="Verijob"
-              className="h-12 w-12 object-contain"
-            />
-          </div>
+    <aside className="border-r border-slate-200 bg-white">
+      <div className="p-4">
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/logo.png?v=20260304" alt="Verijob" className="h-10 w-auto" />
           <div className="leading-tight">
-            <div className="text-base font-extrabold text-slate-900">VERIJOB</div>
+            <div className="text-sm font-extrabold text-slate-900">VERIJOB</div>
             <div className="text-xs text-slate-500">Trust Infrastructure</div>
           </div>
         </div>
+      </div>
 
-        <Section title="Navegación" items={topLinks} />
-        {showCandidate && <Section title="Candidato" items={candidateNav} />}
-        {showCompany && <Section title="Empresa" items={companyNav} />}
+      <div className="px-4 pb-4">
+        <div className="text-xs font-extrabold text-slate-400 uppercase tracking-wider px-1 mt-2">Navegación</div>
+        <div className="mt-2 space-y-1">
+          <Item href="/dashboard" label="Inicio" />
+        </div>
 
-        {inDashboard && (
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-            Selecciona tu contexto: <b>Candidato</b> o <b>Empresa</b>.
+        <div className="text-xs font-extrabold text-slate-400 uppercase tracking-wider px-1 mt-5">
+          {isCompany ? "Empresa" : "Candidato"}
+        </div>
+
+        {isCompany ? (
+          <div className="mt-2 space-y-1">
+            <Item href="/company/dashboard" label="Dashboard" />
+            <Item href="/company/requests" label="Solicitudes" />
+            <Item href="/company/reuse" label="Reutilización" />
+          </div>
+        ) : (
+          <div className="mt-2 space-y-1">
+            <Item href="/candidate/overview" label="Dashboard" />
+            <Item href="/candidate/experience" label="Experiencias" />
+            <Item href="/candidate/evidence" label="Evidencias" />
+            <Item href="/candidate/verifications" label="Verificaciones" />
+            <Item href="/candidate/share" label="Compartir perfil" />
+            <Item href="/candidate/settings" label="Ajustes" />
           </div>
         )}
-
-        <div className="mt-auto rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
-          Completa <b>Perfil</b> + <b>CV & Experiencias</b> para mejorar tu credibilidad.
-        </div>
       </div>
     </aside>
   );

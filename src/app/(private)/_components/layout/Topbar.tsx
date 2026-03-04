@@ -14,12 +14,11 @@ export default function Topbar() {
       <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-3">
         <div className="flex items-center gap-3">
           <Link href="/dashboard" className="flex items-center gap-3">
-            {/* Logo grande (header superior) */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/brand/logo.png"
+              src="/brand/logo.png?v=20260304"
               alt="Verijob"
-              className="h-9 w-auto"
+              className="h-11 w-auto"
               loading="eager"
             />
           </Link>
@@ -38,7 +37,7 @@ export default function Topbar() {
           </a>
 
           <Link
-            href={inCompany ? "/company/dashboard-v4" : "/candidate/overview"}
+            href={inCompany ? "/company/dashboard" : "/candidate/overview"}
             className="inline-flex rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
           >
             Ir al contexto

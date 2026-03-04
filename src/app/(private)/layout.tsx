@@ -10,17 +10,18 @@ export default async function PrivateLayout({ children }: { children: ReactNode 
 
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
+  const { data: profile, error } = await supabase
     .from("profiles")
     .select("role, onboarding_completed")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
-  if (!profile?.onboarding_completed) redirect("/onboarding");
+  // Si no hay profile por lo que sea, mandamos a onboarding (pero sin loop, porque ya no lo hacemos aquí)
+  const role = profile?.role ?? "candidate";
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", minHeight: "100vh", background: "#F8FAFC" }}>
-      <Sidebar role={profile.role} />
+      <Sidebar role={role} />
       <div>
         <Topbar />
         <main style={{ padding: "32px" }}>{children}</main>
