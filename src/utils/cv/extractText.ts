@@ -1,4 +1,4 @@
-import pdfParse from "pdf-parse";
+import * as pdfParse from "pdf-parse";
 import mammoth from "mammoth";
 
 export async function extractCvTextFromBuffer(buf: Buffer, mimeType?: string | null): Promise<string> {
@@ -6,8 +6,9 @@ export async function extractCvTextFromBuffer(buf: Buffer, mimeType?: string | n
 
   // PDF
   if (mt.includes("pdf") || mt === "application/pdf") {
-    const out = await pdfParse(buf);
-    return (out.text || "").trim();
+    // pdf-parse en ESM/TS suele no exponer default export -> usamos namespace import
+    const out = await (pdfParse as any)(buf);
+    return (out?.text || "").trim();
   }
 
   // DOCX
@@ -16,7 +17,7 @@ export async function extractCvTextFromBuffer(buf: Buffer, mimeType?: string | n
     return (out.value || "").trim();
   }
 
-  // fallback: intenta tratar como texto plano
+  // fallback: texto plano
   try {
     return buf.toString("utf8").trim();
   } catch {
