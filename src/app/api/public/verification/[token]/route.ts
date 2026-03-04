@@ -1,47 +1,82 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/utils/supabase/server"
+import { createClient } from "@supabase/supabase-js"
+
+function adminSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!url || !serviceKey) {
+    throw new Error("missing_supabase_service_role_env")
+  }
+
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false }
+  })
+}
 
 export async function GET(
-  request: Request,
+  _req: Request,
   context: { params: Promise<{ token: string }> }
 ) {
   const { token } = await context.params
+  if (!token) return NextResponse.json({ error: "missing_token" }, { status: 400 })
 
-  const supabase = await createClient()
-
-  if (!token) {
-    return NextResponse.json({ error: "missing_token" }, { status: 400 })
+  let supabase
+  try {
+    supabase = adminSupabase()
+  } catch (e: any) {
+    // Si falta la key en Vercel env, mejor devolver 500 explícito
+    return NextResponse.json(
+      { error: "server_misconfigured", detail: e?.message || "missing_env" },
+      { status: 500 }
+    )
   }
 
-  const { data: verification, error } = await supabase
+  // 1) Resolver verification_id por token
+  const { data: vr, error: vrErr } = await supabase
     .from("verification_requests")
-    .select("id, candidate_id")
+    .select("id")
     .eq("public_token", token)
     .maybeSingle()
 
-  if (error || !verification) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 })
-  }
+  if (vrErr || !vr) return NextResponse.json({ error: "not_found" }, { status: 404 })
 
-  const { data: summary } = await supabase
+  // 2) Summary (sanitizado: devolvemos solo campos “publicables”)
+  const { data: summary, error: sumErr } = await supabase
     .from("verification_summary")
     .select("*")
-    .eq("verification_id", verification.id)
+    .eq("verification_id", vr.id)
     .maybeSingle()
 
-  const { data: evidences } = await supabase
+  if (sumErr || !summary) return NextResponse.json({ error: "not_found" }, { status: 404 })
+
+  // 3) Evidences / reuse: devolvemos métricas, no IDs
+  const { count: evidenceCount } = await supabase
     .from("evidences")
-    .select("id, created_at")
-    .eq("verification_id", verification.id)
+    .select("*", { count: "exact", head: true })
+    .eq("verification_id", vr.id)
 
-  const { data: reuse } = await supabase
+  const { count: reuseCount } = await supabase
     .from("verification_reuse_events")
-    .select("company_id, created_at")
-    .eq("verification_id", verification.id)
+    .select("*", { count: "exact", head: true })
+    .eq("verification_id", vr.id)
 
-  return NextResponse.json({
-    verification: summary,
-    evidences,
-    reuse
-  })
+  const payload = {
+    verification: {
+      verification_id: summary.verification_id,
+      status: summary.status,
+      company_confirmed: summary.company_confirmed,
+      evidence_count: summary.evidence_count ?? evidenceCount ?? 0,
+      actions_count: summary.actions_count ?? 0,
+      is_revoked: summary.is_revoked ?? false,
+      revoked_at: summary.revoked_at ?? null,
+      revoked_reason: summary.revoked_reason ?? null
+    },
+    metrics: {
+      evidence_count: evidenceCount ?? summary.evidence_count ?? 0,
+      reuse_count: reuseCount ?? 0
+    }
+  }
+
+  return NextResponse.json(payload)
 }
