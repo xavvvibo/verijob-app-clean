@@ -12,11 +12,11 @@ export default function Topbar() {
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/85 backdrop-blur">
       <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <Link href="/dashboard" className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/brand/logo.png?v=20260304"
+              src="/brand/logo.png"
               alt="Verijob"
               className="h-11 w-auto"
               loading="eager"

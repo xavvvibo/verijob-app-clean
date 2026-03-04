@@ -5,50 +5,66 @@ import { NextResponse, type NextRequest } from "next/server";
 /**
  * HARD RULE:
  * - Middleware must NEVER rewrite/redirect/proxy API routes.
- * - API routes must be handled by Route Handlers.
  */
 const BYPASS_PREFIXES = [
-  "/api/",          // <- blindaje total
-  "/auth/callback", // callback local/edge safe
+  "/api/",
+  "/auth/callback",
+  "/_next/",
+  "/favicon.ico",
+  "/brand/",
 ];
 
-function isLocal(req: NextRequest) {
-  const host = req.headers.get("host") ?? "";
-  return (
-    host.startsWith("localhost:") ||
-    host.startsWith("127.0.0.1:") ||
-    host.startsWith("192.168.") ||
-    host.startsWith("10.") ||
-    host.startsWith("172.")
-  );
-}
+const APP_HOSTS = new Set([
+  "app.verijob.es",
+]);
+
+// Rutas marketing que NO deben vivir en app.* (solo en verijob.es)
+const MARKETING_PREFIXES = [
+  "/como-funciona",
+  "/precios",
+  "/seguridad",
+  "/faq",
+  "/contacto",
+  "/hosteleria",
+  "/retail",
+  "/logistica",
+  "/para-candidatos",
+  "/para-empresas",
+  "/privacidad",
+  "/cookies",
+  "/terminos",
+  "/construccion",
+  "/ui",
+  "/(marketing)", // por si algún path raro llega
+];
 
 function shouldBypass(pathname: string) {
   return BYPASS_PREFIXES.some((p) => pathname === p || pathname.startsWith(p));
 }
 
+function isAppHost(req: NextRequest) {
+  const host = (req.headers.get("host") ?? "").toLowerCase();
+  return APP_HOSTS.has(host);
+}
+
+function isMarketingPath(pathname: string) {
+  return MARKETING_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
 export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+  const { pathname, search } = req.nextUrl;
 
-  // NEVER touch /api/*
-  if (pathname.startsWith("/api/")) {
-    return NextResponse.next();
+  if (shouldBypass(pathname)) return NextResponse.next();
+
+  // En app.verijob.es, todo marketing se va a verijob.es
+  if (isAppHost(req) && isMarketingPath(pathname)) {
+    const url = new URL(`https://verijob.es${pathname}${search}`);
+    return NextResponse.redirect(url, 308);
   }
 
-  // Always bypass callback
-  if (shouldBypass(pathname)) {
-    return NextResponse.next();
-  }
-
-  // En local: no aplicamos ninguna lógica adicional aquí (evita sorpresas)
-  if (isLocal(req)) {
-    return NextResponse.next();
-  }
-
-  // Producción: por defecto no interferimos (si más adelante metes proxy, hazlo explícito aquí)
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!_next/static|_next/image).*)"],
 };
