@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import { extractCvTextFromBuffer } from "@/utils/cv/extractText";
-import { extractStructuredFromCvText } from "@/utils/cv/openaiExtract";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function requireJobSecret(req: Request) {
   const expected = process.env.CV_PARSE_JOB_SECRET;
@@ -18,21 +19,24 @@ function getServiceSupabase() {
   return createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
-// Health (opcional) para abrir en navegador sin 500/405
 export async function GET() {
-  return NextResponse.json({ ok: true, route: "/api/_jobs/cv-parse", methods: ["POST"] });
+  return NextResponse.json({ ok: true, route: "/api/_jobs/cv-parse", runtime: "nodejs", methods: ["POST"] });
 }
 
 export async function POST(req: Request) {
   try {
     if (!requireJobSecret(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
+    const [{ extractCvTextFromBuffer }, { extractStructuredFromCvText }] = await Promise.all([
+      import("@/utils/cv/extractText"),
+      import("@/utils/cv/openaiExtract"),
+    ]);
+
     const supabase = getServiceSupabase();
 
-    // pick 1 queued job
     const { data: jobs, error: pickErr } = await supabase
       .from("cv_parse_jobs")
-      .select("id,cv_upload_id,status,created_at")
+      .select("id,cv_upload_id,created_at")
       .eq("status", "queued")
       .order("created_at", { ascending: true })
       .limit(1);
@@ -42,7 +46,6 @@ export async function POST(req: Request) {
 
     const job = jobs[0];
 
-    // mark processing
     const { error: markErr } = await supabase
       .from("cv_parse_jobs")
       .update({ status: "processing", started_at: new Date().toISOString(), error: null })
@@ -50,7 +53,6 @@ export async function POST(req: Request) {
 
     if (markErr) return NextResponse.json({ error: "mark_processing_failed", details: markErr.message }, { status: 400 });
 
-    // read upload
     const { data: upload, error: upErr } = await supabase
       .from("cv_uploads")
       .select("storage_bucket,storage_path,mime_type")
@@ -87,6 +89,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, job_id: job.id, status: "succeeded" });
   } catch (e: any) {
-    return NextResponse.json({ error: "worker_failed", details: String(e?.message || e) }, { status: 400 });
+    return NextResponse.json({ error: "worker_failed", details: String(e?.message || e) }, { status: 500 });
   }
 }

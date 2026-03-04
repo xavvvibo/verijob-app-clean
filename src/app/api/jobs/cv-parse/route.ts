@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient as createServiceClient } from "@supabase/supabase-js";
-import { extractCvTextFromBuffer } from "@/utils/cv/extractText";
-import { extractStructuredFromCvText } from "@/utils/cv/openaiExtract";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 function requireJobSecret(req: Request) {
   const expected = process.env.CV_PARSE_JOB_SECRET;
@@ -19,18 +20,25 @@ function getServiceSupabase() {
 }
 
 export async function GET() {
-  return NextResponse.json({ ok: true, route: "/api/jobs/cv-parse", methods: ["POST"] });
+  // NO imports pesados aquí; debe responder siempre
+  return NextResponse.json({ ok: true, route: "/api/jobs/cv-parse", runtime: "nodejs", methods: ["POST"] });
 }
 
 export async function POST(req: Request) {
   try {
     if (!requireJobSecret(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
+    // Imports dinámicos para evitar crash al cargar la route
+    const [{ extractCvTextFromBuffer }, { extractStructuredFromCvText }] = await Promise.all([
+      import("@/utils/cv/extractText"),
+      import("@/utils/cv/openaiExtract"),
+    ]);
+
     const supabase = getServiceSupabase();
 
     const { data: jobs, error: pickErr } = await supabase
       .from("cv_parse_jobs")
-      .select("id,cv_upload_id,status,created_at")
+      .select("id,cv_upload_id,created_at")
       .eq("status", "queued")
       .order("created_at", { ascending: true })
       .limit(1);
@@ -83,6 +91,6 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true, job_id: job.id, status: "succeeded" });
   } catch (e: any) {
-    return NextResponse.json({ error: "worker_failed", details: String(e?.message || e) }, { status: 400 });
+    return NextResponse.json({ error: "worker_failed", details: String(e?.message || e) }, { status: 500 });
   }
 }
