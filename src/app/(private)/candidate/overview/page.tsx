@@ -210,7 +210,7 @@ export default function CandidateOverview() {
 
         const { data: p, error: pErr } = await supabase
           .from("profiles")
-          .select("full_name, title, location, avatar_url")
+          .select("full_name, location, avatar_url")
           .eq("id", userId)
           .maybeSingle();
 
