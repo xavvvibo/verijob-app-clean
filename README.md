@@ -56,3 +56,5 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 # vercel retry 2026-03-02T08:56:26Z
 
 # vercel git trigger 2026-03-02T19:25:29Z
+
+# trigger deploy miércoles,  4 de marzo de 2026, 09:00:57 CET
