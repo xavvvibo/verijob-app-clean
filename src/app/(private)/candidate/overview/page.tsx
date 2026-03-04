@@ -263,8 +263,9 @@ const [rows, setRows] = useState<VerificationRow[]>([]);
   const metrics = useMemo(() => {
     const m = computeScore(rows);
     const nameBonus = profile?.full_name ? 10 : 0;
+    const reuseBonus = reuseCompanies >= 3 ? 20 : reuseCompanies >= 1 ? 10 : 0;
     const completion = clamp(m.completion + nameBonus);
-    return { ...m, completion };
+    return { ...m, score: clamp(m.score + reuseBonus), completion };
   }, [rows, profile?.full_name]);
 
   const recent = useMemo(() => {
@@ -369,7 +370,7 @@ const [rows, setRows] = useState<VerificationRow[]>([]);
                         {(v.position || "Experiencia")} · {(v.company_name_freeform || "Empresa")}
                       </div>
                       <div className="mt-1 text-xs text-gray-500">
-                        Evidencias: {v.evidence_count || 0} · Acciones: {v.actions_count || 0}
+                        Evidencias: {v.evidence_count || 0} · Acciones: {v.actions_count || 0} · Reutilizaciones: {reuseEvents}
                         {v.is_revoked ? " · Revocada" : ""}
                       </div>
                     </div>
