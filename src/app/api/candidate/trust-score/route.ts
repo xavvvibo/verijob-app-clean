@@ -25,9 +25,14 @@ export async function GET() {
   const approved = verifications.filter(v => (v.status || "").toLowerCase() === "approved").length
   const confirmed = verifications.filter(v => !!v.company_confirmed).length
   const evidences = verifications.reduce((acc, v) => acc + (v.evidence_count || 0), 0)
-  const revoked = verifications.filter(v => !!v.is_revoked).length
 
-  // reuse basado en verification_ids
+  // revocación solo cuenta como señal negativa si había señal positiva previa (approved o confirmed)
+  const revokedEffective = verifications.filter(v => {
+    const s = (v.status || "").toLowerCase()
+    const positive = s === "approved" || !!v.company_confirmed
+    return !!v.is_revoked && positive
+  }).length
+
   const ids = verifications.map(v => v.verification_id).filter(Boolean)
   let reuseEvents = 0
   let reuseCompanies = 0
@@ -43,48 +48,34 @@ export async function GET() {
     reuseCompanies = new Set(re.map((x: any) => x.company_id).filter(Boolean)).size
   }
 
-  // Fórmula v1 defendible (100):
-  // 40 verifications approved ratio
-  // 25 company confirmed ratio
-  // 20 evidence density
-  // 15 reuse companies
-  // penalización revocaciones
   const R = total ? approved / total : 0
   const V = total ? confirmed / total : 0
   const A = total ? Math.min(1, evidences / (total * 2)) : 0
   const U = Math.min(1, reuseCompanies / 5)
 
-  let score =
-    (R * 40) +
-    (V * 25) +
-    (A * 20) +
-    (U * 15)
+  let score = (R * 40) + (V * 25) + (A * 20) + (U * 15)
 
-  // Revocations penalizan fuerte (hasta -30)
-  score -= Math.min(30, revoked * 15)
+  // penalización suavizada (hasta -20)
+  const penalty = Math.min(20, revokedEffective * 10)
+  score -= penalty
 
   const trust = clamp(Math.round(score))
 
   const breakdown = {
-    total,
-    approved,
-    confirmed,
-    evidences,
-    reuseEvents,
-    reuseCompanies,
-    revoked,
+    total, approved, confirmed, evidences, reuseEvents, reuseCompanies,
+    revoked_effective: revokedEffective,
     components: {
       R: Math.round(R * 40),
       V: Math.round(V * 25),
       A: Math.round(A * 20),
       U: Math.round(U * 15),
-      penalty_revoked: Math.min(30, revoked * 15),
+      penalty_revoked: penalty,
     }
   }
 
   const { error: upErr } = await supabase
     .from("candidate_profiles")
-    .update({ trust_score: trust, trust_score_v1: trust, trust_score_breakdown: breakdown })
+    .update({ trust_score: trust, trust_score_breakdown: breakdown })
     .eq("user_id", userId)
 
   if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 })
