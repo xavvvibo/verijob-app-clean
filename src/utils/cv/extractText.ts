@@ -1,35 +1,57 @@
-import "server-only";
-
-type MaybeMime = string | null | undefined;
+import mammoth from "mammoth";
 
 /**
- * Extrae texto de un PDF desde un Buffer (Node).
- * - NO usa rutas locales
- * - NO usa pdfjs-dist (evita canvas)
- * - Compatible con Vercel/Node runtime
+ * Extrae texto de un CV desde un Buffer (PDF o DOCX).
+ * PDF: pdf-parse-debugging-disabled (fork drop-in que evita el modo debug/test que intenta abrir ./test/data/*.pdf en serverless).
+ * DOCX: mammoth.
  */
-export async function extractCvTextFromBuffer(buf: Buffer, mime: MaybeMime = null): Promise<string> {
-  if (!buf || buf.length < 10) throw new Error("pdf_extract_failed: empty_buffer");
+export async function extractCvTextFromBuffer(buf: Buffer, filename?: string): Promise<string> {
+  const name = (filename || "").toLowerCase();
 
-  // Si no es PDF, devolvemos texto plano “best effort”
-  const isPdf = (mime && mime.includes("pdf")) || buf.slice(0, 4).toString("utf8") === "%PDF";
-  if (!isPdf) {
+  const looksPdfByName = name.endsWith(".pdf");
+  const looksDocxByName = name.endsWith(".docx") || name.endsWith(".doc");
+  const isPdfByMagic =
+    buf.length >= 4 &&
+    buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46; // %PDF
+
+  if (looksPdfByName || isPdfByMagic) {
     try {
-      return buf.toString("utf8");
-    } catch {
-      return "";
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const pdfParse: any = require("pdf-parse-debugging-disabled");
+      const out = await pdfParse(buf);
+      const text = (out?.text || "").toString().trim();
+      if (!text) throw new Error("empty_pdf_text");
+      return text;
+    } catch (e: any) {
+      throw new Error(`pdf_extract_failed: ${e?.message || String(e)}`);
     }
   }
 
-  try {
-    // pdf-parse en CJS funciona bien en Node runtime, pero lo cargamos dinámico para evitar bundling raro.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const pdfParse = require("pdf-parse");
-    const data = await pdfParse(buf);
-    const text = (data?.text || "").trim();
-    if (!text) throw new Error("empty_text");
-    return text;
-  } catch (e: any) {
-    throw new Error(`pdf_parse_failed: ${String(e?.message || e)}`);
+  if (looksDocxByName) {
+    try {
+      const res = await mammoth.extractRawText({ buffer: buf });
+      const text = (res?.value || "").toString().trim();
+      if (!text) throw new Error("empty_docx_text");
+      return text;
+    } catch (e: any) {
+      throw new Error(`docx_extract_failed: ${e?.message || String(e)}`);
+    }
   }
+
+  // Fallbacks si no hay extensión fiable
+  try {
+    const res = await mammoth.extractRawText({ buffer: buf });
+    const text = (res?.value || "").toString().trim();
+    if (text) return text;
+  } catch {}
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pdfParse: any = require("pdf-parse-debugging-disabled");
+    const out = await pdfParse(buf);
+    const text = (out?.text || "").toString().trim();
+    if (text) return text;
+  } catch {}
+
+  throw new Error("unsupported_file_type");
 }
