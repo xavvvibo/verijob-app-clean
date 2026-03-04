@@ -343,11 +343,13 @@ const [rows, setRows] = useState<VerificationRow[]>([]);
         </Card>
 
         <div className="xl:col-span-2 space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
             <Stat label="Verificaciones" value={metrics.total} />
             <Stat label="Aprobadas" value={metrics.verified} />
             <Stat label="Confirmadas (empresa)" value={metrics.confirmed} />
             <Stat label="Evidencias" value={metrics.evidences} />
+            <Stat label="Reutilizaciones" value={reuseEvents} />
+            <Stat label="Empresas (reuse)" value={reuseCompanies} />
           </div>
 
           <Card
