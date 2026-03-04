@@ -1,17 +1,18 @@
 import mammoth from "mammoth";
+import { createRequire } from "module";
+
+const require = createRequire(import.meta.url);
 
 export async function extractCvTextFromBuffer(buf: Buffer, mimeType?: string | null): Promise<string> {
   const mt = (mimeType || "").toLowerCase();
 
   if (mt.includes("pdf") || mt === "application/pdf") {
     try {
-      // Import dinámico: evita crash en load-time del módulo
-      const pdfParseMod: any = await import("pdf-parse");
-      const pdfParseFn = pdfParseMod?.default || pdfParseMod;
-      const out = await pdfParseFn(buf);
+      // pdf-parse en CJS (estable en Node/Vercel)
+      const pdfParse: any = require("pdf-parse");
+      const out = await pdfParse(buf);
       return String(out?.text || "").trim();
     } catch (e: any) {
-      // Dejamos mensaje claro para debug en job.error si hiciera falta
       throw new Error(`pdf_parse_failed: ${String(e?.message || e)}`);
     }
   }

@@ -1,28 +1,25 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
-import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET(_req: Request, ctx: any) {
-  const id = String(ctx?.params?.id || "");
+  const id = ctx?.params?.id;
   if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
 
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
-  const user = auth?.user;
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!auth?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
-  const admin = createAdminSupabaseClient();
-
-  const { data: job, error } = await admin
+  const { data, error } = await supabase
     .from("cv_parse_jobs")
-    .select("id,user_id,status,error,model,tokens_in,tokens_out,result_json,created_at,started_at,finished_at")
+    .select("id,status,error,started_at,finished_at,result_json,model,tokens_in,tokens_out,created_at")
     .eq("id", id)
     .maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-  if (!job || job.user_id !== user.id) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (error) return NextResponse.json({ error: "db_error", details: error.message }, { status: 400 });
+  if (!data) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  return NextResponse.json({ job }, { status: 200 });
+  return NextResponse.json(data);
 }
