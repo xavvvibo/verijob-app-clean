@@ -190,10 +190,12 @@ function computeScore(verifications: VerificationRow[]) {
 export default function CandidateOverview() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<ProfileLite | null>(null);
-  
+
   const [reuseEvents, setReuseEvents] = useState<number>(0);
   const [reuseCompanies, setReuseCompanies] = useState<number>(0);
-const [rows, setRows] = useState<VerificationRow[]>([]);
+  const [rows, setRows] = useState<VerificationRow[]>([]);
+  const [trustScore, setTrustScore] = useState<number | null>(null);
+
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -247,8 +249,19 @@ const [rows, setRows] = useState<VerificationRow[]>([]);
           setReuseEvents(0);
           setReuseCompanies(0);
         }
+
         setRows((data || []) as VerificationRow[]);
         setErr(null);
+
+        // Trust Score (servidor): no bloquea UI
+        try {
+          const r = await fetch("/api/candidate/trust-score");
+          const j = await r.json();
+          if (alive && typeof j?.trust_score === "number") setTrustScore(j.trust_score);
+        } catch {
+          // noop
+        }
+
       } catch (e: any) {
         if (!alive) return;
         setErr(e?.message || "Error cargando datos");
@@ -266,11 +279,12 @@ const [rows, setRows] = useState<VerificationRow[]>([]);
     const nameBonus = profile?.full_name ? 10 : 0;
     const reuseBonus = reuseCompanies >= 3 ? 20 : reuseCompanies >= 1 ? 10 : 0;
     const completion = clamp(m.completion + nameBonus);
-    return { ...m, score: clamp(m.score + reuseBonus), completion };
-  }, [rows, profile?.full_name]);
+    const ravScore = clamp(m.score + reuseBonus);
+    const displayScore = trustScore != null ? clamp(trustScore) : ravScore;
+    return { ...m, ravScore, score: displayScore, completion };
+  }, [rows, profile?.full_name, reuseCompanies, trustScore]);
 
   const recent = useMemo(() => {
-    // orden simple por start_date/end_date (si existe); si no, por company_name_freeform
     const copy = [...rows];
     copy.sort((a, b) => {
       const da = (a.end_date || a.start_date || "") as string;
@@ -293,7 +307,9 @@ const [rows, setRows] = useState<VerificationRow[]>([]);
           <div className="mt-2 text-sm text-gray-600">
             Progreso perfil: <span className="font-semibold text-gray-900">{metrics.completion}%</span>
             {" · "}
-            Score R/A/V: <span className="font-semibold text-gray-900">{metrics.score}%</span>
+            R/A/V: <span className="font-semibold text-gray-900">{metrics.ravScore}%</span>
+            {" · "}
+            Trust: <span className="font-semibold text-gray-900">{metrics.score}%</span>
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
@@ -336,7 +352,7 @@ const [rows, setRows] = useState<VerificationRow[]>([]);
         <Card
           title="Credibilidad"
           subtitle="Basada en verificaciones reales"
-          right={<span className="text-xs text-gray-500">R/A/V ponderado</span>}
+          right={<span className="text-xs text-gray-500">Trust Score</span>}
           className="xl:col-span-1"
         >
           <div className="flex items-center justify-center">
