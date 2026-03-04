@@ -57,3 +57,7 @@ scripts/hardening-scan.sh
 # --------------------------------------------------------------------------
 /0
 .DS_Store
+
+# --- VERIJOB: allow Next.js dynamic routes with [token] ---
+!src/app/v/[token]/**
+!src/app/api/public/verification/[token]/**
