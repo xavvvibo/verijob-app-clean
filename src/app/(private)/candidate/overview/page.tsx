@@ -11,6 +11,26 @@ type ProfileLite = {
   avatar_url?: string | null;
 };
 
+type VerificationRow = {
+  verification_id: string;
+  company_id: string | null;
+  candidate_id: string | null;
+  status: string | null;
+  company_confirmed: boolean | null;
+  evidence_count: number | null;
+  actions_count: number | null;
+  company_name_freeform: string | null;
+  position: string | null;
+  start_date: string | null;
+  end_date: string | null;
+  is_revoked?: boolean | null;
+  revoked_at?: string | null;
+};
+
+function clamp(n: number, a = 0, b = 100) {
+  return Math.max(a, Math.min(b, n));
+}
+
 function scoreTone(score: number) {
   if (score >= 85) return { ring: "stroke-green-600", badge: "bg-green-50 text-green-700 border-green-100", label: "Profesional validado" };
   if (score >= 70) return { ring: "stroke-green-500", badge: "bg-green-50 text-green-700 border-green-100", label: "Alta confianza" };
@@ -19,7 +39,7 @@ function scoreTone(score: number) {
 }
 
 function RingNoNumber({ score }: { score: number }) {
-  const s = Math.max(0, Math.min(100, score));
+  const s = clamp(score);
   const radius = 92;
   const stroke = 14;
   const normalized = radius - stroke * 0.5;
@@ -49,7 +69,7 @@ function RingNoNumber({ score }: { score: number }) {
           {tone.label}
         </div>
         <div className="mt-3 text-sm text-gray-600 leading-snug">
-          Credibilidad basada en verificaciones reales y evidencias consistentes.
+          Credibilidad basada en verificaciones y evidencias reales.
         </div>
       </div>
     </div>
@@ -95,232 +115,255 @@ function Stat({ label, value }: { label: string; value: any }) {
 }
 
 function StatusPill({ status }: { status: string }) {
-  const s = status.toLowerCase();
+  const s = (status || "").toLowerCase();
   const cls =
-    s.includes("verif") ? "bg-green-50 text-green-700 border-green-100" :
-    s.includes("revis") || s.includes("pend") ? "bg-amber-50 text-amber-700 border-amber-100" :
-    s.includes("rech") ? "bg-red-50 text-red-700 border-red-100" :
+    s.includes("approved") || s.includes("verified") ? "bg-green-50 text-green-700 border-green-100" :
+    s.includes("review") || s.includes("pending") ? "bg-amber-50 text-amber-700 border-amber-100" :
+    s.includes("reject") ? "bg-red-50 text-red-700 border-red-100" :
     "bg-gray-50 text-gray-700 border-gray-200";
+
+  const label =
+    s.includes("approved") ? "Aprobada" :
+    s.includes("rejected") ? "Rechazada" :
+    s.includes("review") ? "En revisión" :
+    s.includes("pending") ? "Pendiente" :
+    status || "—";
 
   return (
     <span className={`inline-flex px-3 py-1 rounded-full border text-xs font-semibold ${cls}`}>
-      {status}
+      {label}
     </span>
   );
 }
 
-function PrimaryButton({ children }: { children: React.ReactNode }) {
+function PrimaryButton({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
   return (
-    <button className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition">
+    <button
+      onClick={onClick}
+      className="px-4 py-2.5 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition"
+    >
       {children}
     </button>
   );
 }
 
-function SecondaryButton({ children }: { children: React.ReactNode }) {
+function SecondaryButton({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
   return (
-    <button className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-50 transition">
+    <button
+      onClick={onClick}
+      className="px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-900 text-sm font-semibold hover:bg-gray-50 transition"
+    >
       {children}
     </button>
   );
+}
+
+function computeScore(verifications: VerificationRow[]) {
+  const total = verifications.length;
+
+  const verified = verifications.filter(v => (v.status || "").toLowerCase() === "approved").length;
+  const confirmed = verifications.filter(v => !!v.company_confirmed).length;
+  const evidences = verifications.reduce((acc, v) => acc + (v.evidence_count || 0), 0);
+
+  const R = total > 0 ? verified / total : 0;
+  const V = total > 0 ? confirmed / total : 0;
+  const A = total > 0 ? Math.min(1, evidences / (total * 2)) : 0;
+
+  // R/A/V ponderado (demo-ready y defendible)
+  const score = Math.round((R * 0.5 + V * 0.3 + A * 0.2) * 100);
+
+  // progreso perfil (mínimo, realista): nombre + actividad + verificación
+  const profileCompletionBase = 0; // se suma luego con profile
+  const completion = clamp(
+    profileCompletionBase +
+      (total > 0 ? 40 : 0) +
+      (verified > 0 ? 30 : 0) +
+      (evidences > 0 ? 20 : 0),
+    0,
+    100
+  );
+
+  return { total, verified, confirmed, evidences, score, completion };
 }
 
 export default function CandidateOverview() {
-  const [profile, setProfile] = useState<ProfileLite>({
-    full_name: "Candidato",
-    title: "Profesional",
-    location: "España",
-    avatar_url: null,
-  });
-  const [loadingProfile, setLoadingProfile] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<ProfileLite | null>(null);
+  const [rows, setRows] = useState<VerificationRow[]>([]);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    let cancelled = false;
+    let alive = true;
+
     (async () => {
       try {
         const supabase = createClient();
-        const { data: au } = await supabase.auth.getUser();
-        if (!au.user) return;
 
-        const { data, error } = await supabase
+        const { data: au, error: auErr } = await supabase.auth.getUser();
+        if (auErr) throw auErr;
+        if (!au?.user?.id) {
+          window.location.href = "/login";
+          return;
+        }
+
+        const userId = au.user.id;
+
+        const { data: p, error: pErr } = await supabase
           .from("profiles")
           .select("full_name, title, location, avatar_url")
-          .eq("id", au.user.id)
+          .eq("id", userId)
           .maybeSingle();
 
-        if (!cancelled && !error && data) setProfile(data as ProfileLite);
+        if (pErr) throw pErr;
+
+        const { data, error } = await supabase
+          .from("verification_summary")
+          .select("verification_id, company_id, candidate_id, status, company_confirmed, evidence_count, actions_count, company_name_freeform, position, start_date, end_date, is_revoked, revoked_at")
+          .eq("candidate_id", userId);
+
+        if (error) throw error;
+
+        if (!alive) return;
+        setProfile((p || null) as ProfileLite | null);
+        setRows((data || []) as VerificationRow[]);
+        setErr(null);
+      } catch (e: any) {
+        if (!alive) return;
+        setErr(e?.message || "Error cargando datos");
       } finally {
-        if (!cancelled) setLoadingProfile(false);
+        if (!alive) return;
+        setLoading(false);
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => { alive = false; };
   }, []);
 
-  // Mock pro (siguiente paso: conectar a verification_summary real)
-  const score = 82;
-  const metrics = { active: 3, pending: 1, views30d: 18, shares30d: 5, avgValidation: "2.8 días" };
+  const metrics = useMemo(() => {
+    const m = computeScore(rows);
+    const nameBonus = profile?.full_name ? 10 : 0;
+    const completion = clamp(m.completion + nameBonus);
+    return { ...m, completion };
+  }, [rows, profile?.full_name]);
 
-  const experiences = [
-    { company: "Restaurante Central", role: "Camarero", dates: "2023 — 2025", status: "Verificado" },
-    { company: "Hotel Sol", role: "Ayudante de sala", dates: "2022 — 2023", status: "En revisión" },
-    { company: "Cafetería Plaza", role: "Barista", dates: "2020 — 2022", status: "Verificado" },
-  ];
+  const recent = useMemo(() => {
+    // orden simple por start_date/end_date (si existe); si no, por company_name_freeform
+    const copy = [...rows];
+    copy.sort((a, b) => {
+      const da = (a.end_date || a.start_date || "") as string;
+      const db = (b.end_date || b.start_date || "") as string;
+      return (db || "").localeCompare(da || "");
+    });
+    return copy.slice(0, 6);
+  }, [rows]);
 
-  const name = profile.full_name ?? "Candidato";
-  const title = profile.title ?? "Profesional";
-  const location = profile.location ?? "España";
-
-  const headline = useMemo(() => {
-    if (score >= 85) return "Perfil listo para procesos de selección exigentes.";
-    if (score >= 70) return "Buen nivel. Completa 1 verificación más para subir al máximo.";
-    if (score >= 40) return "Ya estás verificado. Consolidemos con evidencias consistentes.";
-    return "Empieza por tu experiencia más reciente.";
-  }, [score]);
+  const tone = scoreTone(metrics.score);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="h-64 bg-gradient-to-b from-blue-50/70 to-transparent" />
+    <div className="space-y-6">
+      <div className="bg-white border border-gray-200 rounded-3xl shadow-sm p-7 flex items-start justify-between gap-6">
+        <div className="min-w-0">
+          <div className="text-xs text-gray-500">Dashboard candidato</div>
+          <div className="mt-2 text-2xl font-semibold text-gray-900 truncate">
+            {profile?.full_name ? profile.full_name : "Tu credibilidad profesional"}
+          </div>
+          <div className="mt-2 text-sm text-gray-600">
+            Progreso perfil: <span className="font-semibold text-gray-900">{metrics.completion}%</span>
+            {" · "}
+            Score R/A/V: <span className="font-semibold text-gray-900">{metrics.score}%</span>
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-3">
+            <PrimaryButton onClick={() => (window.location.href = "/candidate/verification/new")}>
+              Crear verificación
+            </PrimaryButton>
+            <SecondaryButton onClick={() => (window.location.href = "/candidate/evidences")}>
+              Subir evidencias
+            </SecondaryButton>
+            <SecondaryButton onClick={() => (window.location.href = "/candidate/share")}>
+              Compartir perfil
+            </SecondaryButton>
+          </div>
+
+          {err ? (
+            <div className="mt-4 text-sm text-red-600">
+              {err}
+            </div>
+          ) : null}
+
+          {loading ? (
+            <div className="mt-4 text-sm text-gray-500">
+              Cargando datos…
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex flex-col items-end gap-4 shrink-0">
+          <AvatarUploader
+            currentUrl={profile?.avatar_url || null}
+            fullName={profile?.full_name || "Candidato"}
+          />
+          <div className={`inline-flex px-3 py-1 rounded-full border text-xs font-semibold ${tone.badge}`}>
+            {tone.label}
+          </div>
+        </div>
       </div>
 
-      <div className="relative px-8 py-10">
-        <div className="max-w-7xl mx-auto space-y-10">
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <Card
+          title="Credibilidad"
+          subtitle="Basada en verificaciones reales"
+          right={<span className="text-xs text-gray-500">R/A/V ponderado</span>}
+          className="xl:col-span-1"
+        >
+          <div className="flex items-center justify-center">
+            <RingNoNumber score={metrics.score} />
+          </div>
+        </Card>
 
-          {/* HEADER (limpio, como company) */}
-          <div className="flex flex-col lg:flex-row items-start justify-between gap-6">
-            <div>
-              <div className="text-sm text-gray-500">Dashboard candidato</div>
-              <div className="mt-1 text-2xl font-semibold text-gray-900">
-                {loadingProfile ? "Cargando…" : name}
-              </div>
-              <div className="mt-1 text-sm text-gray-600">
-                {title} · <span className="text-gray-500">{location}</span>
-              </div>
-              <div className="mt-3 text-sm text-gray-600">{headline}</div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <PrimaryButton>Añadir verificación</PrimaryButton>
-              <SecondaryButton>Compartir perfil</SecondaryButton>
-              <SecondaryButton>CV verificado (próximo)</SecondaryButton>
-            </div>
+        <div className="xl:col-span-2 space-y-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Stat label="Verificaciones" value={metrics.total} />
+            <Stat label="Aprobadas" value={metrics.verified} />
+            <Stat label="Confirmadas (empresa)" value={metrics.confirmed} />
+            <Stat label="Evidencias" value={metrics.evidences} />
           </div>
 
-          {/* HERO centrado (identidad + scoring + CTA) */}
-          <Card className="overflow-hidden">
-            <div className="p-8 lg:p-10">
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-
-                <div className="lg:col-span-5 flex flex-col items-center lg:items-start">
-                  <RingNoNumber score={score} />
-                </div>
-
-                <div className="lg:col-span-7 space-y-6">
-                  <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
-                    <div className="text-sm font-semibold text-gray-900">Identidad</div>
-                    <div className="mt-4">
-                      <AvatarUploader
-                        currentUrl={profile.avatar_url ?? null}
-                        fallbackName={name}
-                        onUpdated={(url) => setProfile((p) => ({ ...p, avatar_url: url }))}
-                      />
-                    </div>
-                    <div className="mt-4 text-sm text-gray-600">
-                      Tip: una foto profesional + titular claro aumenta la confianza y prepara el CV verificado.
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6">
-                      <div className="text-sm font-semibold text-blue-900">Siguiente mejor acción</div>
-                      <div className="mt-2 text-sm text-blue-700">
-                        Añade una experiencia reciente y 1 evidencia. Es lo que más mejora tu score.
+          <Card
+            title="Actividad reciente"
+            subtitle="Tus últimas verificaciones"
+          >
+            {recent.length === 0 ? (
+              <div className="text-sm text-gray-600">
+                Aún no tienes verificaciones. Crea la primera y sube evidencias para aumentar tu credibilidad.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recent.map((v) => (
+                  <div key={v.verification_id} className="flex items-center justify-between gap-4 border border-gray-200 rounded-2xl p-4">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-gray-900 truncate">
+                        {(v.position || "Experiencia")} · {(v.company_name_freeform || "Empresa")}
                       </div>
-                      <div className="mt-4">
-                        <PrimaryButton>Empezar</PrimaryButton>
+                      <div className="mt-1 text-xs text-gray-500">
+                        Evidencias: {v.evidence_count || 0} · Acciones: {v.actions_count || 0}
+                        {v.is_revoked ? " · Revocada" : ""}
                       </div>
                     </div>
-
-                    <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
-                      <div className="text-sm font-semibold text-gray-900">Checklist</div>
-                      <ul className="mt-3 text-sm text-gray-600 space-y-2">
-                        <li>• Foto profesional</li>
-                        <li>• 1 verificación nueva</li>
-                        <li>• 1 evidencia por experiencia</li>
-                        <li>• Compartir enlace a empresa</li>
-                      </ul>
+                    <div className="shrink-0 flex items-center gap-3">
+                      <StatusPill status={(v.status || "—")} />
+                      <button
+                        className="text-sm font-semibold text-blue-600 hover:text-blue-700"
+                        onClick={() => (window.location.href = `/candidate/verification/${v.verification_id}`)}
+                      >
+                        Ver
+                      </button>
                     </div>
                   </div>
-                </div>
-
+                ))}
               </div>
-            </div>
+            )}
           </Card>
-
-          {/* KPI STRIP (compacto, organizado) */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
-            <Stat label="Activas" value={metrics.active} />
-            <Stat label="Pendientes" value={metrics.pending} />
-            <Stat label="Vistas (30d)" value={metrics.views30d} />
-            <Stat label="Shares (30d)" value={metrics.shares30d} />
-            <Stat label="T. medio" value={metrics.avgValidation} />
-          </div>
-
-          {/* EXPERIENCIA (bloque principal, con aire) */}
-          <div className="flex items-end justify-between gap-6">
-            <div>
-              <div className="text-xl font-semibold text-gray-900">Experiencia verificable</div>
-              <div className="mt-1 text-sm text-gray-500">
-                Ordenado y claro. Ideal para compartir con empresas.
-              </div>
-            </div>
-            <SecondaryButton>Ver todas</SecondaryButton>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {experiences.map((exp, i) => (
-              <div key={i} className="bg-white border border-gray-200 rounded-3xl shadow-sm p-7">
-                <div className="flex items-start justify-between gap-6">
-                  <div>
-                    <div className="text-lg font-semibold text-gray-900">{exp.company}</div>
-                    <div className="mt-1 text-sm text-gray-600">{exp.role}</div>
-                    <div className="mt-2 text-xs text-gray-500">{exp.dates}</div>
-                  </div>
-                  <StatusPill status={exp.status} />
-                </div>
-
-                <div className="mt-6 flex flex-wrap gap-3">
-                  <PrimaryButton>Ver detalle</PrimaryButton>
-                  <SecondaryButton>Añadir evidencia</SecondaryButton>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* ACCIONES ESTRATÉGICAS (ordenadas, sin competir con el hero) */}
-          <Card title="Acciones" subtitle="Lo que más impacta tu credibilidad">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
-                <div className="text-sm font-semibold text-gray-900">Añadir verificación</div>
-                <div className="mt-2 text-sm text-gray-600">Nueva experiencia o empleo reciente.</div>
-                <div className="mt-4"><PrimaryButton>Crear</PrimaryButton></div>
-              </div>
-
-              <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
-                <div className="text-sm font-semibold text-gray-900">Compartir perfil</div>
-                <div className="mt-2 text-sm text-gray-600">Enlace seguro para empresas.</div>
-                <div className="mt-4"><SecondaryButton>Compartir</SecondaryButton></div>
-              </div>
-
-              <div className="bg-gray-50 border border-gray-200 rounded-2xl p-6">
-                <div className="text-sm font-semibold text-gray-900">CV verificado</div>
-                <div className="mt-2 text-sm text-gray-600">PDF con foto + verificación.</div>
-                <div className="mt-4"><SecondaryButton>Activar (próximo)</SecondaryButton></div>
-              </div>
-            </div>
-          </Card>
-
         </div>
       </div>
     </div>
