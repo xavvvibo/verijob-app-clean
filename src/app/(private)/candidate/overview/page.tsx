@@ -189,7 +189,10 @@ function computeScore(verifications: VerificationRow[]) {
 export default function CandidateOverview() {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<ProfileLite | null>(null);
-  const [rows, setRows] = useState<VerificationRow[]>([]);
+  
+  const [reuseEvents, setReuseEvents] = useState<number>(0);
+  const [reuseCompanies, setReuseCompanies] = useState<number>(0);
+const [rows, setRows] = useState<VerificationRow[]>([]);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
@@ -225,6 +228,24 @@ export default function CandidateOverview() {
 
         if (!alive) return;
         setProfile((p || null) as ProfileLite | null);
+
+        // Reuse events (empresas que reutilizan tus verificaciones)
+        const verificationIds = (data ?? []).map((r: any) => r.verification_id).filter(Boolean);
+        if (verificationIds.length) {
+          const { data: reData, error: reErr } = await supabase
+            .from("verification_reuse_events")
+            .select("verification_id, company_id")
+            .in("verification_id", verificationIds);
+
+          if (!reErr && reData) {
+            setReuseEvents(reData.length);
+            const uniq = new Set((reData as any[]).map((x) => x.company_id).filter(Boolean));
+            setReuseCompanies(uniq.size);
+          }
+        } else {
+          setReuseEvents(0);
+          setReuseCompanies(0);
+        }
         setRows((data || []) as VerificationRow[]);
         setErr(null);
       } catch (e: any) {
