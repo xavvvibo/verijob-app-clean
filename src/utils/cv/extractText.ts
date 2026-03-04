@@ -1,51 +1,57 @@
 import mammoth from "mammoth";
-import { createRequire } from "module";
 
-const require = createRequire(import.meta.url);
+/**
+ * Extrae texto de un CV desde un Buffer (PDF o DOCX).
+ * PDF: pdf-parse@1.1.1 cargado por require("pdf-parse/lib/pdf-parse.js") (CJS) => evita pdfjs-dist/canvas.
+ * DOCX: mammoth.
+ */
+export async function extractCvTextFromBuffer(buf: Buffer, filename?: string): Promise<string> {
+  const name = (filename || "").toLowerCase();
 
-async function extractPdfText(buf: Buffer): Promise<string> {
-  // pdfjs legacy build (CJS) para Node
-  const pdfjs: any = require("pdfjs-dist/legacy/build/pdf.js");
+  const looksPdfByName = name.endsWith(".pdf");
+  const looksDocxByName = name.endsWith(".docx") || name.endsWith(".doc");
+  const isPdfByMagic =
+    buf.length >= 4 &&
+    buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46; // %PDF
 
-  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buf) });
-  const pdf = await loadingTask.promise;
-
-  const parts: string[] = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const pageText = (content.items || [])
-      .map((it: any) => (typeof it.str === "string" ? it.str : ""))
-      .join(" ");
-    parts.push(pageText);
-  }
-
-  return parts.join("\n").replace(/\s+\n/g, "\n").trim();
-}
-
-export async function extractCvTextFromBuffer(buf: Buffer, mimeType?: string | null): Promise<string> {
-  const mt = (mimeType || "").toLowerCase();
-
-  if (mt.includes("pdf") || mt === "application/pdf") {
+  if (looksPdfByName || isPdfByMagic) {
     try {
-      return await extractPdfText(buf);
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const pdfParse: any = require("pdf-parse/lib/pdf-parse.js");
+      const out = await pdfParse(buf);
+      const text = (out?.text || "").toString().trim();
+      if (!text) throw new Error("empty_pdf_text");
+      return text;
     } catch (e: any) {
-      throw new Error(`pdf_extract_failed: ${String(e?.message || e)}`);
+      throw new Error(`pdf_extract_failed: ${e?.message || String(e)}`);
     }
   }
 
-  if (mt.includes("wordprocessingml") || mt.includes("docx")) {
+  if (looksDocxByName) {
     try {
-      const out = await mammoth.extractRawText({ buffer: buf });
-      return String(out?.value || "").trim();
+      const res = await mammoth.extractRawText({ buffer: buf });
+      const text = (res?.value || "").toString().trim();
+      if (!text) throw new Error("empty_docx_text");
+      return text;
     } catch (e: any) {
-      throw new Error(`docx_extract_failed: ${String(e?.message || e)}`);
+      throw new Error(`docx_extract_failed: ${e?.message || String(e)}`);
     }
   }
+
+  // Fallbacks si no hay extensión fiable
+  try {
+    const res = await mammoth.extractRawText({ buffer: buf });
+    const text = (res?.value || "").toString().trim();
+    if (text) return text;
+  } catch {}
 
   try {
-    return buf.toString("utf8").trim();
-  } catch (e: any) {
-    throw new Error(`text_decode_failed: ${String(e?.message || e)}`);
-  }
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const pdfParse: any = require("pdf-parse/lib/pdf-parse.js");
+    const out = await pdfParse(buf);
+    const text = (out?.text || "").toString().trim();
+    if (text) return text;
+  } catch {}
+
+  throw new Error("unsupported_file_type");
 }
