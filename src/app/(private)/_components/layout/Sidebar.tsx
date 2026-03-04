@@ -9,6 +9,12 @@ type NavItem = {
   match?: "exact" | "prefix";
 };
 
+type Props = {
+  // Se pasa desde (private)/layout.tsx. Lo aceptamos para evitar fallo TS.
+  // (Ahora mismo no lo necesitamos para pintar el menú.)
+  role?: any;
+};
+
 function isActive(pathname: string, item: NavItem) {
   const mode = item.match ?? "prefix";
   if (mode === "exact") return pathname === item.href;
@@ -55,13 +61,13 @@ function Section({ title, items }: { title: string; items: NavItem[] }) {
   );
 }
 
-export default function Sidebar() {
+export default function Sidebar(_props: Props) {
   const pathname = usePathname() || "/";
   const inCandidate = pathname === "/candidate" || pathname.startsWith("/candidate/");
   const inCompany = pathname === "/company" || pathname.startsWith("/company/");
   const inDashboard = pathname === "/dashboard" || pathname.startsWith("/dashboard/");
 
-  // Rutas reales (inventario confirmado por ti)
+  // Rutas reales (inventario confirmado)
   const candidateNav: NavItem[] = [
     { label: "Dashboard", href: "/candidate/overview", match: "exact" },
     { label: "Perfil", href: "/candidate/profile" },
@@ -78,33 +84,31 @@ export default function Sidebar() {
     { label: "Reutilización", href: "/company/reuse", match: "exact" },
   ];
 
-  // Link “home” del área privada (no marketing)
-  const topLinks: NavItem[] = [
-    { label: "Inicio", href: "/dashboard", match: "exact" },
-  ];
+  const topLinks: NavItem[] = [{ label: "Inicio", href: "/dashboard", match: "exact" }];
 
-  // Si está dentro de candidate/company, muestra el menú de ese contexto.
-  // Si está en /dashboard (hub), solo muestra “Inicio” para no confundir.
   const showCandidate = inCandidate && !inCompany;
   const showCompany = inCompany && !inCandidate;
 
   return (
     <aside className="h-full w-[260px] shrink-0 border-r border-slate-200 bg-white">
       <div className="flex h-full flex-col gap-6 p-4">
-        <div className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-3">
-          <div className="h-8 w-8 overflow-hidden rounded-xl bg-slate-100">
-            {/* Logo (si existe en public/brand/logo.png) */}
+        {/* BRAND HEADER (logo más grande) */}
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-3">
+          <div className="h-12 w-12 overflow-hidden rounded-2xl bg-slate-100">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/logo.png" alt="Verijob" className="h-8 w-8 object-contain" />
+            <img
+              src="/brand/logo.png"
+              alt="Verijob"
+              className="h-12 w-12 object-contain"
+            />
           </div>
           <div className="leading-tight">
-            <div className="text-sm font-extrabold text-slate-900">VERIJOB</div>
+            <div className="text-base font-extrabold text-slate-900">VERIJOB</div>
             <div className="text-xs text-slate-500">Trust Infrastructure</div>
           </div>
         </div>
 
         <Section title="Navegación" items={topLinks} />
-
         {showCandidate && <Section title="Candidato" items={candidateNav} />}
         {showCompany && <Section title="Empresa" items={companyNav} />}
 
@@ -115,7 +119,7 @@ export default function Sidebar() {
         )}
 
         <div className="mt-auto rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
-          Consejo: completa <b>Perfil</b> + <b>CV & Experiencias</b> para mejorar tu credibilidad.
+          Completa <b>Perfil</b> + <b>CV & Experiencias</b> para mejorar tu credibilidad.
         </div>
       </div>
     </aside>
