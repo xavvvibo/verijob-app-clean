@@ -11,6 +11,15 @@ function ymToInt(ym: string | null | undefined) {
   return null
 }
 
+function first<T = any>(...vals: any[]): T | null {
+  for (const v of vals) {
+    if (v === null || v === undefined) continue
+    if (typeof v === "string" && v.trim() === "") continue
+    return v as T
+  }
+  return null
+}
+
 export async function GET() {
   const supabase = await createClient()
 
@@ -29,28 +38,52 @@ export async function GET() {
 
   const { data: verifications } = await supabase
     .from("verification_summary")
-    .select("verification_id,company_name_freeform,position,start_date,end_date,status,company_confirmed,evidence_count")
+    .select("*")
     .eq("candidate_id", userId)
 
   const cvTimeline = experiences.map((e: any) => ({
     source: "cv",
-    company: e.company || e.company_name || null,
-    position: e.position || e.title || null,
-    start: e.start || e.start_date || null,
-    end: e.end || e.end_date || null
+    company: first(e.company, e.company_name, e.employer, e.organization),
+    position: first(e.position, e.title, e.role),
+    start: first(e.start, e.start_date, e.from, e.from_date),
+    end: first(e.end, e.end_date, e.to, e.to_date),
+    missing_fields: []
   }))
 
-  const verifiedTimeline = (verifications || []).map((v: any) => ({
-    source: "verification",
-    verification_id: v.verification_id,
-    company: v.company_name_freeform,
-    position: v.position,
-    start: v.start_date,
-    end: v.end_date,
-    status: v.status,
-    company_confirmed: v.company_confirmed,
-    evidence_count: v.evidence_count
-  }))
+  const verifiedTimeline = (verifications || []).map((v: any) => {
+    const company = first(
+      v.company_name_freeform,
+      v.company_name,
+      v.company,
+      v.employer,
+      (v.company_profile && v.company_profile.name) ? v.company_profile.name : null
+    )
+
+    const position = first(v.position, v.role, v.job_title)
+    const start = first(v.start_date, v.start, v.from_date, v.from)
+    const end = first(v.end_date, v.end, v.to_date, v.to)
+
+    const missing: string[] = []
+    if (!company) missing.push("company")
+    if (!position) missing.push("position")
+    if (!start) missing.push("start_date")
+
+    return {
+      source: "verification",
+      verification_id: v.verification_id,
+      company: company || "Empresa",
+      position: position || "Puesto",
+      start,
+      end,
+      status: v.status,
+      company_confirmed: v.company_confirmed,
+      evidence_count: v.evidence_count,
+      actions_count: v.actions_count,
+      is_revoked: v.is_revoked,
+      revoked_at: v.revoked_at,
+      missing_fields: missing
+    }
+  })
 
   const timeline = [...cvTimeline, ...verifiedTimeline]
 
@@ -62,9 +95,6 @@ export async function GET() {
 
   return NextResponse.json({
     items: timeline,
-    counts: {
-      cv: cvTimeline.length,
-      verifications: verifiedTimeline.length
-    }
+    counts: { cv: cvTimeline.length, verifications: verifiedTimeline.length }
   })
 }
