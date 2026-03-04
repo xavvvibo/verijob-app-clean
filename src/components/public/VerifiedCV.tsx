@@ -53,7 +53,7 @@ export default function VerifiedCV({ data }: Props) {
 
         <div className="border-t pt-6">
           <p className="text-sm text-gray-500 mb-2">Estado verificación</p>
-          <p className="text-lg font-medium">{labelStatus(verification.status)}</p>
+          <p className="text-lg font-medium">{labelStatus(verification.status_public ?? verification.status)}</p>
 
           {verification.is_revoked ? (
             <div className="mt-4 text-sm text-gray-600">
