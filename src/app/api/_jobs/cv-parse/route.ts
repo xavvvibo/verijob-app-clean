@@ -1,96 +1,92 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
-import { createAdminSupabaseClient } from "@/utils/supabase/admin";
+import { createClient as createServiceClient } from "@supabase/supabase-js";
 import { extractCvTextFromBuffer } from "@/utils/cv/extractText";
-import { extractStructuredFromCvText } from "@/utils/openai_cv_extract";
+import { extractStructuredFromCvText } from "@/utils/cv/openaiExtract";
 
-export const runtime = "nodejs";
+function requireJobSecret(req: Request) {
+  const expected = process.env.CV_PARSE_JOB_SECRET;
+  if (!expected) throw new Error("Missing CV_PARSE_JOB_SECRET");
+  const got = req.headers.get("x-job-secret");
+  return Boolean(got && got === expected);
+}
 
-const BodySchema = z.object({
-  job_id: z.string().uuid(),
-});
+function getServiceSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url) throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL");
+  if (!key) throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+  return createServiceClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
 
-function requireInternal(req: Request) {
-  const token = req.headers.get("x-verijob-internal") || "";
-  const expected = process.env.INTERNAL_JOB_TOKEN || "";
-  // si no configuras token, al menos bloquea por defecto
-  if (!expected || token !== expected) return false;
-  return true;
+// Health (opcional) para abrir en navegador sin 500/405
+export async function GET() {
+  return NextResponse.json({ ok: true, route: "/api/_jobs/cv-parse", methods: ["POST"] });
 }
 
 export async function POST(req: Request) {
-  if (!requireInternal(req)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-  const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
-  if (!parsed.success) return NextResponse.json({ error: "Invalid body", details: parsed.error.flatten() }, { status: 400 });
-
-  const admin = createAdminSupabaseClient();
-
-  // 1) carga job + upload
-  const { data: job, error: jErr } = await admin
-    .from("cv_parse_jobs")
-    .select("id,status,user_id,cv_upload_id,cv_uploads:cv_upload_id(id,storage_bucket,storage_path,mime_type)")
-    .eq("id", parsed.data.job_id)
-    .maybeSingle();
-
-  if (jErr) return NextResponse.json({ error: jErr.message }, { status: 400 });
-  if (!job) return NextResponse.json({ error: "Not found" }, { status: 404 });
-
-  if (job.status === "processing" || job.status === "succeeded") {
-    return NextResponse.json({ ok: true, status: job.status }, { status: 200 });
-  }
-
-  // 2) marca processing
-  await admin
-    .from("cv_parse_jobs")
-    .update({ status: "processing", started_at: new Date().toISOString(), error: null })
-    .eq("id", job.id);
-
   try {
-    const upload: any = (job as any).cv_uploads;
-    const bucket = upload.storage_bucket as string;
-    const path = upload.storage_path as string;
-    const mimeType = upload.mime_type as (string | null);
+    if (!requireJobSecret(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-    // 3) download desde Supabase Storage (service role)
-    const { data: dl, error: dlErr } = await admin.storage.from(bucket).download(path);
-    if (dlErr || !dl) throw new Error(dlErr?.message || "storage_download_failed");
+    const supabase = getServiceSupabase();
 
-    const arrayBuf = await dl.arrayBuffer();
-    const buf = Buffer.from(arrayBuf);
+    // pick 1 queued job
+    const { data: jobs, error: pickErr } = await supabase
+      .from("cv_parse_jobs")
+      .select("id,cv_upload_id,status,created_at")
+      .eq("status", "queued")
+      .order("created_at", { ascending: true })
+      .limit(1);
 
-    // 4) extract text
-    const cvText = await extractCvTextFromBuffer(buf, mimeType);
-    if (!cvText || cvText.length < 80) throw new Error("cv_text_too_short_or_empty");
+    if (pickErr) return NextResponse.json({ error: "pick_failed", details: pickErr.message }, { status: 400 });
+    if (!jobs || jobs.length === 0) return NextResponse.json({ ok: true, message: "no_jobs" });
 
-    // 5) LLM structured extraction
-    const out = await extractStructuredFromCvText(cvText);
+    const job = jobs[0];
 
-    // 6) persist result
-    await admin
+    // mark processing
+    const { error: markErr } = await supabase
+      .from("cv_parse_jobs")
+      .update({ status: "processing", started_at: new Date().toISOString(), error: null })
+      .eq("id", job.id);
+
+    if (markErr) return NextResponse.json({ error: "mark_processing_failed", details: markErr.message }, { status: 400 });
+
+    // read upload
+    const { data: upload, error: upErr } = await supabase
+      .from("cv_uploads")
+      .select("storage_bucket,storage_path,mime_type")
+      .eq("id", job.cv_upload_id)
+      .single();
+
+    if (upErr) throw new Error(`cv_uploads_read_failed: ${upErr.message}`);
+
+    const bucket = upload.storage_bucket || "candidate-cv";
+    const path = upload.storage_path;
+
+    const { data: file, error: dlErr } = await supabase.storage.from(bucket).download(path);
+    if (dlErr || !file) throw new Error(`storage_download_failed: ${dlErr?.message || "no_file"}`);
+
+    const buf = Buffer.from(await file.arrayBuffer());
+    const text = await extractCvTextFromBuffer(buf, upload.mime_type || null);
+    if (!text || text.length < 50) throw new Error("cv_text_too_short");
+
+    const out = await extractStructuredFromCvText(text);
+
+    const { error: saveErr } = await supabase
       .from("cv_parse_jobs")
       .update({
         status: "succeeded",
         finished_at: new Date().toISOString(),
-        model: out.model || null,
+        model: out.model ?? null,
         tokens_in: out.tokensIn ?? null,
         tokens_out: out.tokensOut ?? null,
-        result_json: out.result,
-        error: null,
+        result_json: out.result as any,
       })
       .eq("id", job.id);
 
-    return NextResponse.json({ ok: true, status: "succeeded" }, { status: 200 });
-  } catch (e: any) {
-    await admin
-      .from("cv_parse_jobs")
-      .update({
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        error: String(e?.message || e),
-      })
-      .eq("id", parsed.data.job_id);
+    if (saveErr) throw new Error(`save_result_failed: ${saveErr.message}`);
 
-    return NextResponse.json({ ok: false, status: "failed", error: String(e?.message || e) }, { status: 200 });
+    return NextResponse.json({ ok: true, job_id: job.id, status: "succeeded" });
+  } catch (e: any) {
+    return NextResponse.json({ error: "worker_failed", details: String(e?.message || e) }, { status: 400 });
   }
 }
