@@ -6,7 +6,6 @@ function clamp(n: number, a = 0, b = 100) {
 }
 
 function ymToInt(ym: string) {
-  // acepta "YYYY-MM" o "YYYY"
   const s = (ym || "").trim()
   if (!s) return null
   const m1 = s.match(/^(\d{4})-(\d{2})/)
@@ -16,20 +15,40 @@ function ymToInt(ym: string) {
   return null
 }
 
-function consistencyFromCv(raw: any) {
-  const exps: any[] = Array.isArray(raw?.experiences) ? raw.experiences : []
+function pickExperiences(raw: any, experiencesCol: any) {
+  const candidates: any[] = []
+
+  // 1) raw_cv_json posibles keys
+  if (raw && typeof raw === "object") {
+    candidates.push(raw.experiences, raw.work_experience, raw.experience, raw.jobs, raw.positions, raw.employment)
+    if (raw.profile && typeof raw.profile === "object") {
+      candidates.push(raw.profile.experiences, raw.profile.work_experience, raw.profile.jobs)
+    }
+  }
+
+  // 2) columna experiences (jsonb)
+  candidates.push(experiencesCol)
+
+  for (const c of candidates) {
+    if (Array.isArray(c) && c.length) return c
+  }
+  return []
+}
+
+function consistencyFromCv(raw: any, experiencesCol: any) {
+  const exps: any[] = pickExperiences(raw, experiencesCol)
+
   if (!exps.length) {
     return { cv_consistency_score: 0, breakdown: { reason: "no_experiences" } }
   }
 
   let missingDates = 0
   let invertedDates = 0
-
   const ranges: Array<{ start: number, end: number }> = []
 
   for (const e of exps) {
-    const s = ymToInt(e?.start || e?.start_date || "")
-    const en = ymToInt(e?.end || e?.end_date || "") ?? ymToInt(String(new Date().getFullYear()))
+    const s = ymToInt(e?.start || e?.start_date || e?.from || e?.from_date || "")
+    const en = ymToInt(e?.end || e?.end_date || e?.to || e?.to_date || "") ?? ymToInt(String(new Date().getFullYear()))
     if (s == null) {
       missingDates++
       continue
@@ -40,7 +59,6 @@ function consistencyFromCv(raw: any) {
 
   ranges.sort((a, b) => a.start - b.start)
 
-  // gaps (meses sin experiencia) tolerancia 3 meses
   let gapMonths = 0
   for (let i = 1; i < ranges.length; i++) {
     const prev = ranges[i - 1]
@@ -49,11 +67,10 @@ function consistencyFromCv(raw: any) {
     if (gap > 3) gapMonths += (gap - 3)
   }
 
-  // score base 100 y penalizaciones
   let score = 100
   score -= missingDates * 10
   score -= invertedDates * 20
-  score -= Math.min(40, Math.floor(gapMonths / 6) * 10) // -10 por cada 6 meses de gap efectivo
+  score -= Math.min(40, Math.floor(gapMonths / 6) * 10)
 
   score = clamp(score, 0, 100)
 
@@ -81,18 +98,16 @@ export async function GET() {
 
   const userId = user.id
 
-  // 1) señal CV (raw_cv_json)
   const { data: cp, error: cpErr } = await supabase
     .from("candidate_profiles")
-    .select("raw_cv_json")
+    .select("raw_cv_json, experiences")
     .eq("user_id", userId)
     .maybeSingle()
 
   if (cpErr) return NextResponse.json({ error: cpErr.message }, { status: 400 })
 
-  const cv = consistencyFromCv(cp?.raw_cv_json || null)
+  const cv = consistencyFromCv(cp?.raw_cv_json || null, cp?.experiences || null)
 
-  // 2) señal verificaciones (verification_summary)
   const { data: rows, error } = await supabase
     .from("verification_summary")
     .select("verification_id,status,company_confirmed,evidence_count,is_revoked")
@@ -134,7 +149,6 @@ export async function GET() {
 
   let score = (R * 35) + (V * 22) + (A * 18) + (U * 10)
 
-  // CV consistency aporta hasta +15 (proporcional)
   const cvBoost = Math.round((cv.cv_consistency_score / 100) * 15)
   score += cvBoost
 

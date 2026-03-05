@@ -37,7 +37,7 @@ export async function GET() {
   const experiences = Array.isArray(cp?.experiences) ? cp.experiences : []
 
   const { data: verifications } = await supabase
-    .from("verification_summary")
+    .from("verification_summary_v3")
     .select("*")
     .eq("candidate_id", userId)
 
