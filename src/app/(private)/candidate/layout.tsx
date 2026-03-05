@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+
+export const metadata: Metadata = {
+  title: { default: "VERIJOB — Candidato", template: "VERIJOB Candidato — %s" },
+  description: "Dashboard del candidato: verificaciones, evidencias y CV.",
+};
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;

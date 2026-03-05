@@ -1,5 +1,11 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+
+export const metadata: Metadata = {
+  title: { default: "VERIJOB — Empresa", template: "VERIJOB Empresa — %s" },
+  description: "Dashboard de empresa: verificación, cola y reutilización.",
+};
 
 type Props = { children: React.ReactNode };
 
