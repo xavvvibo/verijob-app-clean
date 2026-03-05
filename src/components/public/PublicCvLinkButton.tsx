@@ -61,7 +61,6 @@ export default function PublicCvLinkButton({ verificationId }: { verificationId:
         disabled={!token}
         className={`rounded-xl border px-3 py-2 text-sm ${token ? "border-gray-200 hover:bg-gray-50" : "border-gray-100 text-gray-300 cursor-not-allowed"}`}
         type="button"
-        title={token ? "Descargar QR (SVG)" : "Genera el enlace público primero"}
       >
         Descargar QR
       </button>
