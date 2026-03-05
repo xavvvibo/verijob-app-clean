@@ -405,6 +405,32 @@ export default function CandidateOverview() {
           </div>
 
           <Card
+            title="CV verificado (IA)"
+            subtitle="Experiencias extraídas del CV"
+          >
+            {experiences.length === 0 ? (
+              <div className="text-sm text-gray-600">
+                Aún no hay CV estructurado. Sube tu CV para generar experiencias verificables.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {experiences.map((exp:any, idx:number) => (
+                  <div key={idx} className="border border-gray-200 rounded-2xl p-4">
+                    <div className="font-semibold text-gray-900">{exp.role_title}</div>
+                    <div className="text-sm text-gray-600">{exp.company_name}</div>
+                    <div className="text-xs text-gray-500">
+                      {exp.start_date || "?"} — {exp.end_date || "Present"}
+                    </div>
+                    {exp.description ? (
+                      <div className="text-sm text-gray-700 mt-2">{exp.description}</div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>          </div>
+
+          <Card
             title="Timeline verificada"
             subtitle="CV + verificaciones (señales reales)"
             right={<span className="text-xs text-gray-500">{timeline.length} items</span>}
