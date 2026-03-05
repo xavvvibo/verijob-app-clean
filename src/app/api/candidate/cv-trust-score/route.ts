@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@/utils/supabase/server";
+import { createClient } from "@/utils/supabase/server";
 
 export async function GET() {
-  const supabase = await createServerClient();
+  const supabase = await createClient();
 
   const { data: userData } = await supabase.auth.getUser();
-
   if (!userData?.user) {
     return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
   }
@@ -19,7 +18,7 @@ export async function GET() {
     .maybeSingle();
 
   if (error) {
-    return NextResponse.json({ error: "query_failed" }, { status: 400 });
+    return NextResponse.json({ error: "query_failed", details: error.message }, { status: 400 });
   }
 
   return NextResponse.json({
