@@ -1,55 +1,52 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/utils/supabase/server"
-import { createClient as createAdminClient } from "@supabase/supabase-js"
 import crypto from "crypto"
 
-function adminSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!url || !serviceKey) throw new Error("missing_supabase_service_role_env")
-  return createAdminClient(url, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
-  })
+function newToken() {
+  return crypto.randomBytes(16).toString("hex") // 32 chars
 }
 
-export async function POST(
-  _req: Request,
-  context: { params: Promise<{ id: string }> }
-) {
-  const { id } = await context.params
+export async function POST(req: Request, ctx: any) {
+  const id = ctx?.params?.id as string | undefined
   if (!id) return NextResponse.json({ error: "missing_id" }, { status: 400 })
 
-  // 1) Auth (candidate logged-in)
   const supabase = await createClient()
-  const { data: au } = await supabase.auth.getUser()
-  const user = au?.user
-  if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-  // 2) Ownership check (must be candidate owner of the verification_request)
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  if (authError || !user) return NextResponse.json({ error: "unauthorized" }, { status: 401 })
+
+  // fetch verification_request
   const { data: vr, error: vrErr } = await supabase
     .from("verification_requests")
-    .select("id, candidate_id, public_token")
+    .select("id, public_token, employment_record_id")
     .eq("id", id)
     .maybeSingle()
 
-  if (vrErr || !vr) return NextResponse.json({ error: "not_found" }, { status: 404 })
-  if (vr.candidate_id !== user.id) return NextResponse.json({ error: "forbidden" }, { status: 403 })
+  if (vrErr) return NextResponse.json({ error: "vr_query_failed", details: vrErr.message }, { status: 400 })
+  if (!vr) return NextResponse.json({ error: "not_found" }, { status: 404 })
 
-  // 3) Ensure token exists (service role write to bypass RLS safely)
-  let token = vr.public_token as string | null
+  // ownership check (candidate must own employment_record)
+  const { data: er, error: erErr } = await supabase
+    .from("employment_records")
+    .select("candidate_id")
+    .eq("id", vr.employment_record_id)
+    .maybeSingle()
+
+  if (erErr) return NextResponse.json({ error: "er_query_failed", details: erErr.message }, { status: 400 })
+  if (!er || er.candidate_id !== user.id) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 })
+  }
+
+  let token = vr.public_token
   if (!token) {
-    token = crypto.randomBytes(16).toString("hex")
-    const admin = adminSupabase()
-    const { error: upErr } = await admin
+    token = newToken()
+    const { error: upErr } = await supabase
       .from("verification_requests")
       .update({ public_token: token })
       .eq("id", id)
-
-    if (upErr) return NextResponse.json({ error: "update_failed" }, { status: 500 })
+    if (upErr) return NextResponse.json({ error: "token_update_failed", details: upErr.message }, { status: 400 })
   }
 
-  const baseUrl = "https://app.verijob.es"
-  const url = `${baseUrl}/v/${token}`
-
-  return NextResponse.json({ token, url })
+  const url = `https://app.verijob.es/v/${token}`
+  return NextResponse.json({ url })
 }
