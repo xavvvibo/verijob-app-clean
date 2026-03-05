@@ -1,15 +1,19 @@
-import { createServerSupabaseClient } from "@/utils/supabase/server"
+import { createClient } from "@/utils/supabase/server"
 
 export default async function CandidateOverviewPage() {
 
-const supabase = await createServerSupabaseClient()
+const supabase = await createClient()
 
 const {
 data: { user }
 } = await supabase.auth.getUser()
 
 if (!user) {
-return null
+return (
+<div className="p-8">
+No user session
+</div>
+)
 }
 
 const { data: profile } = await supabase
@@ -35,7 +39,7 @@ return (
 </div>
 
 <div className="text-sm text-gray-600 mt-2">
-CV Consistency Score: 
+CV Consistency Score:
 <span className="font-semibold ml-1">
 {profile?.cv_consistency_score ?? 0}
 </span>
@@ -65,12 +69,6 @@ CV verificado (IA)
 <div className="text-xs text-gray-500">
 {exp.start_date || "?"} — {exp.end_date || "Present"}
 </div>
-
-{exp.description ? (
-<div className="text-sm mt-2">
-{exp.description}
-</div>
-) : null}
 
 </div>
 ))}
