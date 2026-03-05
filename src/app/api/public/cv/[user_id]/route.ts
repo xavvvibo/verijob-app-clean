@@ -16,8 +16,27 @@ function getSupabaseUrl(): string {
   return process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
 }
 
-export async function GET(_: Request, ctx: any) {
-  const userId = String(ctx?.params?.user_id || "");
+function userIdFromUrl(req: Request): string {
+  try {
+    const u = new URL(req.url);
+    const parts = u.pathname.split("/").filter(Boolean);
+    return parts[parts.length - 1] || "";
+  } catch {
+    return "";
+  }
+}
+
+export async function GET(req: Request, ctx: any) {
+  // Next 16: ctx.params puede ser Promise; además hacemos fallback por URL
+  let userId = "";
+
+  try {
+    const p = ctx?.params;
+    const params = (p && typeof p.then === "function") ? await p : p;
+    userId = String(params?.user_id || "");
+  } catch {}
+
+  if (!userId) userId = userIdFromUrl(req);
   if (!userId) return NextResponse.json({ error: "missing_user_id" }, { status: 400 });
 
   const supabaseUrl = getSupabaseUrl();
@@ -33,7 +52,6 @@ export async function GET(_: Request, ctx: any) {
     auth: { persistSession: false, autoRefreshToken: false }
   });
 
-  // 1) trust aggregates (view)
   const { data: trust, error: trustErr } = await supabase
     .from("candidate_cv_trust_scores")
     .select("cv_trust_score,experiences_total,verified_experiences,evidences_total,reuse_total")
@@ -42,12 +60,11 @@ export async function GET(_: Request, ctx: any) {
 
   if (trustErr) {
     return NextResponse.json(
-      { route_version: "public-cv-v5", error: "trust_query_failed", details: trustErr.message },
+      { route_version: "public-cv-v6", error: "trust_query_failed", details: trustErr.message },
       { status: 400 }
     );
   }
 
-  // 2) experiences (all, ordered)
   const { data: exps, error: expErr } = await supabase
     .from("candidate_cv_experiences")
     .select("id,exp_index")
@@ -56,14 +73,13 @@ export async function GET(_: Request, ctx: any) {
 
   if (expErr) {
     return NextResponse.json(
-      { route_version: "public-cv-v5", error: "experiences_query_failed", details: expErr.message },
+      { route_version: "public-cv-v6", error: "experiences_query_failed", details: expErr.message },
       { status: 400 }
     );
   }
 
   const expIds = Array.isArray(exps) ? exps.map((e: any) => e.id) : [];
 
-  // 3) scores per experience
   let scoresMap = new Map<string, any>();
   if (expIds.length > 0) {
     const { data: scores, error: scoreErr } = await supabase
@@ -73,7 +89,7 @@ export async function GET(_: Request, ctx: any) {
 
     if (scoreErr) {
       return NextResponse.json(
-        { route_version: "public-cv-v5", error: "scores_query_failed", details: scoreErr.message },
+        { route_version: "public-cv-v6", error: "scores_query_failed", details: scoreErr.message },
         { status: 400 }
       );
     }
@@ -95,7 +111,7 @@ export async function GET(_: Request, ctx: any) {
   });
 
   return NextResponse.json({
-    route_version: "public-cv-v5",
+    route_version: "public-cv-v6",
     candidate_id: userId,
     trust_score: trust?.cv_trust_score ?? 0,
     experiences_total: trust?.experiences_total ?? experiences.length,
