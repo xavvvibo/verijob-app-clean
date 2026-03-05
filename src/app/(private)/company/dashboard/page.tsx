@@ -1,96 +1,142 @@
-import Link from "next/link";
+"use client";
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+import { useEffect, useState } from "react";
 
-function Card({ title, value, subtitle }: { title: string; value: string; subtitle?: string }) {
+type Kpis = {
+  pending_requests: number;
+  verified_30d: number;
+  reuse_rate_pct: number;
+  risk_signals: number;
+  reuse_events_30d: number;
+  reuse_events_total: number;
+};
+
+function Card({ title, value, subtitle }: { title: string; value: any; subtitle: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <div className="text-xs font-bold text-slate-500 uppercase">{title}</div>
-      <div className="mt-2 text-2xl font-extrabold text-slate-900">{value}</div>
-      {subtitle ? <div className="mt-1 text-sm text-slate-600">{subtitle}</div> : null}
+    <div className="bg-white border border-gray-200 rounded-3xl shadow-sm p-6">
+      <div className="text-xs font-semibold text-gray-500 tracking-wide">{title}</div>
+      <div className="mt-3 text-3xl font-semibold text-gray-900 tabular-nums">{value}</div>
+      <div className="mt-3 text-sm text-gray-600">{subtitle}</div>
     </div>
   );
 }
 
-export default function CompanyDashboardPage() {
+function SectionCard({
+  title,
+  subtitle,
+  leftBtn,
+  rightBtn,
+}: {
+  title: string;
+  subtitle: string;
+  leftBtn: { label: string; href: string };
+  rightBtn?: { label: string; href: string };
+}) {
   return (
-    <div className="max-w-6xl">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-900">Trust & Risk Command Center</h1>
-          <p className="mt-2 text-slate-600">
+    <div className="bg-white border border-gray-200 rounded-3xl shadow-sm p-6">
+      <div className="text-sm font-semibold text-gray-900">{title}</div>
+      <div className="mt-2 text-sm text-gray-600">{subtitle}</div>
+      <div className="mt-5 flex flex-wrap gap-3">
+        <a
+          href={leftBtn.href}
+          className="inline-flex px-4 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-black transition"
+        >
+          {leftBtn.label}
+        </a>
+        {rightBtn ? (
+          <a
+            href={rightBtn.href}
+            className="inline-flex px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-900 text-sm font-semibold hover:bg-gray-50 transition"
+          >
+            {rightBtn.label}
+          </a>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+export default function CompanyDashboard() {
+  const [kpis, setKpis] = useState<Kpis | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/company/dashboard", { cache: "no-store" as any });
+        const j = await r.json();
+        if (!r.ok) throw new Error(j?.error || "dashboard_kpis_failed");
+        if (!alive) return;
+        setKpis(j?.kpis || null);
+        setErr(null);
+      } catch (e: any) {
+        if (!alive) return;
+        setErr(e?.message || "dashboard_kpis_failed");
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
+
+  const pending = kpis ? kpis.pending_requests : "—";
+  const verified30d = kpis ? kpis.verified_30d : "—";
+  const reuseRate = kpis ? `${kpis.reuse_rate_pct}%` : "—";
+  const risk = kpis ? kpis.risk_signals : "—";
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-6">
+        <div className="min-w-0">
+          <div className="text-3xl font-semibold text-gray-900">Trust & Risk Command Center</div>
+          <div className="mt-2 text-sm text-gray-600">
             Verificación operativa para contratación: estado, cola, reutilización y trazabilidad.
-          </p>
+          </div>
+          {err ? <div className="mt-3 text-sm text-red-600">{err}</div> : null}
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          <Link href="/company/requests" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:opacity-90">
+        <div className="flex flex-wrap gap-3 shrink-0">
+          <a href="/company/requests" className="inline-flex px-4 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-black transition">
             Ver solicitudes
-          </Link>
-          <Link href="/company/reuse" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50">
+          </a>
+          <a href="/company/reuse" className="inline-flex px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-900 text-sm font-semibold hover:bg-gray-50 transition">
             Reutilizar
-          </Link>
-          <Link href="/company/candidates" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50">
+          </a>
+          <a href="/company/candidates" className="inline-flex px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-900 text-sm font-semibold hover:bg-gray-50 transition">
             Abrir candidato
-          </Link>
+          </a>
         </div>
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-4">
-        <Card title="Pendientes" value="—" subtitle="Solicitudes activas" />
-        <Card title="Verificadas (30d)" value="—" subtitle="Producción reciente" />
-        <Card title="Reuse rate" value="—" subtitle="Ahorro de tiempo" />
-        <Card title="Riesgo" value="—" subtitle="Señales / incidencias" />
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <Card title="PENDIENTES" value={pending} subtitle="Solicitudes activas" />
+        <Card title="VERIFICADAS (30D)" value={verified30d} subtitle="Producción reciente" />
+        <Card title="REUSE RATE" value={reuseRate} subtitle="Ahorro de tiempo" />
+        <Card title="RIESGO" value={risk} subtitle="Señales / incidencias" />
       </div>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <div className="text-sm font-extrabold text-slate-900">Cola operativa</div>
-          <p className="mt-2 text-sm text-slate-600">
-            Vista rápida de lo que requiere acción hoy. (B: lo conectamos a datos reales)
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link href="/company/requests" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:opacity-90">
-              Gestionar cola
-            </Link>
-            <Link href="/company/team" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50">
-              Equipo & permisos
-            </Link>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <div className="text-sm font-extrabold text-slate-900">Reutilización</div>
-          <p className="mt-2 text-sm text-slate-600">
-            Importa verificaciones previas con consentimiento y reduce fricción.
-          </p>
-          <div className="mt-4">
-            <Link href="/company/reuse" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:opacity-90">
-              Reutilizar ahora
-            </Link>
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white p-6">
-          <div className="text-sm font-extrabold text-slate-900">Plan & facturación</div>
-          <p className="mt-2 text-sm text-slate-600">
-            Créditos, límites de usuarios y upgrades. (Stripe LIVE en cierre final)
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <Link href="/company/billing" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50">
-              Ver facturación
-            </Link>
-            <Link href="/company/settings" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-900 hover:bg-slate-50">
-              Ajustes
-            </Link>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <SectionCard
+          title="Cola operativa"
+          subtitle="Vista rápida de lo que requiere acción hoy."
+          leftBtn={{ label: "Gestionar cola", href: "/company/requests" }}
+          rightBtn={{ label: "Equipo & permisos", href: "/company/team" }}
+        />
+        <SectionCard
+          title="Reutilización"
+          subtitle="Importa verificaciones previas con consentimiento y reduce fricción."
+          leftBtn={{ label: "Reutilizar ahora", href: "/company/reuse" }}
+        />
+        <SectionCard
+          title="Plan & facturación"
+          subtitle="Créditos, límites de usuarios y upgrades. (Stripe LIVE en cierre final)"
+          leftBtn={{ label: "Ver facturación", href: "/company/billing" }}
+          rightBtn={{ label: "Ajustes", href: "/company/settings" }}
+        />
       </div>
 
-      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
-        <div className="text-sm font-extrabold text-slate-900">Siguiente (B)</div>
-        <ul className="mt-3 list-disc pl-5 text-sm text-slate-700 space-y-2">
+      <div className="bg-white border border-gray-200 rounded-3xl shadow-sm p-6">
+        <div className="text-sm font-semibold text-gray-900">Siguiente (B)</div>
+        <ul className="mt-3 text-sm text-gray-700 list-disc pl-5 space-y-2">
           <li>Conectar KPIs reales (requests/verifications/evidences/reuse) con endpoint company.</li>
           <li>Tabla “Cola” con filtros: estado, fecha, candidato, puesto.</li>
           <li>Panel “Riesgo”: incidencias relevantes + tiempos de respuesta.</li>
