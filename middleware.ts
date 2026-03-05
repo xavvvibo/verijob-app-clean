@@ -52,6 +52,11 @@ function isMarketingPath(pathname: string) {
 }
 
 export function middleware(req: NextRequest) {
+  // allow public QR + public verification assets (must bypass auth/rewrites)
+  const pth = req.nextUrl.pathname
+  if (pth.startsWith("/api/qr/")) return NextResponse.next()
+  if (pth.startsWith("/api/public/verification/")) return NextResponse.next()
+
   const { pathname, search } = req.nextUrl;
 
   if (shouldBypass(pathname)) return NextResponse.next();
