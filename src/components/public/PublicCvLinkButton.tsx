@@ -20,12 +20,9 @@ async function shortHash(text:string){
 }
 
 async function loadLogo(){
-
   const res=await fetch("/favicon.svg")
   const txt=await res.text()
-
   const b64=btoa(txt)
-
   return `data:image/svg+xml;base64,${b64}`
 }
 
@@ -70,7 +67,7 @@ export default function PublicCvLinkButton({verificationId}:{verificationId:stri
     const rawQR=await QRCode.toString(publicUrl,{
       type:"svg",
       margin:0,
-      width:300,
+      width:360,
       errorCorrectionLevel:"H"
     })
 
@@ -79,47 +76,57 @@ export default function PublicCvLinkButton({verificationId}:{verificationId:stri
       .replace(/<\/svg>\s*$/i,"")
 
     const date=today()
-
     const token=publicUrl.split("/v/")[1]||""
+
     const credId=await shortHash(token)
 
+    const sigRes=await fetch("/api/credential/sign",{
+      method:"POST",
+      headers:{"content-type":"application/json"},
+      body:JSON.stringify({credentialId:credId})
+    })
+
+    const {signature}=await sigRes.json()
+
     const branded=`<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="520" height="660" viewBox="0 0 520 660">
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="640" viewBox="0 0 520 640">
 
-<rect width="520" height="660" rx="28" fill="white"/>
+<rect width="520" height="640" rx="24" fill="#ffffff"/>
 
-<text x="40" y="60" font-size="20" font-weight="800" fill="#0f172a">VERIJOB</text>
-<text x="40" y="86" font-size="13" fill="#475569">Credencial laboral verificable</text>
+<text x="40" y="60" font-size="20" font-weight="700" fill="#0f172a">
+VERIJOB
+</text>
 
-<rect x="40" y="120" width="440" height="440" rx="20" fill="#ffffff" stroke="#e5e7eb" stroke-width="2"/>
+<text x="40" y="84" font-size="13" fill="#64748b">
+Credencial laboral verificable
+</text>
 
-<g transform="translate(110,190)">
+<rect x="80" y="120" width="360" height="360" rx="16"
+fill="#ffffff"
+stroke="#e5e7eb"
+stroke-width="2"/>
+
+<g transform="translate(80,120)">
 ${inner}
 </g>
 
-<image href="${logo}" x="230" y="310" width="60" height="60"/>
+<rect x="230" y="270" width="60" height="60" rx="12" fill="#ffffff"/>
+<image href="${logo}" x="238" y="278" width="44" height="44"/>
 
-<g transform="rotate(-30 260 330)">
-<text x="260" y="330"
-text-anchor="middle"
-font-size="44"
-font-weight="900"
-fill="#0f172a"
-opacity="0.07">
-VERIJOB ${date}
-</text>
-</g>
-
-<text x="40" y="610" font-size="12" fill="#0f172a">
-Escanea para verificar en tiempo real
+<text x="40" y="560" font-size="12" fill="#0f172a">
+Escanea para verificar la credencial
 </text>
 
-<text x="40" y="632" font-size="11" fill="#64748b">
+<text x="40" y="582" font-size="11" fill="#64748b">
 Emitido: ${date}
 </text>
 
-<text x="40" y="650" font-size="11" fill="#64748b">
+<text x="40" y="602" font-size="11" fill="#64748b">
 Credential ID: ${credId}
+</text>
+
+<text x="40" y="622" font-size="11" fill="#64748b">
+Signature: ${signature}
 </text>
 
 </svg>`
@@ -129,7 +136,7 @@ Credential ID: ${credId}
 
     const a=document.createElement("a")
     a.href=url
-    a.download="verijob_verified_qr.svg"
+    a.download="verijob_credential_qr.svg"
 
     document.body.appendChild(a)
     a.click()
