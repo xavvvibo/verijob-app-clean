@@ -17,6 +17,7 @@
     "mammoth": "^1.11.0",
     "next": "16.1.6",
     "pdf-parse-debugging-disabled": "^1.1.1",
+    "qrcode": "^1.5.4",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "stripe": "^20.4.0",
