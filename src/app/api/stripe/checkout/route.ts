@@ -25,6 +25,7 @@ export async function POST() {
       apiVersion: "2026-02-25.clover",
     });
 
+  const companyId: string | null = null;
     const session = await stripe.checkout.sessions.create({
       mode: "subscription",
       payment_method_types: ["card"],
