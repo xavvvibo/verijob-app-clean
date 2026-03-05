@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
-const ROUTE_VERSION = "company-dashboard-kpis-v2-2026-03-05";
+const ROUTE_VERSION = "company-dashboard-kpis-v2-fingerprint-2026-03-05b";
 
 export async function GET() {
   try {
@@ -11,7 +11,7 @@ export async function GET() {
     if (uErr) return NextResponse.json({ error: "auth_getUser_failed", details: uErr.message, route_version: ROUTE_VERSION }, { status: 400 });
     if (!user) return NextResponse.json({ error: "unauthorized", route_version: ROUTE_VERSION }, { status: 401 });
 
-    // Self-heal active_company_id if missing (best-effort)
+    // self-heal active_company_id if missing
     const { data: prof, error: pErr } = await supabase
       .from("profiles")
       .select("id,email,active_company_id")
@@ -73,13 +73,32 @@ export async function GET() {
       }, { status: 400 });
     }
 
-    // IMPORTANT: call v2 (the fixed function)
     const { data, error: rpcErr } = await supabase.rpc("company_dashboard_kpis_v2");
-    if (rpcErr) return NextResponse.json({ error: "rpc_failed", details: rpcErr.message, route_version: ROUTE_VERSION }, { status: 400 });
 
-    if ((data as any)?.error) {
-      return NextResponse.json({ ...(data as any), route_version: ROUTE_VERSION }, { status: 400 });
+    if (rpcErr) {
+      // fingerprint + env (SUPABASE URL no es secreto)
+      let fp: any = null;
+      try {
+        const { data: fpData } = await supabase.rpc("kpis_v2_fingerprint");
+        fp = fpData ?? null;
+      } catch {
+        fp = null;
+      }
+
+      return NextResponse.json({
+        error: "rpc_failed",
+        details: rpcErr.message,
+        route_version: ROUTE_VERSION,
+        debug: {
+          user_id: user.id,
+          profiles_active_company_id: activeCompanyId,
+          supabase_url_env: process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || null,
+          kpis_v2_fingerprint: fp,
+        }
+      }, { status: 400 });
     }
+
+    if ((data as any)?.error) return NextResponse.json({ ...(data as any), route_version: ROUTE_VERSION }, { status: 400 });
 
     return NextResponse.json({ ...(data as any), route_version: ROUTE_VERSION });
   } catch (e: any) {
