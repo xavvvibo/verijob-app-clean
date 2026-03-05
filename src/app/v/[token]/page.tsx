@@ -1,41 +1,102 @@
-import VerifiedCV from "@/components/public/VerifiedCV"
-import { headers } from "next/headers"
+import { createClient } from "@/utils/supabase/server"
 
-async function getBaseUrl() {
-  const h = await headers()
-  const host = h.get("x-forwarded-host") ?? h.get("host")
-  const proto = h.get("x-forwarded-proto") ?? "https"
-  if (!host) return "https://app.verijob.es"
-  return `${proto}://${host}`
-}
+type PageProps = { params: { token: string } }
 
-async function getData(token: string) {
-  const baseUrl = await getBaseUrl()
-  const res = await fetch(`${baseUrl}/api/public/verification/${token}`, {
-    cache: "no-store"
-  })
-  if (!res.ok) return null
-  return res.json()
-}
+export default async function PublicVerificationPage({ params }: PageProps) {
 
-export default async function Page(
-  props: { params: Promise<{ token: string }> }
-) {
-  const { token } = await props.params
-  const data = await getData(token)
+  const supabase = await createClient()
 
-  if (!data) {
+  const { data: verification } = await supabase
+    .from("verification_requests")
+    .select(`
+      id,
+      status,
+      public_token,
+      revoked_at,
+      company_name_freeform,
+      position,
+      start_date,
+      end_date,
+      candidate_id
+    `)
+    .eq("public_token", params.token)
+    .maybeSingle()
+
+  if (!verification) {
     return (
-      <div className="max-w-xl mx-auto py-20 px-6 text-center">
-        <h1 className="text-xl font-semibold mb-2">Verificación no encontrada</h1>
-        <p className="text-gray-500">
-          El enlace público no es válido o no está disponible.
-        </p>
-      </div>
+      <main className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-center">
+          <div className="text-3xl font-semibold text-gray-900">
+            QR NO VÁLIDO O CADUCADO
+          </div>
+        </div>
+      </main>
     )
   }
 
-  return <VerifiedCV data={data} />
-}
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("subscription_status, full_name")
+    .eq("id", verification.candidate_id)
+    .maybeSingle()
 
-// deploy-trigger 2026-03-04T08:16:33Z
+  const subscriptionActive =
+    profile?.subscription_status === "active" ||
+    profile?.subscription_status === "trialing"
+
+  const valid_now =
+    subscriptionActive &&
+    !verification.revoked_at &&
+    verification.status === "verified"
+
+  if (!valid_now) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-center">
+          <div className="text-3xl font-semibold text-gray-900">
+            QR NO VÁLIDO O CADUCADO
+          </div>
+        </div>
+      </main>
+    )
+  }
+
+  function fmt(d: string | null) {
+    if (!d) return ""
+    return new Date(d).getFullYear()
+  }
+
+  return (
+    <main className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+      <div className="max-w-xl w-full bg-white border border-gray-200 rounded-3xl p-8 shadow-sm">
+
+        <div className="text-xs text-gray-500">
+          Credencial laboral verificada
+        </div>
+
+        <div className="mt-2 text-2xl font-semibold text-gray-900">
+          {profile?.full_name || "Profesional verificado"}
+        </div>
+
+        <div className="mt-6 border border-gray-200 rounded-2xl p-5">
+          <div className="text-sm font-semibold text-gray-900">
+            {verification.position || "Experiencia"}
+          </div>
+
+          <div className="text-sm text-gray-600">
+            {verification.company_name_freeform || "Empresa"}
+          </div>
+
+          <div className="mt-1 text-xs text-gray-500">
+            {fmt(verification.start_date)} — {verification.end_date ? fmt(verification.end_date) : "Actualidad"}
+          </div>
+
+          <div className="mt-3 inline-flex px-3 py-1 rounded-full border text-xs font-semibold bg-green-50 text-green-700 border-green-100">
+            ✔ Verificado
+          </div>
+        </div>
+
+      </div>
+    </main>
+  )
+}
