@@ -4,7 +4,7 @@ import { requireInternalJobToken } from "@/lib/internalJobAuth";
 
 export const runtime = "nodejs";
 
-const ROUTE_VERSION = "internal-analytics-metrics-v1";
+const ROUTE_VERSION = "internal-analytics-metrics-v2-sqlview";
 
 function adminSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
@@ -13,30 +13,9 @@ function adminSupabase() {
   return createClient(url, key, { auth: { persistSession: false } });
 }
 
-async function countEvents(supabase: any, event_name: string, days: number) {
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-  const { count, error } = await supabase
-    .from("platform_events")
-    .select("id", { count: "exact", head: true })
-    .eq("event_name", event_name)
-    .gte("created_at", since);
-
-  if (error) throw new Error(error.message);
-  return count || 0;
-}
-
-// v1: dedup en app (ok para escala inicial)
-async function distinctCount(supabase: any, column: "company_id" | "user_id", days: number) {
-  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-  const { data, error } = await supabase
-    .from("platform_events")
-    .select(column)
-    .gte("created_at", since)
-    .not(column, "is", null);
-
-  if (error) throw new Error(error.message);
-  const set = new Set((data || []).map((r: any) => r[column]).filter(Boolean));
-  return set.size;
+function num(x: any): number {
+  const n = typeof x === "number" ? x : Number(x || 0);
+  return Number.isFinite(n) ? n : 0;
 }
 
 export async function GET(req: Request) {
@@ -46,26 +25,61 @@ export async function GET(req: Request) {
   try {
     const supabase = adminSupabase();
 
+    const { data: rows, error } = await supabase
+      .from("analytics_metrics_rolling")
+      .select("*");
+
+    if (error) {
+      return NextResponse.json({ ok: false, error: "view_query_failed", details: error.message, route_version: ROUTE_VERSION }, { status: 400 });
+    }
+
+    const byEvent: Record<string, any> = {};
+    for (const r of rows || []) {
+      const name = String((r as any).event_name || "");
+      if (!name) continue;
+      byEvent[name] = r;
+    }
+
+    const e = (name: string) => byEvent[name] || null;
+
     const kpis_7d = {
-      signup: await countEvents(supabase, "signup", 7),
-      onboarding_completed: await countEvents(supabase, "onboarding_completed", 7),
-      verification_created: await countEvents(supabase, "verification_created", 7),
-      evidence_uploaded: await countEvents(supabase, "evidence_uploaded", 7),
-      verification_reused: await countEvents(supabase, "verification_reused", 7),
-      public_cv_viewed: await countEvents(supabase, "public_cv_viewed", 7),
-      active_companies: await distinctCount(supabase, "company_id", 7),
-      active_users: await distinctCount(supabase, "user_id", 7),
+      signup: num(e("signup")?.events_7d),
+      onboarding_completed: num(e("onboarding_completed")?.events_7d),
+      verification_created: num(e("verification_created")?.events_7d),
+      evidence_uploaded: num(e("evidence_uploaded")?.events_7d),
+      verification_reused: num(e("verification_reused")?.events_7d),
+      public_cv_viewed: num(e("public_cv_viewed")?.events_7d),
+      active_users: Math.max(
+        num(e("signup")?.users_7d),
+        num(e("onboarding_completed")?.users_7d),
+        num(e("verification_created")?.users_7d),
+        num(e("evidence_uploaded")?.users_7d),
+        num(e("verification_reused")?.users_7d)
+      ),
+      active_companies: Math.max(
+        num(e("verification_reused")?.companies_7d),
+        num(e("verification_created")?.companies_7d)
+      ),
     };
 
     const kpis_30d = {
-      signup: await countEvents(supabase, "signup", 30),
-      onboarding_completed: await countEvents(supabase, "onboarding_completed", 30),
-      verification_created: await countEvents(supabase, "verification_created", 30),
-      evidence_uploaded: await countEvents(supabase, "evidence_uploaded", 30),
-      verification_reused: await countEvents(supabase, "verification_reused", 30),
-      public_cv_viewed: await countEvents(supabase, "public_cv_viewed", 30),
-      active_companies: await distinctCount(supabase, "company_id", 30),
-      active_users: await distinctCount(supabase, "user_id", 30),
+      signup: num(e("signup")?.events_30d),
+      onboarding_completed: num(e("onboarding_completed")?.events_30d),
+      verification_created: num(e("verification_created")?.events_30d),
+      evidence_uploaded: num(e("evidence_uploaded")?.events_30d),
+      verification_reused: num(e("verification_reused")?.events_30d),
+      public_cv_viewed: num(e("public_cv_viewed")?.events_30d),
+      active_users: Math.max(
+        num(e("signup")?.users_30d),
+        num(e("onboarding_completed")?.users_30d),
+        num(e("verification_created")?.users_30d),
+        num(e("evidence_uploaded")?.users_30d),
+        num(e("verification_reused")?.users_30d)
+      ),
+      active_companies: Math.max(
+        num(e("verification_reused")?.companies_30d),
+        num(e("verification_created")?.companies_30d)
+      ),
     };
 
     const reuse_rate_30d =
@@ -87,8 +101,8 @@ export async function GET(req: Request) {
         reuse_rate_30d_pct: reuse_rate_30d,
         onboarding_completion_rate_30d_pct: onboarding_rate_30d,
       },
-      notes: {
-        v1_limits: "distinct counts dedup en app; si crece, mover a VIEW SQL con COUNT(DISTINCT).",
+      source: {
+        view: "public.analytics_metrics_rolling",
       },
     });
   } catch (e: any) {
