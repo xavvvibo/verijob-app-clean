@@ -64,7 +64,12 @@ async function openaiExtractStructuredCvFromText(text: string) {
 
   if (!r.ok) {
     const t = await r.text().catch(() => "");
-    return { ok: false as const, error: "openai_failed", details: t.slice(0, 2000) };
+    return {
+      ok: false as const,
+      error: "openai_failed",
+      status: r.status,
+      details: t.slice(0, 2000)
+    };
   }
 
   const j: any = await r.json();
@@ -95,86 +100,23 @@ async function openaiExtractStructuredCvFromText(text: string) {
   };
 }
 
-async function openaiExtractStructuredCvFromPdfBase64(pdfBase64: string) {
-  const apiKey = getOpenAIKey();
-  if (!apiKey) return { ok: false as const, error: "missing_openai_api_key" };
-
-  const model = process.env.OPENAI_CV_MODEL || "gpt-4o-mini";
-
-  // Enviamos el PDF como base64 dentro del prompt (simple, robusto). Para PDFs grandes, el runner recorta.
-  const system = [
-    "You extract structured CV data from a PDF provided as base64.",
-    "Return ONLY valid JSON, no markdown, no commentary.",
-    "Schema:",
-    "{",
-    '  "experiences": [',
-    "    {",
-    '      "company": string|null,',
-    '      "title": string|null,',
-    '      "start_date": "YYYY-MM-DD"|null,',
-    '      "end_date": "YYYY-MM-DD"|null',
-    "    }",
-    "  ]",
-    "}"
-  ].join("\n");
-
-  const user = [
-    "The following is a PDF encoded in base64. Extract the CV experiences.",
-    "PDF_BASE64:",
-    pdfBase64.slice(0, 1_200_000) // hard cap
-  ].join("\n\n");
-
-  const body = {
-    model,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user }
-    ],
-    temperature: 0.1
-  };
-
-  const r = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
-    body: JSON.stringify(body)
-  });
-
-  if (!r.ok) {
-    const t = await r.text().catch(() => "");
-    return { ok: false as const, error: "openai_failed", details: t.slice(0, 2000) };
+async function extractTextFromPdf(buf: Buffer) {
+  // Prefer pdf-parse-debugging-disabled (ya lo tienes en deps) para evitar DOMMatrix
+  try {
+    const mod: any = await import("pdf-parse-debugging-disabled");
+    const fn: any = mod?.default || mod;
+    const parsed: any = await fn(buf);
+    const text = (parsed?.text || "").trim();
+    if (text) return { ok: true as const, text, engine: "pdf-parse-debugging-disabled" };
+    return { ok: false as const, error: "empty_pdf_text", engine: "pdf-parse-debugging-disabled" };
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    return { ok: false as const, error: `pdf_text_extract_failed: ${msg}`.slice(0, 900), engine: "pdf-parse-debugging-disabled" };
   }
-
-  const j: any = await r.json();
-  const content = j?.choices?.[0]?.message?.content;
-  if (!content || typeof content !== "string") return { ok: false as const, error: "openai_no_content" };
-
-  let result: any;
-  try { result = JSON.parse(content); } catch {
-    return { ok: false as const, error: "openai_invalid_json", details: content.slice(0, 2000) };
-  }
-
-  if (!result || typeof result !== "object") result = {};
-  if (!Array.isArray(result.experiences)) result.experiences = [];
-
-  result.experiences = result.experiences.map((e: any) => ({
-    company: typeof e?.company === "string" ? e.company : (typeof e?.employer === "string" ? e.employer : null),
-    title: typeof e?.title === "string" ? e.title : (typeof e?.role === "string" ? e.role : null),
-    start_date: typeof e?.start_date === "string" ? e.start_date : (typeof e?.from === "string" ? e.from : null),
-    end_date: typeof e?.end_date === "string" ? e.end_date : (typeof e?.to === "string" ? e.to : null)
-  }));
-
-  return {
-    ok: true as const,
-    result_json: result,
-    tokens_in: j?.usage?.prompt_tokens ?? null,
-    tokens_out: j?.usage?.completion_tokens ?? null,
-    model
-  };
 }
 
 export async function GET() {
-  return NextResponse.json({ route_version: "cv-parse-runner-v5", ok: true });
+  return NextResponse.json({ route_version: "cv-parse-runner-v6", ok: true });
 }
 
 export async function POST(req: Request) {
@@ -226,7 +168,7 @@ export async function POST(req: Request) {
       error: upErr?.message || "cv_upload_not_found"
     }).eq("id", job.id);
 
-    return NextResponse.json({ route_version: "cv-parse-runner-v5", processed_job_id: job.id, status: "failed", error: upErr?.message || "cv_upload_not_found" });
+    return NextResponse.json({ route_version: "cv-parse-runner-v6", processed_job_id: job.id, status: "failed", error: upErr?.message || "cv_upload_not_found" });
   }
 
   const { data: file, error: dlErr } = await supabase.storage.from(upload.storage_bucket).download(upload.storage_path);
@@ -237,46 +179,47 @@ export async function POST(req: Request) {
       error: dlErr?.message || "storage_download_failed"
     }).eq("id", job.id);
 
-    return NextResponse.json({ route_version: "cv-parse-runner-v5", processed_job_id: job.id, status: "failed", error: dlErr?.message || "storage_download_failed" });
+    return NextResponse.json({ route_version: "cv-parse-runner-v6", processed_job_id: job.id, status: "failed", error: dlErr?.message || "storage_download_failed" });
   }
 
   const ab = await file.arrayBuffer();
   const buf = Buffer.from(ab);
 
-  // Intento 1: pdf-parse (puede fallar por DOMMatrix en Node)
-  let extracted: any = null;
-  let pdfParseError: string | null = null;
+  const extractedText = await extractTextFromPdf(buf);
+  if (!extractedText.ok) {
+    await supabase.from("cv_parse_jobs").update({
+      status: "failed",
+      finished_at: new Date().toISOString(),
+      error: `${extractedText.engine}: ${extractedText.error}`.slice(0, 2000)
+    }).eq("id", job.id);
 
-  try {
-    const mod: any = await import("pdf-parse");
-    const pdfParseFn: any = mod?.default || mod;
-    const parsed: any = await pdfParseFn(buf);
-    const text = (parsed?.text || "").trim();
-    if (text) extracted = await openaiExtractStructuredCvFromText(text);
-    else pdfParseError = "empty_pdf_text";
-  } catch (e: any) {
-    pdfParseError = `pdf_parse_failed: ${String(e?.message || e).slice(0, 800)}`;
+    return NextResponse.json({
+      route_version: "cv-parse-runner-v6",
+      processed_job_id: job.id,
+      status: "failed",
+      error: "pdf_text_extract_failed",
+      engine: extractedText.engine,
+      details: extractedText.error
+    });
   }
 
-  // Intento 2 (fallback robusto): PDF base64 directo a OpenAI
-  if (!extracted || !extracted.ok) {
-    const b64 = buf.toString("base64");
-    extracted = await openaiExtractStructuredCvFromPdfBase64(b64);
-    if (!extracted.ok) {
-      await supabase.from("cv_parse_jobs").update({
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        error: `fallback_openai_failed: ${extracted.error}${extracted.details ? `: ${extracted.details}` : ""}`.slice(0, 2000)
-      }).eq("id", job.id);
+  const extracted = await openaiExtractStructuredCvFromText(extractedText.text);
+  if (!extracted.ok) {
+    await supabase.from("cv_parse_jobs").update({
+      status: "failed",
+      finished_at: new Date().toISOString(),
+      error: `${extracted.error}${(extracted as any).status ? `(${(extracted as any).status})` : ""}${(extracted as any).details ? `: ${(extracted as any).details}` : ""}`.slice(0, 2000)
+    }).eq("id", job.id);
 
-      return NextResponse.json({
-        route_version: "cv-parse-runner-v5",
-        processed_job_id: job.id,
-        status: "failed",
-        error: "openai_failed",
-        pdf_parse_error: pdfParseError
-      });
-    }
+    return NextResponse.json({
+      route_version: "cv-parse-runner-v6",
+      processed_job_id: job.id,
+      status: "failed",
+      error: extracted.error,
+      status_code: (extracted as any).status || null,
+      details: (extracted as any).details || null,
+      engine: extractedText.engine
+    });
   }
 
   await supabase.from("cv_parse_jobs").update({
@@ -305,7 +248,7 @@ export async function POST(req: Request) {
 
   if (cvErr || !cvUpsert) {
     return NextResponse.json({
-      route_version: "cv-parse-runner-v5",
+      route_version: "cv-parse-runner-v6",
       processed_job_id: job.id,
       status: "succeeded_but_materialize_failed",
       error: cvErr?.message || "candidate_cvs_upsert_failed"
@@ -328,10 +271,10 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({
-    route_version: "cv-parse-runner-v5",
+    route_version: "cv-parse-runner-v6",
     processed_job_id: job.id,
     status: "succeeded",
     experiences_count: experiencesCount,
-    pdf_parse_error: pdfParseError
+    engine: extractedText.engine
   });
 }
