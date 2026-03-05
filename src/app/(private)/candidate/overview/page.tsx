@@ -455,8 +455,48 @@ export default function CandidateOverview() {
                       </div>
                       <div className="mt-1 text-xs text-gray-500">
                         {fmtRange(t.start, t.end)}
-                        {t.source === "verification" ? ` · Evidencias: ${t.evidence_count || 0}` : ""}
-                        {t.missing_fields && t.missing_fields.length ? " · ⚠ datos incompletos" : ""}
+                      </div>
+
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {t.is_revoked ? (
+                          <span className="inline-flex px-2.5 py-1 rounded-full border text-[11px] font-semibold bg-red-50 text-red-700 border-red-100">
+                            ⛔ Revocada
+                          </span>
+                        ) : null}
+
+                        {t.source === "verification" && !t.is_revoked && (t.status === "verified" || t.company_confirmed) ? (
+                          <span className="inline-flex px-2.5 py-1 rounded-full border text-[11px] font-semibold bg-green-50 text-green-700 border-green-100">
+                            ✔ Verificada
+                          </span>
+                        ) : null}
+
+                        {t.source === "verification" && t.company_confirmed ? (
+                          <span className="inline-flex px-2.5 py-1 rounded-full border text-[11px] font-semibold bg-blue-50 text-blue-700 border-blue-100">
+                            🏢 Confirmada
+                          </span>
+                        ) : null}
+
+                        {t.source === "verification" ? (
+                          <span className="inline-flex px-2.5 py-1 rounded-full border text-[11px] font-semibold bg-gray-50 text-gray-700 border-gray-200">
+                            📄 Evidencias: {t.evidence_count || 0}
+                          </span>
+                        ) : (
+                          <span className="inline-flex px-2.5 py-1 rounded-full border text-[11px] font-semibold bg-gray-50 text-gray-700 border-gray-200">
+                            CV
+                          </span>
+                        )}
+
+                        {t.source === "verification" ? (
+                          <span className="inline-flex px-2.5 py-1 rounded-full border text-[11px] font-semibold bg-gray-50 text-gray-700 border-gray-200">
+                            ♻ Acciones: {t.actions_count || 0}
+                          </span>
+                        ) : null}
+
+                        {t.missing_fields && t.missing_fields.length ? (
+                          <span className="inline-flex px-2.5 py-1 rounded-full border text-[11px] font-semibold bg-amber-50 text-amber-800 border-amber-100">
+                            ⚠ Datos incompletos
+                          </span>
+                        ) : null}
                       </div>
                     </div>
                     <div className="shrink-0 flex items-center gap-3">
