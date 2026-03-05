@@ -15,7 +15,7 @@ return null
 
 const { data: profile } = await supabase
 .from("profiles")
-.select("cv_consistency_score")
+.select("cv_consistency_score, full_name")
 .eq("id", user.id)
 .single()
 
@@ -28,6 +28,16 @@ const { data: experiences } = await supabase
 return (
 
 <div className="space-y-8">
+
+<div className="bg-white border rounded-xl p-6">
+<h1 className="text-xl font-semibold">
+{profile?.full_name ?? "Candidate"}
+</h1>
+
+<div className="text-sm text-slate-500 mt-1">
+CV Intelligence activo
+</div>
+</div>
 
 <CVStructured
 experiences={experiences ?? []}
