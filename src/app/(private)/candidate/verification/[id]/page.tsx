@@ -9,13 +9,14 @@ export default async function CandidateVerificationPage(props: any) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user || !id) return null
 
+  // 1) ownership + token desde verification_requests
   const { data: vr } = await supabase
     .from("verification_requests")
-    .select("id,status,revoked_at,public_token,employment_record_id,company_name_freeform,position,start_date,end_date")
+    .select("id, status, revoked_at, public_token, requested_by")
     .eq("id", id)
     .maybeSingle()
 
-  if (!vr) {
+  if (!vr || vr.requested_by !== user.id) {
     return (
       <div className="p-8">
         <div className="text-xl font-semibold">No encontramos esa página</div>
@@ -23,48 +24,39 @@ export default async function CandidateVerificationPage(props: any) {
     )
   }
 
-  const { data: er } = await supabase
-    .from("employment_records")
-    .select("candidate_id")
-    .eq("id", vr.employment_record_id)
+  // 2) detalle UI desde verification_summary (es donde están position/company/evidences)
+  const { data: vs } = await supabase
+    .from("verification_summary")
+    .select("*")
+    .eq("verification_id", id)
     .maybeSingle()
 
-  if (!er || er.candidate_id !== user.id) {
-    return (
-      <div className="p-8">
-        <div className="text-xl font-semibold">No encontramos esa página</div>
-      </div>
-    )
-  }
+  const title =
+    vs?.position
+      ? `${vs.position} · ${vs.company_name_freeform || "Empresa"}`
+      : `Verificación · ${id}`
 
-  const token = vr.public_token
-  const publicUrl = token ? `https://app.verijob.es/v/${token}` : null
+  const statusLabel = vs?.is_revoked || vr.revoked_at ? "Revocada" : (vs?.status || vr.status || "—")
 
-  function fmt(d: string | null) {
-    if (!d) return "—"
-    try { return new Date(d).toISOString().slice(0,10) } catch { return d }
-  }
+  const publicUrl = vr.public_token ? `https://app.verijob.es/v/${vr.public_token}` : null
 
   return (
     <div className="p-8 space-y-6">
       <div className="bg-white border border-gray-200 rounded-3xl p-7">
         <div className="text-xs text-gray-500">Verificación</div>
-        <div className="mt-2 text-2xl font-semibold text-gray-900">
-          {(vr.position || "Puesto")} · {(vr.company_name_freeform || "Empresa")}
-        </div>
-        <div className="mt-2 text-sm text-gray-600">
-          {fmt(vr.start_date)} — {vr.end_date ? fmt(vr.end_date) : "Actualidad"}
-        </div>
-        <div className="mt-4 flex items-center gap-2">
-          {vr.revoked_at ? (
+        <div className="mt-2 text-2xl font-semibold text-gray-900">{title}</div>
+
+        <div className="mt-4 flex items-center gap-3">
+          {statusLabel === "Revocada" ? (
             <span className="inline-flex px-3 py-1 rounded-full border text-xs font-semibold bg-red-50 text-red-700 border-red-100">
               Revocada
             </span>
           ) : (
             <span className="inline-flex px-3 py-1 rounded-full border text-xs font-semibold bg-gray-50 text-gray-700 border-gray-200">
-              {vr.status || "—"}
+              {statusLabel}
             </span>
           )}
+
           {publicUrl ? (
             <a className="text-sm font-semibold text-blue-600 hover:text-blue-700" href={publicUrl} target="_blank">
               Abrir CV público
@@ -73,6 +65,23 @@ export default async function CandidateVerificationPage(props: any) {
             <span className="text-sm text-gray-400">CV público pendiente</span>
           )}
         </div>
+
+        {vs ? (
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="border border-gray-200 rounded-2xl p-4">
+              <div className="text-xs text-gray-500">Evidencias</div>
+              <div className="mt-1 text-xl font-semibold text-gray-900">{vs.evidence_count ?? 0}</div>
+            </div>
+            <div className="border border-gray-200 rounded-2xl p-4">
+              <div className="text-xs text-gray-500">Acciones</div>
+              <div className="mt-1 text-xl font-semibold text-gray-900">{vs.actions_count ?? 0}</div>
+            </div>
+            <div className="border border-gray-200 rounded-2xl p-4">
+              <div className="text-xs text-gray-500">Trust</div>
+              <div className="mt-1 text-xl font-semibold text-gray-900">{vs.trust_score ?? 0}</div>
+            </div>
+          </div>
+        ) : null}
       </div>
     </div>
   )
