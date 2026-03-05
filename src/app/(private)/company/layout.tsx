@@ -25,7 +25,6 @@ export default async function CompanyLayout({ children }: Props) {
 
   if (!profile?.onboarding_completed) redirect("/onboarding");
 
-  // IMPORTANTE: nunca redirigir a /dashboard desde /company
   if (!profile?.active_company_id) redirect("/company/reuse");
 
   return <>{children}</>;
