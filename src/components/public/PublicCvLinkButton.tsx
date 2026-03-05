@@ -31,7 +31,7 @@ export default function PublicCvLinkButton({ verificationId }: { verificationId:
 
   function onDownloadQr() {
     if (!token) return
-    const href = `/api/public/verification/${token}/qr`
+    const href = `/api/qr/${token}`
     const a = document.createElement("a")
     a.href = href
     a.download = `verijob-qr-${token}.svg`
