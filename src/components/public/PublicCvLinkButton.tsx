@@ -50,7 +50,8 @@ export default function PublicCvLinkButton({ verificationId }: { verificationId:
     const rawQR = await QRCode.toString(publicUrl,{
       type:"svg",
       margin:0,
-      width:300
+      width:300,
+      errorCorrectionLevel:"H"
     })
 
     const inner = rawQR
@@ -71,6 +72,21 @@ export default function PublicCvLinkButton({ verificationId }: { verificationId:
 
 <g transform="translate(110,190)">
 ${inner}
+</g>
+
+<!-- logo centrado -->
+<image href="/favicon.svg" x="230" y="310" width="60" height="60"/>
+
+<!-- watermark antifraude -->
+<g transform="rotate(-30 260 320)">
+<text x="260" y="320"
+text-anchor="middle"
+font-size="42"
+font-weight="900"
+fill="#0f172a"
+opacity="0.07">
+VERIJOB ${date}
+</text>
 </g>
 
 <text x="40" y="600" font-size="12" fill="#0f172a">
