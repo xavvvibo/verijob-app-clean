@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
   // Verifica acceso a la verification_request (vía RLS)
   const { data: vr, error: vrErr } = await supabase
     .from("verification_requests")
-    .select("id")
+    .select("id, company_id")
     .eq("id", verification_request_id)
     .maybeSingle();
 
@@ -62,6 +63,21 @@ export async function POST(req: Request) {
     .single();
 
   if (error) return jsonError(400, "No se pudo registrar la evidencia en DB", error);
+
+  // ✅ Analytics (best-effort)
+  trackEventAdmin({
+    event_name: "evidence_uploaded",
+    user_id: auth.user.id,
+    company_id: vr.company_id ?? null,
+    entity_type: "evidence",
+    entity_id: data.id,
+    metadata: {
+      verification_request_id,
+      storage_path,
+      evidence_type,
+      file_sha256,
+    },
+  }).catch(() => {});
 
   return NextResponse.json({ ok: true, evidence: data });
 }

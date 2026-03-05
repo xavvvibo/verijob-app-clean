@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,6 +85,24 @@ export async function POST(req: Request) {
     .single();
 
   if (vrErr) return json(400, { error: "Insert verification_requests failed", debug: vrErr });
+
+  // ✅ Analytics (best-effort)
+  trackEventAdmin({
+    event_name: "verification_created",
+    user_id: user.id,
+    company_id,
+    entity_type: "verification_request",
+    entity_id: vr.id,
+    metadata: {
+      employment_record_id: er.id,
+      company_name_freeform,
+      position,
+      start_date,
+      end_date,
+      is_current,
+      route_version: ROUTE_VERSION,
+    },
+  }).catch(() => {});
 
   return json(200, { ok: true, verification_request_id: vr.id });
 }

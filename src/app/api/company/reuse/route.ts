@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { requireActiveSubscription } from "@/utils/billing/requireActiveSubscription";
 import { rateLimit } from "@/utils/rateLimit";
+import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
 
 const ROUTE_VERSION = "reuse-direct-sql-v4-idempotent";
 
@@ -78,7 +79,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Verification revoked", route_version: ROUTE_VERSION }, { status: 410 });
   }
 
-  // ✅ Idempotencia: si ya existe, devolverlo
+  // ✅ Idempotencia: si ya existe, devolverlo (NO contamos como nuevo evento)
   const { data: existing } = await supabase
     .from("verification_reuse_events")
     .select("*")
@@ -117,6 +118,19 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ error: insertErr.message, route_version: ROUTE_VERSION }, { status: 400 });
   }
+
+  // ✅ Analytics (best-effort) — SOLO cuando es nuevo (idempotent false)
+  trackEventAdmin({
+    event_name: "verification_reused",
+    user_id: user.id,
+    company_id: profile.active_company_id,
+    entity_type: "verification_request",
+    entity_id: verificationId,
+    metadata: {
+      route_version: ROUTE_VERSION,
+      source: token ? "token" : "verification_id",
+    },
+  }).catch(() => {});
 
   return NextResponse.json({ data: inserted, route_version: ROUTE_VERSION, idempotent: false });
 }

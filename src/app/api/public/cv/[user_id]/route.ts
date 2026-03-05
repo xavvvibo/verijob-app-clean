@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
+import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -109,6 +110,19 @@ export async function GET(req: Request, ctx: any) {
       reuse_count: typeof s?.reuse_count === "number" ? s.reuse_count : 0
     };
   });
+
+  // ✅ Analytics (best-effort) — contar vista pública
+  trackEventAdmin({
+    event_name: "public_cv_viewed",
+    user_id: null,
+    company_id: null,
+    entity_type: "candidate",
+    entity_id: userId,
+    metadata: {
+      route_version: "public-cv-v6",
+      source: "api_public_cv",
+    },
+  }).catch(() => {});
 
   return NextResponse.json({
     route_version: "public-cv-v6",
