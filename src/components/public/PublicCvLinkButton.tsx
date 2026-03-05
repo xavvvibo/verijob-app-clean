@@ -19,6 +19,16 @@ async function shortHash(text:string){
   return hex.slice(0,16)
 }
 
+async function loadLogo(){
+
+  const res=await fetch("/favicon.svg")
+  const txt=await res.text()
+
+  const b64=btoa(txt)
+
+  return `data:image/svg+xml;base64,${b64}`
+}
+
 export default function PublicCvLinkButton({verificationId}:{verificationId:string}){
 
   const [state,setState]=useState<"idle"|"loading"|"copied"|"error">("idle")
@@ -55,6 +65,8 @@ export default function PublicCvLinkButton({verificationId}:{verificationId:stri
 
     if(!publicUrl) return
 
+    const logo=await loadLogo()
+
     const rawQR=await QRCode.toString(publicUrl,{
       type:"svg",
       margin:0,
@@ -85,7 +97,7 @@ export default function PublicCvLinkButton({verificationId}:{verificationId:stri
 ${inner}
 </g>
 
-<image href="/favicon.svg" x="230" y="310" width="60" height="60"/>
+<image href="${logo}" x="230" y="310" width="60" height="60"/>
 
 <g transform="rotate(-30 260 330)">
 <text x="260" y="330"
