@@ -4,7 +4,7 @@ import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 
 export const runtime = "nodejs";
 
-const BodySchema = z.object({ experience_id: z.string().uuid() });
+const BodySchema = z.object({ verification_id: z.string().uuid() });
 
 function requireInternal(req: Request) {
   const token = req.headers.get("x-verijob-internal") || "";
@@ -13,7 +13,7 @@ function requireInternal(req: Request) {
 }
 
 export async function POST(req: Request) {
-  if (!requireInternal(req)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!requireInternal(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
@@ -21,12 +21,12 @@ export async function POST(req: Request) {
   }
 
   const admin = createAdminSupabaseClient();
-  const { data, error } = await admin.rpc("compute_experience_credibility_v2", {
-    p_experience_id: parsed.data.experience_id,
+  const { data, error } = await admin.rpc("compute_network_trust", {
+    p_verification_id: parsed.data.verification_id,
   });
 
   if (error) return NextResponse.json({ error: "rpc_failed", details: error.message }, { status: 400 });
 
   const row = Array.isArray(data) ? data[0] : data;
-  return NextResponse.json({ route_version: "f14-experience-credibility-v2", result: row ?? null });
+  return NextResponse.json({ route_version: "f14-network-trust-v1", result: row ?? null });
 }

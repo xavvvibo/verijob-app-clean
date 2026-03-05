@@ -4,9 +4,7 @@ import { createAdminSupabaseClient } from "@/utils/supabase/admin";
 
 export const runtime = "nodejs";
 
-const BodySchema = z.object({
-  candidate_id: z.string().uuid(),
-});
+const BodySchema = z.object({ candidate_id: z.string().uuid() });
 
 function requireInternal(req: Request) {
   const token = req.headers.get("x-verijob-internal") || "";
@@ -15,35 +13,20 @@ function requireInternal(req: Request) {
 }
 
 export async function POST(req: Request) {
-  if (!requireInternal(req)) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
+  if (!requireInternal(req)) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const parsed = BodySchema.safeParse(await req.json().catch(() => ({})));
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "invalid_body", details: parsed.error.flatten() },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "invalid_body", details: parsed.error.flatten() }, { status: 400 });
   }
 
   const admin = createAdminSupabaseClient();
-
-  const { data, error } = await admin.rpc("compute_candidate_fraud_score", {
+  const { data, error } = await admin.rpc("compute_candidate_fraud_score_v2", {
     p_candidate_id: parsed.data.candidate_id,
   });
 
-  if (error) {
-    return NextResponse.json(
-      { error: "rpc_failed", details: error.message },
-      { status: 400 }
-    );
-  }
+  if (error) return NextResponse.json({ error: "rpc_failed", details: error.message }, { status: 400 });
 
   const row = Array.isArray(data) ? data[0] : data;
-
-  return NextResponse.json({
-    route_version: "f14-candidate-credibility-v2-admin-internal",
-    result: row ?? null,
-  });
+  return NextResponse.json({ route_version: "f14-candidate-credibility-v2", result: row ?? null });
 }
