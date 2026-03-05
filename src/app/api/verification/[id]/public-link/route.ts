@@ -7,7 +7,8 @@ function newToken() {
 }
 
 export async function POST(req: Request, ctx: any) {
-  const id = ctx?.params?.id as string | undefined
+  const params = await ctx?.params
+  const id = params?.id as string | undefined
   if (!id) return NextResponse.json({ error: "missing_id" }, { status: 400 })
 
   const supabase = await createClient()
@@ -15,7 +16,6 @@ export async function POST(req: Request, ctx: any) {
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) return NextResponse.json({ error: "unauthorized" }, { status: 401 })
 
-  // Solo 2 reglas: existe + es del candidato
   const { data: vr, error: vrErr } = await supabase
     .from("verification_requests")
     .select("id, public_token, requested_by")
@@ -40,6 +40,5 @@ export async function POST(req: Request, ctx: any) {
     if (upErr) return NextResponse.json({ error: "token_update_failed", details: upErr.message }, { status: 400 })
   }
 
-  // Siempre devolvemos url, aunque la verificación esté revocada o incompleta.
   return NextResponse.json({ url: `https://app.verijob.es/v/${token}` })
 }
