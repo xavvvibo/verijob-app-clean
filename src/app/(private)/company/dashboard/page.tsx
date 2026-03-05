@@ -37,17 +37,11 @@ function SectionCard({
       <div className="text-sm font-semibold text-gray-900">{title}</div>
       <div className="mt-2 text-sm text-gray-600">{subtitle}</div>
       <div className="mt-5 flex flex-wrap gap-3">
-        <a
-          href={leftBtn.href}
-          className="inline-flex px-4 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-black transition"
-        >
+        <a href={leftBtn.href} className="inline-flex px-4 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-black transition">
           {leftBtn.label}
         </a>
         {rightBtn ? (
-          <a
-            href={rightBtn.href}
-            className="inline-flex px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-900 text-sm font-semibold hover:bg-gray-50 transition"
-          >
+          <a href={rightBtn.href} className="inline-flex px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-900 text-sm font-semibold hover:bg-gray-50 transition">
             {rightBtn.label}
           </a>
         ) : null}
@@ -65,8 +59,15 @@ export default function CompanyDashboard() {
     (async () => {
       try {
         const r = await fetch("/api/company/dashboard", { cache: "no-store" as any });
-        const j = await r.json();
-        if (!r.ok) throw new Error(j?.error || "dashboard_kpis_failed");
+        const txt = await r.text();
+        let j: any = null;
+        try { j = JSON.parse(txt); } catch {}
+
+        if (!r.ok) {
+          const e = j?.error ? `${j.error}${j.details ? `: ${j.details}` : ""}` : txt.slice(0, 300);
+          throw new Error(`api_company_dashboard_failed ${r.status}: ${e}`);
+        }
+
         if (!alive) return;
         setKpis(j?.kpis || null);
         setErr(null);
@@ -132,15 +133,6 @@ export default function CompanyDashboard() {
           leftBtn={{ label: "Ver facturación", href: "/company/billing" }}
           rightBtn={{ label: "Ajustes", href: "/company/settings" }}
         />
-      </div>
-
-      <div className="bg-white border border-gray-200 rounded-3xl shadow-sm p-6">
-        <div className="text-sm font-semibold text-gray-900">Siguiente (B)</div>
-        <ul className="mt-3 text-sm text-gray-700 list-disc pl-5 space-y-2">
-          <li>Conectar KPIs reales (requests/verifications/evidences/reuse) con endpoint company.</li>
-          <li>Tabla “Cola” con filtros: estado, fecha, candidato, puesto.</li>
-          <li>Panel “Riesgo”: incidencias relevantes + tiempos de respuesta.</li>
-        </ul>
       </div>
     </div>
   );
