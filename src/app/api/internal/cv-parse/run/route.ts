@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
-import * as pdfParse from "pdf-parse";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,15 +12,12 @@ function getServiceKey(): string | null {
     null
   );
 }
-
 function getSupabaseUrl(): string {
   return process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
 }
-
 function getAdminSecret(): string {
   return process.env.INTERNAL_ADMIN_SECRET || "";
 }
-
 function getOpenAIKey(): string | null {
   return process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || null;
 }
@@ -50,11 +46,7 @@ async function openaiExtractStructuredCv(pdfText: string) {
     "Keep experiences in reverse-chronological order if possible."
   ].join("\n");
 
-  const user = [
-    "Extract the CV experiences from this text.",
-    "Text:",
-    pdfText.slice(0, 120_000)
-  ].join("\n\n");
+  const user = ["Extract the CV experiences from this text.", "Text:", pdfText.slice(0, 120_000)].join("\n\n");
 
   const body = {
     model,
@@ -68,10 +60,7 @@ async function openaiExtractStructuredCv(pdfText: string) {
 
   const r = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json"
-    },
+    headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json" },
     body: JSON.stringify(body)
   });
 
@@ -82,22 +71,16 @@ async function openaiExtractStructuredCv(pdfText: string) {
 
   const j: any = await r.json();
   const content = j?.choices?.[0]?.message?.content;
-
-  if (!content || typeof content !== "string") {
-    return { ok: false as const, error: "openai_no_content" };
-  }
+  if (!content || typeof content !== "string") return { ok: false as const, error: "openai_no_content" };
 
   let result: any;
-  try {
-    result = JSON.parse(content);
-  } catch {
+  try { result = JSON.parse(content); } catch {
     return { ok: false as const, error: "openai_invalid_json", details: content.slice(0, 2000) };
   }
 
   if (!result || typeof result !== "object") result = {};
   if (!Array.isArray(result.experiences)) result.experiences = [];
 
-  // normalize + sanitize
   result.experiences = result.experiences.map((e: any) => ({
     company: typeof e?.company === "string" ? e.company : (typeof e?.employer === "string" ? e.employer : null),
     title: typeof e?.title === "string" ? e.title : (typeof e?.role === "string" ? e.role : null),
@@ -114,183 +97,201 @@ async function openaiExtractStructuredCv(pdfText: string) {
   };
 }
 
-export async function POST(req: Request) {
-  const adminSecret = getAdminSecret();
-  const hdr = req.headers.get("x-internal-secret") || "";
-  if (!adminSecret || hdr !== adminSecret) {
-    return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  }
-
-  const supabaseUrl = getSupabaseUrl();
-  const serviceKey = getServiceKey();
-  if (!supabaseUrl || !serviceKey) {
-    return NextResponse.json(
-      { error: "missing_server_env", has_url: !!supabaseUrl, has_service_key: !!serviceKey },
-      { status: 500 }
-    );
-  }
-
-  // NOTE: force 'any' to avoid TS deep instantiation with dynamic filters
-  const supabase: any = createSupabaseAdmin(supabaseUrl, serviceKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
-  });
-
-  const payload: any = await req.json().catch(() => ({}));
-  const requestedJobId: string | null = typeof payload?.job_id === "string" ? payload.job_id : null;
-
-  const { data: job, error: jobErr } = requestedJobId
-    ? await supabase.from("cv_parse_jobs").select("id,user_id,cv_upload_id,status").eq("id", requestedJobId).maybeSingle()
-    : await supabase.from("cv_parse_jobs").select("id,user_id,cv_upload_id,status").eq("status", "queued").order("created_at", { ascending: true }).limit(1).maybeSingle();
-
-  if (jobErr) return NextResponse.json({ error: "job_query_failed", details: jobErr.message }, { status: 400 });
-  if (!job) return NextResponse.json({ ok: true, message: requestedJobId ? "job_not_found" : "no_queued_jobs" });
-
-  await supabase.from("cv_parse_jobs").update({
-    status: "processing",
-    started_at: new Date().toISOString(),
-    error: null
-  }).eq("id", job.id);
-
-  const { data: upload, error: upErr } = await supabase
-    .from("cv_uploads")
-    .select("id,user_id,storage_bucket,storage_path,original_filename,mime_type")
-    .eq("id", job.cv_upload_id)
-    .maybeSingle();
-
-  if (upErr || !upload) {
-    await supabase.from("cv_parse_jobs").update({
-      status: "failed",
-      finished_at: new Date().toISOString(),
-      error: upErr?.message || "cv_upload_not_found"
-    }).eq("id", job.id);
-
-    return NextResponse.json({ route_version: "cv-parse-runner-v3", processed_job_id: job.id, status: "failed", error: upErr?.message || "cv_upload_not_found" });
-  }
-
-  const { data: file, error: dlErr } = await supabase.storage.from(upload.storage_bucket).download(upload.storage_path);
-  if (dlErr || !file) {
-    await supabase.from("cv_parse_jobs").update({
-      status: "failed",
-      finished_at: new Date().toISOString(),
-      error: dlErr?.message || "storage_download_failed"
-    }).eq("id", job.id);
-
-    return NextResponse.json({ route_version: "cv-parse-runner-v3", processed_job_id: job.id, status: "failed", error: dlErr?.message || "storage_download_failed" });
-  }
-
-  const ab = await file.arrayBuffer();
-  const buf = Buffer.from(ab);
-
-  let text = "";
-  try {
-    const parsed: any = await (pdfParse as any)(buf);
-    text = (parsed?.text || "").trim();
-  } catch (e: any) {
-    await supabase.from("cv_parse_jobs").update({
-      status: "failed",
-      finished_at: new Date().toISOString(),
-      error: `pdf_parse_failed: ${String(e?.message || e).slice(0, 500)}`
-    }).eq("id", job.id);
-
-    return NextResponse.json({ route_version: "cv-parse-runner-v3", processed_job_id: job.id, status: "failed", error: "pdf_parse_failed" });
-  }
-
-  if (!text) {
-    await supabase.from("cv_parse_jobs").update({
-      status: "failed",
-      finished_at: new Date().toISOString(),
-      error: "empty_pdf_text"
-    }).eq("id", job.id);
-
-    return NextResponse.json({ route_version: "cv-parse-runner-v3", processed_job_id: job.id, status: "failed", error: "empty_pdf_text" });
-  }
-
-  const extracted = await openaiExtractStructuredCv(text);
-  if (!extracted.ok) {
-    await supabase.from("cv_parse_jobs").update({
-      status: "failed",
-      finished_at: new Date().toISOString(),
-      error: `${extracted.error}${(extracted as any).details ? `: ${(extracted as any).details}` : ""}`.slice(0, 2000)
-    }).eq("id", job.id);
-
-    return NextResponse.json({ route_version: "cv-parse-runner-v3", processed_job_id: job.id, status: "failed", error: extracted.error, details: (extracted as any).details || null });
-  }
-
-  await supabase.from("cv_parse_jobs").update({
-    status: "succeeded",
-    finished_at: new Date().toISOString(),
-    result_json: extracted.result_json,
-    model: extracted.model,
-    tokens_in: extracted.tokens_in,
-    tokens_out: extracted.tokens_out,
-    error: null
-  }).eq("id", job.id);
-
-  const experiences = Array.isArray(extracted.result_json?.experiences) ? extracted.result_json.experiences : [];
-  const experiencesCount = experiences.length;
-
-  const { data: cvUpsert, error: cvErr } = await supabase
-    .from("candidate_cvs")
-    .upsert({
-      user_id: job.user_id,
-      structured_cv_json: extracted.result_json,
-      experiences_count: experiencesCount,
-      last_parsed_at: new Date().toISOString()
-    }, { onConflict: "user_id" })
-    .select("id,user_id")
-    .maybeSingle();
-
-  if (cvErr || !cvUpsert) {
-    return NextResponse.json({
-      route_version: "cv-parse-runner-v3",
-      processed_job_id: job.id,
-      status: "succeeded_but_materialize_failed",
-      error: cvErr?.message || "candidate_cvs_upsert_failed"
-    }, { status: 200 });
-  }
-
-  for (let i = 0; i < experiences.length; i++) {
-    const e = experiences[i] || {};
-    await supabase.from("candidate_cv_experiences").upsert({
-      cv_id: cvUpsert.id,
-      user_id: job.user_id,
-      exp_index: i,
-      company_name: typeof e.company === "string" ? e.company : null,
-      role_title: typeof e.title === "string" ? e.title : null,
-      start_date: typeof e.start_date === "string" ? e.start_date : null,
-      end_date: typeof e.end_date === "string" ? e.end_date : null,
-      raw_json: e,
-      updated_at: new Date().toISOString()
-    }, { onConflict: "cv_id,exp_index" });
-  }
-
-  // Bootstrap scores (stable; we’ll enrich with matching + evidences + requests in next iteration)
-  const { data: expRows } = await supabase
-    .from("candidate_cv_experiences")
-    .select("id,user_id")
-    .eq("user_id", job.user_id);
-
-  if (Array.isArray(expRows)) {
-    for (const r of expRows) {
-      await supabase.from("candidate_experience_scores").upsert({
-        experience_id: r.id,
-        user_id: r.user_id,
-        employment_record_id: null,
-        status_text: "none",
-        evidence_count: 0,
-        reuse_count: 0,
-        score: 50,
-        signals: { source: "openai_parse", note: "bootstrap=50 (matching/evidence/reuse pending)" },
-        updated_at: new Date().toISOString()
-      }, { onConflict: "experience_id" });
-    }
-  }
-
+export async function GET() {
+  // healthcheck para evitar 405/500 “ciegos”
   return NextResponse.json({
-    route_version: "cv-parse-runner-v3",
-    processed_job_id: job.id,
-    user_id: job.user_id,
-    cv_upload_id: job.cv_upload_id,
-    experiences_count: experiencesCount
+    route_version: "cv-parse-runner-v4-health",
+    ok: true,
+    has_admin_secret: !!process.env.INTERNAL_ADMIN_SECRET,
+    has_openai_key: !!(process.env.OPENAI_API_KEY || process.env.OPENAI_KEY),
+    has_supabase_url: !!(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL),
+    has_service_key: !!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE || process.env.SUPABASE_SERVICE_KEY)
   });
+}
+
+export async function POST(req: Request) {
+  try {
+    const adminSecret = getAdminSecret();
+    const hdr = req.headers.get("x-internal-secret") || "";
+    if (!adminSecret || hdr !== adminSecret) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+
+    const supabaseUrl = getSupabaseUrl();
+    const serviceKey = getServiceKey();
+    if (!supabaseUrl || !serviceKey) {
+      return NextResponse.json(
+        { error: "missing_server_env", has_url: !!supabaseUrl, has_service_key: !!serviceKey },
+        { status: 500 }
+      );
+    }
+
+    const supabase: any = createSupabaseAdmin(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false }
+    });
+
+    const payload: any = await req.json().catch(() => ({}));
+    const jobId: string | null = typeof payload?.job_id === "string" ? payload.job_id : null;
+    if (!jobId) return NextResponse.json({ error: "missing_job_id" }, { status: 400 });
+
+    const { data: job, error: jobErr } = await supabase
+      .from("cv_parse_jobs")
+      .select("id,user_id,cv_upload_id,status")
+      .eq("id", jobId)
+      .maybeSingle();
+
+    if (jobErr) return NextResponse.json({ error: "job_query_failed", details: jobErr.message }, { status: 400 });
+    if (!job) return NextResponse.json({ error: "job_not_found" }, { status: 404 });
+
+    await supabase.from("cv_parse_jobs").update({
+      status: "processing",
+      started_at: new Date().toISOString(),
+      error: null
+    }).eq("id", job.id);
+
+    const { data: upload, error: upErr } = await supabase
+      .from("cv_uploads")
+      .select("id,user_id,storage_bucket,storage_path,original_filename,mime_type")
+      .eq("id", job.cv_upload_id)
+      .maybeSingle();
+
+    if (upErr || !upload) {
+      await supabase.from("cv_parse_jobs").update({
+        status: "failed",
+        finished_at: new Date().toISOString(),
+        error: upErr?.message || "cv_upload_not_found"
+      }).eq("id", job.id);
+
+      return NextResponse.json({ route_version: "cv-parse-runner-v4", processed_job_id: job.id, status: "failed", error: upErr?.message || "cv_upload_not_found" });
+    }
+
+    const { data: file, error: dlErr } = await supabase.storage.from(upload.storage_bucket).download(upload.storage_path);
+    if (dlErr || !file) {
+      await supabase.from("cv_parse_jobs").update({
+        status: "failed",
+        finished_at: new Date().toISOString(),
+        error: dlErr?.message || "storage_download_failed"
+      }).eq("id", job.id);
+
+      return NextResponse.json({ route_version: "cv-parse-runner-v4", processed_job_id: job.id, status: "failed", error: dlErr?.message || "storage_download_failed" });
+    }
+
+    const ab = await file.arrayBuffer();
+    const buf = Buffer.from(ab);
+
+    // dynamic import (evita /500 por fallo en evaluación del módulo)
+    let text = "";
+    try {
+      const mod: any = await import("pdf-parse");
+      const pdfParseFn: any = mod?.default || mod;
+      const parsed: any = await pdfParseFn(buf);
+      text = (parsed?.text || "").trim();
+    } catch (e: any) {
+      const msg = `pdf_parse_failed: ${String(e?.message || e).slice(0, 800)}`;
+      await supabase.from("cv_parse_jobs").update({
+        status: "failed",
+        finished_at: new Date().toISOString(),
+        error: msg
+      }).eq("id", job.id);
+
+      return NextResponse.json({ route_version: "cv-parse-runner-v4", processed_job_id: job.id, status: "failed", error: "pdf_parse_failed", details: msg });
+    }
+
+    if (!text) {
+      await supabase.from("cv_parse_jobs").update({
+        status: "failed",
+        finished_at: new Date().toISOString(),
+        error: "empty_pdf_text"
+      }).eq("id", job.id);
+
+      return NextResponse.json({ route_version: "cv-parse-runner-v4", processed_job_id: job.id, status: "failed", error: "empty_pdf_text" });
+    }
+
+    const extracted = await openaiExtractStructuredCv(text);
+    if (!extracted.ok) {
+      await supabase.from("cv_parse_jobs").update({
+        status: "failed",
+        finished_at: new Date().toISOString(),
+        error: `${extracted.error}${(extracted as any).details ? `: ${(extracted as any).details}` : ""}`.slice(0, 2000)
+      }).eq("id", job.id);
+
+      return NextResponse.json({ route_version: "cv-parse-runner-v4", processed_job_id: job.id, status: "failed", error: extracted.error, details: (extracted as any).details || null });
+    }
+
+    await supabase.from("cv_parse_jobs").update({
+      status: "succeeded",
+      finished_at: new Date().toISOString(),
+      result_json: extracted.result_json,
+      model: extracted.model,
+      tokens_in: extracted.tokens_in,
+      tokens_out: extracted.tokens_out,
+      error: null
+    }).eq("id", job.id);
+
+    const experiences = Array.isArray(extracted.result_json?.experiences) ? extracted.result_json.experiences : [];
+    const experiencesCount = experiences.length;
+
+    const { data: cvUpsert, error: cvErr } = await supabase
+      .from("candidate_cvs")
+      .upsert({
+        user_id: job.user_id,
+        structured_cv_json: extracted.result_json,
+        experiences_count: experiencesCount,
+        last_parsed_at: new Date().toISOString()
+      }, { onConflict: "user_id" })
+      .select("id,user_id")
+      .maybeSingle();
+
+    if (cvErr || !cvUpsert) {
+      return NextResponse.json({
+        route_version: "cv-parse-runner-v4",
+        processed_job_id: job.id,
+        status: "succeeded_but_materialize_failed",
+        error: cvErr?.message || "candidate_cvs_upsert_failed"
+      }, { status: 200 });
+    }
+
+    for (let i = 0; i < experiences.length; i++) {
+      const e = experiences[i] || {};
+      await supabase.from("candidate_cv_experiences").upsert({
+        cv_id: cvUpsert.id,
+        user_id: job.user_id,
+        exp_index: i,
+        company_name: typeof e.company === "string" ? e.company : null,
+        role_title: typeof e.title === "string" ? e.title : null,
+        start_date: typeof e.start_date === "string" ? e.start_date : null,
+        end_date: typeof e.end_date === "string" ? e.end_date : null,
+        raw_json: e,
+        updated_at: new Date().toISOString()
+      }, { onConflict: "cv_id,exp_index" });
+    }
+
+    // bootstrap scores (50)
+    const { data: expRows } = await supabase.from("candidate_cv_experiences").select("id,user_id").eq("user_id", job.user_id);
+    if (Array.isArray(expRows)) {
+      for (const r of expRows) {
+        await supabase.from("candidate_experience_scores").upsert({
+          experience_id: r.id,
+          user_id: r.user_id,
+          employment_record_id: null,
+          status_text: "none",
+          evidence_count: 0,
+          reuse_count: 0,
+          score: 50,
+          signals: { source: "openai_parse", note: "bootstrap=50 (matching/evidence/reuse pending)" },
+          updated_at: new Date().toISOString()
+        }, { onConflict: "experience_id" });
+      }
+    }
+
+    return NextResponse.json({
+      route_version: "cv-parse-runner-v4",
+      processed_job_id: job.id,
+      user_id: job.user_id,
+      cv_upload_id: job.cv_upload_id,
+      experiences_count: experiencesCount
+    });
+  } catch (e: any) {
+    return NextResponse.json({ error: "unhandled", details: String(e?.message || e).slice(0, 1500) }, { status: 500 });
+  }
 }
