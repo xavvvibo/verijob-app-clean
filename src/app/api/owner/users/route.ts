@@ -55,9 +55,8 @@ export async function GET(req: Request) {
       await trackEventAdmin({
         event_name: "owner_users_viewed",
         user_id: userRes.user.id,
-        role: "owner",
         source: "api_owner_users",
-        metadata: { q: q || null, limit, offset, returned: data?.length ?? 0, total: count ?? null },
+        metadata: { role: "owner", q: q || null, limit, offset, returned: data?.length ?? 0, total: count ?? null },
       });
     } catch {}
 
