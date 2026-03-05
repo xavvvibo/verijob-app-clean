@@ -1,47 +1,135 @@
-import { createClient } from "@/utils/supabase/server"
+import { createClient } from "@supabase/supabase-js"
+import crypto from "crypto"
 
-export default async function PublicVerificationPage(props: any) {
-  const params = await props?.params
-  const token = params?.token as string | undefined
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
-  if (!token) {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="text-3xl font-semibold text-gray-900">QR NO VÁLIDO O CADUCADO</div>
-        </div>
-      </main>
+function shortHash(text:string){
+  const hash=crypto.createHash("sha256").update(text).digest("hex")
+  return hash.slice(0,16)
+}
+
+function verifySignature(credentialId:string,signature:string){
+
+  const secret=process.env.CREDENTIAL_SIGNING_KEY
+
+  if(!secret) return false
+
+  const expected=crypto
+    .createHmac("sha256",secret)
+    .update(credentialId)
+    .digest("hex")
+    .slice(0,24)
+
+  return expected===signature
+}
+
+export default async function Page(ctx:any){
+
+  const token=ctx?.params?.token
+
+  if(!token){
+    return(
+      <div style={{padding:40,fontFamily:"sans-serif"}}>
+        QR NO VÁLIDO O CADUCADO
+      </div>
     )
   }
 
-  const supabase = await createClient()
-
-  const { data: verification } = await supabase
+  const {data,error}=await supabase
     .from("verification_requests")
-    .select("id,status,public_token,revoked_at,company_id,employment_record_id")
-    .eq("public_token", token)
+    .select("*")
+    .eq("public_token",token)
     .maybeSingle()
 
-  // Si no existe o está revocada o no está verificada => QR no válido (sin explicar por qué)
-  const valid_now = !!verification && !verification.revoked_at && verification.status === "verified"
-
-  if (!valid_now) {
-    return (
-      <main className="min-h-screen flex items-center justify-center bg-white">
-        <div className="text-center">
-          <div className="text-3xl font-semibold text-gray-900">QR NO VÁLIDO O CADUCADO</div>
-        </div>
-      </main>
+  if(!data||error){
+    return(
+      <div style={{padding:40,fontFamily:"sans-serif"}}>
+        QR NO VÁLIDO O CADUCADO
+      </div>
     )
   }
 
-  // Vista mínima (el detalle “pro” ya lo muestra vuestra UI pública existente en /v/<token>)
-  return (
-    <main className="min-h-screen flex items-center justify-center bg-white p-6">
-      <div className="max-w-xl w-full bg-white border border-gray-200 rounded-3xl p-8 shadow-sm">
-        <div className="text-xs text-gray-500">Verificación profesional</div>
-        <div className="mt-3 text-2xl font-semibold text-gray-900">Verificado</div>
+  const credentialId=shortHash(token)
+
+  const signature=data.credential_signature||""
+
+  const valid=verifySignature(credentialId,signature)
+
+  return(
+
+    <div style={{
+      fontFamily:"sans-serif",
+      maxWidth:760,
+      margin:"60px auto",
+      border:"1px solid #e5e7eb",
+      borderRadius:16,
+      padding:40
+    }}>
+
+      <h1 style={{fontSize:28,marginBottom:8}}>
+        Verijob Verification
+      </h1>
+
+      <div style={{color:"#64748b",marginBottom:30}}>
+        Credencial laboral verificable
       </div>
-    </main>
+
+      <div style={{
+        padding:16,
+        borderRadius:12,
+        background: valid ? "#ecfdf5" : "#fef2f2",
+        marginBottom:30
+      }}>
+
+        {valid ? "✓ Credencial verificada" : "QR NO VÁLIDO O CADUCADO"}
+
+      </div>
+
+      <div style={{marginBottom:20}}>
+
+        <strong>Empresa</strong><br/>
+        {data.company_name_freeform||"Empresa"}
+
+      </div>
+
+      <div style={{marginBottom:20}}>
+
+        <strong>Puesto</strong><br/>
+        {data.position||"—"}
+
+      </div>
+
+      <div style={{marginBottom:20}}>
+
+        <strong>Periodo</strong><br/>
+        {data.start_date||"—"} — {data.end_date||"Actual"}
+
+      </div>
+
+      <div style={{marginBottom:20}}>
+
+        <strong>Evidencias verificadas</strong><br/>
+        {data.evidence_count||0}
+
+      </div>
+
+      <div style={{marginTop:40,fontSize:13,color:"#64748b"}}>
+
+        Credential ID: {credentialId}
+
+      </div>
+
+      <div style={{fontSize:13,color:"#64748b"}}>
+
+        Signature: {signature}
+
+      </div>
+
+    </div>
+
   )
+
 }
