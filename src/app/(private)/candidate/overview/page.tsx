@@ -301,7 +301,16 @@ function progressItems(args: {
   hasEvidence: boolean;
 }) {
   const personal = extractPersonalFields(args.candidateProfile);
-  const profileDone = !!(args.profile?.full_name || personal.email || personal.phone || args.profile?.location);
+  const profileDone = !!(
+    args.profile?.full_name ||
+    args.profile?.title ||
+    args.profile?.location ||
+    personal.email ||
+    personal.phone ||
+    personal.linkedin ||
+    personal.website
+  );
+
   const items = [
     {
       key: "personal",
