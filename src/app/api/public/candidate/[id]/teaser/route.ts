@@ -2,7 +2,16 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/utils/supabase/server"
 
 export async function GET(req: Request, ctx: any) {
-  const { id } = ctx.params
+  const p = ctx?.params
+  const params = p && typeof p.then === "function" ? await p : p
+  const id = String(params?.id || "")
+
+  if (!id) {
+    return NextResponse.json(
+      { error: "missing_candidate_id" },
+      { status: 400 }
+    )
+  }
 
   const supabase = await createClient()
 
@@ -19,12 +28,21 @@ export async function GET(req: Request, ctx: any) {
     )
   }
 
+  const experiencesTotal = Number(data.experiences_total ?? 0)
+  const educationTotal = Number(data.education_total ?? 0)
+  const achievementsTotal = Number(data.achievements_total ?? 0)
+
+  const showEducation = educationTotal > 0
+  const showAchievements = achievementsTotal > 0
+
   return NextResponse.json({
-    route_version: "candidate-teaser-v1",
+    route_version: "candidate-teaser-v2-clean-sections",
     candidate_id: id,
-    experiences_total: data.experiences_total ?? 0,
-    education_total: data.education_total ?? 0,
-    achievements_total: data.achievements_total ?? 0,
+    experiences_total: experiencesTotal,
+    education_total: educationTotal,
+    achievements_total: achievementsTotal,
+    show_education: showEducation,
+    show_achievements: showAchievements,
     message: {
       title: "Bienvenido a Verijob",
       subtitle: "La verdad laboral verificada",
