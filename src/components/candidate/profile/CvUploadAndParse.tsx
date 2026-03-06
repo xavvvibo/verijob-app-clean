@@ -31,15 +31,21 @@ export default function CvUploadAndParse() {
     }
 
     const mime = (file.type || "").toLowerCase();
-    const ok = mime.includes("pdf") || mime.includes("wordprocessingml") || file.name.toLowerCase().endsWith(".docx");
+    const ok =
+      mime.includes("pdf") ||
+      mime.includes("wordprocessingml") ||
+      file.name.toLowerCase().endsWith(".docx");
+
     if (!ok) {
       setMsg("Formato no soportado. Usa PDF o DOCX.");
       return;
     }
 
     setBusy(true);
+
     try {
-      const { data: auth } = await supabase.auth.getUser();
+      const { data: auth, error: authErr } = await supabase.auth.getUser();
+      if (authErr) throw new Error(authErr.message);
       const user = auth?.user;
       if (!user) throw new Error("No autorizado.");
 
@@ -47,17 +53,19 @@ export default function CvUploadAndParse() {
       const safeName = file.name.replace(/[^\w.\-]+/g, "_");
       const path = `${user.id}/${Date.now()}_${safeName}`;
 
-      const { error: upErr } = await supabase.storage.from(bucket).upload(path, file, {
-        upsert: true,
-        contentType: file.type || undefined,
-      });
-      if (upErr) throw new Error(upErr.message);
+      const { error: upErr } = await supabase.storage
+        .from(bucket)
+        .upload(path, file, {
+          upsert: true,
+          contentType: file.type || undefined,
+        });
+
+      if (upErr) throw new Error(`upload_failed: ${upErr.message}`);
 
       const r = await fetch("/api/candidate/cv/parse", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          storage_bucket: bucket,
           storage_path: path,
           original_filename: file.name,
           mime_type: file.type || null,
@@ -65,8 +73,19 @@ export default function CvUploadAndParse() {
         }),
       });
 
-      const j = await r.json();
-      if (!r.ok) throw new Error(j?.error || "Error creando job.");
+      const j = await r.json().catch(() => ({}));
+
+      if (!r.ok) {
+        throw new Error(
+          j?.details
+            ? `${j?.error || "parse_failed"}: ${j.details}`
+            : (j?.error || "parse_failed")
+        );
+      }
+
+      if (!j?.job_id) {
+        throw new Error("parse_failed: missing_job_id");
+      }
 
       setJobId(j.job_id);
       setMsg("CV subido. Procesando…");
@@ -81,21 +100,29 @@ export default function CvUploadAndParse() {
     if (!jobId) return;
 
     let alive = true;
+
     const tick = async () => {
       try {
         const r = await fetch(`/api/candidate/cv/parse/job/${jobId}`, { method: "GET" });
-        const out = await r.json();
-        if (!r.ok) throw new Error(out?.error || "Error leyendo job.");
+        const out = await r.json().catch(() => ({}));
+
+        if (!r.ok) {
+          throw new Error(out?.error || "Error leyendo job.");
+        }
 
         const j: Job = out.job;
         if (!alive) return;
+
         setJob(j);
 
-        if (j.status === "succeeded") setMsg("Listo. Experiencias extraídas.");
-        if (j.status === "failed") setMsg(j.error || "Falló el parsing.");
+        if (j.status === "succeeded") {
+          setMsg("Listo. Experiencias extraídas.");
+        } else if (j.status === "failed") {
+          setMsg(j.error || "Falló el parsing.");
+        }
       } catch (e: any) {
         if (!alive) return;
-        setMsg(e?.message || "Error poll job.");
+        setMsg(e?.message || "Error consultando job.");
       }
     };
 
@@ -152,23 +179,19 @@ export default function CvUploadAndParse() {
                 <div className="space-y-2">
                   {exps.map((x: any, idx: number) => (
                     <div key={idx} className="rounded-md border bg-white p-3">
-                      <div className="text-sm font-semibold">{x.role_title} — {x.company_name}</div>
-                      <div className="text-xs text-slate-600">
-                        {(x.start_date || "¿inicio?" )} → {(x.end_date || "actualidad")} · conf {(typeof x.confidence === "number" ? x.confidence.toFixed(2) : "0.50")}
+                      <div className="text-sm font-semibold">
+                        {x.role_title || x.title || "Puesto"} — {x.company_name || x.company || "Empresa"}
                       </div>
-                      {x.description && <div className="mt-2 text-sm text-slate-700">{x.description}</div>}
-                      {Array.isArray(x.skills) && x.skills.length > 0 && (
-                        <div className="mt-2 text-xs text-slate-600">Skills: {x.skills.join(", ")}</div>
+                      <div className="text-xs text-slate-600">
+                        {(x.start_date || "¿inicio?")} → {(x.end_date || "actualidad")}
+                      </div>
+                      {x.description && (
+                        <div className="mt-2 text-sm text-slate-700">{x.description}</div>
                       )}
                     </div>
                   ))}
                 </div>
               )}
-
-              {/* siguiente paso: endpoint import -> experiences */}
-              <div className="pt-2 text-xs text-slate-500">
-                Siguiente paso (lo hacemos después): botón “Guardar experiencias” que inserta en public.experiences con source=cv_parse.
-              </div>
             </div>
           )}
 
