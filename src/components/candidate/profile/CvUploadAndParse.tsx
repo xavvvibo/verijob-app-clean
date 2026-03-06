@@ -46,6 +46,7 @@ export default function CvUploadAndParse() {
     try {
       const { data: auth, error: authErr } = await supabase.auth.getUser();
       if (authErr) throw new Error(authErr.message);
+
       const user = auth?.user;
       if (!user) throw new Error("No autorizado.");
 
@@ -60,35 +61,43 @@ export default function CvUploadAndParse() {
           contentType: file.type || undefined,
         });
 
-      if (upErr) throw new Error(`upload_failed: ${upErr.message}`);
+      if (upErr) {
+        throw new Error(`upload_failed: ${upErr.message}`);
+      }
 
-      const r = await fetch("/api/candidate/cv/parse", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      const { data: upload, error: cvUploadErr } = await supabase
+        .from("cv_uploads")
+        .insert({
+          user_id: user.id,
+          storage_bucket: bucket,
           storage_path: path,
           original_filename: file.name,
           mime_type: file.type || null,
           size_bytes: file.size,
-        }),
-      });
+        })
+        .select("id")
+        .single();
 
-      const j = await r.json().catch(() => ({}));
-
-      if (!r.ok) {
-        throw new Error(
-          j?.details
-            ? `${j?.error || "parse_failed"}: ${j.details}`
-            : (j?.error || "parse_failed")
-        );
+      if (cvUploadErr || !upload) {
+        throw new Error(`cv_uploads_insert_failed: ${cvUploadErr?.message || "insert_failed"}`);
       }
 
-      if (!j?.job_id) {
-        throw new Error("parse_failed: missing_job_id");
+      const { data: parseJob, error: jobErr } = await supabase
+        .from("cv_parse_jobs")
+        .insert({
+          user_id: user.id,
+          cv_upload_id: upload.id,
+          status: "queued",
+        })
+        .select("id,status")
+        .single();
+
+      if (jobErr || !parseJob) {
+        throw new Error(`cv_parse_jobs_insert_failed: ${jobErr?.message || "insert_failed"}`);
       }
 
-      setJobId(j.job_id);
-      setMsg("CV subido. Procesando…");
+      setJobId(parseJob.id);
+      setMsg("CV subido. Job de parse creado.");
     } catch (e: any) {
       setMsg(e?.message || "Error subiendo/procesando CV.");
     } finally {
@@ -103,22 +112,25 @@ export default function CvUploadAndParse() {
 
     const tick = async () => {
       try {
-        const r = await fetch(`/api/candidate/cv/parse/job/${jobId}`, { method: "GET" });
-        const out = await r.json().catch(() => ({}));
+        const { data, error } = await supabase
+          .from("cv_parse_jobs")
+          .select("id,status,error,result_json")
+          .eq("id", jobId)
+          .single();
 
-        if (!r.ok) {
-          throw new Error(out?.error || "Error leyendo job.");
-        }
-
-        const j: Job = out.job;
+        if (error) throw new Error(error.message);
         if (!alive) return;
 
-        setJob(j);
+        setJob(data as Job);
 
-        if (j.status === "succeeded") {
+        if (data.status === "queued") {
+          setMsg("Job en cola…");
+        } else if (data.status === "processing") {
+          setMsg("Procesando CV…");
+        } else if (data.status === "succeeded") {
           setMsg("Listo. Experiencias extraídas.");
-        } else if (j.status === "failed") {
-          setMsg(j.error || "Falló el parsing.");
+        } else if (data.status === "failed") {
+          setMsg(data.error || "Falló el parsing.");
         }
       } catch (e: any) {
         if (!alive) return;
@@ -133,7 +145,7 @@ export default function CvUploadAndParse() {
       alive = false;
       clearInterval(t);
     };
-  }, [jobId]);
+  }, [jobId, supabase]);
 
   const exps = job?.result_json?.experiences || [];
 
@@ -149,6 +161,7 @@ export default function CvUploadAndParse() {
             className="mt-1 w-full rounded-lg border px-3 py-2 text-sm bg-white"
           />
         </div>
+
         <button
           onClick={start}
           disabled={busy}
@@ -185,9 +198,9 @@ export default function CvUploadAndParse() {
                       <div className="text-xs text-slate-600">
                         {(x.start_date || "¿inicio?")} → {(x.end_date || "actualidad")}
                       </div>
-                      {x.description && (
+                      {x.description ? (
                         <div className="mt-2 text-sm text-slate-700">{x.description}</div>
-                      )}
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -195,9 +208,9 @@ export default function CvUploadAndParse() {
             </div>
           )}
 
-          {job.status === "failed" && job.error && (
+          {job.status === "failed" && job.error ? (
             <div className="mt-3 text-sm text-red-700">{job.error}</div>
-          )}
+          ) : null}
         </div>
       )}
     </div>
