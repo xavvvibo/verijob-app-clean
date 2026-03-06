@@ -27,6 +27,8 @@ export default function AuthCallbackPage() {
 
     (async () => {
       try {
+        const supabase = createClient();
+
         const url = new URL(window.location.href);
         const search = url.searchParams;
         const hash = new URLSearchParams(url.hash.startsWith("#") ? url.hash.slice(1) : url.hash);
@@ -40,41 +42,25 @@ export default function AuthCallbackPage() {
 
         if (code) {
           setMessage("Validando enlace…");
-          window.location.replace(`/api/auth/exchange?code=${encodeURIComponent(code)}&next=${encodeURIComponent(next)}`);
-          return;
-        }
-
-        if (token_hash && type) {
-          setMessage("Verificando acceso…");
-          const supabase = createClient();
-          const { error } = await supabase.auth.verifyOtp({ token_hash, type });
-
+          const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
-
-          window.location.replace(next);
-          return;
-        }
-
-        if (access_token && refresh_token) {
+        } else if (token_hash && type) {
+          setMessage("Verificando acceso…");
+          const { error } = await supabase.auth.verifyOtp({ token_hash, type });
+          if (error) throw error;
+        } else if (access_token && refresh_token) {
           setMessage("Creando sesión…");
-
-          const res = await fetch("/api/auth/session", {
-            method: "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ access_token, refresh_token }),
-          });
-
-          const data = await res.json().catch(() => ({}));
-
-          if (!res.ok) {
-            throw new Error(data?.error || "session_failed");
-          }
-
-          window.location.replace(next);
-          return;
+          const { error } = await supabase.auth.setSession({ access_token, refresh_token });
+          if (error) throw error;
+        } else {
+          throw new Error("missing_auth_params");
         }
 
-        throw new Error("missing_auth_params");
+        const { data: userData, error: userErr } = await supabase.auth.getUser();
+        if (userErr) throw userErr;
+        if (!userData?.user) throw new Error("session_not_ready");
+
+        window.location.replace(next);
       } catch (e: any) {
         if (!alive) return;
         setError(e?.message || "No se pudo completar el acceso");
