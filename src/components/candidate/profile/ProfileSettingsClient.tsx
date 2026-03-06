@@ -8,6 +8,8 @@ import CvUploadAndParse from "./CvUploadAndParse";
 const ProfileSchema = z.object({
   full_name: z.string().max(160).nullable().optional(),
   phone: z.string().max(50).nullable().optional(),
+  title: z.string().max(160).nullable().optional(),
+  location: z.string().max(160).nullable().optional(),
   address_line1: z.string().max(160).nullable().optional(),
   address_line2: z.string().max(160).nullable().optional(),
   city: z.string().max(120).nullable().optional(),
@@ -21,6 +23,8 @@ type Profile = {
   email: string | null;
   full_name: string | null;
   phone: string | null;
+  title: string | null;
+  location: string | null;
   address_line1: string | null;
   address_line2: string | null;
   city: string | null;
@@ -109,6 +113,10 @@ function cleanCertifications(items: CertificationItem[]) {
     .filter((x) => x.title || x.issuer || x.date || x.description);
 }
 
+function joinLocation(parts: Array<string | null | undefined>) {
+  return parts.map((x) => (x || "").trim()).filter(Boolean).join(", ") || null;
+}
+
 export default function ProfileSettingsClient({ initialProfile }: { initialProfile: Profile }) {
   const supabase = useMemo(() => createClient(), []);
   const [p, setP] = useState<Profile>(initialProfile);
@@ -159,9 +167,15 @@ export default function ProfileSettingsClient({ initialProfile }: { initialProfi
     setSaveMsg(null);
     setSaving(true);
     try {
+      const derivedLocation =
+        (p.location || "").trim() ||
+        joinLocation([p.city, p.region, p.country]);
+
       const data = ProfileSchema.parse({
         full_name: p.full_name,
         phone: p.phone,
+        title: p.title,
+        location: derivedLocation,
         address_line1: p.address_line1,
         address_line2: p.address_line2,
         city: p.city,
@@ -176,6 +190,8 @@ export default function ProfileSettingsClient({ initialProfile }: { initialProfi
         .eq("id", p.id);
 
       if (error) throw new Error(error.message);
+
+      setP((prev) => ({ ...prev, location: derivedLocation }));
       setSaveMsg("Datos personales guardados.");
     } catch (e: any) {
       setSaveMsg(e?.message || "Error guardando perfil.");
@@ -296,7 +312,9 @@ export default function ProfileSettingsClient({ initialProfile }: { initialProfi
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field label="Nombre completo" value={p.full_name ?? ""} onChange={(v) => setP({ ...p, full_name: v || null })} />
+          <Field label="Título profesional" value={p.title ?? ""} onChange={(v) => setP({ ...p, title: v || null })} />
           <Field label="Teléfono" value={p.phone ?? ""} onChange={(v) => setP({ ...p, phone: v || null })} />
+          <Field label="Ubicación visible" value={p.location ?? ""} onChange={(v) => setP({ ...p, location: v || null })} />
           <Field label="Dirección (línea 1)" value={p.address_line1 ?? ""} onChange={(v) => setP({ ...p, address_line1: v || null })} />
           <Field label="Dirección (línea 2)" value={p.address_line2 ?? ""} onChange={(v) => setP({ ...p, address_line2: v || null })} />
           <Field label="Ciudad" value={p.city ?? ""} onChange={(v) => setP({ ...p, city: v || null })} />

@@ -61,8 +61,21 @@ type AchievementItem = {
 
 type CandidateProfilePayload = Record<string, any> | null;
 
+type OnboardingItem = {
+  key: string;
+  label: string;
+  done: boolean;
+  hint: string;
+  href: string;
+  cta: string;
+};
+
 function clamp(n: number, a = 0, b = 100) {
   return Math.max(a, Math.min(b, n));
+}
+
+function goTo(href: string) {
+  window.location.href = href;
 }
 
 function scoreTone(score: number) {
@@ -200,6 +213,17 @@ function SecondaryButton({ children, onClick }: { children: React.ReactNode; onC
   );
 }
 
+function TertiaryButton({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-gray-800 text-sm font-semibold hover:bg-gray-100 transition"
+    >
+      {children}
+    </button>
+  );
+}
+
 function computeScore(verifications: VerificationRow[]) {
   const total = verifications.length;
   const verified = verifications.filter(v => {
@@ -311,30 +335,38 @@ function progressItems(args: {
     personal.website
   );
 
-  const items = [
+  const items: OnboardingItem[] = [
     {
       key: "personal",
       label: "Completa tus datos personales",
       done: profileDone,
       hint: profileDone ? "Base personal detectada" : "Añade nombre, ubicación y contacto",
+      href: "/candidate/profile",
+      cta: "Editar",
     },
     {
       key: "experience",
       label: "Estructura tu experiencia laboral",
       done: args.hasExperience,
       hint: args.hasExperience ? "Experiencia detectada" : "Sube CV o crea verificaciones",
+      href: "/candidate/experience",
+      cta: "Gestionar",
     },
     {
       key: "education",
       label: "Incluye tu formación académica",
       done: args.hasEducation,
       hint: args.hasEducation ? "Formación detectada" : "Añade estudios para reforzar tu perfil",
+      href: "/candidate/profile",
+      cta: "Editar",
     },
     {
       key: "evidence",
       label: "Sube evidencias y valida tu historial",
       done: args.hasVerifications || args.hasEvidence,
       hint: (args.hasVerifications || args.hasEvidence) ? "Ya hay señales verificables" : "Crea verificaciones o sube evidencias",
+      href: "/candidate/evidence",
+      cta: "Abrir",
     },
   ];
 
@@ -575,22 +607,29 @@ export default function CandidateOverview() {
           <div className="mt-2 text-2xl font-semibold text-gray-900 truncate">
             {profile?.full_name ? profile.full_name : "Tu credibilidad profesional"}
           </div>
-          <div className="mt-2 text-sm text-gray-600">
-            Progreso perfil: <span className="font-semibold text-gray-900">{metrics.completion}%</span>
-            {" · "}
-            R/A/V: <span className="font-semibold text-gray-900">{metrics.ravScore}%</span>
-            {" · "}
-            Trust: <span className="font-semibold text-gray-900">{metrics.score}%</span>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+            <div className="inline-flex items-center gap-1">
+              <span>Progreso perfil:</span>
+              <span className="font-semibold tabular-nums text-gray-900">{onboarding.percent}%</span>
+            </div>
+            <div className="inline-flex items-center gap-1">
+              <span>R/A/V:</span>
+              <span className="font-semibold tabular-nums text-gray-900">{metrics.ravScore}%</span>
+            </div>
+            <div className="inline-flex items-center gap-1">
+              <span>Trust:</span>
+              <span className="font-semibold tabular-nums text-gray-900">{metrics.score}%</span>
+            </div>
           </div>
 
           <div className="mt-5 flex flex-wrap gap-3">
-            <PrimaryButton onClick={() => (window.location.href = "/candidate/verification/new")}>
+            <PrimaryButton onClick={() => goTo("/candidate/verifications/new")}>
               Crear verificación
             </PrimaryButton>
-            <SecondaryButton onClick={() => (window.location.href = "/candidate/evidences")}>
+            <SecondaryButton onClick={() => goTo("/candidate/evidence")}>
               Subir evidencias
             </SecondaryButton>
-            <SecondaryButton onClick={() => (window.location.href = "/candidate/share")}>
+            <SecondaryButton onClick={() => goTo("/candidate/profile-share")}>
               Compartir perfil
             </SecondaryButton>
           </div>
@@ -617,10 +656,12 @@ export default function CandidateOverview() {
       >
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
           {onboarding.items.map((item) => (
-            <div
+            <button
               key={item.key}
-              className={`rounded-2xl border p-4 ${
-                item.done ? "border-green-200 bg-green-50" : "border-gray-200 bg-gray-50"
+              type="button"
+              onClick={() => goTo(item.href)}
+              className={`rounded-2xl border p-4 text-left transition hover:shadow-sm ${
+                item.done ? "border-green-200 bg-green-50" : "border-gray-200 bg-gray-50 hover:bg-white"
               }`}
             >
               <div className="flex items-center justify-between gap-3">
@@ -634,7 +675,8 @@ export default function CandidateOverview() {
                 </span>
               </div>
               <div className="mt-2 text-xs text-gray-600">{item.hint}</div>
-            </div>
+              <div className="mt-3 text-xs font-semibold text-blue-600">{item.cta}</div>
+            </button>
           ))}
         </div>
       </Card>
@@ -669,7 +711,14 @@ export default function CandidateOverview() {
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <div className="space-y-6">
                 <div className="rounded-2xl border border-gray-200 p-5">
-                  <div className="text-sm font-semibold text-gray-900">1) Datos personales</div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">1) Datos personales</div>
+                      <div className="mt-1 text-xs text-gray-500">Identidad profesional base del perfil</div>
+                    </div>
+                    <TertiaryButton onClick={() => goTo("/candidate/profile")}>Editar</TertiaryButton>
+                  </div>
+
                   <div className="mt-4 space-y-3">
                     <div>
                       <div className="text-xs text-gray-500">Nombre</div>
@@ -715,16 +764,16 @@ export default function CandidateOverview() {
                 </div>
 
                 <div className="rounded-2xl border border-gray-200 p-5">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-gray-900">2) Experiencia laboral</div>
-                      <div className="mt-1 text-xs text-gray-500">
-                        Timeline + verificaciones + CV estructurado
-                      </div>
+                      <div className="mt-1 text-xs text-gray-500">Timeline + verificaciones + CV estructurado</div>
                     </div>
-                    <span className="text-xs text-gray-500">
-                      {cvExperiences.length > 0 ? `CV score ${cvScore}` : `${experienceItems.length} items`}
-                    </span>
+                    <TertiaryButton onClick={() => goTo("/candidate/experience")}>Gestionar</TertiaryButton>
+                  </div>
+
+                  <div className="mt-2 text-xs text-gray-500">
+                    {cvExperiences.length > 0 ? `CV score ${cvScore}` : `${experienceItems.length} items`}
                   </div>
 
                   {experienceItems.length === 0 ? (
@@ -769,9 +818,12 @@ export default function CandidateOverview() {
 
               <div className="space-y-6">
                 <div className="rounded-2xl border border-gray-200 p-5">
-                  <div className="text-sm font-semibold text-gray-900">3) Datos académicos</div>
-                  <div className="mt-1 text-xs text-gray-500">
-                    Formación reglada, cursos o especializaciones relevantes
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-gray-900">3) Datos académicos</div>
+                      <div className="mt-1 text-xs text-gray-500">Formación reglada, cursos o especializaciones relevantes</div>
+                    </div>
+                    <TertiaryButton onClick={() => goTo("/candidate/profile")}>Editar</TertiaryButton>
                   </div>
 
                   {education.length === 0 ? (
@@ -800,16 +852,16 @@ export default function CandidateOverview() {
                 </div>
 
                 <div className="rounded-2xl border border-gray-200 p-5">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-semibold text-gray-900">4) Otros logros</div>
-                      <div className="mt-1 text-xs text-gray-500">
-                        Certificaciones, premios, hitos y señales complementarias
-                      </div>
+                      <div className="mt-1 text-xs text-gray-500">Certificaciones, premios, hitos y señales complementarias</div>
                     </div>
-                    <span className="text-xs text-gray-500">
-                      {otherAchievementsCollapsed ? "Minimizado" : `${achievements.length} items`}
-                    </span>
+                    <TertiaryButton onClick={() => goTo("/candidate/profile")}>Editar</TertiaryButton>
+                  </div>
+
+                  <div className="mt-2 text-xs text-gray-500">
+                    {otherAchievementsCollapsed ? "Minimizado" : `${achievements.length} items`}
                   </div>
 
                   {otherAchievementsCollapsed ? (

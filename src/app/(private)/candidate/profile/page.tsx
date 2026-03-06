@@ -9,13 +9,12 @@ export default async function CandidateProfilePage() {
   const user = auth?.user;
 
   if (!user) {
-    // El private layout debería cortar antes, pero por si acaso:
     return <div className="p-6">No autorizado</div>;
   }
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, full_name, email, phone, address_line1, address_line2, city, region, postal_code, country")
+    .select("id, full_name, email, phone, title, location, address_line1, address_line2, city, region, postal_code, country")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -32,6 +31,8 @@ export default async function CandidateProfilePage() {
           email: user.email ?? null,
           full_name: (profile as any)?.full_name ?? null,
           phone: (profile as any)?.phone ?? null,
+          title: (profile as any)?.title ?? null,
+          location: (profile as any)?.location ?? null,
           address_line1: (profile as any)?.address_line1 ?? null,
           address_line2: (profile as any)?.address_line2 ?? null,
           city: (profile as any)?.city ?? null,
