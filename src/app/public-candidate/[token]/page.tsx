@@ -2,17 +2,6 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ token: string }> };
 
-async function fetchTeaser(token: string) {
-  const base =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    "https://app.verijob.es";
-
-  const res = await fetch(`${base}/api/public/candidate/${token}`, { cache: "no-store" });
-  const body = await res.json().catch(() => ({}));
-  return { ok: res.ok, status: res.status, body };
-}
-
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-2xl border bg-white p-4 shadow-sm">
@@ -24,27 +13,17 @@ function StatCard({ label, value }: { label: string; value: number }) {
 
 export default async function PublicCandidatePage({ params }: Ctx) {
   const { token } = await params;
-  const { ok, status, body } = await fetchTeaser(token);
 
-  if (!ok) {
-    const msg =
-      status === 410 ? "Este enlace ha caducado." :
-      status === 429 ? "Demasiadas solicitudes. Inténtalo más tarde." :
-      "No encontrado.";
-
-    return (
-      <main className="min-h-screen bg-slate-50 px-6 py-12">
-        <div className="mx-auto max-w-3xl rounded-3xl border bg-white p-8 shadow-sm">
-          <div className="text-sm font-medium text-slate-500">VERIJOB</div>
-          <h1 className="mt-3 text-2xl font-semibold text-slate-900">Perfil no disponible</h1>
-          <p className="mt-3 text-sm text-slate-600">{msg}</p>
-        </div>
-      </main>
-    );
-  }
-
-  const teaser = body?.teaser ?? {};
-  const profile = body?.profile ?? {};
+  const teaser = {
+    title: "Bienvenido a Verijob",
+    subtitle: "La verdad laboral verificada",
+    description:
+      "Este candidato dispone de perfil laboral verificable en Verijob. Regístrate o inicia sesión como empresa para consultar la vista ampliada.",
+    profile_visibility: "private",
+    experiences_total: 0,
+    education_total: 0,
+    achievements_total: 0,
+  };
 
   const origin =
     process.env.NEXT_PUBLIC_SITE_URL ||
@@ -55,10 +34,7 @@ export default async function PublicCandidatePage({ params }: Ctx) {
   const loginUrl = `${origin}/login?mode=company&next=${encodeURIComponent(nextPath)}`;
   const signupUrl = `${origin}/signup?mode=company&next=${encodeURIComponent(nextPath)}`;
 
-  const displayName =
-    teaser?.profile_visibility === "public"
-      ? (teaser?.full_name ?? profile?.full_name ?? "Candidato registrado")
-      : "Candidato verificado";
+  const displayName = "Candidato verificado";
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
@@ -68,16 +44,9 @@ export default async function PublicCandidatePage({ params }: Ctx) {
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
               Verijob
             </div>
-            <h1 className="mt-3 text-3xl font-semibold">
-              {teaser?.title ?? "Bienvenido a Verijob"}
-            </h1>
-            <p className="mt-2 text-base text-slate-200">
-              {teaser?.subtitle ?? "La verdad laboral verificada"}
-            </p>
-            <p className="mt-4 max-w-3xl text-sm text-slate-300">
-              {teaser?.description ??
-                "Accede al perfil laboral verificado de este candidato registrándote como empresa."}
-            </p>
+            <h1 className="mt-3 text-3xl font-semibold">{teaser.title}</h1>
+            <p className="mt-2 text-base text-slate-200">{teaser.subtitle}</p>
+            <p className="mt-4 max-w-3xl text-sm text-slate-300">{teaser.description}</p>
           </div>
 
           <div className="grid gap-8 px-8 py-8 lg:grid-cols-[1.3fr_0.7fr]">
@@ -93,9 +62,9 @@ export default async function PublicCandidatePage({ params }: Ctx) {
               </div>
 
               <div className="mt-6 grid gap-4 sm:grid-cols-3">
-                <StatCard label="Experiencias registradas" value={Number(teaser?.experiences_total ?? 0)} />
-                <StatCard label="Datos académicos" value={Number(teaser?.education_total ?? 0)} />
-                <StatCard label="Otros logros" value={Number(teaser?.achievements_total ?? 0)} />
+                <StatCard label="Experiencias registradas" value={teaser.experiences_total} />
+                <StatCard label="Datos académicos" value={teaser.education_total} />
+                <StatCard label="Otros logros" value={teaser.achievements_total} />
               </div>
 
               <div className="mt-6 rounded-2xl border p-5">
@@ -132,7 +101,7 @@ export default async function PublicCandidatePage({ params }: Ctx) {
               <div className="mt-6 rounded-xl border bg-white p-4">
                 <div className="text-xs uppercase tracking-wide text-slate-500">Estado público</div>
                 <div className="mt-2 text-sm text-slate-700">
-                  Modo de visibilidad: <span className="font-medium">{String(teaser?.profile_visibility ?? "private")}</span>
+                  Modo de visibilidad: <span className="font-medium">{teaser.profile_visibility}</span>
                 </div>
               </div>
             </aside>

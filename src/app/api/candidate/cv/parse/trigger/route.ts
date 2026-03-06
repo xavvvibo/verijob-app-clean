@@ -27,318 +27,113 @@ function getOpenAIKey(): string | null {
   );
 }
 
-async function openaiExtractStructuredCvFromText(text: string) {
-  const apiKey = getOpenAIKey();
-  if (!apiKey) return { ok: false as const, error: "missing_openai_api_key" };
-
-  const model = process.env.OPENAI_CV_MODEL || "gpt-4o-mini";
-
-  const system = [
-    "You extract structured CV data from raw text.",
-    "Return ONLY valid JSON, no markdown, no commentary.",
-    "Schema:",
-    "{",
-    '  "experiences": [',
-    "    {",
-    '      "company": string|null,',
-    '      "title": string|null,',
-    '      "start_date": "YYYY-MM-DD"|null,',
-    '      "end_date": "YYYY-MM-DD"|null',
-    "    }",
-    "  ]",
-    "}"
-  ].join("\n");
-
-  const user = ["Extract the CV experiences from this text.", "Text:", text.slice(0, 120_000)].join("\n\n");
-
-  const body = {
-    model,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user }
-    ],
-    temperature: 0.1
-  };
-
-  const r = await fetch("https://api.openai.com/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${apiKey}`,
-      "content-type": "application/json"
-    },
-    body: JSON.stringify(body)
-  });
-
-  if (!r.ok) {
-    const t = await r.text().catch(() => "");
-    return {
-      ok: false as const,
-      error: "openai_failed",
-      status: r.status,
-      details: t.slice(0, 2000)
-    };
-  }
-
-  const j: any = await r.json();
-  const content = j?.choices?.[0]?.message?.content;
-  if (!content || typeof content !== "string") {
-    return { ok: false as const, error: "openai_no_content" };
-  }
-
-  let result: any;
-  try {
-    result = JSON.parse(content);
-  } catch {
-    return {
-      ok: false as const,
-      error: "openai_invalid_json",
-      details: content.slice(0, 2000)
-    };
-  }
-
-  if (!result || typeof result !== "object") result = {};
-  if (!Array.isArray(result.experiences)) result.experiences = [];
-
-  result.experiences = result.experiences.map((e: any) => ({
-    company: typeof e?.company === "string" ? e.company : (typeof e?.employer === "string" ? e.employer : null),
-    title: typeof e?.title === "string" ? e.title : (typeof e?.role === "string" ? e.role : null),
-    start_date: typeof e?.start_date === "string" ? e.start_date : (typeof e?.from === "string" ? e.from : null),
-    end_date: typeof e?.end_date === "string" ? e.end_date : (typeof e?.to === "string" ? e.to : null)
-  }));
-
-  return {
-    ok: true as const,
-    result_json: result,
-    tokens_in: j?.usage?.prompt_tokens ?? null,
-    tokens_out: j?.usage?.completion_tokens ?? null,
-    model
-  };
-}
-
-async function extractTextFromPdf(buf: Buffer) {
-  try {
-    const mod: any = await import("pdf-parse-debugging-disabled");
-    const fn: any = mod?.default || mod;
-    const parsed: any = await fn(buf);
-    const text = (parsed?.text || "").trim();
-
-    if (text) {
-      return { ok: true as const, text, engine: "pdf-parse-debugging-disabled" };
-    }
-
-    return {
-      ok: false as const,
-      error: "empty_pdf_text",
-      engine: "pdf-parse-debugging-disabled"
-    };
-  } catch (e: any) {
-    return {
-      ok: false as const,
-      error: `pdf_text_extract_failed: ${String(e?.message || e)}`.slice(0, 900),
-      engine: "pdf-parse-debugging-disabled"
-    };
-  }
-}
-
 export async function POST(req: Request) {
   try {
-    const authClient = await createRouteHandlerClient();
+    const auth = await createRouteHandlerClient();
+    const { data: { user } } = await auth.auth.getUser();
 
-    const {
-      data: { user },
-      error: authErr,
-    } = await authClient.auth.getUser();
-
-    if (authErr || !user) {
+    if (!user) {
       return NextResponse.json({ error: "unauthorized" }, { status: 401 });
     }
 
-    const body = await req.json().catch(() => ({}));
-    const jobId = typeof body?.job_id === "string" ? body.job_id : null;
+    const { job_id } = await req.json();
 
-    if (!jobId) {
-      return NextResponse.json({ error: "missing_job_id" }, { status: 400 });
-    }
+    const supabase = createSupabaseAdmin(
+      getSupabaseUrl(),
+      getServiceKey() as string,
+      { auth: { persistSession: false } }
+    );
 
-    const supabaseUrl = getSupabaseUrl();
-    const serviceKey = getServiceKey();
-
-    if (!supabaseUrl || !serviceKey) {
-      return NextResponse.json(
-        {
-          error: "missing_server_env",
-          has_url: !!supabaseUrl,
-          has_service_key: !!serviceKey,
-        },
-        { status: 500 }
-      );
-    }
-
-    const supabase: any = createSupabaseAdmin(supabaseUrl, serviceKey, {
-      auth: { persistSession: false, autoRefreshToken: false }
-    });
-
-    const { data: job, error: jobErr } = await supabase
+    const { data: job } = await supabase
       .from("cv_parse_jobs")
-      .select("id,user_id,cv_upload_id,status")
-      .eq("id", jobId)
-      .maybeSingle();
-
-    if (jobErr) {
-      return NextResponse.json({ error: "job_query_failed", details: jobErr.message }, { status: 400 });
-    }
+      .select("id,user_id,cv_upload_id")
+      .eq("id", job_id)
+      .single();
 
     if (!job) {
       return NextResponse.json({ error: "job_not_found" }, { status: 404 });
-    }
-
-    if (job.user_id !== user.id) {
-      return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
     await supabase
       .from("cv_parse_jobs")
       .update({
         status: "processing",
-        started_at: new Date().toISOString(),
-        error: null
+        started_at: new Date().toISOString()
       })
       .eq("id", job.id);
 
-    const { data: upload, error: upErr } = await supabase
+    const { data: upload } = await supabase
       .from("cv_uploads")
-      .select("id,user_id,storage_bucket,storage_path,original_filename,mime_type")
+      .select("*")
       .eq("id", job.cv_upload_id)
-      .maybeSingle();
+      .single();
 
-    if (upErr || !upload) {
-      await supabase.from("cv_parse_jobs").update({
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        error: upErr?.message || "cv_upload_not_found"
-      }).eq("id", job.id);
-
-      return NextResponse.json({
-        processed_job_id: job.id,
-        status: "failed",
-        error: upErr?.message || "cv_upload_not_found"
-      });
-    }
-
-    const { data: file, error: dlErr } = await supabase.storage
+    const { data: file } = await supabase
+      .storage
       .from(upload.storage_bucket)
       .download(upload.storage_path);
 
-    if (dlErr || !file) {
-      await supabase.from("cv_parse_jobs").update({
-        status: "failed",
+    const openaiKey = getOpenAIKey();
+
+    const form = new FormData();
+    form.append("file", file as any);
+
+    const uploadRes = await fetch(
+      "https://api.openai.com/v1/files",
+      {
+        method: "POST",
+        headers: { Authorization: `Bearer ${openaiKey}` },
+        body: form
+      }
+    );
+
+    const fileJson = await uploadRes.json();
+
+    const resp = await fetch(
+      "https://api.openai.com/v1/responses",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${openaiKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: "gpt-4.1-mini",
+          input: [
+            {
+              role: "user",
+              content: [
+                { type: "input_text", text: "Extract work experiences from this CV." },
+                { type: "input_file", file_id: fileJson.id }
+              ]
+            }
+          ]
+        })
+      }
+    );
+
+    const result = await resp.json();
+
+    await supabase
+      .from("cv_parse_jobs")
+      .update({
+        status: "succeeded",
         finished_at: new Date().toISOString(),
-        error: dlErr?.message || "storage_download_failed"
-      }).eq("id", job.id);
-
-      return NextResponse.json({
-        processed_job_id: job.id,
-        status: "failed",
-        error: dlErr?.message || "storage_download_failed"
-      });
-    }
-
-    const ab = await file.arrayBuffer();
-    const buf = Buffer.from(ab);
-
-    const extractedText = await extractTextFromPdf(buf);
-    if (!extractedText.ok) {
-      await supabase.from("cv_parse_jobs").update({
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        error: `${extractedText.engine}: ${extractedText.error}`.slice(0, 2000)
-      }).eq("id", job.id);
-
-      return NextResponse.json({
-        processed_job_id: job.id,
-        status: "failed",
-        error: extractedText.error,
-        engine: extractedText.engine
-      });
-    }
-
-    const extracted = await openaiExtractStructuredCvFromText(extractedText.text);
-    if (!extracted.ok) {
-      await supabase.from("cv_parse_jobs").update({
-        status: "failed",
-        finished_at: new Date().toISOString(),
-        error: `${extracted.error}${(extracted as any).status ? `(${(extracted as any).status})` : ""}${(extracted as any).details ? `: ${(extracted as any).details}` : ""}`.slice(0, 2000)
-      }).eq("id", job.id);
-
-      return NextResponse.json({
-        processed_job_id: job.id,
-        status: "failed",
-        error: extracted.error,
-        details: (extracted as any).details || null
-      });
-    }
-
-    await supabase.from("cv_parse_jobs").update({
-      status: "succeeded",
-      finished_at: new Date().toISOString(),
-      result_json: extracted.result_json,
-      model: extracted.model,
-      tokens_in: extracted.tokens_in,
-      tokens_out: extracted.tokens_out,
-      error: null
-    }).eq("id", job.id);
-
-    const experiences = Array.isArray(extracted.result_json?.experiences)
-      ? extracted.result_json.experiences
-      : [];
-
-    const experiencesCount = experiences.length;
-
-    const { data: cvUpsert, error: cvErr } = await supabase
-      .from("candidate_cvs")
-      .upsert({
-        user_id: job.user_id,
-        structured_cv_json: extracted.result_json,
-        experiences_count: experiencesCount,
-        last_parsed_at: new Date().toISOString()
-      }, { onConflict: "user_id" })
-      .select("id,user_id")
-      .maybeSingle();
-
-    if (cvErr || !cvUpsert) {
-      return NextResponse.json({
-        processed_job_id: job.id,
-        status: "succeeded_but_materialize_failed",
-        error: cvErr?.message || "candidate_cvs_upsert_failed"
-      });
-    }
-
-    for (let i = 0; i < experiences.length; i++) {
-      const e = experiences[i] || {};
-      await supabase.from("candidate_cv_experiences").upsert({
-        cv_id: cvUpsert.id,
-        user_id: job.user_id,
-        exp_index: i,
-        company_name: typeof e.company === "string" ? e.company : null,
-        role_title: typeof e.title === "string" ? e.title : null,
-        start_date: typeof e.start_date === "string" ? e.start_date : null,
-        end_date: typeof e.end_date === "string" ? e.end_date : null,
-        raw_json: e,
-        updated_at: new Date().toISOString()
-      }, { onConflict: "cv_id,exp_index" });
-    }
+        result_json: result
+      })
+      .eq("id", job.id);
 
     return NextResponse.json({
       ok: true,
-      processed_job_id: job.id,
-      status: "succeeded",
-      experiences_count: experiencesCount
+      job_id: job.id
     });
-  } catch (e: any) {
-    return NextResponse.json(
-      { error: "trigger_failed", details: String(e?.message || e) },
-      { status: 400 }
-    );
+
+  } catch (e:any) {
+
+    return NextResponse.json({
+      error: "trigger_failed",
+      details: String(e?.message || e)
+    }, { status: 500 });
+
   }
 }
