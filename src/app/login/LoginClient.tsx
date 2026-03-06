@@ -4,9 +4,16 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/browser";
 
+function safeNext(raw: string | null) {
+  const fallback = "/candidate/overview";
+  if (!raw) return fallback;
+  if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  return fallback;
+}
+
 export default function LoginClient() {
   const sp = useSearchParams();
-  const next = useMemo(() => sp.get("next") ?? "/dashboard", [sp]);
+  const next = useMemo(() => safeNext(sp.get("next")), [sp]);
 
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,7 +34,11 @@ export default function LoginClient() {
     setLoading(true);
     try {
       const supabase = createClient();
-      const redirectTo = `${location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
+      const appUrl =
+        process.env.NEXT_PUBLIC_APP_URL ||
+        (typeof window !== "undefined" ? window.location.origin : "");
+
+      const redirectTo = `${appUrl}/auth/callback?next=${encodeURIComponent(next)}`;
 
       const { error } = await supabase.auth.signInWithOtp({
         email: v,
