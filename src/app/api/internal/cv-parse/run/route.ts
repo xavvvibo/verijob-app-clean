@@ -19,7 +19,7 @@ function getAdminSecret(): string {
   return process.env.INTERNAL_ADMIN_SECRET || "";
 }
 function getOpenAIKey(): string | null {
-  return process.env.OPENAI_API_KEY || process.env.OPENAI_KEY || null;
+  return process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || process.env.OPENAI_KEY || null;
 }
 
 async function openaiExtractStructuredCvFromText(text: string) {
