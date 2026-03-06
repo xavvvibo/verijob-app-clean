@@ -1,3 +1,10 @@
+export const dynamic = "force-dynamic";
+
 export async function GET() {
-  return new Response("ok", { status: 200, headers: { "content-type": "text/plain; charset=utf-8" } })
+  return Response.json({
+    ok: true,
+    route: "/api/public/ping",
+    kind: "minimal-app-route",
+    ts: new Date().toISOString(),
+  });
 }
