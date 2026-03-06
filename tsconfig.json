@@ -9,6 +9,8 @@
     "allowJs": true,
     "skipLibCheck": true,
     "strict": false,
+    "strictNullChecks": false,
+    "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
@@ -31,18 +33,12 @@
   },
   "include": [
     "next-env.d.ts",
-    "src/**/*.ts",
-    "src/**/*.tsx",
+    "**/*.ts",
+    "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules",
-    "app__backup__20260223_005339",
-    "app__backup__*",
-    "**/app__backup__*",
-    "src/_disabled_routes/**",
-    "src/_disabled_routes",
-    "src/_disabled_routes/**/*"
+    "node_modules"
   ]
 }

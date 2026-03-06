@@ -1,106 +1,71 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { createClient } from "@/utils/supabase/client";
 
 export default function ResetClient() {
-  const router = useRouter();
+  const supabase = createClient();
   const sp = useSearchParams();
 
-  // Supabase a veces pasa params tipo: access_token, refresh_token, type=recovery
-  const accessToken = sp.get("access_token") || "";
-  const refreshToken = sp.get("refresh_token") || "";
-  const type = sp.get("type") || "";
-
-  const hasRecoveryTokens = useMemo(() => {
-    return (type === "recovery" && accessToken.length > 0) || accessToken.length > 0 || refreshToken.length > 0;
-  }, [type, accessToken, refreshToken]);
+  const accessToken = sp ? sp.get("access_token") || "" : "";
+  const refreshToken = sp ? sp.get("refresh_token") || "" : "";
+  const type = sp ? sp.get("type") || "" : "";
 
   const [password, setPassword] = useState("");
-  const [password2, setPassword2] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setMsg(null);
-
-    if (password.length < 8) return setMsg("La contraseña debe tener al menos 8 caracteres.");
-    if (password !== password2) return setMsg("Las contraseñas no coinciden.");
-
-    setLoading(true);
+  async function submit() {
     try {
-      // Aquí normalmente harías el updatePassword vía supabase client.
-      // Pero para desbloquear build y no romper producción, dejamos un flow simple:
-      // Si tienes ya implementado el reset en otro sitio (/login o /auth/callback), redirige allí.
-      //
-      // TODO: integrar supabase auth update password con sesión recovery.
-      setMsg("Página de reset activa. Falta integrar el update de contraseña (TODO).");
+      setBusy(true);
+      setMsg(null);
+
+      if (!accessToken || !refreshToken || type !== "recovery") {
+        throw new Error("Enlace de recuperación inválido.");
+      }
+
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+      if (sessionError) throw sessionError;
+
+      const { error: updateError } = await supabase.auth.updateUser({
+        password,
+      });
+      if (updateError) throw updateError;
+
+      setMsg("Contraseña actualizada correctamente.");
+    } catch (e: any) {
+      setMsg(e?.message || "No se pudo actualizar la contraseña.");
     } finally {
-      setLoading(false);
+      setBusy(false);
     }
   }
 
   return (
-    <main style={{ maxWidth: 420, margin: "40px auto", padding: 16 }}>
-      <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 12 }}>Restablecer contraseña</h1>
+    <div className="mx-auto max-w-md space-y-4">
+      <h1 className="text-2xl font-semibold">Restablecer contraseña</h1>
 
-      {!hasRecoveryTokens && (
-        <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 8, marginBottom: 12 }}>
-          <p style={{ margin: 0 }}>
-            No se han detectado tokens de recuperación en la URL. Si vienes desde un email de reset, abre el enlace completo.
-          </p>
-          <button
-            onClick={() => router.push("/login")}
-            style={{ marginTop: 10, padding: "10px 12px", borderRadius: 8, border: "1px solid #ccc" }}
-          >
-            Ir a login
-          </button>
-        </div>
-      )}
+      <input
+        type="password"
+        className="w-full rounded border px-3 py-2"
+        placeholder="Nueva contraseña"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
 
-      <form onSubmit={onSubmit} style={{ display: "grid", gap: 10 }}>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>Nueva contraseña</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="new-password"
-            style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
-          />
-        </label>
+      <button
+        type="button"
+        onClick={submit}
+        disabled={busy}
+        className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
+      >
+        {busy ? "Actualizando..." : "Actualizar contraseña"}
+      </button>
 
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>Repite la contraseña</span>
-          <input
-            type="password"
-            value={password2}
-            onChange={(e) => setPassword2(e.target.value)}
-            autoComplete="new-password"
-            style={{ padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
-          />
-        </label>
-
-        <button
-          type="submit"
-          disabled={loading}
-          style={{ padding: "10px 12px", borderRadius: 8, border: "1px solid #333" }}
-        >
-          {loading ? "Procesando..." : "Guardar contraseña"}
-        </button>
-
-        {msg && <p style={{ margin: 0 }}>{msg}</p>}
-      </form>
-
-      <details style={{ marginTop: 14, opacity: 0.8 }}>
-        <summary>Debug</summary>
-        <pre style={{ whiteSpace: "pre-wrap" }}>
-type={type || "(none)"}{"\n"}
-access_token={(accessToken && accessToken.slice(0, 12) + "...") || "(none)"}{"\n"}
-refresh_token={(refreshToken && refreshToken.slice(0, 12) + "...") || "(none)"}
-        </pre>
-      </details>
-    </main>
+      {msg ? <p className="text-sm">{msg}</p> : null}
+    </div>
   );
 }
