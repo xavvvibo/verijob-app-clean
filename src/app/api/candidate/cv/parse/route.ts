@@ -27,6 +27,10 @@ function getServiceKey(): string | null {
   );
 }
 
+function getInternalSecret(): string {
+  return process.env.INTERNAL_ADMIN_SECRET || "";
+}
+
 export async function POST(req: Request) {
   try {
     const authClient = await createRouteHandlerClient();
@@ -110,12 +114,48 @@ export async function POST(req: Request) {
       );
     }
 
+    const origin = new URL(req.url).origin;
+    const internalSecret = getInternalSecret();
+
+    let runnerTriggered = false;
+    let runnerStatus: number | null = null;
+    let runnerError: string | null = null;
+
+    if (internalSecret) {
+      try {
+        const runnerRes = await fetch(`${origin}/api/internal/cv-parse/run`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-internal-secret": internalSecret,
+          },
+          body: JSON.stringify({ job_id: job.id }),
+          cache: "no-store",
+        });
+
+        runnerStatus = runnerRes.status;
+        runnerTriggered = runnerRes.ok;
+
+        if (!runnerRes.ok) {
+          const txt = await runnerRes.text().catch(() => "");
+          runnerError = txt.slice(0, 500) || `runner_failed_${runnerRes.status}`;
+        }
+      } catch (e: any) {
+        runnerError = String(e?.message || e);
+      }
+    } else {
+      runnerError = "missing_internal_admin_secret";
+    }
+
     return NextResponse.json({
       ok: true,
       job_id: job.id,
       status: job.status,
       created_at: job.created_at,
       upload_id: upload.id,
+      runner_triggered: runnerTriggered,
+      runner_status: runnerStatus,
+      runner_error: runnerError,
     });
   } catch (e: any) {
     return NextResponse.json(
