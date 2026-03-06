@@ -63,8 +63,8 @@ export async function POST(_req: Request, ctx: any) {
     event_name: "verification_shared",
     user_id: user.id,
     company_id,
-    verification_id: verificationId,
     metadata: {
+      verification_id: verificationId,
       channel: "public_link",
       has_existing: Boolean((existing as any)?.token),
     },
