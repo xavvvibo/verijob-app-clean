@@ -7,8 +7,36 @@ import { vjEvents } from "@/lib/analytics";
 
 export const dynamic = "force-dynamic";
 
+type StepKey = "personal" | "experience" | "education" | "achievements";
+
 function isStrongEnough(pw: string) {
   return (pw || "").length >= 8;
+}
+
+function StepCard({
+  title,
+  description,
+  done,
+}: {
+  title: string;
+  description: string;
+  done: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border bg-white p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-sm font-semibold text-slate-900">{title}</div>
+        <div
+          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+            done ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"
+          }`}
+        >
+          {done ? "Listo" : "Pendiente"}
+        </div>
+      </div>
+      <p className="mt-2 text-sm text-slate-600">{description}</p>
+    </div>
+  );
 }
 
 export default function OnboardingPage() {
@@ -21,6 +49,14 @@ export default function OnboardingPage() {
 
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
+
+  const [profileVisibility, setProfileVisibility] = useState("private");
+  const [showPersonal, setShowPersonal] = useState(true);
+  const [showExperience, setShowExperience] = useState(true);
+  const [showEducation, setShowEducation] = useState(true);
+  const [showAchievements, setShowAchievements] = useState(true);
+
+  const [currentStep, setCurrentStep] = useState<StepKey>("personal");
 
   useEffect(() => {
     let cancelled = false;
@@ -39,7 +75,9 @@ export default function OnboardingPage() {
 
       const { data: profile, error: pErr } = await supabase
         .from("profiles")
-        .select("id, onboarding_completed")
+        .select(
+          "id, onboarding_completed, onboarding_step, profile_visibility, show_personal, show_experience, show_education, show_achievements"
+        )
         .eq("id", user.id)
         .maybeSingle();
 
@@ -48,6 +86,15 @@ export default function OnboardingPage() {
       } else if (profile?.onboarding_completed) {
         if (!cancelled) router.replace("/dashboard");
         return;
+      } else {
+        if (!cancelled) {
+          setProfileVisibility(profile?.profile_visibility ?? "private");
+          setShowPersonal(profile?.show_personal ?? true);
+          setShowExperience(profile?.show_experience ?? true);
+          setShowEducation(profile?.show_education ?? true);
+          setShowAchievements(profile?.show_achievements ?? true);
+          setCurrentStep((profile?.onboarding_step as StepKey) ?? "personal");
+        }
       }
 
       if (!cancelled) setLoading(false);
@@ -59,17 +106,76 @@ export default function OnboardingPage() {
     };
   }, [router, supabase]);
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  const steps = [
+    {
+      key: "personal" as StepKey,
+      title: "Datos personales",
+      description: "Configura contraseña y decide cómo quieres mostrar tu perfil público.",
+      done: isStrongEnough(pw) && pw === pw2,
+    },
+    {
+      key: "experience" as StepKey,
+      title: "Experiencia laboral",
+      description: "Añade o revisa tu experiencia laboral para que tu CV verificable tenga base real.",
+      done: showExperience,
+    },
+    {
+      key: "education" as StepKey,
+      title: "Datos académicos",
+      description: "Incluye tu formación académica y verifícala para reforzar el valor de tu perfil.",
+      done: showEducation,
+    },
+    {
+      key: "achievements" as StepKey,
+      title: "Otros logros",
+      description: "Añade certificados, premios u otros hitos. Si no tienes nada ahora, esta sección podrá quedar mínima.",
+      done: true,
+    },
+  ];
+
+  const completedCount = steps.filter((s) => s.done).length;
+  const progressPct = Math.round((completedCount / steps.length) * 100);
+
+  async function savePreferences(step: StepKey) {
+    const { data: au } = await supabase.auth.getUser();
+    const user = au.user;
+    if (!user) {
+      router.replace("/login?next=/onboarding");
+      return false;
+    }
+
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        onboarding_step: step,
+        profile_visibility: profileVisibility,
+        show_personal: showPersonal,
+        show_experience: showExperience,
+        show_education: showEducation,
+        show_achievements: showAchievements,
+      })
+      .eq("id", user.id);
+
+    if (error) {
+      setErr(error.message || "No se pudieron guardar las preferencias.");
+      return false;
+    }
+
+    return true;
+  }
+
+  async function onContinue(step: StepKey) {
     setErr(null);
 
-    if (!isStrongEnough(pw)) {
-      setErr("La contraseña debe tener al menos 8 caracteres.");
-      return;
-    }
-    if (pw !== pw2) {
-      setErr("Las contraseñas no coinciden.");
-      return;
+    if (step === "personal") {
+      if (!isStrongEnough(pw)) {
+        setErr("La contraseña debe tener al menos 8 caracteres.");
+        return;
+      }
+      if (pw !== pw2) {
+        setErr("Las contraseñas no coinciden.");
+        return;
+      }
     }
 
     setSaving(true);
@@ -81,112 +187,272 @@ export default function OnboardingPage() {
         return;
       }
 
-      const { error: upErr } = await supabase.auth.updateUser({ password: pw });
-      if (upErr) throw upErr;
+      if (step === "personal") {
+        const { error: upErr } = await supabase.auth.updateUser({ password: pw });
+        if (upErr) throw upErr;
+      }
 
-      await supabase
-        .from("profiles")
-        .update({ onboarding_completed: true })
-        .eq("id", user.id);
+      const nextMap: Record<StepKey, StepKey> = {
+        personal: "experience",
+        experience: "education",
+        education: "achievements",
+        achievements: "achievements",
+      };
 
-      // ✅ F10 evento: onboarding completado
-      vjEvents.onboarding_completed("candidate");
+      const ok = await savePreferences(nextMap[step]);
+      if (!ok) return;
 
-      router.replace("/dashboard");
-      router.refresh();
+      vjEvents.onboarding_step_completed(step);
+      vjEvents.profile_section_completed(step);
+      setCurrentStep(nextMap[step]);
     } catch (e: any) {
-      setErr(e?.message || "Error guardando la contraseña.");
+      setErr(e?.message || "No se pudo continuar.");
     } finally {
       setSaving(false);
     }
   }
 
+  async function onFinish() {
+    setErr(null);
+    setSaving(true);
+
+    try {
+      const { data: au } = await supabase.auth.getUser();
+      const user = au.user;
+      if (!user) {
+        router.replace("/login?next=/onboarding");
+        return;
+      }
+
+      const ok = await savePreferences("achievements");
+      if (!ok) return;
+
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          onboarding_completed: true,
+          onboarding_step: "achievements",
+        })
+        .eq("id", user.id);
+
+      if (error) throw error;
+
+      vjEvents.onboarding_step_completed("achievements");
+      vjEvents.profile_section_completed("achievements");
+      vjEvents.onboarding_completed("candidate");
+
+      router.replace("/dashboard");
+      router.refresh();
+    } catch (e: any) {
+      setErr(e?.message || "No se pudo completar el onboarding.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-slate-50 px-6 py-10">
+        <div className="mx-auto max-w-3xl rounded-3xl border bg-white p-8 shadow-sm">
+          <div className="text-sm text-slate-600">Cargando…</div>
+        </div>
+      </main>
+    );
+  }
+
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontFamily: "system-ui, sans-serif",
-        padding: 24,
-      }}
-    >
-      <div style={{ width: 420, maxWidth: "100%" }}>
-        <h1 style={{ fontSize: 22, margin: 0 }}>Configura tu contraseña</h1>
-        <p style={{ marginTop: 8, opacity: 0.75 }}>
-          Este paso es necesario para terminar el onboarding.
-        </p>
+    <main className="min-h-screen bg-slate-50 px-6 py-10">
+      <div className="mx-auto max-w-5xl">
+        <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
+          <section className="rounded-3xl border bg-white p-8 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Onboarding candidato
+            </div>
+            <h1 className="mt-3 text-3xl font-semibold text-slate-900">
+              Construye tu CV verificable paso a paso
+            </h1>
+            <p className="mt-3 text-sm text-slate-600">
+              Te guiaremos por cuatro bloques: datos personales, experiencia laboral, datos académicos y otros logros.
+            </p>
 
-        {loading ? (
-          <div style={{ opacity: 0.7, marginTop: 16 }}>Cargando…</div>
-        ) : (
-          <form onSubmit={onSubmit} style={{ marginTop: 16 }}>
-            <label style={{ display: "block", fontSize: 13, marginBottom: 6 }}>
-              Contraseña
-            </label>
-            <input
-              type="password"
-              value={pw}
-              onChange={(e) => setPw(e.target.value)}
-              autoComplete="new-password"
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid #ddd",
-                marginBottom: 12,
-              }}
-            />
+            <div className="mt-6">
+              <div className="mb-2 flex items-center justify-between text-sm text-slate-600">
+                <span>Progreso</span>
+                <span>{progressPct}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-2 rounded-full bg-slate-900" style={{ width: `${progressPct}%` }} />
+              </div>
+            </div>
 
-            <label style={{ display: "block", fontSize: 13, marginBottom: 6 }}>
-              Repite contraseña
-            </label>
-            <input
-              type="password"
-              value={pw2}
-              onChange={(e) => setPw2(e.target.value)}
-              autoComplete="new-password"
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid #ddd",
-                marginBottom: 12,
-              }}
-            />
+            <div className="mt-8 space-y-4">
+              <StepCard
+                title="1. Datos personales"
+                description="Configura tu acceso y decide qué partes de tu perfil serán visibles."
+                done={isStrongEnough(pw) && pw === pw2}
+              />
+              <StepCard
+                title="2. Experiencia laboral"
+                description="Tu historial laboral es la base principal del CV verificable."
+                done={showExperience}
+              />
+              <StepCard
+                title="3. Datos académicos"
+                description="Añade tu formación para enriquecer el perfil y mejorar su lectura."
+                done={showEducation}
+              />
+              <StepCard
+                title="4. Otros logros"
+                description="Premios, cursos o certificaciones. Si está vacío, podrá mantenerse discreto."
+                done={true}
+              />
+            </div>
+          </section>
+
+          <section className="rounded-3xl border bg-white p-8 shadow-sm">
+            <div className="text-sm font-semibold text-slate-900">
+              Paso actual: {currentStep === "personal" ? "Datos personales" :
+                currentStep === "experience" ? "Experiencia laboral" :
+                currentStep === "education" ? "Datos académicos" : "Otros logros"}
+            </div>
+
+            {currentStep === "personal" && (
+              <div className="mt-6 space-y-5">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Contraseña</label>
+                  <input
+                    type="password"
+                    value={pw}
+                    onChange={(e) => setPw(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full rounded-xl border px-3 py-2.5 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Repite contraseña</label>
+                  <input
+                    type="password"
+                    value={pw2}
+                    onChange={(e) => setPw2(e.target.value)}
+                    autoComplete="new-password"
+                    className="w-full rounded-xl border px-3 py-2.5 text-sm"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Visibilidad pública del perfil</label>
+                  <select
+                    value={profileVisibility}
+                    onChange={(e) => setProfileVisibility(e.target.value)}
+                    className="w-full rounded-xl border px-3 py-2.5 text-sm"
+                  >
+                    <option value="private">Privado</option>
+                    <option value="public">Público</option>
+                    <option value="public_anonymous">Público anónimo</option>
+                  </select>
+                </div>
+
+                <div className="rounded-2xl border bg-slate-50 p-4">
+                  <div className="text-sm font-medium text-slate-900">Secciones visibles</div>
+                  <div className="mt-3 space-y-3 text-sm text-slate-700">
+                    <label className="flex items-center gap-3">
+                      <input type="checkbox" checked={showPersonal} onChange={(e) => setShowPersonal(e.target.checked)} />
+                      <span>Mostrar datos personales</span>
+                    </label>
+                    <label className="flex items-center gap-3">
+                      <input type="checkbox" checked={showExperience} onChange={(e) => setShowExperience(e.target.checked)} />
+                      <span>Mostrar experiencia laboral</span>
+                    </label>
+                    <label className="flex items-center gap-3">
+                      <input type="checkbox" checked={showEducation} onChange={(e) => setShowEducation(e.target.checked)} />
+                      <span>Mostrar datos académicos</span>
+                    </label>
+                    <label className="flex items-center gap-3">
+                      <input type="checkbox" checked={showAchievements} onChange={(e) => setShowAchievements(e.target.checked)} />
+                      <span>Mostrar otros logros</span>
+                    </label>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => onContinue("personal")}
+                  className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {saving ? "Guardando…" : "Guardar y continuar"}
+                </button>
+              </div>
+            )}
+
+            {currentStep === "experience" && (
+              <div className="mt-6 space-y-5">
+                <p className="text-sm text-slate-600">
+                  Añade tu experiencia laboral en Verijob. Es la parte más valiosa para que una empresa entienda tu recorrido real.
+                </p>
+                <a
+                  href="/candidate/experience"
+                  className="inline-flex w-full items-center justify-center rounded-xl border px-4 py-3 text-sm font-medium text-slate-900"
+                >
+                  Ir a experiencia laboral
+                </a>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => onContinue("experience")}
+                  className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {saving ? "Guardando…" : "Ya he revisado esta sección"}
+                </button>
+              </div>
+            )}
+
+            {currentStep === "education" && (
+              <div className="mt-6 space-y-5">
+                <p className="text-sm text-slate-600">
+                  Incluye tu formación académica y verifícala. Esta sección refuerza tu candidatura cuando aporta contexto real.
+                </p>
+                <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-slate-700">
+                  Si todavía no tienes datos aquí, podrás completarlos más adelante. El perfil seguirá funcionando.
+                </div>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={() => onContinue("education")}
+                  className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {saving ? "Guardando…" : "Continuar a otros logros"}
+                </button>
+              </div>
+            )}
+
+            {currentStep === "achievements" && (
+              <div className="mt-6 space-y-5">
+                <p className="text-sm text-slate-600">
+                  Añade certificados, premios u otros hitos. Si esta sección no tiene contenido, podrá quedarse al mínimo y ocultarse del perfil público.
+                </p>
+                <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-slate-700">
+                  Has llegado al final del onboarding inicial. Después podrás seguir enriqueciendo el perfil desde el dashboard.
+                </div>
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={onFinish}
+                  className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
+                >
+                  {saving ? "Finalizando…" : "Finalizar onboarding"}
+                </button>
+              </div>
+            )}
 
             {err ? (
-              <div
-                style={{
-                  background: "#fff1f1",
-                  border: "1px solid #ffd1d1",
-                  padding: 10,
-                  borderRadius: 10,
-                  marginBottom: 12,
-                }}
-              >
-                <div style={{ color: "#a40000", fontSize: 13 }}>{err}</div>
+              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+                {err}
               </div>
             ) : null}
-
-            <button
-              type="submit"
-              disabled={saving}
-              style={{
-                width: "100%",
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid #111",
-                background: saving ? "#333" : "#111",
-                color: "#fff",
-                cursor: saving ? "not-allowed" : "pointer",
-              }}
-            >
-              {saving ? "Guardando…" : "Guardar y continuar"}
-            </button>
-          </form>
-        )}
+          </section>
+        </div>
       </div>
     </main>
   );

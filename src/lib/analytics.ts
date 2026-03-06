@@ -16,21 +16,32 @@ export function trackEvent(event: string, params?: Record<string, any>) {
   if (process.env.NODE_ENV !== "production") return;
   if (!hasAnalyticsConsent()) return;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const w = window as any;
   if (typeof w.gtag !== "function") return;
 
   w.gtag("event", event, { ...params });
 }
 
-/**
- * Eventos SaaS VERIJOB (F10)
- * Nombres estables: los marcamos luego como conversions en GA4 UI.
- */
 export const vjEvents = {
   signup: (role: "candidate" | "company") => trackEvent("signup", { role }),
+
   onboarding_completed: (role: "candidate" | "company") =>
     trackEvent("onboarding_completed", { role }),
+
+  onboarding_step_completed: (step: "personal" | "experience" | "education" | "achievements") =>
+    trackEvent("onboarding_step_completed", { step }),
+
+  profile_section_completed: (section: "personal" | "experience" | "education" | "achievements") =>
+    trackEvent("profile_section_completed", { section }),
+
+  public_teaser_view: (surface: "candidate_qr" | "candidate_link") =>
+    trackEvent("public_teaser_view", { surface }),
+
+  teaser_signup_click: (surface: "candidate_qr" | "candidate_link") =>
+    trackEvent("teaser_signup_click", { surface }),
+
+  teaser_login_click: (surface: "candidate_qr" | "candidate_link") =>
+    trackEvent("teaser_login_click", { surface }),
 
   verification_created: (verification_id: string) =>
     trackEvent("verification_created", { verification_id }),
