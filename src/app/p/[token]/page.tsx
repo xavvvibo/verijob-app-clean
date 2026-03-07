@@ -88,14 +88,15 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
   const loginUrl = `/login?mode=company&next=${encodeURIComponent(nextPath)}`;
   const signupUrl = `/signup?mode=company&next=${encodeURIComponent(nextPath)}`;
   const trustLabel = getTrustLabel(trust);
-  const profileVisibility = teaser?.profile_visibility || "public_link";
+  const trustInterpretation = getTrustInterpretation(trust);
+  const profileVisibility = getProfileVisibilityLabel(teaser?.profile_visibility);
   const metrics = [
-    { label: "Experiencias", value: Number(teaser?.experiences_total ?? 0) },
-    { label: "Experiencias verificadas", value: Number(teaser?.verified_experiences ?? 0) },
-    { label: "Evidencias", value: Number(teaser?.evidences_total ?? 0) },
-    { label: "Reutilizaciones", value: Number(teaser?.reuse_total ?? 0) },
-    { label: "Empresas que reutilizan", value: Number(teaser?.reuse_companies ?? 0) },
-    { label: "Experiencias confirmadas", value: Number(teaser?.confirmed_experiences ?? 0) },
+    { label: "Experiencias", value: Number(teaser?.experiences_total ?? 0), hint: "Trayectoria registrada" },
+    { label: "Experiencias verificadas", value: Number(teaser?.verified_experiences ?? 0), hint: "Con validación visible" },
+    { label: "Evidencias", value: Number(teaser?.evidences_total ?? 0), hint: "Soporte documental asociado" },
+    { label: "Reutilizaciones", value: Number(teaser?.reuse_total ?? 0), hint: "Verificaciones reutilizadas por empresas" },
+    { label: "Empresas que reutilizan", value: Number(teaser?.reuse_companies ?? 0), hint: "Organizaciones con uso registrado" },
+    { label: "Experiencias confirmadas", value: Number(teaser?.confirmed_experiences ?? 0), hint: "Confirmadas por entidad" },
   ];
   const trustSignals = getTrustSignals({
     trustScore: trust,
@@ -109,7 +110,7 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
     <main className="min-h-screen bg-slate-50 px-5 py-10 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-6xl">
         <section className="overflow-hidden rounded-[28px] border border-slate-200/90 bg-white shadow-sm">
-          <header className="bg-slate-900 px-6 py-9 text-white sm:px-10 sm:py-12">
+          <header className="bg-slate-800 px-6 py-9 text-white sm:px-10 sm:py-12">
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Verijob</div>
             <div className="mt-5 flex flex-wrap items-start justify-between gap-5">
               <div className="max-w-3xl">
@@ -122,15 +123,19 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
                 {teaser?.location ? (
                   <p className="mt-2 text-sm text-slate-300">Ubicación: {teaser.location}</p>
                 ) : null}
+                <p className="mt-3 text-sm leading-6 text-slate-200/95">
+                  Perfil profesional con credenciales laborales estructuradas y evidencias verificables en VERIJOB.
+                </p>
               </div>
 
               <section
                 aria-label="Resumen de credibilidad"
-                className="min-w-[220px] rounded-2xl border border-slate-600/80 bg-slate-800 px-6 py-5 text-right shadow-sm"
+                className="min-w-[220px] rounded-2xl border border-slate-500/70 bg-slate-700 px-6 py-5 text-right shadow-sm"
               >
                 <div className="text-xs font-semibold uppercase tracking-wider text-slate-300">Trust Score</div>
                 <div className="mt-1 text-5xl font-bold leading-none text-white">{trust}</div>
                 <div className="mt-2 text-sm font-medium text-slate-200">{trustLabel}</div>
+                <div className="mt-1 text-xs leading-5 text-slate-200/95">{trustInterpretation}</div>
               </section>
             </div>
 
@@ -149,9 +154,9 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
               </p>
 
               <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                <Stat label="Trust Score" value={trust} highlight />
+                <Stat label="Trust Score" value={trust} highlight hint={trustInterpretation} />
                 {metrics.map((metric) => (
-                  <Stat key={metric.label} label={metric.label} value={metric.value} />
+                  <Stat key={metric.label} label={metric.label} value={metric.value} hint={metric.hint} />
                 ))}
               </div>
 
@@ -229,7 +234,9 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
                   </div>
                 ) : (
                   <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                    Aún no hay experiencias profesionales visibles en este perfil.
+                    {Number(teaser?.experiences_total ?? 0) > 0
+                      ? "Las experiencias de este perfil se encuentran en proceso de revisión o verificación."
+                      : "Aún no hay experiencias profesionales visibles en este perfil."}
                   </div>
                 )}
               </div>
@@ -239,10 +246,14 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
               <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-800">Estado público</h3>
                 <p className="mt-3 text-sm leading-6 text-slate-700">
-                  Candidatura verificable disponible mediante enlace público seguro.
+                  Candidatura verificable accesible mediante enlace seguro.
                 </p>
                 <p className="mt-2 text-sm text-slate-700">
                   Visibilidad: <span className="font-semibold text-slate-900">{profileVisibility}</span>
+                </p>
+                <p className="mt-3 text-xs leading-5 text-slate-600">
+                  Este perfil incluye credenciales laborales estructuradas y evidencias documentales registradas en
+                  VERIJOB.
                 </p>
                 <p className="mt-3 text-xs text-slate-500">
                   Para una revisión completa, accede a la vista empresarial ampliada.
@@ -254,12 +265,12 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
                   Acceso empresa
                 </h3>
                 <p className="mt-3 text-sm leading-6 text-slate-600">
-                  Inicia sesión o crea tu cuenta para continuar la evaluación del candidato.
+                  Accede a la vista empresarial para consultar detalles verificables de la trayectoria profesional.
                 </p>
 
                 <div className="mt-5 flex flex-col gap-2.5">
                   <a
-                    className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+                    className="inline-flex items-center justify-center rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-900"
                     href={signupUrl}
                     aria-label="Crear cuenta de empresa para ver la versión ampliada"
                   >
@@ -274,6 +285,10 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
                   </a>
                 </div>
               </section>
+
+              <p className="px-1 text-xs text-slate-500">
+                Enlace público verificable generado por VERIJOB.
+              </p>
             </aside>
           </div>
         </section>
@@ -282,12 +297,22 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
   );
 }
 
-function Stat({ label, value, highlight = false }: { label: string; value: number; highlight?: boolean }) {
+function Stat({
+  label,
+  value,
+  highlight = false,
+  hint,
+}: {
+  label: string;
+  value: number;
+  highlight?: boolean;
+  hint?: string;
+}) {
   return (
     <div
       className={
         highlight
-          ? "rounded-2xl border border-slate-900 bg-slate-900 p-4 text-white shadow-sm"
+          ? "rounded-2xl border border-slate-800 bg-slate-800 p-4 text-white shadow-sm"
           : "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
       }
     >
@@ -295,6 +320,11 @@ function Stat({ label, value, highlight = false }: { label: string; value: numbe
       <div className={highlight ? "mt-1 text-3xl font-bold" : "mt-1 text-3xl font-semibold text-slate-900"}>
         {value}
       </div>
+      {hint ? (
+        <div className={highlight ? "mt-1 text-xs leading-5 text-slate-200/90" : "mt-1 text-xs leading-5 text-slate-500"}>
+          {hint}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -304,6 +334,19 @@ function getTrustLabel(score: number) {
   if (score >= 60) return "Credibilidad sólida";
   if (score >= 40) return "Credibilidad media";
   return "Credibilidad inicial";
+}
+
+function getTrustInterpretation(score: number) {
+  if (score === 0) return "Perfil en fase inicial de verificación.";
+  if (score >= 80) return "Perfil con credenciales verificables.";
+  return "Perfil con señales de credibilidad en consolidación.";
+}
+
+function getProfileVisibilityLabel(raw?: string | null) {
+  const value = String(raw || "").toLowerCase();
+  if (value === "public_link") return "Perfil público verificable";
+  if (!value) return "Perfil accesible mediante enlace seguro";
+  return "Perfil accesible mediante enlace seguro";
 }
 
 function getStatusBadge(statusText?: string | null) {
