@@ -33,18 +33,18 @@ const AVAILABILITY_START_OPTIONS = [
 const WORKDAY_OPTIONS = [
   { value: "jornada_completa", label: "Jornada completa" },
   { value: "media_jornada", label: "Media jornada" },
-  { value: "extras_eventos", label: "Extras y eventos" },
-  { value: "fines_semana", label: "Fines de semana" },
+  { value: "temporal_proyectos", label: "Temporal / por proyectos" },
   { value: "flexible", label: "Flexible" },
 ];
 
 const ROLE_OPTIONS = [
-  { value: "sala", label: "Sala" },
-  { value: "barra", label: "Barra" },
-  { value: "cocina", label: "Cocina" },
-  { value: "recepcion", label: "Recepción" },
-  { value: "limpieza", label: "Limpieza" },
-  { value: "encargado_supervision", label: "Encargado / supervisión" },
+  { value: "atencion_cliente", label: "Atención al cliente" },
+  { value: "administracion", label: "Administración" },
+  { value: "operaciones", label: "Operaciones" },
+  { value: "ventas", label: "Ventas" },
+  { value: "produccion", label: "Producción" },
+  { value: "logistica", label: "Logística" },
+  { value: "soporte_tecnico", label: "Soporte técnico" },
   { value: "otros", label: "Otros" },
 ];
 
@@ -52,9 +52,31 @@ const SCHEDULE_OPTIONS = [
   { value: "mananas", label: "Mañanas" },
   { value: "tardes", label: "Tardes" },
   { value: "noches", label: "Noches" },
-  { value: "fines_semana", label: "Fines de semana" },
+  { value: "horario_flexible", label: "Horario flexible" },
   { value: "turnos_rotativos", label: "Turnos rotativos" },
 ];
+
+function normalizeLegacyWorkday(value: string) {
+  if (value === "extras_eventos" || value === "fines_semana") return "temporal_proyectos";
+  return value;
+}
+
+function normalizeLegacyRole(value: string) {
+  const map: Record<string, string> = {
+    sala: "atencion_cliente",
+    barra: "atencion_cliente",
+    cocina: "produccion",
+    recepcion: "administracion",
+    limpieza: "operaciones",
+    encargado_supervision: "operaciones",
+  };
+  return map[value] || value;
+}
+
+function normalizeLegacySchedule(value: string) {
+  if (value === "fines_semana") return "horario_flexible";
+  return value;
+}
 
 function Toggle({ label, checked, onChange, help }: { label: string; checked: boolean; onChange: (v: boolean) => void; help?: string }) {
   return (
@@ -158,10 +180,14 @@ export default function CandidateSettings() {
         allow_company_phone_contact: !!j?.settings?.allow_company_phone_contact,
         job_search_status: String(j?.settings?.job_search_status || "abierto_oportunidades"),
         availability_start: String(j?.settings?.availability_start || "mas_adelante"),
-        preferred_workday: String(j?.settings?.preferred_workday || "flexible"),
-        preferred_roles: Array.isArray(j?.settings?.preferred_roles) ? j.settings.preferred_roles : [],
+        preferred_workday: normalizeLegacyWorkday(String(j?.settings?.preferred_workday || "flexible")),
+        preferred_roles: Array.isArray(j?.settings?.preferred_roles)
+          ? Array.from(new Set(j.settings.preferred_roles.map((x: string) => normalizeLegacyRole(String(x)))))
+          : [],
         work_zones: String(j?.settings?.work_zones || ""),
-        availability_schedule: Array.isArray(j?.settings?.availability_schedule) ? j.settings.availability_schedule : [],
+        availability_schedule: Array.isArray(j?.settings?.availability_schedule)
+          ? Array.from(new Set(j.settings.availability_schedule.map((x: string) => normalizeLegacySchedule(String(x)))))
+          : [],
       };
       setS(loaded);
       setInitial(loaded);
@@ -251,9 +277,9 @@ export default function CandidateSettings() {
           </div>
 
           <div className="bg-white border border-gray-200 rounded-2xl p-5 mt-6">
-            <div className="text-base font-semibold text-gray-900">Disponibilidad laboral</div>
+            <div className="text-base font-semibold text-gray-900">Disponibilidad profesional</div>
             <div className="mt-2 text-sm text-gray-600">
-              Completa esta información para que las empresas registradas entiendan mejor tu disponibilidad y encaje profesional.
+              Completa esta información para ayudar a las empresas registradas a entender tu disponibilidad y tipo de oportunidad profesional que buscas.
             </div>
 
             <div className="mt-4 grid gap-4">
@@ -276,13 +302,13 @@ export default function CandidateSettings() {
                 options={WORKDAY_OPTIONS}
               />
               <MultiSelectChecks
-                label="Roles preferidos"
+                label="Áreas o funciones de interés"
                 options={ROLE_OPTIONS}
                 selected={s.preferred_roles}
                 onChange={(v) => setPatch({ preferred_roles: Array.from(new Set(v)) })}
               />
               <label className="block">
-                <div className="text-sm font-semibold text-gray-900">Zonas de trabajo</div>
+                <div className="text-sm font-semibold text-gray-900">Zona o zonas donde prefieres trabajar</div>
                 <input
                   type="text"
                   value={s.work_zones}
@@ -290,6 +316,9 @@ export default function CandidateSettings() {
                   placeholder="Ej.: Madrid centro, Chamberí y Salamanca"
                   className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900"
                 />
+                <div className="mt-1 text-xs text-gray-500">
+                  Puedes indicar ciudades, zonas o áreas donde te gustaría trabajar.
+                </div>
               </label>
               <MultiSelectChecks
                 label="Disponibilidad horaria"

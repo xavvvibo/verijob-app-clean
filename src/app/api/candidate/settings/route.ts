@@ -3,17 +3,39 @@ import { createClient } from "@/utils/supabase/server";
 
 const JOB_SEARCH_STATUS = ["buscando_activamente", "abierto_oportunidades", "no_disponible"] as const;
 const AVAILABILITY_START = ["inmediata", "7_dias", "15_dias", "30_dias", "mas_adelante"] as const;
-const PREFERRED_WORKDAY = ["jornada_completa", "media_jornada", "extras_eventos", "fines_semana", "flexible"] as const;
+// Incluye valores legacy para no romper compatibilidad con datos existentes.
+const PREFERRED_WORKDAY = [
+  "jornada_completa",
+  "media_jornada",
+  "temporal_proyectos",
+  "flexible",
+  "extras_eventos",
+  "fines_semana",
+] as const;
 const PREFERRED_ROLES = [
+  "atencion_cliente",
+  "administracion",
+  "operaciones",
+  "ventas",
+  "produccion",
+  "logistica",
+  "soporte_tecnico",
+  "otros",
   "sala",
   "barra",
   "cocina",
   "recepcion",
   "limpieza",
   "encargado_supervision",
-  "otros",
 ] as const;
-const AVAILABILITY_SCHEDULE = ["mananas", "tardes", "noches", "fines_semana", "turnos_rotativos"] as const;
+const AVAILABILITY_SCHEDULE = [
+  "mananas",
+  "tardes",
+  "noches",
+  "horario_flexible",
+  "turnos_rotativos",
+  "fines_semana",
+] as const;
 
 function pickEnum<T extends readonly string[]>(value: any, allowed: T) {
   return typeof value === "string" && (allowed as readonly string[]).includes(value) ? value : undefined;
