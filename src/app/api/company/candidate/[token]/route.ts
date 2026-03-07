@@ -32,6 +32,15 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const { data: au, error: auErr } = await supabase.auth.getUser();
   if (auErr || !au?.user) return json(401, { error: "Unauthorized" });
 
+  // Guard estricto: solo contexto empresa autenticada
+  const { data: requesterProfile, error: requesterErr } = await supabase
+    .from("profiles")
+    .select("active_company_id")
+    .eq("id", au.user.id)
+    .maybeSingle();
+  if (requesterErr) return json(400, { error: "Profile read failed", details: requesterErr.message });
+  if (!(requesterProfile as any)?.active_company_id) return json(403, { error: "Company context required" });
+
   // Resolver token con service role (no dependemos de RLS del link)
   const service = createServiceRoleClient();
 
@@ -71,16 +80,47 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
   if (!profile) return json(404, { error: "Not found" });
 
+  const { data: candidatePrivacy } = await service
+    .from("candidate_profiles")
+    .select("allow_company_email_contact,allow_company_phone_contact")
+    .eq("user_id", link.candidate_id)
+    .maybeSingle();
+
   await service
     .from("candidate_public_links")
     .update({ last_viewed_at: new Date().toISOString() })
     .eq("id", link.id);
 
   const safe = sanitizePublic(profile);
+  const rawEmail =
+    typeof (profile as any)?.email === "string" && (profile as any).email.trim()
+      ? String((profile as any).email).trim()
+      : null;
+  const rawPhone = [
+    (profile as any)?.phone,
+    (profile as any)?.phone_number,
+    (profile as any)?.mobile,
+    (profile as any)?.telefono,
+    (profile as any)?.tel,
+  ]
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .find((v) => !!v) || null;
+
+  const allowEmail = !!(candidatePrivacy as any)?.allow_company_email_contact;
+  const allowPhone = !!(candidatePrivacy as any)?.allow_company_phone_contact;
+  const contact = {
+    email: allowEmail ? rawEmail : null,
+    phone: allowPhone ? rawPhone : null,
+    permissions: {
+      allow_company_email_contact: allowEmail,
+      allow_company_phone_contact: allowPhone,
+    },
+  };
 
   return json(200, {
     candidate_id: link.candidate_id,
     profile: safe,
+    contact,
     gate: {
       allowed: true,
       consumed: !!gate?.consumed,

@@ -53,6 +53,10 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
 
   const profile = body?.profile ?? {};
   const gate = body?.gate ?? {};
+  const contact = body?.contact ?? {};
+  const hasEmail = typeof contact?.email === "string" && contact.email.length > 0;
+  const hasPhone = typeof contact?.phone === "string" && contact.phone.length > 0;
+  const hasContact = hasEmail || hasPhone;
 
   return (
     <main className="p-6 max-w-3xl">
@@ -74,6 +78,47 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
           </span>
         )}
       </div>
+
+      <section className="mt-6 rounded-lg border p-4">
+        <h2 className="text-base font-semibold text-gray-900">Contacto del candidato</h2>
+        {hasContact ? (
+          <div className="mt-3 space-y-3">
+            {hasEmail ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-gray-200 p-3">
+                <div>
+                  <div className="text-xs text-gray-500">Email</div>
+                  <div className="text-sm font-medium text-gray-900">{contact.email}</div>
+                </div>
+                <a
+                  className="rounded-md border px-3 py-2 text-sm inline-block"
+                  href={`mailto:${contact.email}`}
+                >
+                  Enviar email
+                </a>
+              </div>
+            ) : null}
+
+            {hasPhone ? (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-gray-200 p-3">
+                <div>
+                  <div className="text-xs text-gray-500">Teléfono</div>
+                  <div className="text-sm font-medium text-gray-900">{contact.phone}</div>
+                </div>
+                <a
+                  className="rounded-md border px-3 py-2 text-sm inline-block"
+                  href={`tel:${String(contact.phone).replace(/\s+/g, "")}`}
+                >
+                  Llamar
+                </a>
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-gray-600">
+            El candidato no ha habilitado métodos de contacto directo para empresas registradas.
+          </p>
+        )}
+      </section>
 
       <div className="mt-6 rounded-lg border p-4">
         <pre className="text-xs whitespace-pre-wrap break-words">
