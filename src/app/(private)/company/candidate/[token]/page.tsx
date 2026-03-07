@@ -3,6 +3,14 @@ export const revalidate = 0;
 import { headers } from "next/headers";
 
 type Ctx = { params: Promise<{ token: string }> };
+type Availability = {
+  job_search_status?: string | null;
+  availability_start?: string | null;
+  preferred_workday?: string | null;
+  preferred_roles?: string[] | null;
+  work_zones?: string | null;
+  availability_schedule?: string[] | null;
+};
 
 async function fetchCompanyProfile(token: string) {
   const h = await headers();
@@ -83,9 +91,24 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
   const profile = body?.profile ?? {};
   const gate = body?.gate ?? {};
   const contact = body?.contact ?? {};
+  const availability: Availability = body?.availability ?? {};
   const hasEmail = typeof contact?.email === "string" && contact.email.length > 0;
   const hasPhone = typeof contact?.phone === "string" && contact.phone.length > 0;
   const hasContact = hasEmail || hasPhone;
+  const roles = Array.isArray(availability?.preferred_roles)
+    ? Array.from(new Set(availability.preferred_roles.map((x) => mapRole(String(x))).filter(Boolean)))
+    : [];
+  const schedules = Array.isArray(availability?.availability_schedule)
+    ? Array.from(new Set(availability.availability_schedule.map((x) => mapSchedule(String(x))).filter(Boolean)))
+    : [];
+  const hasAvailabilityData = Boolean(
+    availability?.job_search_status ||
+      availability?.availability_start ||
+      availability?.preferred_workday ||
+      (availability?.work_zones && String(availability.work_zones).trim()) ||
+      roles.length ||
+      schedules.length
+  );
 
   return (
     <main className="p-6 max-w-3xl">
@@ -149,6 +172,38 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
         )}
       </section>
 
+      <section className="mt-6 rounded-lg border p-4">
+        <h2 className="text-base font-semibold text-gray-900">Disponibilidad profesional</h2>
+
+        {hasAvailabilityData ? (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <Field label="Estado actual" value={mapJobSearchStatus(availability?.job_search_status)} />
+            <Field label="Incorporación" value={mapAvailabilityStart(availability?.availability_start)} />
+            <Field label="Tipo de jornada" value={mapWorkday(availability?.preferred_workday)} />
+            <Field
+              label="Áreas o funciones de interés"
+              value={roles.length ? roles.join(", ") : "No especificado"}
+            />
+            <Field
+              label="Zona o zonas preferidas"
+              value={
+                typeof availability?.work_zones === "string" && availability.work_zones.trim()
+                  ? availability.work_zones
+                  : "No especificado"
+              }
+            />
+            <Field
+              label="Disponibilidad horaria"
+              value={schedules.length ? schedules.join(", ") : "No especificado"}
+            />
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-gray-600">
+            El candidato todavía no ha completado su disponibilidad profesional.
+          </p>
+        )}
+      </section>
+
       <div className="mt-6 rounded-lg border p-4">
         <pre className="text-xs whitespace-pre-wrap break-words">
           {JSON.stringify(profile, null, 2)}
@@ -162,4 +217,58 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
       </div>
     </main>
   );
+}
+
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-gray-200 p-3">
+      <div className="text-xs text-gray-500">{label}</div>
+      <div className="mt-1 text-sm font-medium text-gray-900">{value}</div>
+    </div>
+  );
+}
+
+function mapJobSearchStatus(v?: string | null) {
+  if (v === "buscando_activamente") return "Buscando empleo activamente";
+  if (v === "abierto_oportunidades") return "Abierto a oportunidades";
+  if (v === "no_disponible") return "No disponible actualmente";
+  return "No especificado";
+}
+
+function mapAvailabilityStart(v?: string | null) {
+  if (v === "inmediata") return "Inmediata";
+  if (v === "7_dias") return "En 7 días";
+  if (v === "15_dias") return "En 15 días";
+  if (v === "30_dias") return "En 30 días";
+  if (v === "mas_adelante") return "Más adelante";
+  return "No especificado";
+}
+
+function mapWorkday(v?: string | null) {
+  if (v === "jornada_completa") return "Jornada completa";
+  if (v === "media_jornada") return "Media jornada";
+  if (v === "temporal_proyectos" || v === "extras_eventos" || v === "fines_semana") return "Temporal / por proyectos";
+  if (v === "flexible") return "Flexible";
+  return "No especificado";
+}
+
+function mapRole(v: string) {
+  if (v === "atencion_cliente" || v === "sala" || v === "barra") return "Atención al cliente";
+  if (v === "administracion" || v === "recepcion") return "Administración";
+  if (v === "operaciones" || v === "limpieza" || v === "encargado_supervision") return "Operaciones";
+  if (v === "ventas") return "Ventas";
+  if (v === "produccion" || v === "cocina") return "Producción";
+  if (v === "logistica") return "Logística";
+  if (v === "soporte_tecnico") return "Soporte técnico";
+  if (v === "otros") return "Otros";
+  return "";
+}
+
+function mapSchedule(v: string) {
+  if (v === "mananas") return "Mañanas";
+  if (v === "tardes") return "Tardes";
+  if (v === "noches") return "Noches";
+  if (v === "horario_flexible" || v === "fines_semana") return "Horario flexible";
+  if (v === "turnos_rotativos") return "Turnos rotativos";
+  return "";
 }

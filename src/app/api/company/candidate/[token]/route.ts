@@ -80,9 +80,9 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
   if (!profile) return json(404, { error: "Not found" });
 
-  const { data: candidatePrivacy } = await service
+  const { data: candidateProfile } = await service
     .from("candidate_profiles")
-    .select("allow_company_email_contact,allow_company_phone_contact")
+    .select("allow_company_email_contact,allow_company_phone_contact,job_search_status,availability_start,preferred_workday,preferred_roles,work_zones,availability_schedule")
     .eq("user_id", link.candidate_id)
     .maybeSingle();
 
@@ -106,8 +106,8 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     .map((v) => (typeof v === "string" ? v.trim() : ""))
     .find((v) => !!v) || null;
 
-  const allowEmail = !!(candidatePrivacy as any)?.allow_company_email_contact;
-  const allowPhone = !!(candidatePrivacy as any)?.allow_company_phone_contact;
+  const allowEmail = !!(candidateProfile as any)?.allow_company_email_contact;
+  const allowPhone = !!(candidateProfile as any)?.allow_company_phone_contact;
   const contact = {
     email: allowEmail ? rawEmail : null,
     phone: allowPhone ? rawPhone : null,
@@ -116,11 +116,24 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       allow_company_phone_contact: allowPhone,
     },
   };
+  const availability = {
+    job_search_status: (candidateProfile as any)?.job_search_status ?? null,
+    availability_start: (candidateProfile as any)?.availability_start ?? null,
+    preferred_workday: (candidateProfile as any)?.preferred_workday ?? null,
+    preferred_roles: Array.isArray((candidateProfile as any)?.preferred_roles)
+      ? (candidateProfile as any).preferred_roles
+      : [],
+    work_zones: (candidateProfile as any)?.work_zones ?? null,
+    availability_schedule: Array.isArray((candidateProfile as any)?.availability_schedule)
+      ? (candidateProfile as any).availability_schedule
+      : [],
+  };
 
   return json(200, {
     candidate_id: link.candidate_id,
     profile: safe,
     contact,
+    availability,
     gate: {
       allowed: true,
       consumed: !!gate?.consumed,
