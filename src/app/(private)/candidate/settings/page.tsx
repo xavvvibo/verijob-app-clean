@@ -6,6 +6,8 @@ type Settings = {
   show_trust_score: boolean;
   show_verification_counts: boolean;
   show_verified_timeline: boolean;
+  allow_company_email_contact: boolean;
+  allow_company_phone_contact: boolean;
 };
 
 function Toggle({ label, checked, onChange, help }: { label: string; checked: boolean; onChange: (v: boolean) => void; help?: string }) {
@@ -85,6 +87,28 @@ export default function CandidateSettings() {
             onChange={(v) => save({ show_verified_timeline: v })}
             help="Si lo ocultas, la empresa verá menos señal (pero siempre respetamos tu privacidad)."
           />
+
+          <div className="bg-white border border-gray-200 rounded-2xl p-5 mt-6">
+            <div className="text-base font-semibold text-gray-900">Configuración de contacto</div>
+            <div className="mt-2 text-sm text-gray-600">
+              Decide si las empresas registradas en VERIJOB pueden ver métodos de contacto directo en tu perfil ampliado.
+            </div>
+            <div className="mt-4 space-y-3">
+              <Toggle
+                label="Mostrar email a empresas registradas"
+                checked={s.allow_company_email_contact}
+                onChange={(v) => save({ allow_company_email_contact: v })}
+              />
+              <Toggle
+                label="Mostrar teléfono a empresas registradas"
+                checked={s.allow_company_phone_contact}
+                onChange={(v) => save({ allow_company_phone_contact: v })}
+              />
+            </div>
+            <div className="mt-3 text-xs text-gray-500">
+              Estos datos no se mostrarán en tu perfil público abierto.
+            </div>
+          </div>
         </div>
       ) : (
         <div className="text-sm text-gray-600">Cargando…</div>

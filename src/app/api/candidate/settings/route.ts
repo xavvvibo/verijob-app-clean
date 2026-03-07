@@ -8,7 +8,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("candidate_profiles")
-    .select("show_trust_score,show_verification_counts,show_verified_timeline")
+    .select("show_trust_score,show_verification_counts,show_verified_timeline,allow_company_email_contact,allow_company_phone_contact")
     .eq("user_id", user.id)
     .maybeSingle();
 
@@ -19,6 +19,8 @@ export async function GET() {
       show_trust_score: true,
       show_verification_counts: true,
       show_verified_timeline: true,
+      allow_company_email_contact: false,
+      allow_company_phone_contact: false,
     }
   });
 }
@@ -33,6 +35,10 @@ export async function POST(req: Request) {
     show_trust_score: typeof body.show_trust_score === "boolean" ? body.show_trust_score : undefined,
     show_verification_counts: typeof body.show_verification_counts === "boolean" ? body.show_verification_counts : undefined,
     show_verified_timeline: typeof body.show_verified_timeline === "boolean" ? body.show_verified_timeline : undefined,
+    allow_company_email_contact:
+      typeof body.allow_company_email_contact === "boolean" ? body.allow_company_email_contact : undefined,
+    allow_company_phone_contact:
+      typeof body.allow_company_phone_contact === "boolean" ? body.allow_company_phone_contact : undefined,
     updated_at: new Date().toISOString(),
   } as any;
 
