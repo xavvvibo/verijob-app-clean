@@ -48,7 +48,7 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
         ? "Este enlace ha caducado y ya no está disponible."
         : "Este enlace no existe o no está disponible en este momento.";
     return (
-      <main className="min-h-screen bg-slate-50 px-6 py-12">
+      <main className="min-h-screen bg-blue-50/40 px-6 py-12">
         <section
           aria-labelledby="public-profile-unavailable-title"
           className="mx-auto max-w-3xl rounded-3xl border bg-white p-10 text-center shadow-sm"
@@ -62,14 +62,14 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
           </p>
           <div className="mt-6 flex flex-col items-center justify-center gap-3 sm:flex-row">
             <a
-              className="inline-flex min-w-44 items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+              className="inline-flex min-w-44 items-center justify-center rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
               href="/login?mode=company"
               aria-label="Iniciar sesión como empresa en Verijob"
             >
               Iniciar sesión empresa
             </a>
             <a
-              className="inline-flex min-w-44 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100"
+              className="inline-flex min-w-44 items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               href="/signup?mode=company"
               aria-label="Crear cuenta de empresa en Verijob"
             >
@@ -107,40 +107,40 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
   });
 
   return (
-    <main className="min-h-screen bg-slate-50 px-5 py-10 sm:px-8 sm:py-14">
+    <main className="min-h-screen bg-blue-50/40 px-5 py-10 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-6xl">
         <section className="overflow-hidden rounded-[28px] border border-slate-200/90 bg-white shadow-sm">
-          <header className="bg-slate-800 px-6 py-9 text-white sm:px-10 sm:py-12">
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">Verijob</div>
+          <header className="bg-blue-900 px-6 py-9 text-white sm:px-10 sm:py-12">
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">Verijob</div>
             <div className="mt-5 flex flex-wrap items-start justify-between gap-5">
               <div className="max-w-3xl">
                 <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">
                   {teaser?.full_name || "Candidato verificado"}
                 </h1>
-                <p className="mt-2 text-base font-medium text-slate-200">
+                <p className="mt-2 text-base font-medium text-blue-100">
                   {teaser?.title || "Perfil profesional verificable"}
                 </p>
                 {teaser?.location ? (
-                  <p className="mt-2 text-sm text-slate-300">Ubicación: {teaser.location}</p>
+                  <p className="mt-2 text-sm text-blue-100/90">Ubicación: {teaser.location}</p>
                 ) : null}
-                <p className="mt-3 text-sm leading-6 text-slate-200/95">
+                <p className="mt-3 text-sm leading-6 text-blue-100/95">
                   Perfil profesional con credenciales laborales estructuradas y evidencias verificables en VERIJOB.
                 </p>
               </div>
 
               <section
                 aria-label="Resumen de credibilidad"
-                className="min-w-[220px] rounded-2xl border border-slate-500/70 bg-slate-700 px-6 py-5 text-right shadow-sm"
+                className="min-w-[220px] rounded-2xl border border-blue-300/40 bg-blue-800/80 px-6 py-5 text-right shadow-sm"
               >
-                <div className="text-xs font-semibold uppercase tracking-wider text-slate-300">Trust Score</div>
+                <div className="text-xs font-semibold uppercase tracking-wider text-blue-100/90">Trust Score</div>
                 <div className="mt-1 text-5xl font-bold leading-none text-white">{trust}</div>
-                <div className="mt-2 text-sm font-medium text-slate-200">{trustLabel}</div>
-                <div className="mt-1 text-xs leading-5 text-slate-200/95">{trustInterpretation}</div>
+                <div className="mt-2 text-sm font-medium text-blue-100">{trustLabel}</div>
+                <div className="mt-1 text-xs leading-5 text-blue-100/95">{trustInterpretation}</div>
               </section>
             </div>
 
             {teaser?.summary ? (
-              <p className="mt-6 max-w-4xl text-sm leading-7 text-slate-200/95">{String(teaser.summary)}</p>
+              <p className="mt-6 max-w-4xl text-sm leading-7 text-blue-100/95">{String(teaser.summary)}</p>
             ) : null}
           </header>
 
@@ -160,16 +160,16 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
                 ))}
               </div>
 
-              <div className="mt-8 rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+              <div className="mt-8 rounded-2xl border border-blue-100 bg-blue-50/60 p-5 shadow-sm">
                 <h3 className="text-base font-semibold text-slate-900">Señales de confianza</h3>
                 {trustSignals.length ? (
                   <ul className="mt-4 space-y-2.5">
                     {trustSignals.map((signal) => (
                       <li
                         key={signal}
-                        className="flex items-start gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm leading-6 text-slate-700"
+                        className="flex items-start gap-2.5 rounded-xl border border-blue-100 bg-white px-3.5 py-3 text-sm leading-6 text-slate-700"
                       >
-                        <span className="mt-[7px] h-1.5 w-1.5 rounded-full bg-slate-400" />
+                        <span className="mt-[7px] h-1.5 w-1.5 rounded-full bg-blue-500/80" />
                         <span>{signal}</span>
                       </li>
                     ))}
@@ -233,7 +233,7 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
                     })}
                   </div>
                 ) : (
-                  <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
+                  <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-slate-600">
                     {Number(teaser?.experiences_total ?? 0) > 0
                       ? "Las experiencias de este perfil se encuentran en proceso de revisión o verificación."
                       : "Aún no hay experiencias profesionales visibles en este perfil."}
@@ -243,7 +243,7 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
             </section>
 
             <aside className="space-y-5" aria-label="Información complementaria para empresa">
-              <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
+              <section className="rounded-2xl border border-blue-100 bg-blue-50/60 p-5 shadow-sm">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-800">Estado público</h3>
                 <p className="mt-3 text-sm leading-6 text-slate-700">
                   Candidatura verificable accesible mediante enlace seguro.
@@ -270,14 +270,14 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
 
                 <div className="mt-5 flex flex-col gap-2.5">
                   <a
-                    className="inline-flex items-center justify-center rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-900"
+                    className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
                     href={signupUrl}
                     aria-label="Crear cuenta de empresa para ver la versión ampliada"
                   >
                     Crear cuenta de empresa
                   </a>
                   <a
-                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:bg-slate-100"
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
                     href={loginUrl}
                     aria-label="Iniciar sesión como empresa para continuar la evaluación"
                   >
@@ -312,16 +312,16 @@ function Stat({
     <div
       className={
         highlight
-          ? "rounded-2xl border border-slate-800 bg-slate-800 p-4 text-white shadow-sm"
+          ? "rounded-2xl border border-blue-800 bg-blue-800 p-4 text-white shadow-sm"
           : "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
       }
     >
-      <div className={highlight ? "text-xs font-medium text-slate-300" : "text-xs font-medium text-slate-500"}>{label}</div>
+      <div className={highlight ? "text-xs font-medium text-blue-100/90" : "text-xs font-medium text-slate-500"}>{label}</div>
       <div className={highlight ? "mt-1 text-3xl font-bold" : "mt-1 text-3xl font-semibold text-slate-900"}>
         {value}
       </div>
       {hint ? (
-        <div className={highlight ? "mt-1 text-xs leading-5 text-slate-200/90" : "mt-1 text-xs leading-5 text-slate-500"}>
+        <div className={highlight ? "mt-1 text-xs leading-5 text-blue-100/95" : "mt-1 text-xs leading-5 text-slate-500"}>
           {hint}
         </div>
       ) : null}
