@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { useRouter } from "next/navigation";
 
 type Job = {
   id: string;
@@ -12,6 +13,7 @@ type Job = {
 
 export default function CvUploadAndParse() {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
 
   const [busy, setBusy] = useState(false);
@@ -43,9 +45,10 @@ export default function CvUploadAndParse() {
       } else {
         setMsg(
           section === "experiences"
-            ? `Propuesta aplicada: ${imported} experiencias importadas.`
-            : `Propuesta aplicada: ${imported} formaciones importadas.`
+            ? `Propuesta aplicada: ${imported} experiencias importadas. Ya puedes revisarlas en /candidate/experience.`
+            : `Propuesta aplicada: ${imported} formaciones importadas. Ya están disponibles en tu perfil.`
         );
+        router.refresh();
       }
     } catch (e: any) {
       setMsg(e?.message || "No se pudo aplicar la propuesta de importación.");

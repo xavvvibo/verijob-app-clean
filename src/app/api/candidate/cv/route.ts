@@ -29,8 +29,28 @@ export async function GET() {
     return NextResponse.json({ error: "experiences_query_failed", details: eErr.message }, { status: 400 })
   }
 
+  let out = experiences ?? []
+  if (out.length === 0) {
+    const { data: fallbackRows, error: fbErr } = await supabase
+      .from("experiences")
+      .select("company_name,title,start_date,end_date,description")
+      .eq("user_id", user.id)
+      .order("start_date", { ascending: false })
+    if (!fbErr && Array.isArray(fallbackRows)) {
+      out = fallbackRows.map((x: any) => ({
+        company_name: x.company_name ?? null,
+        role_title: x.title ?? null,
+        start_date: x.start_date ?? null,
+        end_date: x.end_date ?? null,
+        description: x.description ?? null,
+        matched_verification_id: null,
+        confidence: null,
+      }))
+    }
+  }
+
   return NextResponse.json({
     score: profile?.cv_consistency_score ?? 0,
-    experiences: experiences ?? []
+    experiences: out
   })
 }

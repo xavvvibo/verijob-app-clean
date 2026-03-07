@@ -5,12 +5,14 @@ type Props = {
   currentUrl?: string | null;
   fallbackName?: string | null;
   onUploaded?: (url: string) => void;
+  sizeClass?: string;
 };
 
 export default function AvatarUploader({
   url,
   currentUrl,
   fallbackName,
+  sizeClass = "h-24 w-24",
 }: Props) {
   const finalUrl = currentUrl || url || null;
   const initials = (fallbackName || "?")
@@ -29,10 +31,10 @@ export default function AvatarUploader({
         <img
           src={finalUrl}
           alt="Avatar"
-          className="mt-3 h-20 w-20 rounded-full object-cover"
+          className={`mt-3 rounded-full object-cover ${sizeClass}`}
         />
       ) : (
-        <div className="mt-3 flex h-20 w-20 items-center justify-center rounded-full border text-sm font-semibold">
+        <div className={`mt-3 flex items-center justify-center rounded-full border text-sm font-semibold ${sizeClass}`}>
           {initials || "?"}
         </div>
       )}

@@ -132,6 +132,42 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "experiences_insert_failed", details: insErr.message }, { status: 400 });
     }
 
+    const profileRows = (candidateRows as any[]).map((row) => ({
+      user_id: user.id,
+      role_title: row.title,
+      company_name: row.company_name,
+      start_date: row.start_date,
+      end_date: row.end_date,
+      description: row.description,
+      confidence: null,
+      matched_verification_id: null,
+    }));
+
+    const { data: existingProfileRows, error: existingProfileErr } = await supabase
+      .from("profile_experiences")
+      .select("role_title,company_name,start_date,end_date")
+      .eq("user_id", user.id);
+
+    if (!existingProfileErr) {
+      const profileSet = new Set(
+        (existingProfileRows || []).map((x: any) =>
+          `${normalizeText(x?.role_title).toLowerCase()}|${normalizeText(x?.company_name).toLowerCase()}|${normalizeText(x?.start_date).toLowerCase()}|${normalizeText(x?.end_date).toLowerCase()}`
+        )
+      );
+
+      const profileToInsert: any[] = [];
+      for (const row of profileRows) {
+        const sig = `${normalizeText(row.role_title).toLowerCase()}|${normalizeText(row.company_name).toLowerCase()}|${normalizeText(row.start_date).toLowerCase()}|${normalizeText(row.end_date).toLowerCase()}`;
+        if (profileSet.has(sig)) continue;
+        profileSet.add(sig);
+        profileToInsert.push(row);
+      }
+
+      if (profileToInsert.length > 0) {
+        await supabase.from("profile_experiences").insert(profileToInsert as any[]);
+      }
+    }
+
     return NextResponse.json({ ok: true, imported: toInsert.length, section: "experiences" });
   }
 

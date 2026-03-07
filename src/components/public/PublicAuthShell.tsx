@@ -95,7 +95,7 @@ export default function PublicAuthShell({
                   </div>
                   <div className="text-center text-slate-400">↓</div>
                   <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900">
-                    Empresa evalúa perfil
+                    Empresa evalúa el perfil
                   </div>
                 </div>
               </div>

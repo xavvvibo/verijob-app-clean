@@ -79,25 +79,24 @@ function goTo(href: string) {
 }
 
 function scoreTone(score: number) {
-  if (score >= 85) return { ring: "stroke-green-600", badge: "bg-green-50 text-green-700 border-green-100", label: "Profesional validado" };
-  if (score >= 70) return { ring: "stroke-green-500", badge: "bg-green-50 text-green-700 border-green-100", label: "Alta confianza" };
-  if (score >= 40) return { ring: "stroke-blue-600", badge: "bg-blue-50 text-blue-700 border-blue-100", label: "Verificado" };
-  return { ring: "stroke-gray-400", badge: "bg-gray-50 text-gray-700 border-gray-200", label: "Inicial" };
+  if (score >= 80) return { ring: "stroke-green-600", badge: "bg-green-50 text-green-700 border-green-100", label: "Alta confianza" };
+  if (score >= 45) return { ring: "stroke-blue-600", badge: "bg-blue-50 text-blue-700 border-blue-100", label: "Confianza media" };
+  return { ring: "stroke-amber-500", badge: "bg-amber-50 text-amber-800 border-amber-200", label: "Confianza inicial" };
 }
 
 function RingNoNumber({ score }: { score: number }) {
   const s = clamp(score);
-  const radius = 92;
-  const stroke = 14;
+  const radius = 68;
+  const stroke = 10;
   const normalized = radius - stroke * 0.5;
   const circumference = normalized * 2 * Math.PI;
   const offset = circumference - (s / 100) * circumference;
   const tone = scoreTone(s);
 
   return (
-    <div className="relative w-64 h-64 flex items-center justify-center">
-      <svg height="224" width="224" className="rotate-[-90deg]">
-        <circle stroke="#e5e7eb" fill="transparent" strokeWidth={stroke} r={normalized} cx="112" cy="112" />
+    <div className="relative w-44 h-44 flex items-center justify-center">
+      <svg height="168" width="168" className="rotate-[-90deg]">
+        <circle stroke="#e5e7eb" fill="transparent" strokeWidth={stroke} r={normalized} cx="84" cy="84" />
         <circle
           strokeLinecap="round"
           className={`${tone.ring} transition-all duration-700`}
@@ -106,17 +105,18 @@ function RingNoNumber({ score }: { score: number }) {
           strokeDasharray={circumference}
           strokeDashoffset={offset}
           r={normalized}
-          cx="112"
-          cy="112"
+          cx="84"
+          cy="84"
         />
       </svg>
 
-      <div className="absolute text-center px-8">
+      <div className="absolute text-center px-4">
+        <div className="text-2xl font-semibold text-gray-900 tabular-nums">{s}%</div>
         <div className={`inline-flex px-3 py-1 rounded-full border text-xs font-semibold ${tone.badge}`}>
           {tone.label}
         </div>
-        <div className="mt-3 text-sm text-gray-600 leading-snug">
-          Credibilidad basada en verificaciones y evidencias reales.
+        <div className="mt-2 text-xs text-gray-600 leading-snug">
+          Credibilidad basada en verificaciones y evidencias.
         </div>
       </div>
     </div>
@@ -154,9 +154,9 @@ function Card({
 
 function Stat({ label, value }: { label: string; value: any }) {
   return (
-    <div className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="mt-2 text-2xl font-semibold text-gray-900 tabular-nums">{value}</div>
+    <div className="h-full bg-white border border-gray-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between min-h-[108px]">
+      <div className="text-xs text-gray-500 leading-5">{label}</div>
+      <div className="mt-2 text-2xl font-semibold text-gray-900 tabular-nums leading-none">{value}</div>
     </div>
   );
 }
@@ -601,8 +601,15 @@ export default function CandidateOverview() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white border border-gray-200 rounded-3xl shadow-sm p-7 flex items-start justify-between gap-6">
-        <div className="min-w-0">
+      <div className="bg-white border border-gray-200 rounded-3xl shadow-sm p-7 flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start gap-4">
+            <AvatarUploader
+              currentUrl={profile?.avatar_url ?? ""}
+              fallbackName={profile?.full_name ?? "Candidato"}
+              sizeClass="h-28 w-28"
+            />
+            <div className="min-w-0">
           <div className="text-xs text-gray-500">Dashboard candidato</div>
           <div className="mt-2 text-2xl font-semibold text-gray-900 truncate">
             {profile?.full_name ? profile.full_name : "Tu credibilidad profesional"}
@@ -619,6 +626,8 @@ export default function CandidateOverview() {
             <div className="inline-flex items-center gap-1">
               <span>Trust:</span>
               <span className="font-semibold tabular-nums text-gray-900">{metrics.score}%</span>
+            </div>
+          </div>
             </div>
           </div>
 
@@ -638,14 +647,11 @@ export default function CandidateOverview() {
           {loading ? <div className="mt-4 text-sm text-gray-500">Cargando datos…</div> : null}
         </div>
 
-        <div className="flex flex-col items-end gap-4 shrink-0">
-          <AvatarUploader
-            currentUrl={profile?.avatar_url ?? ""}
-            fallbackName={profile?.full_name ?? "Candidato"}
-          />
+        <div className="flex flex-col items-start lg:items-end gap-3 shrink-0">
           <div className={`inline-flex px-3 py-1 rounded-full border text-xs font-semibold ${tone.badge}`}>
             {tone.label}
           </div>
+          <div className="text-xs text-gray-500">Trust Score: <span className="font-semibold text-gray-900 tabular-nums">{metrics.score}%</span></div>
         </div>
       </div>
 

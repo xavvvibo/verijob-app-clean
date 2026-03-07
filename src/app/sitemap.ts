@@ -11,6 +11,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/seguridad",
     "/faq",
     "/contacto",
+    "/legal",
     "/privacidad",
     "/terminos",
     "/cookies",
