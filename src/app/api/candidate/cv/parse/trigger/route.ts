@@ -27,56 +27,102 @@ function getOpenAIKey(): string | null {
   );
 }
 
-export async function POST(req: Request) {
-  try {
-    const auth = await createRouteHandlerClient();
-    const { data: { user } } = await auth.auth.getUser();
+function getInternalSecret(): string {
+  return process.env.INTERNAL_ADMIN_SECRET || "";
+}
 
-    if (!user) {
-      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+function createAdminClient() {
+  const url = getSupabaseUrl();
+  const key = getServiceKey();
+  if (!url || !key) {
+    throw new Error("missing_supabase_admin_env");
+  }
+  return createSupabaseAdmin(url, key, { auth: { persistSession: false } });
+}
+
+export async function POST(req: Request) {
+  let jobId: string | null = null;
+  let supabase: ReturnType<typeof createSupabaseAdmin> | null = null;
+
+  try {
+    const internalSecret = getInternalSecret();
+    const suppliedSecret = req.headers.get("x-internal-secret") || "";
+    const isInternalCall = !!internalSecret && suppliedSecret === internalSecret;
+    let requesterUserId: string | null = null;
+
+    if (!isInternalCall) {
+      const auth = await createRouteHandlerClient();
+      const {
+        data: { user },
+      } = await auth.auth.getUser();
+
+      if (!user) {
+        return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+      }
+
+      requesterUserId = user.id;
     }
 
-    const { job_id } = await req.json();
+    const payload = await req.json().catch(() => null);
+    jobId = typeof payload?.job_id === "string" ? payload.job_id.trim() : null;
+    if (!jobId) {
+      return NextResponse.json({ error: "missing_job_id" }, { status: 400 });
+    }
 
-    const supabase = createSupabaseAdmin(
-      getSupabaseUrl(),
-      getServiceKey() as string,
-      { auth: { persistSession: false } }
-    );
+    supabase = createAdminClient();
 
-    const { data: job } = await supabase
+    const { data: job, error: jobErr } = await supabase
       .from("cv_parse_jobs")
       .select("id,user_id,cv_upload_id")
-      .eq("id", job_id)
+      .eq("id", jobId)
       .single();
+
+    if (jobErr) {
+      return NextResponse.json({ error: "job_query_failed", details: jobErr.message }, { status: 400 });
+    }
 
     if (!job) {
       return NextResponse.json({ error: "job_not_found" }, { status: 404 });
+    }
+
+    if (!isInternalCall && requesterUserId && job.user_id !== requesterUserId) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
     await supabase
       .from("cv_parse_jobs")
       .update({
         status: "processing",
-        started_at: new Date().toISOString()
+        started_at: new Date().toISOString(),
+        error: null,
       })
       .eq("id", job.id);
 
-    const { data: upload } = await supabase
+    const { data: upload, error: uploadErr } = await supabase
       .from("cv_uploads")
       .select("*")
       .eq("id", job.cv_upload_id)
       .single();
 
-    const { data: file } = await supabase
-      .storage
+    if (uploadErr || !upload) {
+      throw new Error(`upload_not_found: ${uploadErr?.message || "missing_upload"}`);
+    }
+
+    const { data: file, error: downloadErr } = await supabase.storage
       .from(upload.storage_bucket)
       .download(upload.storage_path);
 
+    if (downloadErr || !file) {
+      throw new Error(`file_download_failed: ${downloadErr?.message || "missing_file"}`);
+    }
+
     const openaiKey = getOpenAIKey();
+    if (!openaiKey) {
+      throw new Error("missing_openai_api_key");
+    }
 
     const form = new FormData();
-    form.append("file", file as any);
+    form.append("file", file, upload.original_filename || "cv_upload");
 
     const uploadRes = await fetch(
       "https://api.openai.com/v1/files",
@@ -87,7 +133,15 @@ export async function POST(req: Request) {
       }
     );
 
+    if (!uploadRes.ok) {
+      const txt = await uploadRes.text().catch(() => "");
+      throw new Error(`openai_file_upload_failed_${uploadRes.status}: ${txt.slice(0, 300)}`);
+    }
+
     const fileJson = await uploadRes.json();
+    if (!fileJson?.id) {
+      throw new Error("openai_file_id_missing");
+    }
 
     const resp = await fetch(
       "https://api.openai.com/v1/responses",
@@ -112,6 +166,11 @@ export async function POST(req: Request) {
       }
     );
 
+    if (!resp.ok) {
+      const txt = await resp.text().catch(() => "");
+      throw new Error(`openai_response_failed_${resp.status}: ${txt.slice(0, 300)}`);
+    }
+
     const result = await resp.json();
 
     await supabase
@@ -119,6 +178,7 @@ export async function POST(req: Request) {
       .update({
         status: "succeeded",
         finished_at: new Date().toISOString(),
+        error: null,
         result_json: result
       })
       .eq("id", job.id);
@@ -129,6 +189,16 @@ export async function POST(req: Request) {
     });
 
   } catch (e:any) {
+    if (supabase && jobId) {
+      await supabase
+        .from("cv_parse_jobs")
+        .update({
+          status: "failed",
+          finished_at: new Date().toISOString(),
+          error: String(e?.message || e).slice(0, 1000),
+        })
+        .eq("id", jobId);
+    }
 
     return NextResponse.json({
       error: "trigger_failed",

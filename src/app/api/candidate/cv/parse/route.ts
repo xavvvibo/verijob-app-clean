@@ -121,30 +121,31 @@ export async function POST(req: Request) {
     let runnerStatus: number | null = null;
     let runnerError: string | null = null;
 
-    if (internalSecret) {
-      try {
-        const runnerRes = await fetch(`${origin}/api/candidate/cv/parse/trigger`, {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            "x-internal-secret": internalSecret,
-          },
-          body: JSON.stringify({ job_id: job.id }),
-          cache: "no-store",
-        });
+    try {
+      const cookie = req.headers.get("cookie");
+      const headers: Record<string, string> = {
+        "content-type": "application/json",
+      };
 
-        runnerStatus = runnerRes.status;
-        runnerTriggered = runnerRes.ok;
+      if (internalSecret) headers["x-internal-secret"] = internalSecret;
+      if (cookie) headers["cookie"] = cookie;
 
-        if (!runnerRes.ok) {
-          const txt = await runnerRes.text().catch(() => "");
-          runnerError = txt.slice(0, 500) || `runner_failed_${runnerRes.status}`;
-        }
-      } catch (e: any) {
-        runnerError = String(e?.message || e);
+      const runnerRes = await fetch(`${origin}/api/candidate/cv/parse/trigger`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ job_id: job.id }),
+        cache: "no-store",
+      });
+
+      runnerStatus = runnerRes.status;
+      runnerTriggered = runnerRes.ok;
+
+      if (!runnerRes.ok) {
+        const txt = await runnerRes.text().catch(() => "");
+        runnerError = txt.slice(0, 500) || `runner_failed_${runnerRes.status}`;
       }
-    } else {
-      runnerError = "missing_internal_admin_secret";
+    } catch (e: any) {
+      runnerError = String(e?.message || e);
     }
 
     return NextResponse.json({
