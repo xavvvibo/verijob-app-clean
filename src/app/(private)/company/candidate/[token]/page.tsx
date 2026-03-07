@@ -1,0 +1,91 @@
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+type Ctx = { params: Promise<{ token: string }> };
+
+async function fetchCompanyProfile(token: string) {
+  const base =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    "http://localhost:3000";
+
+  const res = await fetch(`${base}/api/company/candidate/${token}`, {
+    cache: "no-store",
+    credentials: "include",
+  });
+
+  const body = await res.json().catch(() => ({}));
+  return { ok: res.ok, status: res.status, body };
+}
+
+export default async function CompanyCandidateTokenPage({ params }: Ctx) {
+  const { token } = await params;
+  const { ok, status, body } = await fetchCompanyProfile(token);
+
+  if (!ok) {
+    const msg =
+      status === 401 ? "Necesitas iniciar sesión como empresa." :
+      status === 402 ? "Has agotado tus créditos. Sube de plan o compra un pack." :
+      status === 410 ? "Este enlace ha caducado." :
+      status === 429 ? "Demasiadas solicitudes. Inténtalo más tarde." :
+      "No encontrado.";
+
+    const upgradeUrl = body?.upgrade_url ?? "/company/upgrade";
+
+    return (
+      <main className="p-6 max-w-2xl">
+        <h1 className="text-xl font-semibold">Perfil (Empresa)</h1>
+        <p className="mt-3 text-sm text-gray-600">{msg}</p>
+
+        {status === 402 && (
+          <div className="mt-4 flex gap-3">
+            <a className="rounded-md border px-4 py-2 text-sm inline-block" href={upgradeUrl}>
+              Ir a Upgrade
+            </a>
+            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/requests">
+              Volver
+            </a>
+          </div>
+        )}
+      </main>
+    );
+  }
+
+  const profile = body?.profile ?? {};
+  const gate = body?.gate ?? {};
+
+  return (
+    <main className="p-6 max-w-3xl">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold">CV completo (Empresa)</h1>
+          <p className="mt-1 text-sm text-gray-600">
+            Este acceso consume 1 crédito por candidato y periodo (idempotente).
+          </p>
+        </div>
+
+        {gate?.requires_overage ? (
+          <span className="text-xs rounded-full border px-3 py-1">
+            Enterprise: overage pendiente ({gate?.overage_price ?? "—"}€)
+          </span>
+        ) : (
+          <span className="text-xs rounded-full border px-3 py-1">
+            Créditos restantes: {gate?.credits_remaining ?? "—"}
+          </span>
+        )}
+      </div>
+
+      <div className="mt-6 rounded-lg border p-4">
+        <pre className="text-xs whitespace-pre-wrap break-words">
+          {JSON.stringify(profile, null, 2)}
+        </pre>
+      </div>
+
+      <div className="mt-6">
+        <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/requests">
+          Volver a Requests
+        </a>
+      </div>
+    </main>
+  );
+}

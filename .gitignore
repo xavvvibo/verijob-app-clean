@@ -12,7 +12,11 @@ out
 **/.env*
 **/*secret*
 **/*key*
-**/*token*
+# token-like secret files (do not ignore route folders like [token])
+**/*.token
+**/*_token
+**/*_token.*
+**/*token_secret*
 **/*service_role*
 **/*stripe*
 
