@@ -37,12 +37,12 @@ function createAdminClient() {
   if (!url || !key) {
     throw new Error("missing_supabase_admin_env");
   }
-  return createSupabaseAdmin(url, key, { auth: { persistSession: false } });
+  return createSupabaseAdmin(url, key, { auth: { persistSession: false } }) as any;
 }
 
 export async function POST(req: Request) {
   let jobId: string | null = null;
-  let supabase: ReturnType<typeof createSupabaseAdmin> | null = null;
+  let supabase: any = null;
 
   try {
     const internalSecret = getInternalSecret();
@@ -71,46 +71,57 @@ export async function POST(req: Request) {
 
     supabase = createAdminClient();
 
-    const { data: job, error: jobErr } = await supabase
+    const { data: job, error: jobErr } = await (supabase as any)
       .from("cv_parse_jobs")
       .select("id,user_id,cv_upload_id")
       .eq("id", jobId)
       .single();
 
+    const jobRow = (job ?? null) as { id: string; user_id: string; cv_upload_id: string } | null;
+
     if (jobErr) {
       return NextResponse.json({ error: "job_query_failed", details: jobErr.message }, { status: 400 });
     }
 
-    if (!job) {
+    if (!jobRow) {
       return NextResponse.json({ error: "job_not_found" }, { status: 404 });
     }
 
-    if (!isInternalCall && requesterUserId && job.user_id !== requesterUserId) {
+    if (!isInternalCall && requesterUserId && jobRow.user_id !== requesterUserId) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
 
-    await supabase
+    await (supabase as any)
       .from("cv_parse_jobs")
       .update({
         status: "processing",
         started_at: new Date().toISOString(),
         error: null,
       })
-      .eq("id", job.id);
+      .eq("id", jobRow.id);
 
-    const { data: upload, error: uploadErr } = await supabase
+    const { data: upload, error: uploadErr } = await (supabase as any)
       .from("cv_uploads")
       .select("*")
-      .eq("id", job.cv_upload_id)
+      .eq("id", jobRow.cv_upload_id)
       .single();
 
-    if (uploadErr || !upload) {
+    const uploadRow = (upload ?? null) as
+      | { storage_bucket: string; storage_path: string; original_filename?: string | null }
+      | null;
+
+    if (uploadErr || !uploadRow) {
       throw new Error(`upload_not_found: ${uploadErr?.message || "missing_upload"}`);
     }
 
-    const { data: file, error: downloadErr } = await supabase.storage
-      .from(upload.storage_bucket)
-      .download(upload.storage_path);
+    const bucketPrefix = `${uploadRow.storage_bucket}/`;
+    const normalizedStoragePath = uploadRow.storage_path.startsWith(bucketPrefix)
+      ? uploadRow.storage_path.slice(bucketPrefix.length)
+      : uploadRow.storage_path;
+
+    const { data: file, error: downloadErr } = await (supabase as any).storage
+      .from(uploadRow.storage_bucket)
+      .download(normalizedStoragePath);
 
     if (downloadErr || !file) {
       throw new Error(`file_download_failed: ${downloadErr?.message || "missing_file"}`);
@@ -121,8 +132,14 @@ export async function POST(req: Request) {
       throw new Error("missing_openai_api_key");
     }
 
+    const effectiveFilename =
+      uploadRow.original_filename ||
+      uploadRow.storage_path.split("/").pop() ||
+      "cv_upload.pdf";
+
     const form = new FormData();
-    form.append("file", file, upload.original_filename || "cv_upload");
+    form.append("purpose", "user_data");
+    form.append("file", file, effectiveFilename);
 
     const uploadRes = await fetch(
       "https://api.openai.com/v1/files",
@@ -173,7 +190,7 @@ export async function POST(req: Request) {
 
     const result = await resp.json();
 
-    await supabase
+    await (supabase as any)
       .from("cv_parse_jobs")
       .update({
         status: "succeeded",
@@ -181,16 +198,16 @@ export async function POST(req: Request) {
         error: null,
         result_json: result
       })
-      .eq("id", job.id);
+      .eq("id", jobRow.id);
 
     return NextResponse.json({
       ok: true,
-      job_id: job.id
+      job_id: jobRow.id
     });
 
   } catch (e:any) {
     if (supabase && jobId) {
-      await supabase
+      await (supabase as any)
         .from("cv_parse_jobs")
         .update({
           status: "failed",
