@@ -117,9 +117,6 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
                 <h1 className="text-3xl font-semibold leading-tight sm:text-4xl">
                   {teaser?.full_name || "Candidato verificado"}
                 </h1>
-                <p className="mt-2 text-base font-medium text-blue-100">
-                  {teaser?.title || "Perfil profesional verificable"}
-                </p>
                 {teaser?.location ? (
                   <p className="mt-2 text-sm text-blue-100/90">Ubicación: {teaser.location}</p>
                 ) : null}

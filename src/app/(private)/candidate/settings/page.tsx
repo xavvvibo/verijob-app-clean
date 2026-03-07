@@ -30,7 +30,9 @@ function Toggle({ label, checked, onChange, help }: { label: string; checked: bo
 
 export default function CandidateSettings() {
   const [s, setS] = useState<Settings | null>(null);
+  const [initial, setInitial] = useState<Settings | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [ok, setOk] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -39,24 +41,38 @@ export default function CandidateSettings() {
       const j = await r.json();
       if (!r.ok) { setErr(j?.error || "load_failed"); return; }
       setS(j.settings);
+      setInitial(j.settings);
     })();
   }, []);
 
-  async function save(patch: Partial<Settings>) {
+  function setPatch(patch: Partial<Settings>) {
     if (!s) return;
-    const next = { ...s, ...patch };
-    setS(next);
+    setS({ ...s, ...patch });
+    setOk(null);
+    setErr(null);
+  }
+
+  async function save() {
+    if (!s) return;
     setSaving(true);
     setErr(null);
+    setOk(null);
     const r = await fetch("/api/candidate/settings", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(next),
+      body: JSON.stringify(s),
     });
     const j = await r.json().catch(() => ({}));
     setSaving(false);
-    if (!r.ok) setErr(j?.error ? `${j.error}${j.details ? `: ${j.details}` : ""}` : "save_failed");
+    if (!r.ok) {
+      setErr(j?.error ? `${j.error}${j.details ? `: ${j.details}` : ""}` : "save_failed");
+      return;
+    }
+    setInitial(s);
+    setOk("Cambios guardados correctamente.");
   }
+
+  const hasChanges = !!(s && initial && JSON.stringify(s) !== JSON.stringify(initial));
 
   return (
     <div className="space-y-6">
@@ -64,6 +80,7 @@ export default function CandidateSettings() {
         <div className="text-2xl font-semibold text-gray-900">Ajustes de privacidad</div>
         <div className="mt-2 text-sm text-gray-600">Controla qué se muestra en tu perfil y en el CV compartido/exportado.</div>
         {err ? <div className="mt-3 text-sm text-red-600">{err}</div> : null}
+        {ok ? <div className="mt-3 text-sm text-green-700">{ok}</div> : null}
         {saving ? <div className="mt-3 text-xs text-gray-500">Guardando…</div> : null}
       </div>
 
@@ -72,19 +89,19 @@ export default function CandidateSettings() {
           <Toggle
             label="Mostrar Trust Score (rating)"
             checked={s.show_trust_score}
-            onChange={(v) => save({ show_trust_score: v })}
+            onChange={(v) => setPatch({ show_trust_score: v })}
             help="RGPD: puedes ocultarlo en el perfil compartido y CV exportado."
           />
           <Toggle
             label="Mostrar número de verificaciones (total + por tipo)"
             checked={s.show_verification_counts}
-            onChange={(v) => save({ show_verification_counts: v })}
+            onChange={(v) => setPatch({ show_verification_counts: v })}
             help="Se mostrará en CV compartido/exportado para reflejar credibilidad real."
           />
           <Toggle
             label="Mostrar timeline verificada (CV + verificaciones)"
             checked={s.show_verified_timeline}
-            onChange={(v) => save({ show_verified_timeline: v })}
+            onChange={(v) => setPatch({ show_verified_timeline: v })}
             help="Si lo ocultas, la empresa verá menos señal (pero siempre respetamos tu privacidad)."
           />
 
@@ -97,17 +114,31 @@ export default function CandidateSettings() {
               <Toggle
                 label="Mostrar email a empresas registradas"
                 checked={s.allow_company_email_contact}
-                onChange={(v) => save({ allow_company_email_contact: v })}
+                onChange={(v) => setPatch({ allow_company_email_contact: v })}
               />
               <Toggle
                 label="Mostrar teléfono a empresas registradas"
                 checked={s.allow_company_phone_contact}
-                onChange={(v) => save({ allow_company_phone_contact: v })}
+                onChange={(v) => setPatch({ allow_company_phone_contact: v })}
               />
             </div>
             <div className="mt-3 text-xs text-gray-500">
               Estos datos no se mostrarán en tu perfil público abierto.
             </div>
+          </div>
+
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving || !hasChanges}
+              className={`inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition ${
+                saving || !hasChanges ? "bg-gray-400 cursor-not-allowed" : "bg-blue-700 hover:bg-blue-800"
+              }`}
+            >
+              {saving ? "Guardando…" : "Guardar cambios"}
+            </button>
+            {hasChanges ? <div className="mt-2 text-xs text-gray-500">Tienes cambios pendientes de guardar.</div> : null}
           </div>
         </div>
       ) : (
