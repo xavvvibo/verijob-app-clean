@@ -3,14 +3,31 @@ import React from "react";
 type Props = {
   title?: string;
   subtitle?: string;
+  leftPanelMode?: "flow" | "bullets";
+  signupBullets?: string[];
   children: React.ReactNode;
 };
 
-export default function PublicAuthShell({ title, subtitle, children }: Props) {
+export default function PublicAuthShell({
+  title,
+  subtitle,
+  leftPanelMode = "flow",
+  signupBullets = [],
+  children,
+}: Props) {
+  const bullets = signupBullets.length
+    ? signupBullets
+    : [
+        "Perfil compartible",
+        "Control del candidato",
+        "Evidencias verificables",
+        "Acceso en segundos",
+      ];
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="sticky top-0 z-50 border-b border-slate-200 bg-slate-50/85 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4">
+        <div className="mx-auto flex max-w-[1200px] items-center justify-between px-6 py-4">
           <a href="https://verijob.es" className="flex items-center gap-3">
             <img
               src="/brand/logo.png"
@@ -36,7 +53,7 @@ export default function PublicAuthShell({ title, subtitle, children }: Props) {
         </div>
       </div>
 
-      <div className="mx-auto grid max-w-6xl grid-cols-1 gap-10 px-5 py-10 lg:grid-cols-2">
+      <div className="mx-auto grid max-w-[1200px] grid-cols-1 gap-10 px-6 py-10 lg:grid-cols-2">
         <div className="hidden lg:block">
           <div className="rounded-3xl border border-slate-200 bg-white p-7 shadow-[0_16px_44px_rgba(2,6,23,.10)]">
             <div className="text-xs font-semibold text-slate-500">
@@ -55,22 +72,75 @@ export default function PublicAuthShell({ title, subtitle, children }: Props) {
               </div>
             )}
 
+            {leftPanelMode === "flow" ? (
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Flujo verificable
+                </div>
+                <div className="mt-3 space-y-2">
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900">
+                    CV
+                  </div>
+                  <div className="text-center text-slate-400">↓</div>
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900">
+                    Extracción automática
+                  </div>
+                  <div className="text-center text-slate-400">↓</div>
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900">
+                    Verificación
+                  </div>
+                  <div className="text-center text-slate-400">↓</div>
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-slate-900">
+                    Perfil verificable (Trust Score + Evidencias)
+                  </div>
+                  <div className="text-center text-slate-400">↓</div>
+                  <div className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900">
+                    Empresa evalúa perfil
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Qué obtienes con tu cuenta
+                </div>
+                <ul className="mt-3 space-y-2 text-sm font-semibold text-slate-900">
+                  {bullets.map((bullet) => (
+                    <li
+                      key={bullet}
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-3"
+                    >
+                      {bullet}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className="mt-6 grid grid-cols-2 gap-3">
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="text-xs text-slate-500">Compartir</div>
-                <div className="mt-2 font-extrabold text-slate-900">Enlace verificable</div>
+                <div className="text-xs text-slate-500">Valor</div>
+                <div className="mt-2 font-extrabold text-slate-900">
+                  Perfil compartible
+                </div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="text-xs text-slate-500">Control</div>
-                <div className="mt-2 font-extrabold text-slate-900">Revocable</div>
+                <div className="text-xs text-slate-500">Valor</div>
+                <div className="mt-2 font-extrabold text-slate-900">
+                  Control del candidato
+                </div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="text-xs text-slate-500">Consistencia</div>
-                <div className="mt-2 font-extrabold text-slate-900">Evidencias</div>
+                <div className="text-xs text-slate-500">Valor</div>
+                <div className="mt-2 font-extrabold text-slate-900">
+                  Evidencias verificables
+                </div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="text-xs text-slate-500">Reutilización</div>
-                <div className="mt-2 font-extrabold text-slate-900">1 clic</div>
+                <div className="text-xs text-slate-500">Valor</div>
+                <div className="mt-2 font-extrabold text-slate-900">
+                  Acceso en segundos
+                </div>
               </div>
             </div>
 

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
+import { z } from "zod";
+import { extractCvTextFromBuffer } from "@/utils/cv/extractText";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,6 +40,139 @@ function createAdminClient() {
     throw new Error("missing_supabase_admin_env");
   }
   return createSupabaseAdmin(url, key, { auth: { persistSession: false } }) as any;
+}
+
+const ExperienceSchema = z.object({
+  company_name: z.string().nullable().optional(),
+  role_title: z.string().nullable().optional(),
+  start_date: z.string().nullable().optional(),
+  end_date: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  skills: z.array(z.string()).optional().default([]),
+  confidence: z.number().min(0).max(1).nullable().optional(),
+});
+
+const EducationSchema = z.object({
+  institution: z.string().nullable().optional(),
+  title: z.string().nullable().optional(),
+  study_field: z.string().nullable().optional(),
+  start_date: z.string().nullable().optional(),
+  end_date: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  confidence: z.number().min(0).max(1).nullable().optional(),
+});
+
+const CvExtractSchema = z.object({
+  full_name: z.string().nullable().optional(),
+  email: z.string().nullable().optional(),
+  phone: z.string().nullable().optional(),
+  headline: z.string().nullable().optional(),
+  experiences: z.array(ExperienceSchema).optional().default([]),
+  education: z.array(EducationSchema).optional().default([]),
+});
+
+function buildCvExtractionPrompt(cvText: string) {
+  return [
+    "Extrae información estructurada de este CV en JSON válido.",
+    "No inventes datos. Si no existe un campo, usa null o array vacío.",
+    "Debes separar experiencia laboral y formación académica.",
+    "",
+    "Devuelve exactamente este objeto JSON:",
+    "{",
+    '  "full_name": string|null,',
+    '  "email": string|null,',
+    '  "phone": string|null,',
+    '  "headline": string|null,',
+    '  "experiences": [',
+    "    {",
+    '      "company_name": string|null,',
+    '      "role_title": string|null,',
+    '      "start_date": string|null,',
+    '      "end_date": string|null,',
+    '      "location": string|null,',
+    '      "description": string|null,',
+    '      "skills": string[],',
+    '      "confidence": number|null',
+    "    }",
+    "  ],",
+    '  "education": [',
+    "    {",
+    '      "institution": string|null,',
+    '      "title": string|null,',
+    '      "study_field": string|null,',
+    '      "start_date": string|null,',
+    '      "end_date": string|null,',
+    '      "description": string|null,',
+    '      "confidence": number|null',
+    "    }",
+    "  ]",
+    "}",
+    "",
+    "Texto del CV:",
+    cvText,
+  ].join("\n");
+}
+
+function readResponseOutputText(resp: any): string {
+  if (typeof resp?.output_text === "string" && resp.output_text.trim()) return resp.output_text.trim();
+  if (Array.isArray(resp?.output)) {
+    for (const item of resp.output) {
+      if (!Array.isArray(item?.content)) continue;
+      for (const part of item.content) {
+        if (part?.type === "output_text" && typeof part?.text === "string" && part.text.trim()) {
+          return part.text.trim();
+        }
+      }
+    }
+  }
+  return "";
+}
+
+function normalizeExtract(raw: any) {
+  const parsed = CvExtractSchema.parse(raw || {});
+  return {
+    full_name: parsed.full_name ?? null,
+    email: parsed.email ?? null,
+    phone: parsed.phone ?? null,
+    headline: parsed.headline ?? null,
+    experiences: parsed.experiences.map((x) => ({
+      company_name: x.company_name ?? null,
+      role_title: x.role_title ?? null,
+      start_date: x.start_date ?? null,
+      end_date: x.end_date ?? null,
+      location: x.location ?? null,
+      description: x.description ?? null,
+      skills: Array.isArray(x.skills) ? x.skills.filter(Boolean) : [],
+      confidence: typeof x.confidence === "number" ? x.confidence : null,
+    })),
+    education: parsed.education.map((x) => ({
+      institution: x.institution ?? null,
+      title: x.title ?? null,
+      study_field: x.study_field ?? null,
+      start_date: x.start_date ?? null,
+      end_date: x.end_date ?? null,
+      description: x.description ?? null,
+      confidence: typeof x.confidence === "number" ? x.confidence : null,
+    })),
+  };
+}
+
+function buildWarnings(input: { cvText: string; experiences: any[]; education: any[] }) {
+  const warnings: string[] = [];
+  const plain = input.cvText.replace(/\s+/g, " ").trim();
+  const wordCount = plain ? plain.split(" ").length : 0;
+
+  if (plain.length < 400 || wordCount < 80) {
+    warnings.push("cv_text_insufficient");
+  }
+  if (input.experiences.length === 0) {
+    warnings.push("no_experiences_detected");
+  }
+  if (input.education.length === 0) {
+    warnings.push("no_education_detected");
+  }
+  return { warnings, chars: plain.length, words: wordCount };
 }
 
 export async function POST(req: Request) {
@@ -127,38 +262,19 @@ export async function POST(req: Request) {
       throw new Error(`file_download_failed: ${downloadErr?.message || "missing_file"}`);
     }
 
-    const openaiKey = getOpenAIKey();
-    if (!openaiKey) {
-      throw new Error("missing_openai_api_key");
-    }
-
     const effectiveFilename =
       uploadRow.original_filename ||
       uploadRow.storage_path.split("/").pop() ||
       "cv_upload.pdf";
 
-    const form = new FormData();
-    form.append("purpose", "user_data");
-    form.append("file", file, effectiveFilename);
+    const fileBuffer = Buffer.from(await file.arrayBuffer());
+    const extractedText = (await extractCvTextFromBuffer(fileBuffer, effectiveFilename)).trim();
+    if (!extractedText) throw new Error("empty_cv_text");
 
-    const uploadRes = await fetch(
-      "https://api.openai.com/v1/files",
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${openaiKey}` },
-        body: form
-      }
-    );
+    const openaiKey = getOpenAIKey();
+    if (!openaiKey) throw new Error("missing_openai_api_key");
 
-    if (!uploadRes.ok) {
-      const txt = await uploadRes.text().catch(() => "");
-      throw new Error(`openai_file_upload_failed_${uploadRes.status}: ${txt.slice(0, 300)}`);
-    }
-
-    const fileJson = await uploadRes.json();
-    if (!fileJson?.id) {
-      throw new Error("openai_file_id_missing");
-    }
+    const prompt = buildCvExtractionPrompt(extractedText.slice(0, 120000));
 
     const resp = await fetch(
       "https://api.openai.com/v1/responses",
@@ -173,12 +289,11 @@ export async function POST(req: Request) {
           input: [
             {
               role: "user",
-              content: [
-                { type: "input_text", text: "Extract work experiences from this CV." },
-                { type: "input_file", file_id: fileJson.id }
-              ]
+              content: [{ type: "input_text", text: prompt }],
             }
-          ]
+          ],
+          text: { format: { type: "json_object" } },
+          temperature: 0,
         })
       }
     );
@@ -188,7 +303,23 @@ export async function POST(req: Request) {
       throw new Error(`openai_response_failed_${resp.status}: ${txt.slice(0, 300)}`);
     }
 
-    const result = await resp.json();
+    const raw = await resp.json();
+    const outputText = readResponseOutputText(raw);
+    if (!outputText) throw new Error("openai_no_output_text");
+
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(outputText);
+    } catch {
+      throw new Error("openai_invalid_json_output");
+    }
+
+    const normalized = normalizeExtract(parsed);
+    const warningData = buildWarnings({
+      cvText: extractedText,
+      experiences: normalized.experiences,
+      education: normalized.education,
+    });
 
     await (supabase as any)
       .from("cv_parse_jobs")
@@ -196,7 +327,17 @@ export async function POST(req: Request) {
         status: "succeeded",
         finished_at: new Date().toISOString(),
         error: null,
-        result_json: result
+        result_json: {
+          ...normalized,
+          meta: {
+            model: raw?.model ?? "gpt-4.1-mini",
+            input_tokens: raw?.usage?.input_tokens ?? null,
+            output_tokens: raw?.usage?.output_tokens ?? null,
+            warnings: warningData.warnings,
+            extracted_text_chars: warningData.chars,
+            extracted_text_words: warningData.words,
+          },
+        },
       })
       .eq("id", jobRow.id);
 

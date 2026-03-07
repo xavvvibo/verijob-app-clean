@@ -88,31 +88,31 @@ export default function CompanyDashboard() {
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-6">
         <div className="min-w-0">
-          <div className="text-3xl font-semibold text-gray-900">Trust & Risk Command Center</div>
+          <div className="text-3xl font-semibold text-gray-900">Panel de evaluación de candidatos</div>
           <div className="mt-2 text-sm text-gray-600">
-            Verificación operativa para contratación: estado, cola, reutilización y trazabilidad.
+            Revisa solicitudes, valida perfiles candidatos y toma decisiones de contratación con señales verificables.
           </div>
           {err ? <div className="mt-3 text-sm text-red-600">{err}</div> : null}
         </div>
 
         <div className="flex flex-wrap gap-3 shrink-0">
           <a href="/company/requests" className="inline-flex px-4 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-black transition">
-            Ver solicitudes
-          </a>
-          <a href="/company/reuse" className="inline-flex px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-900 text-sm font-semibold hover:bg-gray-50 transition">
-            Reutilizar
+            Revisar solicitudes
           </a>
           <a href="/company/candidates" className="inline-flex px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-900 text-sm font-semibold hover:bg-gray-50 transition">
-            Abrir candidato
+            Ver candidatos
+          </a>
+          <a href="/company/reuse" className="inline-flex px-4 py-2.5 rounded-xl bg-white border border-gray-200 text-gray-900 text-sm font-semibold hover:bg-gray-50 transition">
+            Actividad de validación
           </a>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card title="PENDIENTES" value={pending} subtitle="Solicitudes activas" />
-        <Card title="VERIFICADAS (30D)" value={verified30d} subtitle="Producción reciente" />
-        <Card title="REUSE RATE" value={reuseRate} subtitle="Ahorro de tiempo" />
-        <Card title="RIESGO" value={risk} subtitle="Señales / incidencias" />
+        <Card title="SOLICITUDES PENDIENTES" value={pending} subtitle="Cola operativa de revisión" />
+        <Card title="PERFILES VERIFICADOS (30D)" value={verified30d} subtitle="Candidatos con validación reciente" />
+        <Card title="ACTIVIDAD DE VALIDACIÓN" value={reuseRate} subtitle="Eficiencia operativa del proceso" />
+        <Card title="RIESGO OPERATIVO" value={risk} subtitle="Señales e incidencias abiertas" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -124,8 +124,8 @@ export default function CompanyDashboard() {
         />
         <SectionCard
           title="Reutilización"
-          subtitle="Importa verificaciones previas con consentimiento y reduce fricción."
-          leftBtn={{ label: "Reutilizar ahora", href: "/company/reuse" }}
+          subtitle="Gestiona actividad interna de validación y trazabilidad de verificaciones."
+          leftBtn={{ label: "Ver actividad", href: "/company/reuse" }}
         />
         <SectionCard
           title="Plan & facturación"

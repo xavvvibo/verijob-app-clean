@@ -29,6 +29,11 @@ export default async function PublicCandidatePage({ params }: Ctx) {
     education_total: 0,
     achievements_total: 0,
     profile_visibility: "private",
+    verified_work_count: 0,
+    verified_education_count: 0,
+    total_verifications: 0,
+    evidences_count: 0,
+    profile_status: "reviewing",
   };
 
   const nextPath = `/company/candidate/${token}`;
@@ -45,10 +50,9 @@ export default async function PublicCandidatePage({ params }: Ctx) {
               Verijob
             </div>
             <h1 className="mt-3 text-3xl font-semibold">Bienvenido a Verijob</h1>
-            <p className="mt-2 text-base text-slate-200">La verdad laboral verificada</p>
+            <p className="mt-2 text-base text-slate-200">Evaluación de perfil profesional verificado</p>
             <p className="mt-4 max-w-3xl text-sm text-slate-300">
-              {teaser.description ||
-                "Este candidato dispone de perfil laboral verificable en Verijob. Regístrate o inicia sesión como empresa para consultar la vista ampliada."}
+              Este candidato reúne señales verificables de trayectoria profesional. Accede al perfil completo verificado para consultar todos los detalles.
             </p>
           </div>
 
@@ -60,27 +64,35 @@ export default async function PublicCandidatePage({ params }: Ctx) {
                 </div>
                 <div className="mt-2 text-2xl font-semibold text-slate-900">{displayName}</div>
                 <div className="mt-2 text-sm text-slate-600">
-                  Vista teaser pública orientada a empresa. El detalle ampliado requiere registro o inicio de sesión.
+                  Este perfil incluye {Number(teaser?.verified_work_count ?? 0)} verificaciones laborales y{" "}
+                  {Number(teaser?.verified_education_count ?? 0)} verificaciones académicas.
+                </div>
+                <div className="mt-2 text-xs text-slate-500">
+                  Cuantas más verificaciones reúne el candidato, mayor es la solidez de su perfil.
                 </div>
               </div>
 
-              <div className="mt-6 grid gap-4 sm:grid-cols-3">
-                <StatCard label="Experiencias registradas" value={teaser.experiences_total} />
-                <StatCard label="Datos académicos" value={teaser.education_total} />
-                <StatCard label="Otros logros" value={teaser.achievements_total} />
+              <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <StatCard label="Trust Score" value={Number(teaser.trust_score ?? 0)} />
+                <StatCard label="Experiencias verificadas" value={Number(teaser.verified_work_count ?? 0)} />
+                <StatCard label="Formación verificada" value={Number(teaser.verified_education_count ?? 0)} />
+                <StatCard label="Total verificaciones" value={Number(teaser.total_verifications ?? 0)} />
+                <StatCard label="Evidencias registradas" value={Number(teaser.evidences_count ?? 0)} />
               </div>
 
-              <div className="mt-4 grid gap-4 sm:grid-cols-2">
-                <StatCard label="Trust Score" value={Number(teaser.trust_score ?? 0)} />
-                <StatCard label="Experiencias verificadas" value={Number(teaser.verified_experiences ?? 0)} />
+              <div className="mt-4 rounded-2xl border bg-white p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Estado global del perfil</div>
+                <div className="mt-1 text-sm font-semibold text-slate-900">
+                  {mapProfileStatus(String(teaser?.profile_status || "reviewing"))}
+                </div>
               </div>
 
               <div className="mt-6 rounded-2xl border p-5">
                 <div className="text-sm font-semibold text-slate-900">Qué podrás ver como empresa</div>
                 <ul className="mt-3 space-y-2 text-sm text-slate-600">
-                  <li>• Historial laboral estructurado del candidato</li>
-                  <li>• Señales de credibilidad y trazabilidad documental</li>
-                  <li>• Vista ampliada para análisis interno y selección</li>
+                  <li>• Perfil completo verificado para análisis de contratación</li>
+                  <li>• Detalle de trayectoria, credenciales y evidencias asociadas</li>
+                  <li>• Señales consolidadas para evaluación profesional del candidato</li>
                 </ul>
               </div>
             </div>
@@ -88,7 +100,7 @@ export default async function PublicCandidatePage({ params }: Ctx) {
             <aside className="rounded-2xl border bg-slate-50 p-5">
               <div className="text-sm font-semibold text-slate-900">Acceso empresa</div>
               <p className="mt-2 text-sm text-slate-600">
-                Crea una cuenta o entra como empresa para consultar la vista ampliada de este perfil en Verijob.
+                El acceso se realiza por perfil completo verificado, no por verificaciones individuales.
               </p>
 
               <div className="mt-5 flex flex-col gap-3">
@@ -112,7 +124,7 @@ export default async function PublicCandidatePage({ params }: Ctx) {
                   Modo de visibilidad: <span className="font-medium">{teaser.profile_visibility}</span>
                 </div>
                 <div className="mt-1 text-xs text-slate-500">
-                  Fuente score: {apiBody?.route_version || "public-candidate-token-v1"}
+                  Perfil verificable orientado a desbloqueo completo para empresa.
                 </div>
               </div>
             </aside>
@@ -121,4 +133,10 @@ export default async function PublicCandidatePage({ params }: Ctx) {
       </div>
     </main>
   );
+}
+
+function mapProfileStatus(v: string) {
+  if (v === "verified") return "Verificado";
+  if (v === "partially_verified") return "Parcialmente verificado";
+  return "En revisión";
 }

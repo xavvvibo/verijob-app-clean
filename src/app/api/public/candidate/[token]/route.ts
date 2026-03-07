@@ -20,6 +20,42 @@ function isExpired(expiresAt?: string | null) {
   return t <= Date.now();
 }
 
+function isVerifiedStatus(status: any) {
+  const s = String(status || "").toLowerCase();
+  return s === "approved" || s === "verified";
+}
+
+function isEducationVerification(row: any) {
+  const candidates = [
+    row?.verification_type,
+    row?.type,
+    row?.category,
+    row?.kind,
+    row?.request_type,
+    row?.entity_type,
+    row?.title,
+    row?.position,
+    row?.institution,
+    row?.school,
+    row?.degree,
+  ]
+    .filter(Boolean)
+    .map((x) => String(x).toLowerCase());
+
+  const joined = candidates.join(" ");
+  return /(educ|academ|formaci|study|degree|univers|school|curso|master|fp|bachiller)/i.test(joined);
+}
+
+function resolveProfileStatus(args: {
+  totalVerifications: number;
+  evidencesCount: number;
+  trustScore: number;
+}) {
+  if (args.totalVerifications === 0 && args.evidencesCount === 0) return "reviewing";
+  if (args.totalVerifications >= 3 || args.trustScore >= 80) return "verified";
+  return "partially_verified";
+}
+
 export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const { token } = await ctx.params;
 
@@ -54,7 +90,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
 
   const { data: verifications } = await admin
     .from("verification_summary")
-    .select("verification_id,status,company_confirmed,evidence_count")
+    .select("*")
     .eq("candidate_id", candidateId);
 
   const rows = Array.isArray(verifications) ? verifications : [];
@@ -72,13 +108,16 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     reuseCompanies = new Set(rr.map((x: any) => x.company_id).filter(Boolean)).size;
   }
 
-  const verified = rows.filter((r: any) => {
-    const s = String(r?.status || "").toLowerCase();
-    return s === "approved" || s === "verified";
-  }).length;
+  const verifiedRows = rows.filter((r: any) => isVerifiedStatus(r?.status));
+  const verifiedWork = verifiedRows.filter((r: any) => !isEducationVerification(r)).length;
+  const verifiedEducation = verifiedRows.filter((r: any) => isEducationVerification(r)).length;
+  const totalVerifications = verifiedWork + verifiedEducation;
 
   const confirmed = rows.filter((r: any) => !!r?.company_confirmed).length;
-  const evidences = rows.reduce((acc: number, r: any) => acc + Number(r?.evidence_count || 0), 0);
+  const evidences = rows.reduce(
+    (acc: number, r: any) => acc + Number(r?.evidence_count ?? r?.evidences_count ?? 0),
+    0
+  );
 
   const educationTotal = Array.isArray(cp?.education) ? cp.education.length : 0;
   const achievementsRaw = Array.isArray(cp?.achievements)
@@ -88,6 +127,11 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       : [];
 
   const trustScore = Number(cp?.trust_score ?? 0);
+  const profileStatus = resolveProfileStatus({
+    totalVerifications,
+    evidencesCount: evidences,
+    trustScore,
+  });
 
   return json(200, {
     route_version: "public-candidate-token-v1",
@@ -101,13 +145,18 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       trust_score: trustScore,
       trust_score_breakdown: cp?.trust_score_breakdown || null,
       experiences_total: rows.length,
-      verified_experiences: verified,
+      verified_experiences: verifiedRows.length,
       confirmed_experiences: confirmed,
       evidences_total: evidences,
+      evidences_count: evidences,
       reuse_total: reuseEvents,
       reuse_companies: reuseCompanies,
       education_total: educationTotal,
       achievements_total: achievementsRaw.length,
+      verified_work_count: verifiedWork,
+      verified_education_count: verifiedEducation,
+      total_verifications: totalVerifications,
+      profile_status: profileStatus,
       profile_visibility: "public_link",
     },
   });

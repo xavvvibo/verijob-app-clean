@@ -98,7 +98,7 @@ export default function LoginClient() {
         <h1 className="text-2xl font-semibold text-gray-900">Accede a Verijob</h1>
         <p className="text-sm text-gray-500 mt-2">
           {step === "email"
-            ? "Te enviaremos un código de acceso por email."
+            ? "Te enviaremos un código de acceso a tu email para entrar en Verijob."
             : "Introduce el código que has recibido en tu email."}
         </p>
 

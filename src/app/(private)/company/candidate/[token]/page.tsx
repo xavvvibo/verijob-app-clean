@@ -11,6 +11,14 @@ type Availability = {
   work_zones?: string | null;
   availability_schedule?: string[] | null;
 };
+type Credibility = {
+  verified_work_count?: number | null;
+  verified_education_count?: number | null;
+  total_verifications?: number | null;
+  evidences_count?: number | null;
+  trust_score?: number | null;
+  profile_status?: "reviewing" | "partially_verified" | "verified" | string | null;
+};
 
 async function fetchCompanyProfile(token: string) {
   const h = await headers();
@@ -92,6 +100,7 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
   const gate = body?.gate ?? {};
   const contact = body?.contact ?? {};
   const availability: Availability = body?.availability ?? {};
+  const credibility: Credibility = body?.credibility ?? {};
   const hasEmail = typeof contact?.email === "string" && contact.email.length > 0;
   const hasPhone = typeof contact?.phone === "string" && contact.phone.length > 0;
   const hasContact = hasEmail || hasPhone;
@@ -109,6 +118,11 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
       roles.length ||
       schedules.length
   );
+  const trustScore = Number(credibility?.trust_score ?? 0);
+  const verifiedWork = Number(credibility?.verified_work_count ?? 0);
+  const verifiedEducation = Number(credibility?.verified_education_count ?? 0);
+  const totalVerifications = Number(credibility?.total_verifications ?? 0);
+  const evidencesCount = Number(credibility?.evidences_count ?? 0);
 
   return (
     <main className="p-6 max-w-3xl">
@@ -116,7 +130,7 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
         <div>
           <h1 className="text-xl font-semibold">CV completo (Empresa)</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Este acceso consume 1 crédito por candidato y periodo (idempotente).
+            Has desbloqueado el perfil completo verificado del candidato para evaluación de contratación.
           </p>
         </div>
 
@@ -130,6 +144,25 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
           </span>
         )}
       </div>
+
+      <section className="mt-6 rounded-lg border p-4">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-gray-900">Señales de credibilidad del perfil</h2>
+          <span className="rounded-full border px-3 py-1 text-xs">
+            {mapProfileStatus(String(credibility?.profile_status || "reviewing"))}
+          </span>
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <Field label="Trust Score" value={String(trustScore)} />
+          <Field label="Experiencias verificadas" value={String(verifiedWork)} />
+          <Field label="Formación verificada" value={String(verifiedEducation)} />
+          <Field label="Total verificaciones" value={String(totalVerifications)} />
+          <Field label="Evidencias registradas" value={String(evidencesCount)} />
+        </div>
+        <p className="mt-3 text-sm text-gray-600">
+          Cuantas más verificaciones reúne el candidato, mayor es la solidez de su perfil para la toma de decisión.
+        </p>
+      </section>
 
       <section className="mt-6 rounded-lg border p-4">
         <h2 className="text-base font-semibold text-gray-900">Contacto del candidato</h2>
@@ -205,14 +238,18 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
       </section>
 
       <div className="mt-6 rounded-lg border p-4">
+        <div className="mb-2 text-sm font-semibold text-gray-900">Datos completos del perfil</div>
         <pre className="text-xs whitespace-pre-wrap break-words">
           {JSON.stringify(profile, null, 2)}
         </pre>
       </div>
 
-      <div className="mt-6">
+      <div className="mt-6 flex gap-3">
         <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/requests">
-          Volver a Requests
+          Continuar evaluación en solicitudes
+        </a>
+        <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/candidates">
+          Ver más candidatos
         </a>
       </div>
     </main>
@@ -271,4 +308,10 @@ function mapSchedule(v: string) {
   if (v === "horario_flexible" || v === "fines_semana") return "Horario flexible";
   if (v === "turnos_rotativos") return "Turnos rotativos";
   return "";
+}
+
+function mapProfileStatus(v: string) {
+  if (v === "verified") return "Verificado";
+  if (v === "partially_verified") return "Parcialmente verificado";
+  return "En revisión";
 }

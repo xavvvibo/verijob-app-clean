@@ -706,7 +706,7 @@ export default function CandidateOverview() {
           <Card
             title="CV estructurado"
             subtitle="Tus bloques clave para construir y compartir un perfil profesional claro"
-            right={<span className="text-xs text-gray-500">IA + señales reales</span>}
+            right={<span className="text-xs text-gray-500">Procesamiento automático + señales reales</span>}
           >
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <div className="space-y-6">

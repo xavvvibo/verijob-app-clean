@@ -1,0 +1,241 @@
+{
+  "currency": "eur",
+  "products": [
+    {
+      "key": "candidate_starter_monthly",
+      "name": "Candidate Starter Monthly",
+      "description": "Suscripción mensual Candidate Starter",
+      "mode": "subscription",
+      "unit_amount": 299,
+      "recurring": { "interval": "month", "interval_count": 1 },
+      "metadata": {
+        "slug": "candidate_starter_monthly",
+        "audience": "candidate",
+        "plan_family": "candidate_starter",
+        "billing_cycle": "monthly",
+        "billing_type": "recurring",
+        "environment": "live"
+      }
+    },
+    {
+      "key": "candidate_starter_yearly",
+      "name": "Candidate Starter Yearly",
+      "description": "Suscripción anual Candidate Starter",
+      "mode": "subscription",
+      "unit_amount": 2990,
+      "recurring": { "interval": "year", "interval_count": 1 },
+      "metadata": {
+        "slug": "candidate_starter_yearly",
+        "audience": "candidate",
+        "plan_family": "candidate_starter",
+        "billing_cycle": "yearly",
+        "billing_type": "recurring",
+        "environment": "live"
+      }
+    },
+    {
+      "key": "candidate_pro_monthly",
+      "name": "Candidate Pro Monthly",
+      "description": "Suscripción mensual Candidate Pro",
+      "mode": "subscription",
+      "unit_amount": 499,
+      "recurring": { "interval": "month", "interval_count": 1 },
+      "metadata": {
+        "slug": "candidate_pro_monthly",
+        "audience": "candidate",
+        "plan_family": "candidate_pro",
+        "billing_cycle": "monthly",
+        "billing_type": "recurring",
+        "environment": "live"
+      }
+    },
+    {
+      "key": "candidate_pro_yearly",
+      "name": "Candidate Pro Yearly",
+      "description": "Suscripción anual Candidate Pro",
+      "mode": "subscription",
+      "unit_amount": 4990,
+      "recurring": { "interval": "year", "interval_count": 1 },
+      "metadata": {
+        "slug": "candidate_pro_yearly",
+        "audience": "candidate",
+        "plan_family": "candidate_pro",
+        "billing_cycle": "yearly",
+        "billing_type": "recurring",
+        "environment": "live"
+      }
+    },
+    {
+      "key": "candidate_proplus_monthly",
+      "name": "Candidate Pro+ Monthly",
+      "description": "Suscripción mensual Candidate Pro+",
+      "mode": "subscription",
+      "unit_amount": 999,
+      "recurring": { "interval": "month", "interval_count": 1 },
+      "metadata": {
+        "slug": "candidate_proplus_monthly",
+        "audience": "candidate",
+        "plan_family": "candidate_proplus",
+        "billing_cycle": "monthly",
+        "billing_type": "recurring",
+        "environment": "live"
+      }
+    },
+    {
+      "key": "candidate_proplus_yearly",
+      "name": "Candidate Pro+ Yearly",
+      "description": "Suscripción anual Candidate Pro+",
+      "mode": "subscription",
+      "unit_amount": 9990,
+      "recurring": { "interval": "year", "interval_count": 1 },
+      "metadata": {
+        "slug": "candidate_proplus_yearly",
+        "audience": "candidate",
+        "plan_family": "candidate_proplus",
+        "billing_cycle": "yearly",
+        "billing_type": "recurring",
+        "environment": "live"
+      }
+    },
+    {
+      "key": "company_access_monthly",
+      "name": "Company Access Monthly",
+      "description": "Suscripción mensual Company Access",
+      "mode": "subscription",
+      "unit_amount": 4900,
+      "recurring": { "interval": "month", "interval_count": 1 },
+      "metadata": {
+        "slug": "company_access_monthly",
+        "audience": "company",
+        "plan_family": "company_access",
+        "billing_cycle": "monthly",
+        "billing_type": "recurring",
+        "environment": "live"
+      }
+    },
+    {
+      "key": "company_access_yearly",
+      "name": "Company Access Yearly",
+      "description": "Suscripción anual Company Access",
+      "mode": "subscription",
+      "unit_amount": 49000,
+      "recurring": { "interval": "year", "interval_count": 1 },
+      "metadata": {
+        "slug": "company_access_yearly",
+        "audience": "company",
+        "plan_family": "company_access",
+        "billing_cycle": "yearly",
+        "billing_type": "recurring",
+        "environment": "live"
+      }
+    },
+    {
+      "key": "company_hiring_monthly",
+      "name": "Company Hiring Monthly",
+      "description": "Suscripción mensual Company Hiring",
+      "mode": "subscription",
+      "unit_amount": 9900,
+      "recurring": { "interval": "month", "interval_count": 1 },
+      "metadata": {
+        "slug": "company_hiring_monthly",
+        "audience": "company",
+        "plan_family": "company_hiring",
+        "billing_cycle": "monthly",
+        "billing_type": "recurring",
+        "environment": "live"
+      }
+    },
+    {
+      "key": "company_hiring_yearly",
+      "name": "Company Hiring Yearly",
+      "description": "Suscripción anual Company Hiring",
+      "mode": "subscription",
+      "unit_amount": 99000,
+      "recurring": { "interval": "year", "interval_count": 1 },
+      "metadata": {
+        "slug": "company_hiring_yearly",
+        "audience": "company",
+        "plan_family": "company_hiring",
+        "billing_cycle": "yearly",
+        "billing_type": "recurring",
+        "environment": "live"
+      }
+    },
+    {
+      "key": "company_team_monthly",
+      "name": "Company Team Monthly",
+      "description": "Suscripción mensual Company Team",
+      "mode": "subscription",
+      "unit_amount": 19900,
+      "recurring": { "interval": "month", "interval_count": 1 },
+      "metadata": {
+        "slug": "company_team_monthly",
+        "audience": "company",
+        "plan_family": "company_team",
+        "billing_cycle": "monthly",
+        "billing_type": "recurring",
+        "environment": "live"
+      }
+    },
+    {
+      "key": "company_team_yearly",
+      "name": "Company Team Yearly",
+      "description": "Suscripción anual Company Team",
+      "mode": "subscription",
+      "unit_amount": 199000,
+      "recurring": { "interval": "year", "interval_count": 1 },
+      "metadata": {
+        "slug": "company_team_yearly",
+        "audience": "company",
+        "plan_family": "company_team",
+        "billing_cycle": "yearly",
+        "billing_type": "recurring",
+        "environment": "live"
+      }
+    },
+    {
+      "key": "company_enterprise",
+      "name": "Company Enterprise",
+      "description": "Plan Enterprise bajo contacto comercial",
+      "mode": "contact_only",
+      "unit_amount": null,
+      "metadata": {
+        "slug": "company_enterprise",
+        "audience": "company",
+        "plan_family": "company_enterprise",
+        "billing_type": "contact",
+        "environment": "live"
+      }
+    },
+    {
+      "key": "company_single_cv",
+      "name": "Company Single Profile",
+      "description": "Pago único por 1 perfil verificable",
+      "mode": "payment",
+      "unit_amount": 1900,
+      "metadata": {
+        "slug": "company_single_cv",
+        "audience": "company",
+        "plan_family": "pay_per_use",
+        "credits": "1",
+        "billing_type": "one_time",
+        "environment": "live"
+      }
+    },
+    {
+      "key": "company_pack_5",
+      "name": "Company Pack 5 Profiles",
+      "description": "Pago único por pack de 5 perfiles verificables",
+      "mode": "payment",
+      "unit_amount": 7900,
+      "metadata": {
+        "slug": "company_pack_5",
+        "audience": "company",
+        "plan_family": "pay_per_use",
+        "credits": "5",
+        "billing_type": "one_time",
+        "environment": "live"
+      }
+    }
+  ]
+}

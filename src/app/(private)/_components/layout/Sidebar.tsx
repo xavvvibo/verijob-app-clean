@@ -81,9 +81,9 @@ function getSections(role: Role): Section[] {
         ],
       },
       {
-        title: "IA & Operaciones",
+        title: "Automatización & Operaciones",
         items: [
-          { href: "/owner/ai-ops", label: "IA Jobs & Calidad" },
+          { href: "/owner/ai-ops", label: "Procesamiento automático & Calidad" },
           { href: "/owner/settings", label: "Configuración" },
         ],
       },

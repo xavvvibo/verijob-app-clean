@@ -7,8 +7,9 @@ export const dynamic = "force-dynamic";
 export default function LoginPage() {
   return (
     <PublicAuthShell
-      title="Inicia sesión"
-      subtitle="Accede a tu perfil y gestiona tus verificaciones en un entorno seguro."
+      title="Perfiles profesionales verificables"
+      subtitle="Verijob permite crear y consultar perfiles profesionales verificables que las empresas pueden comprobar en segundos."
+      leftPanelMode="flow"
     >
       <LoginClient />
     </PublicAuthShell>

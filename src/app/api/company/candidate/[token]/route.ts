@@ -22,6 +22,37 @@ function isExpired(expiresAt?: string | null) {
   return t <= Date.now();
 }
 
+function isVerifiedStatus(status: any) {
+  const s = String(status || "").toLowerCase();
+  return s === "approved" || s === "verified";
+}
+
+function isEducationVerification(row: any) {
+  const candidates = [
+    row?.verification_type,
+    row?.type,
+    row?.category,
+    row?.kind,
+    row?.request_type,
+    row?.entity_type,
+    row?.title,
+    row?.position,
+    row?.institution,
+    row?.school,
+    row?.degree,
+  ]
+    .filter(Boolean)
+    .map((x) => String(x).toLowerCase());
+  const joined = candidates.join(" ");
+  return /(educ|academ|formaci|study|degree|univers|school|curso|master|fp|bachiller)/i.test(joined);
+}
+
+function resolveProfileStatus(args: { totalVerifications: number; evidencesCount: number; trustScore: number }) {
+  if (args.totalVerifications === 0 && args.evidencesCount === 0) return "reviewing";
+  if (args.totalVerifications >= 3 || args.trustScore >= 80) return "verified";
+  return "partially_verified";
+}
+
 export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const { token } = await ctx.params;
 
@@ -82,9 +113,14 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
   const { data: candidateProfile } = await service
     .from("candidate_profiles")
-    .select("allow_company_email_contact,allow_company_phone_contact,job_search_status,availability_start,preferred_workday,preferred_roles,work_zones,availability_schedule")
+    .select("allow_company_email_contact,allow_company_phone_contact,job_search_status,availability_start,preferred_workday,preferred_roles,work_zones,availability_schedule,trust_score,trust_score_breakdown,education")
     .eq("user_id", link.candidate_id)
     .maybeSingle();
+
+  const { data: verifications } = await service
+    .from("verification_summary")
+    .select("*")
+    .eq("candidate_id", link.candidate_id);
 
   await service
     .from("candidate_public_links")
@@ -128,12 +164,36 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       ? (candidateProfile as any).availability_schedule
       : [],
   };
+  const verificationRows = Array.isArray(verifications) ? verifications : [];
+  const verifiedRows = verificationRows.filter((r: any) => isVerifiedStatus(r?.status));
+  const verifiedWorkCount = verifiedRows.filter((r: any) => !isEducationVerification(r)).length;
+  const verifiedEducationCount = verifiedRows.filter((r: any) => isEducationVerification(r)).length;
+  const totalVerifications = verifiedWorkCount + verifiedEducationCount;
+  const evidencesCount = verificationRows.reduce(
+    (acc: number, r: any) => acc + Number(r?.evidence_count ?? r?.evidences_count ?? 0),
+    0
+  );
+  const trustScore = Number((candidateProfile as any)?.trust_score ?? 0);
+  const profileStatus = resolveProfileStatus({
+    totalVerifications,
+    evidencesCount,
+    trustScore,
+  });
+  const credibility = {
+    verified_work_count: verifiedWorkCount,
+    verified_education_count: verifiedEducationCount,
+    total_verifications: totalVerifications,
+    evidences_count: evidencesCount,
+    trust_score: trustScore,
+    profile_status: profileStatus,
+  };
 
   return json(200, {
     candidate_id: link.candidate_id,
     profile: safe,
     contact,
     availability,
+    credibility,
     gate: {
       allowed: true,
       consumed: !!gate?.consumed,

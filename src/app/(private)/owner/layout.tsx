@@ -17,7 +17,7 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
     { href: "/owner/verifications", label: "Verificaciones" },
     { href: "/owner/evidences", label: "Evidencias" },
     { href: "/owner/issues", label: "Issues" },
-    { href: "/owner/ai-ops", label: "AI Ops" },
+    { href: "/owner/ai-ops", label: "Procesamiento automático" },
     { href: "/owner/monetization", label: "Monetización" },
     { href: "/owner/marketing", label: "Marketing" },
     { href: "/owner/settings", label: "Settings" },

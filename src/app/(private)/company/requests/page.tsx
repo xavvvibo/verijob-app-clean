@@ -50,7 +50,7 @@ export default async function CompanyRequestsPage(
 
   return (
     <div style={{ padding: 32, maxWidth: 1100 }}>
-      <h1 style={{ fontSize: 24, marginBottom: 20 }}>Verificaciones</h1>
+      <h1 style={{ fontSize: 24, marginBottom: 20 }}>Solicitudes y verificaciones de candidatos</h1>
 
       <div style={{ display: "flex", gap: 16, marginBottom: 24, fontWeight: 500 }}>
         <Link href="?status=all">Todas ({counts.all})</Link>
@@ -70,7 +70,7 @@ export default async function CompanyRequestsPage(
           borderRadius: 8,
           border: "1px solid #e5e7eb"
         }}>
-          No hay verificaciones en este estado.
+          No hay solicitudes de candidatos en este estado.
         </div>
       ) : (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>

@@ -1,6 +1,6 @@
 export default function Terminos() {
   return (
-    <main className="max-w-4xl mx-auto px-6 py-20 text-gray-900">
+    <main className="max-w-[1200px] mx-auto px-6 py-16 text-gray-900">
       <h1 className="text-3xl font-semibold mb-6">Términos y Condiciones</h1>
 
       <p className="text-gray-700">
@@ -23,6 +23,18 @@ export default function Terminos() {
       <h2 className="text-xl font-semibold mt-10 mb-3">Uso aceptable</h2>
       <p className="text-gray-700">
         Queda prohibido el uso fraudulento, la manipulación de evidencias, el intento de acceso no autorizado o la automatización abusiva del servicio.
+      </p>
+
+      <h2 className="text-xl font-semibold mt-10 mb-3">Planes y facturación</h2>
+      <p className="text-gray-700">
+        Los planes de pago y condiciones de facturación se muestran antes de completar la contratación.
+        El acceso empresarial se orienta al desbloqueo de perfiles verificables completos, no a verificaciones unitarias.
+      </p>
+
+      <h2 className="text-xl font-semibold mt-10 mb-3">Propiedad intelectual</h2>
+      <p className="text-gray-700">
+        La marca VERIJOB, su software y sus contenidos son titularidad de sus propietarios y están protegidos
+        conforme a la normativa vigente.
       </p>
 
       <h2 className="text-xl font-semibold mt-10 mb-3">Jurisdicción</h2>

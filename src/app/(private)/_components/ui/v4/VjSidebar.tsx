@@ -1,7 +1,7 @@
 import React from "react";
 
 export function VjSidebar({ active = "Dashboard" }: { active?: string }) {
-  const items = ["Dashboard", "Requests", "Verificaciones", "Evidencias", "Reuse", "Settings"];
+  const items = ["Dashboard", "Solicitudes", "Candidatos", "Reutilización", "Equipo", "Facturación"];
   return (
     <aside className="vj-panel v3 vj-panel v4 vj-sidebar v3">
       <div className="vj-sidebar-header">

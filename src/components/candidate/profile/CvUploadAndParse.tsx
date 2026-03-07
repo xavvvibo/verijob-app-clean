@@ -19,6 +19,40 @@ export default function CvUploadAndParse() {
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [job, setJob] = useState<Job | null>(null);
+  const [importing, setImporting] = useState<null | "experiences" | "education">(null);
+
+  async function importSection(section: "experiences" | "education") {
+    if (!jobId) return;
+    setImporting(section);
+    setMsg(null);
+    try {
+      const res = await fetch("/api/candidate/cv/parse/import", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ job_id: jobId, section }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "import_failed");
+      const imported = Number(data?.imported ?? 0);
+      if (imported === 0) {
+        setMsg(
+          section === "experiences"
+            ? "No se importaron experiencias: ya existían o no había datos válidos para insertar."
+            : "No se importó formación: ya existía o no había datos válidos para insertar."
+        );
+      } else {
+        setMsg(
+          section === "experiences"
+            ? `Propuesta aplicada: ${imported} experiencias importadas.`
+            : `Propuesta aplicada: ${imported} formaciones importadas.`
+        );
+      }
+    } catch (e: any) {
+      setMsg(e?.message || "No se pudo aplicar la propuesta de importación.");
+    } finally {
+      setImporting(null);
+    }
+  }
 
   async function start() {
     setMsg(null);
@@ -134,7 +168,27 @@ export default function CvUploadAndParse() {
         } else if (data.status === "processing") {
           setMsg("Procesando CV…");
         } else if (data.status === "succeeded") {
-          setMsg("Listo. Experiencias extraídas.");
+          const ex = Array.isArray((data as any)?.result_json?.experiences)
+            ? (data as any).result_json.experiences.length
+            : 0;
+          const ed = Array.isArray((data as any)?.result_json?.education)
+            ? (data as any).result_json.education.length
+            : 0;
+          const warnings = Array.isArray((data as any)?.result_json?.meta?.warnings)
+            ? (data as any).result_json.meta.warnings
+            : [];
+
+          if (warnings.includes("cv_text_insufficient")) {
+            setMsg("Procesamiento completado con aviso: el CV tiene poco texto legible y la extracción puede ser incompleta.");
+          } else if (ex === 0 && ed === 0) {
+            setMsg("Procesamiento completado: no se detectaron experiencias ni formación con suficiente claridad.");
+          } else if (ex === 0) {
+            setMsg("Procesamiento completado: se detectó formación, pero no experiencias laborales.");
+          } else if (ed === 0) {
+            setMsg("Procesamiento completado: se detectaron experiencias, pero no formación académica.");
+          } else {
+            setMsg("Listo. CV procesado con extracción laboral y académica.");
+          }
         } else if (data.status === "failed") {
           setMsg(data.error || "Falló el parsing.");
         }
@@ -153,7 +207,9 @@ export default function CvUploadAndParse() {
     };
   }, [jobId, supabase]);
 
-  const exps = job?.result_json?.experiences || [];
+  const exps = Array.isArray(job?.result_json?.experiences) ? job?.result_json?.experiences : [];
+  const education = Array.isArray(job?.result_json?.education) ? job?.result_json?.education : [];
+  const warnings = Array.isArray(job?.result_json?.meta?.warnings) ? job?.result_json?.meta?.warnings : [];
 
   return (
     <div className="space-y-3">
@@ -173,7 +229,7 @@ export default function CvUploadAndParse() {
           disabled={busy}
           className="rounded-lg px-3 py-2 text-sm font-medium border bg-slate-900 text-white disabled:opacity-50"
         >
-          {busy ? "Subiendo…" : "Extraer experiencias"}
+          {busy ? "Subiendo…" : "Extraer perfil desde CV"}
         </button>
       </div>
 
@@ -190,10 +246,28 @@ export default function CvUploadAndParse() {
           </div>
 
           {job.status === "succeeded" && (
-            <div className="mt-3 space-y-2">
-              <div className="text-sm font-medium">Experiencias detectadas</div>
+            <div className="mt-3 space-y-5">
+              {warnings.length > 0 ? (
+                <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  {warnings.includes("cv_text_insufficient")
+                    ? "Aviso: el CV tiene poco texto legible. Revisa los datos extraídos antes de importarlos."
+                    : "Aviso: la extracción puede estar incompleta. Revisa los datos antes de importarlos."}
+                </div>
+              ) : null}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-medium">Experiencias laborales detectadas</div>
+                  <button
+                    type="button"
+                    onClick={() => importSection("experiences")}
+                    disabled={importing !== null}
+                    className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium disabled:opacity-60"
+                  >
+                    {importing === "experiences" ? "Importando…" : "Importar a experiencias"}
+                  </button>
+                </div>
               {exps.length === 0 ? (
-                <div className="text-sm text-slate-600">No se detectaron experiencias.</div>
+                <div className="text-sm text-slate-600">No se detectaron experiencias laborales.</div>
               ) : (
                 <div className="space-y-2">
                   {exps.map((x: any, idx: number) => (
@@ -211,6 +285,43 @@ export default function CvUploadAndParse() {
                   ))}
                 </div>
               )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-medium">Formación académica detectada</div>
+                  <button
+                    type="button"
+                    onClick={() => importSection("education")}
+                    disabled={importing !== null}
+                    className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium disabled:opacity-60"
+                  >
+                    {importing === "education" ? "Importando…" : "Importar a formación"}
+                  </button>
+                </div>
+                {education.length === 0 ? (
+                  <div className="text-sm text-slate-600">No se detectó formación académica.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {education.map((x: any, idx: number) => (
+                      <div key={idx} className="rounded-md border bg-white p-3">
+                        <div className="text-sm font-semibold">
+                          {x.title || "Título"} — {x.institution || "Institución"}
+                        </div>
+                        <div className="text-xs text-slate-600">
+                          {(x.start_date || "¿inicio?")} → {(x.end_date || "actualidad")}
+                        </div>
+                        {x.study_field ? (
+                          <div className="mt-1 text-xs text-slate-600">Área: {x.study_field}</div>
+                        ) : null}
+                        {x.description ? (
+                          <div className="mt-2 text-sm text-slate-700">{x.description}</div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

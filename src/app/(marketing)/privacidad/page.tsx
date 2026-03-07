@@ -1,6 +1,6 @@
 export default function Privacidad() {
   return (
-    <main className="max-w-4xl mx-auto px-6 py-20 text-gray-900">
+    <main className="max-w-[1200px] mx-auto px-6 py-16 text-gray-900">
       <h1 className="text-3xl font-semibold mb-6">Política de Privacidad</h1>
 
       <p className="text-gray-700">
@@ -31,6 +31,18 @@ export default function Privacidad() {
       <h2 className="text-xl font-semibold mt-10 mb-3">Derechos</h2>
       <p className="text-gray-700">
         Puedes ejercer tus derechos de acceso, rectificación, supresión y demás derechos aplicables mediante contacto@verijob.es.
+      </p>
+
+      <h2 className="text-xl font-semibold mt-10 mb-3">Cesiones y encargados</h2>
+      <p className="text-gray-700">
+        VERIJOB puede apoyarse en proveedores tecnológicos para operar la plataforma, siempre bajo acuerdos de
+        tratamiento y medidas de seguridad adecuadas.
+      </p>
+
+      <h2 className="text-xl font-semibold mt-10 mb-3">Base legal</h2>
+      <p className="text-gray-700">
+        El tratamiento se basa en la ejecución del servicio, el cumplimiento de obligaciones legales y, cuando
+        aplica, el consentimiento del usuario.
       </p>
 
       <p className="text-gray-500 mt-10 text-sm">Contacto: contacto@verijob.es</p>
