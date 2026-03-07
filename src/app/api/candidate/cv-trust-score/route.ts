@@ -11,9 +11,11 @@ export async function GET() {
 
   const userId = userData.user.id;
 
+  // Legacy compatibility route.
+  // Canonical trust source is candidate_profiles.trust_score.
   const { data, error } = await supabase
-    .from("candidate_cv_trust_scores")
-    .select("*")
+    .from("candidate_profiles")
+    .select("trust_score,trust_score_breakdown")
     .eq("user_id", userId)
     .maybeSingle();
 
@@ -21,12 +23,18 @@ export async function GET() {
     return NextResponse.json({ error: "query_failed", details: error.message }, { status: 400 });
   }
 
+  const breakdown = (data as any)?.trust_score_breakdown || {};
+  const components = breakdown?.components || {};
+
   return NextResponse.json({
-    route_version: "cv-trust-score-v1",
-    trust_score: data?.cv_trust_score ?? 0,
-    experiences_total: data?.experiences_total ?? 0,
-    verified_experiences: data?.verified_experiences ?? 0,
-    evidences_total: data?.evidences_total ?? 0,
-    reuse_total: data?.reuse_total ?? 0
+    route_version: "cv-trust-score-v1-compat-canonical",
+    trust_score: Number((data as any)?.trust_score ?? 0),
+    experiences_total: Number(breakdown?.total ?? 0),
+    verified_experiences: Number(breakdown?.approved ?? 0),
+    evidences_total: Number(breakdown?.evidences ?? 0),
+    reuse_total: Number(breakdown?.reuseEvents ?? 0),
+    source_of_truth: "candidate_profiles.trust_score",
+    deprecated_legacy_table: "candidate_cv_trust_scores",
+    components
   });
 }

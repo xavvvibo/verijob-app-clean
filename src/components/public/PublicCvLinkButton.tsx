@@ -14,7 +14,7 @@ export default function PublicCvLinkButton({
   const href = token
     ? `/v/${token}`
     : verificationId
-      ? `/api/verification/${verificationId}/public-link`
+      ? `/candidate/verification/${verificationId}/report`
       : "#";
 
   return (

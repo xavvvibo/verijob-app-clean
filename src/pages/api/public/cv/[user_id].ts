@@ -42,7 +42,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  const { data: trust, error: trustErr } = await supabase
+  // Legacy support: keep old metrics table for backward-compatible counters.
+  const { data: trustLegacy, error: trustErr } = await supabase
     .from("candidate_cv_trust_scores")
     .select("cv_trust_score,experiences_total,verified_experiences,evidences_total,reuse_total")
     .eq("user_id", userId)
@@ -114,24 +115,41 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     entity_id: userId,
     metadata: {
       route_version: "public-cv-v6-pages",
-      experiences_total: trust?.experiences_total ?? 0,
-      verified_experiences: trust?.verified_experiences ?? 0,
-      evidences_total: trust?.evidences_total ?? 0,
-      reuse_total: trust?.reuse_total ?? 0,
-      cv_trust_score: trust?.cv_trust_score ?? 0,
+      experiences_total: trustLegacy?.experiences_total ?? 0,
+      verified_experiences: trustLegacy?.verified_experiences ?? 0,
+      evidences_total: trustLegacy?.evidences_total ?? 0,
+      reuse_total: trustLegacy?.reuse_total ?? 0,
+      cv_trust_score: trustLegacy?.cv_trust_score ?? 0,
     },
   }).catch(() => {});
+
+  const { data: canonical, error: canonicalErr } = await supabase
+    .from("candidate_profiles")
+    .select("trust_score,trust_score_breakdown")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (canonicalErr) {
+    return res.status(400).json({
+      route_version: "public-cv-v6-pages",
+      route: "/pages/api/public/cv/[user_id]",
+      error: "canonical_trust_query_failed",
+      details: canonicalErr.message,
+    });
+  }
 
   res.setHeader("Cache-Control", "no-store");
   return res.status(200).json({
     route_version: "public-cv-v6-pages",
     route: "/pages/api/public/cv/[user_id]",
     candidate_id: userId,
-    trust_score: trust?.cv_trust_score ?? 0,
-    experiences_total: trust?.experiences_total ?? 0,
-    verified_experiences: trust?.verified_experiences ?? 0,
-    evidences_total: trust?.evidences_total ?? 0,
-    reuse_total: trust?.reuse_total ?? 0,
+    trust_score: Number((canonical as any)?.trust_score ?? trustLegacy?.cv_trust_score ?? 0),
+    experiences_total: Number((canonical as any)?.trust_score_breakdown?.total ?? trustLegacy?.experiences_total ?? 0),
+    verified_experiences: Number((canonical as any)?.trust_score_breakdown?.approved ?? trustLegacy?.verified_experiences ?? 0),
+    evidences_total: Number((canonical as any)?.trust_score_breakdown?.evidences ?? trustLegacy?.evidences_total ?? 0),
+    reuse_total: Number((canonical as any)?.trust_score_breakdown?.reuseEvents ?? trustLegacy?.reuse_total ?? 0),
+    source_of_truth: "candidate_profiles.trust_score",
+    legacy_metrics_table_used: Boolean(trustLegacy),
     experiences,
   });
 }

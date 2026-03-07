@@ -40,7 +40,7 @@ export default async function Page(ctx:any){
 
   const {data,error}=await supabase
     .from("verification_requests")
-    .select("*")
+    .select("id,public_token,company_name_freeform,position,start_date,end_date,evidence_count,credential_signature")
     .eq("public_token",token)
     .maybeSingle()
 
@@ -57,6 +57,22 @@ export default async function Page(ctx:any){
   const signature=data.credential_signature||""
 
   const valid=verifySignature(credentialId,signature)
+
+  const { data: summary } = await supabase
+    .from("verification_summary")
+    .select("verification_id,candidate_id,trust_score,evidence_count,status")
+    .eq("verification_id", data.id)
+    .maybeSingle()
+
+  const { data: candidateProfile } = summary?.candidate_id
+    ? await supabase
+        .from("candidate_profiles")
+        .select("trust_score")
+        .eq("user_id", summary.candidate_id)
+        .maybeSingle()
+    : { data: null as any }
+
+  const trustScore = Number(candidateProfile?.trust_score ?? summary?.trust_score ?? 0)
 
   return(
 
@@ -112,8 +128,13 @@ export default async function Page(ctx:any){
       <div style={{marginBottom:20}}>
 
         <strong>Evidencias verificadas</strong><br/>
-        {data.evidence_count||0}
+        {(summary?.evidence_count ?? data.evidence_count) || 0}
 
+      </div>
+
+      <div style={{marginBottom:20}}>
+        <strong>Trust Score</strong><br/>
+        {trustScore}
       </div>
 
       <div style={{marginTop:40,fontSize:13,color:"#64748b"}}>

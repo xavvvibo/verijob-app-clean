@@ -31,6 +31,12 @@ export default async function CandidateVerificationPage(props: any) {
     .eq("verification_id", id)
     .maybeSingle()
 
+  const { data: cp } = await supabase
+    .from("candidate_profiles")
+    .select("trust_score")
+    .eq("user_id", user.id)
+    .maybeSingle()
+
   const title =
     vs?.position
       ? `${vs.position} · ${vs.company_name_freeform || "Empresa"}`
@@ -77,8 +83,11 @@ export default async function CandidateVerificationPage(props: any) {
               <div className="mt-1 text-xl font-semibold text-gray-900">{vs.actions_count ?? 0}</div>
             </div>
             <div className="border border-gray-200 rounded-2xl p-4">
-              <div className="text-xs text-gray-500">Trust</div>
-              <div className="mt-1 text-xl font-semibold text-gray-900">{vs.trust_score ?? 0}</div>
+              <div className="text-xs text-gray-500">Trust (perfil global)</div>
+              <div className="mt-1 text-xl font-semibold text-gray-900">{cp?.trust_score ?? 0}</div>
+              {typeof vs?.trust_score === "number" ? (
+                <div className="mt-1 text-xs text-gray-500">Contexto verificación: {vs.trust_score}</div>
+              ) : null}
             </div>
           </div>
         ) : null}

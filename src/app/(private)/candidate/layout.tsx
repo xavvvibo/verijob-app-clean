@@ -14,7 +14,7 @@ export default async function CandidateLayout({ children }: { children: React.Re
   const supabase = await createServerSupabaseClient();
   const { data: au } = await supabase.auth.getUser();
 
-  if (!au.user) redirect("/login?next=/candidate");
+  if (!au.user) redirect("/login?next=/candidate/overview");
 
   const { data: profile } = await supabase
     .from("profiles")
