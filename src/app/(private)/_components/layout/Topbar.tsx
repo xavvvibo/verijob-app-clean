@@ -30,6 +30,12 @@ export default function Topbar({ role }: { role?: Role }) {
     return "/candidate/overview";
   }, [r]);
 
+  const contextCtaLabel = useMemo(() => {
+    if (r === "owner") return "Ir al contexto owner";
+    if (r === "company") return "Ir al contexto empresa";
+    return "Ir al contexto candidato";
+  }, [r]);
+
   const [loggingOut, setLoggingOut] = useState(false);
 
   async function logout() {
@@ -73,7 +79,7 @@ export default function Topbar({ role }: { role?: Role }) {
             href={contextHref}
             className="inline-flex rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
           >
-            Ir al contexto
+            {contextCtaLabel}
           </Link>
 
           <button

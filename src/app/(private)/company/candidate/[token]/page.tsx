@@ -1,17 +1,23 @@
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+import { headers } from "next/headers";
 
 type Ctx = { params: Promise<{ token: string }> };
 
 async function fetchCompanyProfile(token: string) {
+  const h = await headers();
+  const forwardedProto = h.get("x-forwarded-proto") || "http";
+  const forwardedHost = h.get("x-forwarded-host") || h.get("host");
   const base =
+    (forwardedHost ? `${forwardedProto}://${forwardedHost}` : null) ||
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.NEXT_PUBLIC_SITE_URL ||
     "http://localhost:3000";
+  const cookie = h.get("cookie") || "";
 
   const res = await fetch(`${base}/api/company/candidate/${token}`, {
     cache: "no-store",
-    credentials: "include",
+    headers: cookie ? { cookie } : undefined,
   });
 
   const body = await res.json().catch(() => ({}));
@@ -24,7 +30,8 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
 
   if (!ok) {
     const msg =
-      status === 401 ? "Necesitas iniciar sesión como empresa." :
+      status === 401 ? "Necesitas iniciar sesión para acceder a esta vista privada." :
+      status === 403 ? "Necesitas un contexto de empresa activo para acceder a esta vista." :
       status === 402 ? "Has agotado tus créditos. Sube de plan o compra un pack." :
       status === 410 ? "Este enlace ha caducado." :
       status === 429 ? "Demasiadas solicitudes. Inténtalo más tarde." :
@@ -36,6 +43,28 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
       <main className="p-6 max-w-2xl">
         <h1 className="text-xl font-semibold">Perfil (Empresa)</h1>
         <p className="mt-3 text-sm text-gray-600">{msg}</p>
+
+        {status === 401 && (
+          <div className="mt-4 flex gap-3">
+            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/login?mode=company">
+              Iniciar sesión
+            </a>
+            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/signup?mode=company">
+              Crear cuenta empresa
+            </a>
+          </div>
+        )}
+
+        {status === 403 && (
+          <div className="mt-4 flex gap-3">
+            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/dashboard">
+              Cambiar a empresa
+            </a>
+            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/dashboard">
+              Ir al panel principal
+            </a>
+          </div>
+        )}
 
         {status === 402 && (
           <div className="mt-4 flex gap-3">
