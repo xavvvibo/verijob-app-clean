@@ -46,7 +46,7 @@ export default function ReportIssueButton({ httpStatus, defaultMessage }: Props)
       (httpStatus === 404 ? "404 en navegación (posible link roto)" : "500 inesperado en app");
 
     try {
-      const res = await fetch("/api/admin/issues", {
+      const res = await fetch("/api/issues", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

@@ -123,7 +123,7 @@ export async function POST(req: Request) {
 
     if (internalSecret) {
       try {
-        const runnerRes = await fetch(`${origin}/api/internal/cv-parse/run`, {
+        const runnerRes = await fetch(`${origin}/api/candidate/cv/parse/trigger`, {
           method: "POST",
           headers: {
             "content-type": "application/json",

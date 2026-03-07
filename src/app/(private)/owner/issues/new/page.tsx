@@ -18,7 +18,7 @@ export default function NewIssuePage() {
     setErr(null);
 
     try {
-      const res = await fetch("/api/admin/issues", {
+      const res = await fetch("/api/issues", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({

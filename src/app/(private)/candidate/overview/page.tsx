@@ -465,7 +465,7 @@ export default function CandidateOverview() {
         } catch {}
 
         try {
-          const r3 = await fetch("/api/candidate/cv-parse", { credentials: "include" });
+          const r3 = await fetch("/api/candidate/cv", { credentials: "include" });
           if (r3.ok) {
             const j3 = await r3.json();
             if (alive) {
