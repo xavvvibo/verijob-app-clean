@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +81,7 @@ function formatDateEs(value?: string | null): string {
 
 export default function CandidateSubscriptionPage() {
   const supabase = useMemo(() => createClient(), []);
+  const searchParams = useSearchParams();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [loadingPortal, setLoadingPortal] = useState(false);
   const [loadingDowngrade, setLoadingDowngrade] = useState<string | null>(null);
@@ -87,6 +89,7 @@ export default function CandidateSubscriptionPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [subscription, setSubscription] = useState<SubscriptionRow | null>(null);
   const [scheduledChange, setScheduledChange] = useState<ScheduledChange | null>(null);
+  const [checkoutSyncState, setCheckoutSyncState] = useState<"idle" | "success" | "syncing">("idle");
 
   const currentTier = useMemo(() => normalizeTier(subscription?.plan), [subscription?.plan]);
   const subscriptionStatusLabel = useMemo(
@@ -94,7 +97,7 @@ export default function CandidateSubscriptionPage() {
     [subscription?.status]
   );
 
-  async function loadSubscriptionState() {
+  async function loadSubscriptionState(): Promise<SubscriptionRow | null> {
     setLoadingSubscription(true);
     try {
       const {
@@ -104,7 +107,7 @@ export default function CandidateSubscriptionPage() {
       if (!user?.id) {
         setSubscription(null);
         setScheduledChange(null);
-        return;
+        return null;
       }
 
       const { data, error } = await supabase
@@ -119,7 +122,7 @@ export default function CandidateSubscriptionPage() {
       if (error || !data) {
         setSubscription(null);
         setScheduledChange(null);
-        return;
+        return null;
       }
 
       setSubscription(data as SubscriptionRow);
@@ -129,6 +132,7 @@ export default function CandidateSubscriptionPage() {
       } else {
         setScheduledChange(null);
       }
+      return data as SubscriptionRow;
     } finally {
       setLoadingSubscription(false);
     }
@@ -138,6 +142,49 @@ export default function CandidateSubscriptionPage() {
     loadSubscriptionState();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const checkoutStatus = String(searchParams.get("checkout") || "");
+    if (checkoutStatus === "cancel") {
+      setMessage("Checkout cancelado. Puedes intentarlo de nuevo cuando quieras.");
+      return;
+    }
+    if (checkoutStatus !== "success") return;
+
+    let cancelled = false;
+    const maxAttempts = 6;
+    const intervalMs = 2500;
+
+    async function pollForSubscriptionSync() {
+      setCheckoutSyncState("syncing");
+
+      for (let i = 0; i < maxAttempts; i += 1) {
+        if (cancelled) return;
+        const fresh = await loadSubscriptionState();
+        const tier = normalizeTier(fresh?.plan);
+        const status = String(fresh?.status || "");
+        if (tier !== "free" && (status === "active" || status === "trialing" || status === "trial")) {
+          if (!cancelled) {
+            setCheckoutSyncState("success");
+            setMessage("Gracias, tu suscripción se ha activado correctamente.");
+          }
+          return;
+        }
+        await new Promise((r) => setTimeout(r, intervalMs));
+      }
+
+      if (!cancelled) {
+        setCheckoutSyncState("syncing");
+        setMessage("Pago recibido. Estamos sincronizando tu suscripción.");
+      }
+    }
+
+    pollForSubscriptionSync();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   async function startCheckout(planKey: CandidateCheckoutPlan) {
     setLoadingPlan(planKey);
@@ -249,6 +296,11 @@ export default function CandidateSubscriptionPage() {
     return [];
   }, [currentTier]);
 
+  const upgradeOptions = useMemo(
+    () => upgrades.filter((u) => normalizeTier(u.planKey) !== currentTier),
+    [upgrades, currentTier]
+  );
+
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold text-gray-900">Suscripción</h1>
@@ -290,9 +342,9 @@ export default function CandidateSubscriptionPage() {
           </p>
 
           <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-gray-500">Subir de plan</h3>
-          {upgrades.length > 0 ? (
+          {upgradeOptions.length > 0 ? (
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              {upgrades.map((plan) => (
+              {upgradeOptions.map((plan) => (
                 <button
                   key={plan.planKey}
                   type="button"
@@ -359,6 +411,11 @@ export default function CandidateSubscriptionPage() {
 
       {message ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{message}</div>
+      ) : null}
+      {checkoutSyncState === "syncing" && !message ? (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          Pago recibido. Estamos sincronizando tu suscripción.
+        </div>
       ) : null}
     </div>
   );

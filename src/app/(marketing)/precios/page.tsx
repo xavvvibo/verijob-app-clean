@@ -2,22 +2,28 @@
 
 import { useState } from "react";
 
-type CandidatePlan = {
-  name: string;
-  monthlyPrice: string;
-  yearlyPrice?: string;
-  summary: string;
-  features: string[];
-  monthlyPlanKey?: "candidate_starter_monthly" | "candidate_pro_monthly" | "candidate_proplus_monthly";
-  yearlyPlanKey?: "candidate_proplus_yearly";
-  cta?: string;
-};
-
 type CheckoutPlanKey =
   | "candidate_starter_monthly"
   | "candidate_pro_monthly"
   | "candidate_proplus_monthly"
   | "candidate_proplus_yearly";
+
+type CandidateCard = {
+  name: string;
+  badge?: string;
+  summary: string;
+  monthly: { label: string; planKey?: CheckoutPlanKey; comingSoon?: boolean };
+  yearly?: { label: string; planKey?: CheckoutPlanKey; badge?: string; comingSoon?: boolean };
+};
+
+type CompanyCard = {
+  name: string;
+  badge?: string;
+  summary: string;
+  monthly?: string;
+  yearly?: string;
+  cta: string;
+};
 
 export default function Precios() {
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
@@ -44,119 +50,210 @@ export default function Precios() {
     }
   }
 
-  const candidatePlans: CandidatePlan[] = [
+  const candidatePlans: CandidateCard[] = [
     {
       name: "Free",
-      monthlyPrice: "0€",
       summary: "Empieza tu perfil verificable con acceso base.",
-      features: ["Perfil verificable básico", "Señales iniciales de credibilidad", "Acceso sin coste"],
-      cta: "Comenzar gratis",
+      monthly: { label: "0 €" },
     },
     {
       name: "Starter",
-      monthlyPrice: "2,99 €/mes",
-      summary: "Perfil verificable básico para empezar a validar experiencia.",
-      features: ["Perfil verificable básico", "Evidencias limitadas", "Primer nivel de visibilidad profesional"],
-      monthlyPlanKey: "candidate_starter_monthly",
-      cta: "Activar Starter",
+      summary: "Perfil verificable básico con evidencias limitadas.",
+      monthly: { label: "2,99 €/mes", planKey: "candidate_starter_monthly" },
+      yearly: { label: "29,90 €/año", comingSoon: true },
     },
     {
       name: "Pro",
-      monthlyPrice: "4,99 €/mes",
-      summary: "Perfil más sólido con mayor capacidad de credibilidad.",
-      features: ["Más evidencias verificables", "Señales de confianza reforzadas", "Mejor presentación ante empresas"],
-      monthlyPlanKey: "candidate_pro_monthly",
-      cta: "Activar Pro",
+      badge: "Más popular",
+      summary: "Mayor capacidad verificable y señales de credibilidad reforzadas.",
+      monthly: { label: "4,99 €/mes", planKey: "candidate_pro_monthly" },
+      yearly: { label: "49,90 €/año", comingSoon: true },
     },
     {
       name: "Pro+",
-      monthlyPrice: "9,99 €/mes",
-      yearlyPrice: "99,90 €/año",
       summary: "Perfil profesional verificable completo con máxima capacidad.",
-      features: ["Trayectoria verificable completa", "Capacidad máxima de evidencias", "Máximo potencial de Trust Score"],
-      monthlyPlanKey: "candidate_proplus_monthly",
-      yearlyPlanKey: "candidate_proplus_yearly",
-      cta: "Activar Pro+",
+      monthly: { label: "9,99 €/mes", planKey: "candidate_proplus_monthly" },
+      yearly: { label: "99,90 €/año", planKey: "candidate_proplus_yearly", badge: "Mejor valor" },
+    },
+  ];
+
+  const companyPlans: CompanyCard[] = [
+    {
+      name: "Free",
+      summary: "Acceso inicial para explorar el flujo de evaluación.",
+      monthly: "0 €",
+      cta: "Comenzar",
+    },
+    {
+      name: "Access",
+      summary: "Acceso base al perfil verificable completo.",
+      monthly: "49 €/mes",
+      yearly: "490 €/año",
+      cta: "Solicitar Access",
+    },
+    {
+      name: "Hiring",
+      badge: "Más popular",
+      summary: "Para equipos con procesos de selección continuos.",
+      monthly: "99 €/mes",
+      yearly: "990 €/año",
+      cta: "Solicitar Hiring",
+    },
+    {
+      name: "Team",
+      summary: "Mayor capacidad operativa para equipos de reclutamiento.",
+      monthly: "199 €/mes",
+      yearly: "1.990 €/año",
+      cta: "Solicitar Team",
+    },
+    {
+      name: "Enterprise",
+      summary: "Modelo personalizado para organizaciones con necesidades avanzadas.",
+      cta: "Contactar",
     },
   ];
 
   return (
-    <main className="max-w-[1200px] mx-auto px-6 py-16 text-slate-900">
+    <main className="mx-auto max-w-[1200px] px-6 py-16 text-slate-900">
       <h1 className="text-4xl font-semibold tracking-tight">Precios</h1>
       <p className="mt-4 max-w-3xl text-slate-600 leading-relaxed">
-        Estructura de acceso simple: candidatos con planes progresivos y empresas con acceso
-        al perfil verificable completo.
+        Estructura de acceso simple: candidatos con planes progresivos y empresas con acceso al perfil verificable completo.
       </p>
 
       <section className="mt-10">
         <h2 className="text-2xl font-semibold">Candidatos</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-4">
-          {candidatePlans.map((plan) => (
-            <article key={plan.name} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-semibold">{plan.name}</h3>
-              <p className="mt-2 text-2xl font-bold text-slate-900">{plan.monthlyPrice}</p>
-              {plan.yearlyPrice ? <p className="mt-1 text-sm font-medium text-slate-600">o {plan.yearlyPrice}</p> : null}
-              <p className="mt-2 text-sm text-slate-600">{plan.summary}</p>
-              <ul className="mt-3 space-y-1 text-sm text-slate-600">
-                {plan.features.map((feature) => (
-                  <li key={feature}>• {feature}</li>
-                ))}
-              </ul>
-              {plan.monthlyPlanKey ? (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => startCheckout(plan.monthlyPlanKey!)}
-                    disabled={loadingPlan !== null}
-                    className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
-                  >
-                    {loadingPlan === plan.monthlyPlanKey ? "Procesando…" : `${plan.cta} mensual`}
-                  </button>
-                  {plan.yearlyPlanKey ? (
-                    <button
-                      type="button"
-                      onClick={() => startCheckout(plan.yearlyPlanKey!)}
-                      disabled={loadingPlan !== null}
-                      className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
-                    >
-                      {loadingPlan === plan.yearlyPlanKey ? "Procesando…" : `${plan.cta} anual`}
-                    </button>
+          {candidatePlans.map((plan) => {
+            const featured = plan.badge === "Más popular";
+            return (
+              <article
+                key={plan.name}
+                className={`rounded-2xl border p-5 shadow-sm ${
+                  featured ? "border-blue-500 bg-blue-50/40 ring-1 ring-blue-200" : "border-slate-200 bg-white"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-lg font-semibold">{plan.name}</h3>
+                  {plan.badge ? (
+                    <span className="rounded-full bg-blue-700 px-2.5 py-1 text-xs font-semibold text-white">{plan.badge}</span>
                   ) : null}
                 </div>
-              ) : (
-                <a
-                  href="/signup"
-                  className="mt-4 inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
-                >
-                  {plan.cta}
-                </a>
-              )}
-            </article>
-          ))}
+                <p className="mt-2 text-sm text-slate-600">{plan.summary}</p>
+
+                <div className="mt-4 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Mensual</span>
+                    <span className="text-sm font-semibold text-slate-900">{plan.monthly.label}</span>
+                  </div>
+                  {plan.yearly ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Anual</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-slate-900">{plan.yearly.label}</span>
+                        {plan.yearly.badge ? (
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                            {plan.yearly.badge}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                {plan.name === "Free" ? (
+                  <a
+                    href="/signup"
+                    className="mt-4 inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                  >
+                    Comenzar gratis
+                  </a>
+                ) : (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => plan.monthly.planKey && startCheckout(plan.monthly.planKey)}
+                      disabled={loadingPlan !== null || !plan.monthly.planKey}
+                      className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+                    >
+                      {loadingPlan === plan.monthly.planKey ? "Procesando…" : "Elegir mensual"}
+                    </button>
+                    {plan.yearly?.planKey ? (
+                      <button
+                        type="button"
+                        onClick={() => startCheckout(plan.yearly!.planKey!)}
+                        disabled={loadingPlan !== null}
+                        className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        {loadingPlan === plan.yearly.planKey ? "Procesando…" : "Elegir anual"}
+                      </button>
+                    ) : plan.yearly?.comingSoon ? (
+                      <span className="inline-flex rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-800">
+                        Anual: Próximamente
+                      </span>
+                    ) : null}
+                  </div>
+                )}
+              </article>
+            );
+          })}
         </div>
         {error ? (
           <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{error}</div>
         ) : null}
       </section>
 
-      <section className="mt-10">
+      <section className="mt-12">
         <h2 className="text-2xl font-semibold">Empresas</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-5">
-          {[
-            { name: "Free", price: "0€" },
-            { name: "Access", price: "49€" },
-            { name: "Hiring", price: "99€" },
-            { name: "Team", price: "199€" },
-            { name: "Enterprise", price: "Contacto" },
-          ].map((plan) => (
-            <article key={plan.name} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-lg font-semibold">{plan.name}</h3>
-              <p className="mt-2 text-2xl font-bold text-slate-900">{plan.price}</p>
-              <p className="mt-2 text-sm text-slate-600">
-                Acceso al perfil completo verificable según capacidades del plan.
-              </p>
-            </article>
-          ))}
+          {companyPlans.map((plan) => {
+            const featured = plan.badge === "Más popular";
+            const valueBadge = plan.name === "Team" && plan.yearly ? "Mejor valor" : undefined;
+            return (
+              <article
+                key={plan.name}
+                className={`rounded-2xl border p-5 shadow-sm ${
+                  featured ? "border-blue-500 bg-blue-50/40 ring-1 ring-blue-200" : "border-slate-200 bg-white"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-lg font-semibold">{plan.name}</h3>
+                  {plan.badge ? (
+                    <span className="rounded-full bg-blue-700 px-2.5 py-1 text-xs font-semibold text-white">{plan.badge}</span>
+                  ) : valueBadge ? (
+                    <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                      {valueBadge}
+                    </span>
+                  ) : null}
+                </div>
+
+                <p className="mt-2 text-sm text-slate-600">{plan.summary}</p>
+                <div className="mt-4 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  {plan.monthly ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Mensual</span>
+                      <span className="text-sm font-semibold text-slate-900">{plan.monthly}</span>
+                    </div>
+                  ) : null}
+                  {plan.yearly ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Anual</span>
+                      <span className="text-sm font-semibold text-slate-900">{plan.yearly}</span>
+                    </div>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  className={`mt-4 inline-flex rounded-xl px-4 py-2 text-sm font-semibold ${
+                    plan.name === "Enterprise"
+                      ? "border border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
+                      : "bg-slate-900 text-white hover:bg-slate-800"
+                  }`}
+                >
+                  {plan.cta}
+                </button>
+              </article>
+            );
+          })}
         </div>
       </section>
 
@@ -165,15 +262,11 @@ export default function Precios() {
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">Perfil individual</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              Desbloqueo puntual del perfil verificable de un candidato.
-            </p>
+            <p className="mt-2 text-sm text-slate-600">Desbloqueo puntual del perfil verificable de un candidato.</p>
           </article>
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-lg font-semibold">Pack 5 perfiles</h3>
-            <p className="mt-2 text-sm text-slate-600">
-              Paquete para procesos con varias candidaturas simultáneas.
-            </p>
+            <p className="mt-2 text-sm text-slate-600">Paquete para procesos con varias candidaturas simultáneas.</p>
           </article>
         </div>
       </section>
