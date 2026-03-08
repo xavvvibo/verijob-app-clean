@@ -75,10 +75,10 @@ export default function ProfileClient() {
         </div>
 
         <a
-          href="/candidate/profile-share"
+          href="/candidate/share"
           className="rounded-md border px-4 py-2 text-sm hover:bg-gray-50"
         >
-          Compartir perfil
+          Perfil público
         </a>
       </div>
 
@@ -115,14 +115,9 @@ export default function ProfileClient() {
         </div>
       </div>
 
-      <details className="mt-6 rounded-xl border p-5">
-        <summary className="cursor-pointer text-sm font-medium">
-          Ver JSON completo (debug)
-        </summary>
-        <pre className="mt-3 text-xs whitespace-pre-wrap break-words">
-          {JSON.stringify(profile, null, 2)}
-        </pre>
-      </details>
+      <p className="mt-6 text-xs text-gray-500">
+        Revisa y actualiza estos datos para mejorar la calidad de tu perfil público verificable.
+      </p>
     </div>
   );
 }

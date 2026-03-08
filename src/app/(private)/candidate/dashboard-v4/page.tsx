@@ -19,7 +19,7 @@ export default function CandidateDashboardV4() {
             </div>
             <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button className="vj-btn v3 v4 primary">Solicitar validación</button>
-              <button className="vj-btn v3 v4 ghost">Compartir perfil</button>
+              <button className="vj-btn v3 v4 ghost">Perfil público</button>
             </div>
           </section>
 

@@ -7,7 +7,7 @@ const items = [
   { href: "/candidate/overview", label: "Resumen" },
   { href: "/candidate/profile", label: "Mi perfil" },
   { href: "/candidate/verifications", label: "Verificaciones" },
-  { href: "/candidate/share", label: "Compartir" },
+  { href: "/candidate/share", label: "Perfil público" },
   { href: "/candidate/settings", label: "Ajustes" },
 ];
 

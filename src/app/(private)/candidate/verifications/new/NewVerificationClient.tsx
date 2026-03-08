@@ -48,8 +48,7 @@ export default function NewVerificationClient() {
 
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const dbg = json?.debug ? JSON.stringify(json.debug, null, 2) : "";
-        throw new Error(`${json?.error || "No se pudo crear la verificación"}${dbg ? "\n\n" + dbg : ""}`);
+        throw new Error(json?.error || "No se pudo crear la verificación");
       }
 
       const vid = (json?.verification_request_id || json?.verification_id) as string | undefined;

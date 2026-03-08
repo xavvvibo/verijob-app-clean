@@ -27,6 +27,11 @@ export default async function CandidateExperiencePage() {
     .eq("user_id", au.user.id)
     .order("created_at", { ascending: false });
 
+  const { data: importedRows } = await supabase
+    .from("experiences")
+    .select("title,company_name,start_date,end_date")
+    .eq("user_id", au.user.id);
+
   const verificationIds = (rows || []).map((x: any) => x.matched_verification_id).filter(Boolean);
   const verificationMap = new Map<string, { status: string | null; is_revoked: boolean | null }>();
   if (verificationIds.length > 0) {
@@ -42,16 +47,26 @@ export default async function CandidateExperiencePage() {
     }
   }
 
-  function resolveStatus(row: any) {
+  function norm(v: any) {
+    return String(v || "").trim().toLowerCase();
+  }
+
+  const importedSet = new Set(
+    (importedRows || []).map((r: any) => `${norm(r?.title)}|${norm(r?.company_name)}|${norm(r?.start_date)}|${norm(r?.end_date)}`)
+  );
+
+  function resolveStatus(row: any): "Importado" | "Sin verificar" | "En verificación" | "Verificado" | "Revocado" {
     const linkedId = row?.matched_verification_id as string | null;
-    if (!linkedId) return "Sin verificar";
+    if (!linkedId) {
+      const sig = `${norm(row?.role_title)}|${norm(row?.company_name)}|${norm(row?.start_date)}|${norm(row?.end_date)}`;
+      return importedSet.has(sig) ? "Importado" : "Sin verificar";
+    }
     const linked = verificationMap.get(linkedId);
-    if (!linked) return "Pendiente de verificación";
-    if (linked.is_revoked) return "Revocada";
+    if (!linked) return "En verificación";
+    if (linked.is_revoked) return "Revocado";
     const status = String(linked.status || "").toLowerCase();
-    if (status === "verified" || status === "approved") return "Verificada";
-    if (status.includes("rejected")) return "Rechazada";
-    return "Pendiente de verificación";
+    if (status === "verified" || status === "approved") return "Verificado";
+    return "En verificación";
   }
 
   return (
@@ -96,9 +111,8 @@ export default async function CandidateExperiencePage() {
           </div>
 
           <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-            Las experiencias importadas desde CV se registran como <span className="font-semibold">sin verificar</span>.
-            Solo cambian a <span className="font-semibold">verificada</span> cuando existe una verificación real vinculada.
-            Si una experiencia ya está verificada, no se edita directamente: crea una nueva entrada si necesitas corregir datos sustanciales.
+            Estado de experiencia: <span className="font-semibold">Importado</span>, <span className="font-semibold">Sin verificar</span>, <span className="font-semibold">En verificación</span>, <span className="font-semibold">Verificado</span> o <span className="font-semibold">Revocado</span>.
+            Solo una validación real convierte una experiencia en verificada.
           </div>
 
           <div className="mt-4 space-y-2">
@@ -125,7 +139,7 @@ export default async function CandidateExperiencePage() {
                         Email de verificación de la empresa: se solicitará en el flujo de solicitud.
                       </div>
                     </div>
-                    {resolveStatus(r) !== "Verificada" ? (
+                    {resolveStatus(r) !== "Verificado" ? (
                       <Link
                         href="/candidate/profile"
                         className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50"
@@ -135,6 +149,11 @@ export default async function CandidateExperiencePage() {
                     ) : null}
                   </div>
                   {r.description ? <div className="mt-3 text-sm text-gray-700">{r.description}</div> : null}
+                  {resolveStatus(r) !== "Verificado" ? (
+                    <div className="mt-2 text-xs text-blue-700">
+                      Verifica esta experiencia para aumentar tu credibilidad.
+                    </div>
+                  ) : null}
 
                   <div className="mt-4 space-y-3">
                     <form action="/candidate/verifications/new" method="get" className="rounded-xl border border-gray-200 p-3">
@@ -166,6 +185,9 @@ export default async function CandidateExperiencePage() {
                     >
                       Verificar documentalmente
                     </Link>
+                    <div className="text-xs text-blue-700">
+                      Sube una evidencia para reforzar esta experiencia.
+                    </div>
                   </div>
                 </div>
               ))

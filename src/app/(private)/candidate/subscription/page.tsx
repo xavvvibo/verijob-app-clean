@@ -20,7 +20,11 @@ export default function CandidateSubscriptionPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok || !data?.url) {
-        throw new Error(data?.error || "No se pudo iniciar el checkout");
+        const raw = String(data?.error || "");
+        if (raw.includes("missing_env")) {
+          throw new Error("No se pudo iniciar el checkout: falta configuración de precios en Stripe.");
+        }
+        throw new Error(data?.error || "No se pudo iniciar el checkout.");
       }
       window.location.href = data.url;
     } catch (e: any) {
@@ -66,6 +70,7 @@ export default function CandidateSubscriptionPage() {
         <section className="rounded-2xl border border-gray-200 bg-white p-5">
           <h2 className="text-sm font-semibold text-gray-900">Siguiente plan recomendado</h2>
           <p className="mt-2 text-sm text-gray-600">Pro+ anual para ampliar señales verificables y uso intensivo.</p>
+          <p className="mt-1 text-xs text-blue-700">Activa más señales verificables con un plan superior.</p>
           <div className="mt-4 flex flex-wrap gap-2">
             <button
               onClick={() => goCheckout("candidate_proplus_yearly")}
@@ -74,13 +79,12 @@ export default function CandidateSubscriptionPage() {
             >
               {loadingPlan === "candidate_proplus_yearly" ? "Procesando…" : "Mejorar plan"}
             </button>
-            <button
-              onClick={() => goCheckout("candidate_starter_monthly")}
-              disabled={loadingPlan !== null}
-              className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+            <a
+              href="/precios"
+              className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
             >
               Ver planes
-            </button>
+            </a>
             <button
               onClick={openPortal}
               disabled={loadingPortal}

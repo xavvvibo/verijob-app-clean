@@ -7,12 +7,11 @@ export const revalidate = 0;
 
 function mapStatus(status: string | null) {
   const s = String(status || "").toLowerCase();
-  if (s.includes("revoked")) return "Revocada";
-  if (s.includes("verified") || s.includes("approved")) return "Aceptada";
+  if (s.includes("revoked")) return "Revocado";
+  if (s.includes("verified") || s.includes("approved")) return "Verificado";
   if (s.includes("rejected")) return "Rechazada";
   if (s.includes("modified") || s.includes("clarif")) return "Modificada";
-  if (s.includes("waiting")) return "Esperando respuesta";
-  return "Enviada";
+  return "En verificación";
 }
 
 export default async function CandidateVerificationsPage() {
@@ -51,7 +50,7 @@ export default async function CandidateVerificationsPage() {
           (rows || []).map((r: any) => {
             const employment = Array.isArray(r.employment_records) ? r.employment_records[0] : r.employment_records;
             const status = mapStatus(r.status);
-            const reminderEnabled = status === "Enviada" || status === "Esperando respuesta";
+            const reminderEnabled = status === "En verificación";
 
             return (
               <div key={r.id} className="rounded-xl border border-gray-200 bg-white p-4">

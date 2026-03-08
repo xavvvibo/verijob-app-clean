@@ -129,7 +129,7 @@ function getSections(role: Role): Section[] {
         { href: "/candidate/achievements", label: "Logros" },
         { href: "/candidate/evidence", label: "Evidencias" },
         { href: "/candidate/verifications", label: "Verificaciones" },
-        { href: "/candidate/share", label: "Compartir perfil" },
+        { href: "/candidate/share", label: "Perfil público" },
       ],
     },
     {

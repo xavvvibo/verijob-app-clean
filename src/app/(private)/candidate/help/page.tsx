@@ -42,7 +42,7 @@ export default function CandidateHelpPage() {
         <article className="rounded-2xl border border-slate-200 bg-white p-6">
           <h3 className="text-base font-semibold text-slate-900">Cómo compartir tu perfil</h3>
           <p className="mt-2 text-sm text-slate-700">
-            Usa la sección Compartir perfil para generar tu enlace verificable y controlar su visibilidad.
+            Usa la sección Perfil público para previsualizar lo que verá cada tipo de empresa y gestionar tu enlace verificable.
           </p>
         </article>
         <article className="rounded-2xl border border-slate-200 bg-white p-6">

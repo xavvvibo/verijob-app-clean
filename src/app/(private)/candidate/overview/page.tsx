@@ -79,7 +79,7 @@ function TrustRing({ score }: { score: number }) {
         </div>
       </div>
       <p className="mt-3 text-center text-sm text-gray-600">
-        Mejora tu credibilidad verificando tu experiencia y formación
+        Añade evidencias o verifica tu experiencia para mejorar tu credibilidad.
       </p>
     </div>
   );

@@ -68,6 +68,7 @@ export default function EvidenceListClient({ initialItems }: { initialItems: Evi
         <p className="mt-2 text-sm text-gray-600">
           Aquí solo se muestran evidencias documentales de verificación. El CV no aparece en este listado.
         </p>
+        <p className="mt-1 text-xs text-blue-700">Sube una evidencia para reforzar esta experiencia y acelerar su validación.</p>
       </div>
 
       {visibleItems.length === 0 ? (
