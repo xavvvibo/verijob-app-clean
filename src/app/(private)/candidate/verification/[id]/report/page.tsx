@@ -29,14 +29,14 @@ function isUuid(v: string) {
 function labelForLevel(level: string) {
   switch (level) {
     case "verified":
-      return { title: "Verified", hint: "High confidence result" };
+      return { title: "Verificada", hint: "Resultado con alta confianza" };
     case "in_review":
-      return { title: "In review", hint: "Verification is being processed" };
+      return { title: "En revisión", hint: "La verificación se está procesando" };
     case "rejected":
-      return { title: "Rejected", hint: "Verification did not pass" };
+      return { title: "Rechazada", hint: "La verificación no superó la validación" };
     case "partial":
     default:
-      return { title: "Partial", hint: "Some elements are verified, others missing" };
+      return { title: "Parcial", hint: "Algunos elementos están verificados y otros pendientes" };
   }
 }
 
@@ -51,13 +51,13 @@ export default async function CandidateVerificationReportPage({
   if (!verificationId || verificationId === "undefined" || !isUuid(verificationId)) {
     return (
       <div style={{ maxWidth: 880, margin: "0 auto", padding: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 22 }}>Invalid verification id</h1>
+        <h1 style={{ margin: 0, fontSize: 22 }}>ID de verificación no válido</h1>
         <div style={{ marginTop: 10, opacity: 0.85 }}>
-          Received: <code>{String(verificationId ?? null)}</code>
+          Recibido: <code>{String(verificationId ?? null)}</code>
         </div>
         <div style={{ marginTop: 16 }}>
           <Link href="/candidate/verification" style={{ textDecoration: "underline" }}>
-            Back
+            Volver
           </Link>
         </div>
       </div>
@@ -74,11 +74,11 @@ export default async function CandidateVerificationReportPage({
   if (userError || !user) {
     return (
       <div style={{ maxWidth: 880, margin: "0 auto", padding: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 22 }}>Unauthorized</h1>
-        <div style={{ marginTop: 10, opacity: 0.85 }}>Please log in again.</div>
+        <h1 style={{ margin: 0, fontSize: 22 }}>No autorizado</h1>
+        <div style={{ marginTop: 10, opacity: 0.85 }}>Inicia sesión de nuevo.</div>
         <div style={{ marginTop: 16 }}>
           <Link href="/login" style={{ textDecoration: "underline" }}>
-            Go to login
+            Ir a login
           </Link>
         </div>
       </div>
@@ -103,13 +103,13 @@ export default async function CandidateVerificationReportPage({
   if (!data) {
     return (
       <div style={{ maxWidth: 880, margin: "0 auto", padding: 24 }}>
-        <h1 style={{ margin: 0, fontSize: 22 }}>Not found</h1>
+        <h1 style={{ margin: 0, fontSize: 22 }}>No encontrado</h1>
         <div style={{ marginTop: 10, opacity: 0.85 }}>
-          This verification doesn’t exist or you don’t have access.
+          Esta verificación no existe o no tienes acceso.
         </div>
         <div style={{ marginTop: 16 }}>
           <Link href="/candidate/verification" style={{ textDecoration: "underline" }}>
-            Back
+            Volver
           </Link>
         </div>
       </div>
@@ -121,32 +121,32 @@ export default async function CandidateVerificationReportPage({
 
   const companyLabel =
     s.company_name_freeform ||
-    (s.company_id ? `Company ID: ${s.company_id}` : "Company not specified");
+    (s.company_id ? `ID empresa: ${s.company_id}` : "Empresa no especificada");
 
   const dateRange =
     s.start_date && s.end_date
       ? `${s.start_date} → ${s.end_date}`
       : s.start_date && !s.end_date
-      ? `${s.start_date} → Present`
-      : "Dates not provided";
+      ? `${s.start_date} → Actualidad`
+      : "Fechas no informadas";
 
   const whatIsVerified =
     s.verification_level === "verified"
-      ? ["Employment relationship confirmed", "Evidence accepted"]
+      ? ["Relación laboral confirmada", "Evidencias aceptadas"]
       : s.verification_level === "partial"
-      ? ["Evidence received", "Basic data captured"]
+      ? ["Evidencias recibidas", "Datos básicos registrados"]
       : s.verification_level === "in_review"
-      ? ["Evidence received", "Awaiting review"]
-      : ["Outcome recorded"];
+      ? ["Evidencias recibidas", "En espera de revisión"]
+      : ["Resultado registrado"];
 
   const whatIsMissing =
     s.verification_level === "partial"
       ? [
-          "More evidence may be required to reach Verified",
-          "Employer confirmation may be needed depending on the case",
+          "Puede requerirse evidencia adicional para alcanzar nivel verificado",
+          "Puede requerirse confirmación de la empresa según el caso",
         ]
       : s.verification_level === "in_review"
-      ? ["Waiting for review completion"]
+      ? ["Pendiente de finalización de revisión"]
       : s.verification_level === "verified"
       ? []
       : [];
@@ -155,7 +155,7 @@ export default async function CandidateVerificationReportPage({
     <div style={{ maxWidth: 880, margin: "0 auto", padding: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>Verification Report</div>
+          <div style={{ fontSize: 12, opacity: 0.7 }}>Informe de verificación</div>
           <h1 style={{ margin: "8px 0 0", fontSize: 28 }}>{level.title}</h1>
           <div style={{ marginTop: 6, opacity: 0.8 }}>{level.hint}</div>
         </div>
@@ -163,7 +163,7 @@ export default async function CandidateVerificationReportPage({
         <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <ShareLinkButton verificationId={verificationId} />
           <Link href="/candidate/verification" style={{ textDecoration: "underline" }}>
-            Back
+            Volver
           </Link>
         </div>
       </div>
@@ -171,36 +171,36 @@ export default async function CandidateVerificationReportPage({
       <div style={{ marginTop: 18, padding: 16, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>Role</div>
-            <div style={{ marginTop: 6, fontSize: 16 }}>{s.position ?? "Not specified"}</div>
+            <div style={{ fontSize: 12, opacity: 0.7 }}>Puesto</div>
+            <div style={{ marginTop: 6, fontSize: 16 }}>{s.position ?? "No especificado"}</div>
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>Company</div>
+            <div style={{ fontSize: 12, opacity: 0.7 }}>Empresa</div>
             <div style={{ marginTop: 6, fontSize: 16 }}>{companyLabel}</div>
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>Dates</div>
+            <div style={{ fontSize: 12, opacity: 0.7 }}>Fechas</div>
             <div style={{ marginTop: 6, fontSize: 16 }}>{dateRange}</div>
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>Evidence</div>
+            <div style={{ fontSize: 12, opacity: 0.7 }}>Evidencias</div>
             <div style={{ marginTop: 6, fontSize: 16 }}>
-              {s.evidence_count} file(s) • {s.actions_count} event(s)
+              {s.evidence_count} documento(s) • {s.actions_count} evento(s)
             </div>
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>Employer confirmation</div>
+            <div style={{ fontSize: 12, opacity: 0.7 }}>Confirmación de empresa</div>
             <div style={{ marginTop: 6, fontSize: 16 }}>
-              {s.company_confirmed ? "Yes" : "Not yet"}
+              {s.company_confirmed ? "Sí" : "Aún no"}
             </div>
           </div>
 
           <div>
-            <div style={{ fontSize: 12, opacity: 0.7 }}>Verification ID</div>
+            <div style={{ fontSize: 12, opacity: 0.7 }}>ID de verificación</div>
             <div style={{ marginTop: 6, fontSize: 14, opacity: 0.85 }}>{s.verification_id}</div>
           </div>
         </div>
@@ -208,7 +208,7 @@ export default async function CandidateVerificationReportPage({
 
       <div style={{ marginTop: 18, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <div style={{ padding: 16, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14 }}>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>What’s verified</div>
+          <div style={{ fontSize: 12, opacity: 0.7 }}>Qué está verificado</div>
           <ul style={{ margin: "10px 0 0", paddingLeft: 18 }}>
             {whatIsVerified.map((x) => (
               <li key={x} style={{ marginBottom: 6 }}>{x}</li>
@@ -217,9 +217,9 @@ export default async function CandidateVerificationReportPage({
         </div>
 
         <div style={{ padding: 16, border: "1px solid rgba(255,255,255,0.12)", borderRadius: 14 }}>
-          <div style={{ fontSize: 12, opacity: 0.7 }}>What’s missing / next steps</div>
+          <div style={{ fontSize: 12, opacity: 0.7 }}>Qué falta / próximos pasos</div>
           {whatIsMissing.length === 0 ? (
-            <div style={{ marginTop: 10, opacity: 0.85 }}>Nothing pending.</div>
+            <div style={{ marginTop: 10, opacity: 0.85 }}>No hay pendientes.</div>
           ) : (
             <ul style={{ margin: "10px 0 0", paddingLeft: 18 }}>
               {whatIsMissing.map((x) => (

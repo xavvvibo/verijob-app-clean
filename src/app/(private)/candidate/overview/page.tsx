@@ -48,7 +48,7 @@ function scoreTone(score: number) {
 function TrustRing({ score }: { score: number }) {
   const s = clamp(score);
   const radius = 74;
-  const stroke = 14;
+  const stroke = 28;
   const normalized = radius - stroke * 0.5;
   const circumference = normalized * 2 * Math.PI;
   const offset = circumference - (s / 100) * circumference;
@@ -56,9 +56,9 @@ function TrustRing({ score }: { score: number }) {
 
   return (
     <div className="flex flex-col items-center">
-      <div className="relative flex h-48 w-48 items-center justify-center">
-        <svg height="192" width="192" className="rotate-[-90deg]">
-          <circle stroke="#e5e7eb" fill="transparent" strokeWidth={stroke} r={normalized} cx="96" cy="96" />
+      <div className="relative flex h-56 w-56 items-center justify-center">
+        <svg height="224" width="224" className="rotate-[-90deg]">
+          <circle stroke="#e5e7eb" fill="transparent" strokeWidth={stroke} r={normalized} cx="112" cy="112" />
           <circle
             strokeLinecap="round"
             className={`${tone.ring} transition-all duration-700`}
@@ -67,8 +67,8 @@ function TrustRing({ score }: { score: number }) {
             strokeDasharray={circumference}
             strokeDashoffset={offset}
             r={normalized}
-            cx="96"
-            cy="96"
+            cx="112"
+            cy="112"
           />
         </svg>
         <div className="absolute text-center">
@@ -78,7 +78,9 @@ function TrustRing({ score }: { score: number }) {
           </div>
         </div>
       </div>
-      <p className="mt-3 text-center text-sm text-gray-600">Mejora tu credibilidad verificando experiencias</p>
+      <p className="mt-3 text-center text-sm text-gray-600">
+        Mejora tu credibilidad verificando tu experiencia y formación
+      </p>
     </div>
   );
 }
@@ -239,12 +241,18 @@ export default function CandidateOverview() {
             <div className="flex items-start gap-4">
               <AvatarView fullName={profile?.full_name} avatarUrl={profile?.avatar_url} />
               <div className="min-w-0">
-                <p className="text-xs text-gray-500">Dashboard candidato</p>
-                <h1 className="mt-2 truncate text-3xl font-semibold text-gray-900">
+                <p className="text-xs text-gray-500">Resumen del candidato</p>
+                <h1 className="mt-2 truncate text-4xl font-semibold text-gray-900">
                   {profile?.full_name || "Tu resumen profesional"}
                 </h1>
-                <p className="mt-1 text-sm text-gray-600">{profile?.location || "Ubicación no definida"}</p>
+                <p className="mt-2 text-base text-gray-600">{profile?.location || "Ubicación no definida"}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
+                  <Link
+                    href="/candidate/profile"
+                    className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+                  >
+                    Perfil
+                  </Link>
                   <Link
                     href="/candidate/experiences"
                     className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
@@ -255,19 +263,19 @@ export default function CandidateOverview() {
                     href="/candidate/settings"
                     className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
                   >
-                    Settings
+                    Ajustes
                   </Link>
                   <Link
                     href="/candidate/education"
                     className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
                   >
-                    Education
+                    Educación
                   </Link>
                   <Link
                     href="/candidate/achievements"
                     className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
                   >
-                    Achievements
+                    Logros
                   </Link>
                 </div>
               </div>
@@ -285,7 +293,7 @@ export default function CandidateOverview() {
 
       <section className="grid gap-4 md:grid-cols-5">
         <Kpi label="Trust Score" value={`${metrics.score}%`} />
-        <Kpi label="Progreso perfil" value={`${profileCompletion}%`} />
+        <Kpi label="Progreso del perfil" value={`${profileCompletion}%`} />
         <Kpi label="Verificaciones" value={metrics.total} />
         <Kpi label="Aprobadas" value={metrics.verified} />
         <Kpi label="Evidencias" value={metrics.evidences} />
@@ -306,7 +314,11 @@ export default function CandidateOverview() {
           />
           <SummaryCard
             title="Experiencia laboral"
-            summary={experienceCount > 0 ? `${experienceCount} experiencias detectadas. Gestiona cambios y verificaciones desde tu sección de experiencias.` : "Aún no hay experiencias cargadas. Sube tu CV o añade experiencias manualmente."}
+            summary={
+              experienceCount > 0
+                ? `${experienceCount} experiencias detectadas. Las importadas desde CV se muestran como “Sin verificar” hasta tener validación real.`
+                : "Aún no hay experiencias cargadas. Sube tu CV o añade experiencias manualmente."
+            }
             href="/candidate/experiences"
             cta="Gestionar"
           />

@@ -1,5 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
-import ProfileSettingsClient from "@/components/candidate/profile/ProfileSettingsClient";
+import CandidateProfileIdentityClient from "./CandidateProfileIdentityClient";
 
 export const dynamic = "force-dynamic";
 
@@ -22,10 +22,10 @@ export default async function CandidateProfilePage() {
     <div className="p-6 space-y-6">
       <div>
         <h1 className="text-xl font-semibold">Perfil</h1>
-        <p className="text-sm text-slate-600">Datos personales, cuenta y CV para extraer experiencias.</p>
+        <p className="text-sm text-slate-600">Gestiona tus datos personales y de cuenta.</p>
       </div>
 
-      <ProfileSettingsClient
+      <CandidateProfileIdentityClient
         initialProfile={{
           id: user.id,
           email: user.email ?? null,

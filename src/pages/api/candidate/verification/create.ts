@@ -27,37 +27,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
 
     const company_name_freeform = String(body?.company_name_freeform ?? "").trim();
+    const company_email = String(body?.company_email ?? "").trim().toLowerCase();
     const position = String(body?.position ?? "").trim();
     const start_date = String(body?.start_date ?? "").trim();
     const end_date_raw = String(body?.end_date ?? "").trim();
     const is_current = Boolean(body?.is_current ?? false);
 
     if (!company_name_freeform) return json(res, 400, { error: "Falta company_name_freeform" });
+    if (!company_email || !company_email.includes("@")) return json(res, 400, { error: "Falta company_email válido" });
     if (!position) return json(res, 400, { error: "Falta position" });
     if (!start_date) return json(res, 400, { error: "Falta start_date" });
 
     const end_date = is_current ? null : (end_date_raw || null);
 
-    const { data: profile, error: pErr } = await supabase
-      .from("profiles")
-      .select("active_company_id")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (pErr) return json(res, 400, { error: "Read profile failed", details: pErr.message });
-    if (!profile?.active_company_id) {
-      return json(res, 400, {
-        error: "Missing active_company_id",
-        message: "Tu usuario no tiene active_company_id. Asigna empresa activa y reintenta.",
-      });
-    }
-
-    const company_id = profile.active_company_id;
-
     const { data: er, error: erErr } = await supabase
       .from("employment_records")
       .insert({
-        company_id,
         candidate_id: user.id,
         company_name_freeform,
         position,
@@ -72,7 +57,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data: vr, error: vrErr } = await supabase
       .from("verification_requests")
       .insert({
-        company_id,
         employment_record_id: er.id,
         requested_by: user.id,
       })
@@ -84,12 +68,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     trackEventAdmin({
       event_name: "verification_created",
       user_id: user.id,
-      company_id,
+      company_id: null,
       entity_type: "verification_request",
       entity_id: vr.id,
       metadata: {
         employment_record_id: er.id,
         company_name_freeform,
+        company_email,
         position,
         start_date,
         end_date,

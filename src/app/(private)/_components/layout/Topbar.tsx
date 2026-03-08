@@ -25,9 +25,9 @@ export default function Topbar({ role }: { role?: Role }) {
   }, [pathname, r]);
 
   const userPlanLabel = useMemo(() => {
-    if (r === "owner") return "Owner";
-    if (r === "company") return "Company Access";
-    return "Candidate PRO";
+    if (r === "owner") return "Plan Owner";
+    if (r === "company") return "Plan Empresa Access";
+    return "Plan Candidato Pro";
   }, [r]);
 
   const [loggingOut, setLoggingOut] = useState(false);

@@ -7,11 +7,12 @@ export const revalidate = 0;
 
 function mapStatus(status: string | null) {
   const s = String(status || "").toLowerCase();
-  if (s.includes("verified") || s.includes("approved")) return "accepted";
-  if (s.includes("rejected")) return "rejected";
-  if (s.includes("modified") || s.includes("clarif")) return "modified";
-  if (s.includes("waiting")) return "waiting response";
-  return "sent";
+  if (s.includes("revoked")) return "Revocada";
+  if (s.includes("verified") || s.includes("approved")) return "Aceptada";
+  if (s.includes("rejected")) return "Rechazada";
+  if (s.includes("modified") || s.includes("clarif")) return "Modificada";
+  if (s.includes("waiting")) return "Esperando respuesta";
+  return "Enviada";
 }
 
 export default async function CandidateVerificationsPage() {
@@ -27,9 +28,9 @@ export default async function CandidateVerificationsPage() {
 
   return (
     <div>
-      <h2 className="text-xl font-semibold">Verification Requests</h2>
+      <h2 className="text-xl font-semibold">Solicitudes de verificación</h2>
       <p className="mt-2 text-sm text-gray-600">
-        Gestiona tus solicitudes y su estado actual.
+        Gestiona tus solicitudes, su estado y los próximos pasos.
       </p>
 
       <div className="mt-6">
@@ -37,7 +38,7 @@ export default async function CandidateVerificationsPage() {
           className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
           href="/candidate/verifications/new"
         >
-          Nueva solicitud
+          Nueva verificación
         </Link>
       </div>
 
@@ -50,7 +51,7 @@ export default async function CandidateVerificationsPage() {
           (rows || []).map((r: any) => {
             const employment = Array.isArray(r.employment_records) ? r.employment_records[0] : r.employment_records;
             const status = mapStatus(r.status);
-            const reminderEnabled = status === "sent" || status === "waiting response";
+            const reminderEnabled = status === "Enviada" || status === "Esperando respuesta";
 
             return (
               <div key={r.id} className="rounded-xl border border-gray-200 bg-white p-4">
@@ -63,7 +64,7 @@ export default async function CandidateVerificationsPage() {
                       Estado: {status} · Alta: {r.submitted_at || r.created_at || "—"}
                     </div>
                     {reminderEnabled ? (
-                      <div className="mt-1 text-xs text-amber-700">reminder available</div>
+                      <div className="mt-1 text-xs text-amber-700">Recordatorio disponible</div>
                     ) : null}
                   </div>
                   <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-semibold text-gray-700">
@@ -77,20 +78,20 @@ export default async function CandidateVerificationsPage() {
                     disabled={!reminderEnabled}
                     className="inline-flex rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 disabled:opacity-40"
                   >
-                    send reminder
+                    Enviar recordatorio
                   </button>
                   <button
                     type="button"
-                    disabled={status !== "modified"}
+                    disabled={status !== "Modificada"}
                     className="inline-flex rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 disabled:opacity-40"
                   >
-                    accept modification
+                    Aceptar modificación
                   </button>
                   <Link
                     href={`/candidate/verification/${r.id}`}
                     className="inline-flex rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800"
                   >
-                    register verification
+                    Registrar verificación
                   </Link>
                 </div>
               </div>

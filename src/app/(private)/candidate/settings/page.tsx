@@ -171,7 +171,7 @@ export default function CandidateSettings() {
     (async () => {
       const r = await fetch("/api/candidate/settings", { cache: "no-store" as any });
       const j = await r.json();
-      if (!r.ok) { setErr(j?.error || "load_failed"); return; }
+      if (!r.ok) { setErr(j?.error || "No se pudieron cargar los ajustes."); return; }
       const loaded: Settings = {
         show_trust_score: !!j?.settings?.show_trust_score,
         show_verification_counts: !!j?.settings?.show_verification_counts,
@@ -214,7 +214,7 @@ export default function CandidateSettings() {
     const j = await r.json().catch(() => ({}));
     setSaving(false);
     if (!r.ok) {
-      setErr(j?.error ? `${j.error}${j.details ? `: ${j.details}` : ""}` : "save_failed");
+      setErr(j?.error ? `${j.error}${j.details ? `: ${j.details}` : ""}` : "No se pudieron guardar los ajustes.");
       return;
     }
     setInitial(s);
@@ -226,8 +226,13 @@ export default function CandidateSettings() {
   return (
     <div className="space-y-6">
       <div className="bg-white border border-gray-200 rounded-3xl shadow-sm p-7">
-        <div className="text-2xl font-semibold text-gray-900">Ajustes de privacidad</div>
-        <div className="mt-2 text-sm text-gray-600">Controla qué se muestra en tu perfil y en el CV compartido/exportado.</div>
+        <div className="text-2xl font-semibold text-gray-900">Ajustes</div>
+        <div className="mt-2 text-sm text-gray-600">
+          Aquí gestionas privacidad, visibilidad, contacto y disponibilidad profesional.
+        </div>
+        <div className="mt-2 text-xs text-gray-500">
+          Los datos de identidad personal se editan en la sección Perfil.
+        </div>
         {err ? <div className="mt-3 text-sm text-red-600">{err}</div> : null}
         {ok ? <div className="mt-3 text-sm text-green-700">{ok}</div> : null}
         {saving ? <div className="mt-3 text-xs text-gray-500">Guardando…</div> : null}
@@ -241,10 +246,10 @@ export default function CandidateSettings() {
                 <div className="text-base font-semibold text-gray-900">Visibilidad de credibilidad</div>
                 <div className="mt-3 space-y-3">
                   <Toggle
-                    label="Mostrar Trust Score (rating)"
+                    label="Mostrar Trust Score"
                     checked={s.show_trust_score}
                     onChange={(v) => setPatch({ show_trust_score: v })}
-                    help="RGPD: puedes ocultarlo en el perfil compartido y CV exportado."
+                    help="Puedes ocultarlo en el perfil compartido para reforzar privacidad."
                   />
                   <Toggle
                     label="Mostrar número de verificaciones (total + por tipo)"
@@ -253,7 +258,7 @@ export default function CandidateSettings() {
                     help="Se mostrará en CV compartido/exportado para reflejar credibilidad real."
                   />
                   <Toggle
-                    label="Mostrar timeline verificada (CV + verificaciones)"
+                    label="Mostrar cronología verificada (CV + verificaciones)"
                     checked={s.show_verified_timeline}
                     onChange={(v) => setPatch({ show_verified_timeline: v })}
                     help="Si lo ocultas, la empresa verá menos señal (pero siempre respetamos tu privacidad)."

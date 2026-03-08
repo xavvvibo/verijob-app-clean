@@ -2,20 +2,73 @@ export const dynamic = "force-dynamic";
 
 export default function CandidateHelpPage() {
   return (
-    <div className="max-w-3xl">
-      <h1 className="text-2xl font-extrabold text-slate-900">Ayuda</h1>
-      <p className="mt-2 text-slate-600">
-        Centro de ayuda del candidato. Aquí integraremos FAQ, guías rápidas y un botón para reportar incidencias.
-      </p>
+    <div className="max-w-4xl space-y-4">
+      <header className="rounded-2xl border border-slate-200 bg-white p-6">
+        <h1 className="text-2xl font-extrabold text-slate-900">Ayuda para candidatos</h1>
+        <p className="mt-2 text-slate-600">
+          Guía rápida para construir un perfil verificable, mejorar tu credibilidad y compartir tu trayectoria profesional.
+        </p>
+      </header>
 
-      <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6">
-        <div className="text-sm font-bold text-slate-900">Acciones rápidas</div>
-        <ul className="mt-3 list-disc pl-5 text-sm text-slate-700 space-y-2">
-          <li>Cómo subir CV y revisar experiencias detectadas de forma automática.</li>
-          <li>Cómo adjuntar evidencias y asignarlas a experiencias.</li>
-          <li>Cómo compartir tu perfil (token) y revocar el acceso.</li>
+      <section className="rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 className="text-lg font-semibold text-slate-900">Cómo funciona Verijob para candidatos</h2>
+        <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-700">
+          <li>Subes tu CV y obtienes una estructura inicial de tu trayectoria.</li>
+          <li>Revisas experiencias y formación en tus secciones correspondientes.</li>
+          <li>Solicitas verificaciones a empresa o subes evidencias documentales.</li>
+          <li>Tu credibilidad mejora a medida que se validan tus datos.</li>
         </ul>
-      </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2">
+        <article className="rounded-2xl border border-slate-200 bg-white p-6">
+          <h3 className="text-base font-semibold text-slate-900">Cómo subir tu CV</h3>
+          <p className="mt-2 text-sm text-slate-700">
+            Ve a Perfil o Experiencias, sube tu archivo y revisa las propuestas antes de importarlas.
+          </p>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-6">
+          <h3 className="text-base font-semibold text-slate-900">Cómo se verifican tus experiencias</h3>
+          <p className="mt-2 text-sm text-slate-700">
+            Puedes solicitar verificación a empresa o realizar verificación documental desde cada experiencia.
+          </p>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-6">
+          <h3 className="text-base font-semibold text-slate-900">Experiencia importada vs. verificada</h3>
+          <p className="mt-2 text-sm text-slate-700">
+            Importada significa estructurada pero sin validar. Verificada significa confirmada por evidencia o por empresa.
+          </p>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-6">
+          <h3 className="text-base font-semibold text-slate-900">Cómo compartir tu perfil</h3>
+          <p className="mt-2 text-sm text-slate-700">
+            Usa la sección Compartir perfil para generar tu enlace verificable y controlar su visibilidad.
+          </p>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-6">
+          <h3 className="text-base font-semibold text-slate-900">Cómo funciona tu suscripción</h3>
+          <p className="mt-2 text-sm text-slate-700">
+            Desde Suscripción puedes revisar tu plan, mejorarlo y acceder a la gestión de facturación.
+          </p>
+        </article>
+        <article className="rounded-2xl border border-slate-200 bg-white p-6">
+          <h3 className="text-base font-semibold text-slate-900">Soporte</h3>
+          <p className="mt-2 text-sm text-slate-700">
+            Si tienes incidencias, escríbenos a soporte y facilita el contexto de la verificación afectada.
+          </p>
+        </article>
+      </section>
+
+      <section className="rounded-2xl border border-blue-100 bg-blue-50 p-6">
+        <h2 className="text-lg font-semibold text-blue-900">Viaje del candidato</h2>
+        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-blue-900">
+          <li>Completa tu perfil</li>
+          <li>Añade o revisa tu experiencia</li>
+          <li>Solicita verificaciones o sube documentos</li>
+          <li>Mejora tu credibilidad</li>
+          <li>Comparte tu perfil verificable</li>
+        </ol>
+      </section>
     </div>
   );
 }

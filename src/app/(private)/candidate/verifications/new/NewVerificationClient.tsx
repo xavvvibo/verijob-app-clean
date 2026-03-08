@@ -15,6 +15,7 @@ export default function NewVerificationClient() {
   const [position, setPosition] = useState(searchParams?.get("position") || "");
   const [start, setStart] = useState(searchParams?.get("start") || "");
   const [end, setEnd] = useState(searchParams?.get("end") || "");
+  const [companyEmail, setCompanyEmail] = useState(searchParams?.get("company_email") || "");
   const [isCurrent, setIsCurrent] = useState(false);
 
   const [saving, setSaving] = useState(false);
@@ -37,6 +38,7 @@ export default function NewVerificationClient() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           company_name_freeform: company,
+          company_email: companyEmail,
           position,
           start_date: start,
           end_date: end,
@@ -67,7 +69,7 @@ export default function NewVerificationClient() {
   return (
     <div className="max-w-xl mx-auto py-10">
       <h1 className="text-2xl font-semibold">Nueva verificación</h1>
-      <p className="mt-2 text-sm text-gray-600">Crea una verificación y pasa a subir evidencias.</p>
+      <p className="mt-2 text-sm text-gray-600">Crea una solicitud y continúa con la subida de evidencias.</p>
 
       {err && (
         <pre className="mt-4 whitespace-pre-wrap rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
@@ -85,6 +87,19 @@ export default function NewVerificationClient() {
             placeholder="Ej: La Picatería"
             required
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium">Email de verificación de la empresa</label>
+          <input
+            type="email"
+            value={companyEmail}
+            onChange={(e) => setCompanyEmail(e.target.value)}
+            className="mt-1 w-full rounded-lg border px-3 py-2"
+            placeholder="ejemplo@empresa.com"
+            required
+          />
+          <p className="mt-1 text-xs text-gray-600">Indica el email al que quieres enviar esta solicitud.</p>
         </div>
 
         <div>

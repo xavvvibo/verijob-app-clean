@@ -213,6 +213,16 @@ export default function CvUploadAndParse() {
   const exps = Array.isArray(job?.result_json?.experiences) ? job?.result_json?.experiences : [];
   const education = Array.isArray(job?.result_json?.education) ? job?.result_json?.education : [];
   const warnings = Array.isArray(job?.result_json?.meta?.warnings) ? job?.result_json?.meta?.warnings : [];
+  const statusLabel =
+    job?.status === "queued"
+      ? "En cola"
+      : job?.status === "processing"
+        ? "Procesando"
+        : job?.status === "succeeded"
+          ? "Completado"
+          : job?.status === "failed"
+            ? "Fallido"
+            : "—";
 
   return (
     <div className="space-y-3">
@@ -243,9 +253,9 @@ export default function CvUploadAndParse() {
           <div className="flex items-center justify-between gap-4">
             <div className="text-sm">
               <span className="font-medium">Estado:</span>{" "}
-              <span className="uppercase">{job.status}</span>
+              <span>{statusLabel}</span>
             </div>
-            {jobId && <div className="text-xs text-slate-500 break-all">job_id: {jobId}</div>}
+            {jobId && <div className="text-xs text-slate-500 break-all">ID del proceso: {jobId}</div>}
           </div>
 
           {job.status === "succeeded" && (

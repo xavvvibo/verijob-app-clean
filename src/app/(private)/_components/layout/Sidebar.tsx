@@ -107,7 +107,7 @@ function getSections(role: Role): Section[] {
         title: "Gestión",
         items: [
           { href: "/company/team", label: "Equipo & Permisos" },
-          { href: "/company/billing", label: "Subscription" },
+          { href: "/company/billing", label: "Suscripción" },
           { href: "/company/settings", label: "Ajustes" },
           { href: "/company/help", label: "Ayuda" },
         ],
@@ -123,6 +123,7 @@ function getSections(role: Role): Section[] {
       title: "Candidato",
       items: [
         { href: "/candidate/overview", label: "Inicio" },
+        { href: "/candidate/profile", label: "Perfil" },
         { href: "/candidate/experiences", label: "Experiencias" },
         { href: "/candidate/education", label: "Educación" },
         { href: "/candidate/achievements", label: "Logros" },
@@ -134,7 +135,7 @@ function getSections(role: Role): Section[] {
     {
       title: "Cuenta",
       items: [
-        { href: "/candidate/subscription", label: "Subscription" },
+        { href: "/candidate/subscription", label: "Suscripción" },
         { href: "/candidate/settings", label: "Ajustes" },
         { href: "/candidate/help", label: "Ayuda" },
       ],
