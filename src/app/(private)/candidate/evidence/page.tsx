@@ -8,10 +8,18 @@ export const revalidate = 0;
 
 function toneForStatus(s?: string) {
   const v = (s || "").toLowerCase();
-  if (v.includes("approved") || v.includes("verified")) return "ok";
-  if (v.includes("rejected")) return "err";
-  if (v.includes("pending") || v.includes("review")) return "warn";
-  return "neutral";
+  if (v.includes("verified") || v.includes("approved")) return "accepted";
+  if (v.includes("rejected")) return "rejected";
+  if (v.includes("clarif") || v.includes("modified")) return "needs_clarification";
+  return "processing";
+}
+
+function labelForStatus(s?: string) {
+  const t = toneForStatus(s);
+  if (t === "accepted") return "accepted";
+  if (t === "rejected") return "rejected";
+  if (t === "needs_clarification") return "needs clarification";
+  return "processing";
 }
 
 export default async function CandidateEvidencePage() {
@@ -26,32 +34,39 @@ export default async function CandidateEvidencePage() {
     .single();
   if (!profile || !profile.onboarding_completed) redirect("/onboarding");
 
-  const { data: reqs } = await supabase
-    .from("verification_requests")
-    .select(
-      "id, status, submitted_at, resolved_at, created_at, employment_records (id, company_name_freeform, position, start_date, end_date, company_id), revoked_at, revoked_reason"
-    )
-    .eq("requested_by", au.user.id)
+  const { data: evidences } = await supabase
+    .from("evidences")
+    .select("id, verification_request_id, storage_path, created_at, verification_requests(status, employment_records(position, company_name_freeform))")
+    .eq("uploaded_by", au.user.id)
     .order("created_at", { ascending: false });
 
-  const items = (reqs || []).map((r: any) => {
-    const er = Array.isArray(r.employment_records) ? r.employment_records[0] : r.employment_records;
-    const status = r.status || "unknown";
-    
-  const statusVisible = ((r as any).revoked_at ? "revoked" : status);
-const tone = toneForStatus(statusVisible);
-    return { ...r, employment: er, tone, statusVisible };
+  const items = (evidences || []).map((r: any) => {
+    const vr = Array.isArray(r.verification_requests) ? r.verification_requests[0] : r.verification_requests;
+    const er = Array.isArray(vr?.employment_records) ? vr.employment_records[0] : vr?.employment_records;
+    const status = vr?.status || "processing";
+    const docName = String(r.storage_path || "documento").split("/").pop() || "documento";
+    return {
+      id: r.id,
+      document_name: docName,
+      experience: [er?.position, er?.company_name_freeform].filter(Boolean).join(" · ") || "Experiencia no vinculada",
+      status,
+      label: labelForStatus(status),
+      created_at: r.created_at,
+    };
   });
 
   return (
-    <DashboardShell title="Evidencias y verificaciones">
+    <DashboardShell title="Evidencias">
       <div className="space-y-4">
         <Card>
-          <CardTitle>Mis verificaciones</CardTitle>
+          <CardTitle>Documentos de verificación</CardTitle>
+          <div className="mt-2 text-sm text-gray-600">
+            Aquí solo se muestran documentos de verificación subidos para experiencias. El CV no aparece en este listado.
+          </div>
           <div className="mt-3 space-y-2">
             {items.length === 0 ? (
               <div className="text-sm text-gray-600">
-                Aún no has solicitado verificaciones.
+                Aún no has subido documentos de verificación.
               </div>
             ) : (
               items.map((it: any) => (
@@ -60,17 +75,11 @@ const tone = toneForStatus(statusVisible);
                   className="flex flex-col gap-1 rounded-lg border p-3"
                 >
                   <div className="flex flex-wrap items-center gap-2">
-                    <Badge>{it.statusVisible ?? it.status}</Badge>
-                    <div className="text-sm font-medium">
-                      {it.employment?.company_name_freeform || "Empresa"}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      {it.employment?.position || ""}
-                    </div>
+                    <Badge>{it.label}</Badge>
+                    <div className="text-sm font-medium">{it.document_name}</div>
                   </div>
-                  <div className="text-xs text-gray-600">
-                    Solicitud: {it.submitted_at || it.created_at || ""}
-                  </div>
+                  <div className="text-xs text-gray-600">Experiencia vinculada: {it.experience}</div>
+                  <div className="text-xs text-gray-600">Subido: {it.created_at || "—"}</div>
                 </div>
               ))
             )}

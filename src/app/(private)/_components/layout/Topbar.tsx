@@ -24,16 +24,10 @@ export default function Topbar({ role }: { role?: Role }) {
     return r === "company" ? "Empresa" : "Candidato";
   }, [pathname, r]);
 
-  const contextHref = useMemo(() => {
-    if (r === "owner") return "/owner/overview";
-    if (r === "company") return "/company/dashboard";
-    return "/candidate/overview";
-  }, [r]);
-
-  const contextCtaLabel = useMemo(() => {
-    if (r === "owner") return "Ir al contexto owner";
-    if (r === "company") return "Ir al contexto empresa";
-    return "Ir al contexto candidato";
+  const userPlanLabel = useMemo(() => {
+    if (r === "owner") return "Owner";
+    if (r === "company") return "Company Access";
+    return "Candidate PRO";
   }, [r]);
 
   const [loggingOut, setLoggingOut] = useState(false);
@@ -68,19 +62,16 @@ export default function Topbar({ role }: { role?: Role }) {
         </div>
 
         <div className="flex items-center gap-2">
+          <div className="hidden md:inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-700">
+            {userPlanLabel}
+          </div>
+
           <a
             href="https://verijob.es"
             className="hidden sm:inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:opacity-90"
           >
             Web
           </a>
-
-          <Link
-            href={contextHref}
-            className="inline-flex rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-          >
-            {contextCtaLabel}
-          </Link>
 
           <button
             onClick={logout}

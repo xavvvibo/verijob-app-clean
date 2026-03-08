@@ -2,17 +2,19 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { vjEvents } from "@/lib/analytics";
 
 export default function NewVerificationClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
 
-  const [company, setCompany] = useState("");
-  const [position, setPosition] = useState("");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
+  const [company, setCompany] = useState(searchParams?.get("company") || "");
+  const [position, setPosition] = useState(searchParams?.get("position") || "");
+  const [start, setStart] = useState(searchParams?.get("start") || "");
+  const [end, setEnd] = useState(searchParams?.get("end") || "");
   const [isCurrent, setIsCurrent] = useState(false);
 
   const [saving, setSaving] = useState(false);
@@ -48,7 +50,7 @@ export default function NewVerificationClient() {
         throw new Error(`${json?.error || "No se pudo crear la verificación"}${dbg ? "\n\n" + dbg : ""}`);
       }
 
-      const vid = json?.verification_id as string | undefined;
+      const vid = (json?.verification_request_id || json?.verification_id) as string | undefined;
       if (!vid) throw new Error("Respuesta inválida (sin verification_id)");
 
       vjEvents.verification_created(vid);

@@ -100,7 +100,6 @@ function getSections(role: Role): Section[] {
         items: [
           { href: "/company/dashboard", label: "Inicio" },
           { href: "/company/requests", label: "Solicitudes" },
-          { href: "/company/reuse", label: "Reutilización" },
           { href: "/company/candidates", label: "Candidatos" },
         ],
       },
@@ -108,7 +107,7 @@ function getSections(role: Role): Section[] {
         title: "Gestión",
         items: [
           { href: "/company/team", label: "Equipo & Permisos" },
-          { href: "/company/billing", label: "Facturación" },
+          { href: "/company/billing", label: "Subscription" },
           { href: "/company/settings", label: "Ajustes" },
           { href: "/company/help", label: "Ayuda" },
         ],
@@ -124,7 +123,9 @@ function getSections(role: Role): Section[] {
       title: "Candidato",
       items: [
         { href: "/candidate/overview", label: "Inicio" },
-        { href: "/candidate/experience", label: "Experiencias" },
+        { href: "/candidate/experiences", label: "Experiencias" },
+        { href: "/candidate/education", label: "Educación" },
+        { href: "/candidate/achievements", label: "Logros" },
         { href: "/candidate/evidence", label: "Evidencias" },
         { href: "/candidate/verifications", label: "Verificaciones" },
         { href: "/candidate/share", label: "Compartir perfil" },
@@ -133,6 +134,7 @@ function getSections(role: Role): Section[] {
     {
       title: "Cuenta",
       items: [
+        { href: "/candidate/subscription", label: "Subscription" },
         { href: "/candidate/settings", label: "Ajustes" },
         { href: "/candidate/help", label: "Ayuda" },
       ],

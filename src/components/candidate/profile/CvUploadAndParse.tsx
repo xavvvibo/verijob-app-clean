@@ -45,7 +45,7 @@ export default function CvUploadAndParse() {
       } else {
         setMsg(
           section === "experiences"
-            ? `Propuesta aplicada: ${imported} experiencias importadas. Ya puedes revisarlas en /candidate/experience.`
+            ? `Propuesta aplicada: ${imported} experiencias importadas con estado no verificado. Ya puedes revisarlas en /candidate/experience.`
             : `Propuesta aplicada: ${imported} formaciones importadas. Ya están disponibles en tu perfil.`
         );
         router.refresh();
