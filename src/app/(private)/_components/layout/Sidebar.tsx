@@ -125,7 +125,7 @@ function getSections(role: Role): Section[] {
       items: [
         { href: "/candidate/overview", label: "Inicio" },
         { href: "/candidate/profile", label: "Perfil" },
-        { href: "/candidate/experiences", label: "Experiencias" },
+        { href: "/candidate/experience", label: "Experiencias" },
         { href: "/candidate/education", label: "Educación" },
         { href: "/candidate/achievements", label: "Idiomas y logros" },
         { href: "/candidate/evidence", label: "Evidencias" },

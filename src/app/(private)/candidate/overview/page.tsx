@@ -374,7 +374,7 @@ export default function CandidateOverview() {
                     Perfil
                   </Link>
                   <Link
-                    href="/candidate/experiences"
+                    href="/candidate/experience"
                     className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
                   >
                     Experiencias
@@ -439,7 +439,7 @@ export default function CandidateOverview() {
                 ? `${experienceCount} experiencias detectadas. Las importadas desde CV se muestran como “Sin verificar” hasta tener validación real.`
                 : "Aún no hay experiencias cargadas. Sube tu CV o añade experiencias manualmente."
             }
-            href="/candidate/experiences"
+            href="/candidate/experience"
             cta="Gestionar"
           />
           <SummaryCard

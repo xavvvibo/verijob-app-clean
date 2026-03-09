@@ -52,6 +52,17 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
     setMessage(null);
   }
 
+  function normalizeDateForSave(value: string | null) {
+    const raw = String(value || "").trim();
+    if (!raw) return null;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+    const ym = raw.match(/^(\d{4})-(\d{2})$/);
+    if (ym) return `${ym[1]}-${ym[2]}-01`;
+    const dmy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+    return raw;
+  }
+
   async function saveRow(id: string) {
     const row = rows.find((x) => x.id === id);
     if (!row) return;
@@ -62,8 +73,8 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
     const payload = {
       role_title: String(row.role_title || "").trim() || null,
       company_name: String(row.company_name || "").trim() || null,
-      start_date: String(row.start_date || "").trim() || null,
-      end_date: String(row.end_date || "").trim() || null,
+      start_date: normalizeDateForSave(row.start_date || null),
+      end_date: normalizeDateForSave(row.end_date || null),
       description: String(row.description || "").trim() || null,
       updated_at: new Date().toISOString(),
     };

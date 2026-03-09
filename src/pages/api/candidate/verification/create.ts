@@ -39,23 +39,52 @@ async function tryInsertEmploymentRecord(
     { ...baseRecord },
   ];
 
+  const parseMissingColumn = (message: string): string | null => {
+    const full = message.match(/column\s+"([^"]+)"\s+of relation\s+"employment_records"\s+does not exist/i);
+    if (full?.[1]) return full[1];
+    const short = message.match(/column\s+([a-zA-Z0-9_]+)\s+does not exist/i);
+    return short?.[1] || null;
+  };
+
   let lastError: any = null;
 
-  for (const payload of variants) {
-    const { data, error } = await supabase
-      .from("employment_records")
-      .insert(payload)
-      .select("id, company_id")
-      .single();
+  for (const seedPayload of variants) {
+    let payload: Record<string, any> = { ...seedPayload };
 
-    if (!error) return { data, error: null };
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const { data, error } = await supabase
+        .from("employment_records")
+        .insert(payload)
+        .select("id, company_id")
+        .single();
 
-    lastError = error;
-    const msg = String(error?.message || "").toLowerCase();
-    const isUnknownColumnCandidate = msg.includes("column") && msg.includes("candidate_id");
-    const isUnknownColumnUser = msg.includes("column") && msg.includes("user_id");
-    if (isUnknownColumnCandidate || isUnknownColumnUser) {
-      continue;
+      if (!error) return { data, error: null };
+      lastError = error;
+
+      const message = String(error?.message || "");
+      const lower = message.toLowerCase();
+
+      // Legacy schemas can miss recently added columns. Remove unknown columns and retry.
+      const missingColumn = parseMissingColumn(message);
+      if (missingColumn && Object.prototype.hasOwnProperty.call(payload, missingColumn)) {
+        const { [missingColumn]: _drop, ...rest } = payload;
+        payload = rest;
+        continue;
+      }
+
+      // Some legacy schemas require end_date to be non-null.
+      if (lower.includes("null value in column") && lower.includes("end_date") && !payload.end_date) {
+        payload = { ...payload, end_date: payload.start_date || new Date().toISOString().slice(0, 10) };
+        continue;
+      }
+
+      // If RLS expects candidate ownership, ensure candidate_id exists in payload.
+      if (lower.includes("row-level security") && !payload.candidate_id) {
+        payload = { ...payload, candidate_id: userId };
+        continue;
+      }
+
+      break;
     }
   }
 
@@ -127,7 +156,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     let erErr: any = null;
     ({ data: er, error: erErr } = await tryInsertEmploymentRecord(supabase, baseRecord, user.id));
 
-    if (erErr) return json(res, 400, { error: "Insert employment_records failed", details: erErr.message });
+    if (erErr) {
+      return json(res, 400, {
+        error: "Insert employment_records failed",
+        details: erErr.message,
+        hint: "Revisa columnas requeridas de employment_records y formato de fechas.",
+      });
+    }
 
     const { data: vr, error: vrErr } = await supabase
       .from("verification_requests")
