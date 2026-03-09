@@ -79,7 +79,8 @@ function getSections(role: Role): Section[] {
       {
         title: "Growth & Revenue",
         items: [
-          { href: "/owner/marketing", label: "Marketing & Growth" },
+          { href: "/owner/growth", label: "Growth" },
+          { href: "/owner/marketing", label: "Marketing" },
           { href: "/owner/monetization", label: "Monetización" },
         ],
       },
@@ -102,6 +103,7 @@ function getSections(role: Role): Section[] {
         title: "Empresa",
         items: [
           { href: "/company", label: "Dashboard" },
+          { href: "/company/profile", label: "Perfil de empresa" },
           { href: "/company/requests", label: "Solicitudes" },
           { href: "/company/reuse", label: "Reutilización" },
           { href: "/company/candidates", label: "Candidatos" },
