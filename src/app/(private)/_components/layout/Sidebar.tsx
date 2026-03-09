@@ -11,7 +11,9 @@ type Section = { title: string; items: Item[] };
 function isActive(pathname: string, href: string) {
   if (href === "/dashboard") return pathname === "/dashboard";
   if (href === "/candidate") return pathname === "/candidate" || pathname.startsWith("/candidate/");
-  if (href === "/company") return pathname === "/company" || pathname.startsWith("/company/");
+  if (href === "/company") {
+    return pathname === "/company" || pathname === "/company/dashboard" || pathname === "/company/dashboard-v4";
+  }
   if (href === "/owner") return pathname === "/owner" || pathname.startsWith("/owner/");
   return pathname === href || pathname.startsWith(href + "/");
 }
@@ -98,8 +100,9 @@ function getSections(role: Role): Section[] {
       {
         title: "Empresa",
         items: [
-          { href: "/company/dashboard", label: "Inicio" },
+          { href: "/company", label: "Dashboard" },
           { href: "/company/requests", label: "Solicitudes" },
+          { href: "/company/reuse", label: "Reutilización" },
           { href: "/company/candidates", label: "Candidatos" },
         ],
       },

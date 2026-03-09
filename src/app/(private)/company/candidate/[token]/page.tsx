@@ -73,7 +73,7 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
 
         {status === 403 && (
           <div className="mt-4 flex gap-3">
-            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/dashboard">
+            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company">
               Cambiar a empresa
             </a>
             <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/dashboard">

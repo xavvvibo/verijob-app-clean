@@ -117,10 +117,6 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
           <a className="text-sm underline text-blue-700" href={`/api/verification/${id}/summary`} target="_blank" rel="noreferrer">
             Ver JSON resumen
           </a>
-
-          <Link className="text-sm underline text-blue-700" href={`/company/verification/${id}/evidences`}>
-            Ver evidencias
-          </Link>
         </div>
       </div>
     </div>
