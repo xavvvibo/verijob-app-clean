@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createClient as createSbAdmin } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/server";
+import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 
 function extractIdFromUrl(req: Request): string | null {
   try {
@@ -129,6 +130,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   if (!updated) {
     return NextResponse.json({ error: "Verification not found", route_version: ROUTE_VERSION }, { status: 404 });
   }
+
+  await recalculateAndPersistCandidateTrustScore(String(user.id)).catch(() => {});
 
   return NextResponse.json({ ok: true, data: updated, route_version: ROUTE_VERSION }, { status: 200 });
 }

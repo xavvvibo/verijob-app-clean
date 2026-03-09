@@ -28,6 +28,78 @@ function planFeatures(label: string) {
   return ["Panel básico", "Solicitudes en modo limitado", "Visibilidad del valor premium para upgrade"];
 }
 
+function verificationStatusLabel(statusRaw: unknown) {
+  const status = String(statusRaw || "").toLowerCase();
+  if (status === "verified_paid") return "Empresa verificada por suscripción";
+  if (status === "verified_document") return "Empresa verificada por documentación";
+  return "Empresa no verificada";
+}
+
+function verificationStatusClass(statusRaw: unknown) {
+  const status = String(statusRaw || "").toLowerCase();
+  if (status === "verified_paid") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "verified_document") return "border-blue-200 bg-blue-50 text-blue-800";
+  return "border-amber-200 bg-amber-50 text-amber-800";
+}
+
+async function resolveCompanyVerificationStatus(
+  supabase: any,
+  companyId: string,
+  subscriptionStatusRaw: unknown
+) {
+  const subscriptionStatus = String(subscriptionStatusRaw || "").toLowerCase();
+  if (subscriptionStatus === "active" || subscriptionStatus === "trialing") return "verified_paid";
+
+  const companyRes = await supabase
+    .from("companies")
+    .select("company_verification_status")
+    .eq("id", companyId)
+    .maybeSingle();
+
+  if (!companyRes.error && companyRes.data?.company_verification_status) {
+    return String(companyRes.data.company_verification_status);
+  }
+
+  const profileRes = await supabase
+    .from("company_profiles")
+    .select("company_verification_status")
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  if (!profileRes.error && profileRes.data?.company_verification_status) {
+    return String(profileRes.data.company_verification_status);
+  }
+
+  return "unverified";
+}
+
+function computeProfileCompleteness(profile: any) {
+  if (!profile) return 0;
+  const checks = [
+    Boolean(profile.legal_name),
+    Boolean(profile.trade_name),
+    Boolean(profile.tax_id),
+    Boolean(profile.website_url),
+    Boolean(profile.contact_email),
+    Boolean(profile.contact_phone),
+    Boolean(profile.country),
+    Boolean(profile.province),
+    Boolean(profile.city),
+    Boolean(profile.fiscal_address),
+    Boolean(profile.sector),
+    Boolean(profile.subsector),
+    Boolean(profile.primary_activity),
+    Boolean(profile.employee_count_range),
+    Boolean(profile.annual_hiring_volume_range),
+    Array.isArray(profile.common_roles_hired) && profile.common_roles_hired.length > 0,
+    Array.isArray(profile.common_contract_types) && profile.common_contract_types.length > 0,
+    Array.isArray(profile.common_workday_types) && profile.common_workday_types.length > 0,
+    Array.isArray(profile.common_languages_required) && profile.common_languages_required.length > 0,
+    Array.isArray(profile.hiring_zones) && profile.hiring_zones.length > 0,
+  ];
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+}
+
 export default async function CompanyBillingPage() {
   const supabase = await createClient();
   const {
@@ -43,11 +115,29 @@ export default async function CompanyBillingPage() {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("active_company_id")
+    .eq("id", user.id)
+    .maybeSingle();
+  const { data: companyProfile } = profile?.active_company_id
+    ? await supabase
+        .from("company_profiles")
+        .select("*")
+        .eq("company_id", profile.active_company_id)
+        .maybeSingle()
+    : ({ data: null } as any);
 
   const label = planLabel(sub?.plan);
   const status = String(sub?.status || "free").toLowerCase();
   const isActive = status === "active" || status === "trialing";
   const features = planFeatures(label);
+  const verificationStatus = profile?.active_company_id
+    ? await resolveCompanyVerificationStatus(supabase, profile.active_company_id, status)
+    : "unverified";
+  const profileCompletenessScore = Number(
+    companyProfile?.profile_completeness_score ?? computeProfileCompleteness(companyProfile)
+  );
 
   return (
     <div className="space-y-6">
@@ -78,6 +168,18 @@ export default async function CompanyBillingPage() {
               <dt className="text-slate-500">Cancelación programada</dt>
               <dd className="font-semibold text-slate-900">{sub?.cancel_at_period_end ? "Sí" : "No"}</dd>
             </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-slate-500">Estado de empresa</dt>
+              <dd>
+                <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${verificationStatusClass(verificationStatus)}`}>
+                  {verificationStatusLabel(verificationStatus)}
+                </span>
+              </dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-slate-500">Perfil de empresa</dt>
+              <dd className="font-semibold text-slate-900">{profileCompletenessScore}% completado</dd>
+            </div>
           </dl>
 
           <div className="mt-5 flex flex-wrap gap-3">
@@ -107,6 +209,19 @@ export default async function CompanyBillingPage() {
               Activa un plan para ampliar candidatos consultables, ritmo de revisión y capacidad de equipo.
             </div>
           ) : null}
+          {String(verificationStatus).toLowerCase() === "unverified" ? (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-white p-4 text-sm text-slate-700">
+              Verifica tu empresa para aumentar la credibilidad de tus verificaciones.
+            </div>
+          ) : null}
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+            <p className="font-semibold text-slate-900">Modelo de estados</p>
+            <ul className="mt-2 space-y-1">
+              <li>• Empresa free no verificada: acceso base, estado no verificado.</li>
+              <li>• Empresa free verificada: credibilidad documental sin plan activo.</li>
+              <li>• Empresa con plan activo: estado verificada por suscripción.</li>
+            </ul>
+          </div>
         </aside>
       </section>
     </div>

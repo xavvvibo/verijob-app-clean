@@ -19,6 +19,13 @@ type VerificationRow = {
   evidence_count: number | null;
 };
 
+type TrustBreakdown = {
+  verification?: number;
+  evidence?: number;
+  consistency?: number;
+  reuse?: number;
+};
+
 function clamp(n: number, a = 0, b = 100) {
   return Math.max(a, Math.min(b, n));
 }
@@ -264,6 +271,7 @@ export default function CandidateOverview() {
   const [candidateProfile, setCandidateProfile] = useState<CandidateProfilePayload>(null);
   const [verifications, setVerifications] = useState<VerificationRow[]>([]);
   const [trustScore, setTrustScore] = useState<number | null>(null);
+  const [trustBreakdown, setTrustBreakdown] = useState<TrustBreakdown>({});
   const [experienceCount, setExperienceCount] = useState<number>(0);
 
   useEffect(() => {
@@ -305,6 +313,7 @@ export default function CandidateOverview() {
         setVerifications((verificationsRes.data || []) as VerificationRow[]);
         setCandidateProfile(profileApiRes?.profile ?? null);
         setTrustScore(typeof trustRes?.trust_score === "number" ? trustRes.trust_score : null);
+        setTrustBreakdown((trustRes?.breakdown || {}) as TrustBreakdown);
         setExperienceCount(Number(experienceRes.count || 0));
         setError(null);
       } catch (e: any) {
@@ -417,6 +426,19 @@ export default function CandidateOverview() {
         <Kpi label="Verificaciones" value={metrics.total} />
         <Kpi label="Aprobadas" value={metrics.verified} />
         <Kpi label="Evidencias" value={metrics.evidences} />
+      </section>
+
+      <section className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-gray-900">Trust Score: {metrics.score} / 100</h2>
+          <p className="text-xs text-gray-500">Desglose del cálculo</p>
+        </div>
+        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <Kpi label="Verificaciones empresariales" value={`${Number(trustBreakdown.verification ?? 0)} / 40`} />
+          <Kpi label="Evidencias documentales" value={`${Number(trustBreakdown.evidence ?? 0)} / 30`} />
+          <Kpi label="Coherencia del historial" value={`${Number(trustBreakdown.consistency ?? 0)} / 15`} />
+          <Kpi label="Reutilización por empresas" value={`${Number(trustBreakdown.reuse ?? 0)} / 15`} />
+        </div>
       </section>
 
       <section className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">

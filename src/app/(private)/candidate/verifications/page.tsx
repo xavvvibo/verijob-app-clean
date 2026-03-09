@@ -83,7 +83,18 @@ export default async function CandidateVerificationsPage() {
       <div className="mt-6 space-y-3">
         {(rows || []).length === 0 ? (
           <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm text-gray-600">
-            Aún no has enviado solicitudes de verificación.
+            <p>
+              Para verificar tu perfil primero debes añadir experiencias laborales.
+            </p>
+            <p className="mt-2">
+              Cuando tengas una experiencia podrás solicitar a la empresa que confirme que trabajaste allí.
+            </p>
+            <Link
+              href="/candidate/experience"
+              className="mt-4 inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+            >
+              Ir a experiencias
+            </Link>
           </div>
         ) : (
           (rows || []).map((r: any) => {

@@ -50,6 +50,82 @@ async function resolveCompanyName(supabase: any, companyId: string): Promise<str
   return null;
 }
 
+function asFilled(value: unknown) {
+  if (value === null || value === undefined) return false;
+  return String(value).trim().length > 0;
+}
+
+function computeProfileCompleteness(profile: any) {
+  if (!profile) return 0;
+  const checks = [
+    asFilled(profile.legal_name),
+    asFilled(profile.trade_name),
+    asFilled(profile.tax_id),
+    asFilled(profile.website_url),
+    asFilled(profile.contact_email),
+    asFilled(profile.contact_phone),
+    asFilled(profile.country),
+    asFilled(profile.province),
+    asFilled(profile.city),
+    asFilled(profile.fiscal_address),
+    asFilled(profile.sector),
+    asFilled(profile.subsector),
+    asFilled(profile.primary_activity),
+    asFilled(profile.employee_count_range),
+    asFilled(profile.annual_hiring_volume_range),
+    Array.isArray(profile.common_roles_hired) && profile.common_roles_hired.length > 0,
+    Array.isArray(profile.common_contract_types) && profile.common_contract_types.length > 0,
+    Array.isArray(profile.common_workday_types) && profile.common_workday_types.length > 0,
+    Array.isArray(profile.common_languages_required) && profile.common_languages_required.length > 0,
+    Array.isArray(profile.hiring_zones) && profile.hiring_zones.length > 0,
+    asFilled(profile.market_segment),
+    asFilled(profile.business_description),
+    asFilled(profile.verification_document_type),
+    asFilled(profile.verification_document_uploaded_at),
+  ];
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
+}
+
+function normalizeCompanyVerificationStatus(input: unknown) {
+  const value = String(input || "").toLowerCase();
+  if (value === "verified_document") return "verified_document";
+  if (value === "verified_paid") return "verified_paid";
+  return "unverified";
+}
+
+async function resolveCompanyVerificationStatus(
+  supabase: any,
+  companyId: string,
+  subscriptionStatusRaw: unknown
+): Promise<"unverified" | "verified_document" | "verified_paid"> {
+  const subscriptionStatus = String(subscriptionStatusRaw || "").toLowerCase();
+  if (subscriptionStatus === "active" || subscriptionStatus === "trialing") {
+    return "verified_paid";
+  }
+
+  const companyRes = await supabase
+    .from("companies")
+    .select("company_verification_status")
+    .eq("id", companyId)
+    .maybeSingle();
+
+  if (!companyRes.error && companyRes.data?.company_verification_status) {
+    return normalizeCompanyVerificationStatus(companyRes.data.company_verification_status) as any;
+  }
+
+  const profileRes = await supabase
+    .from("company_profiles")
+    .select("company_verification_status")
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  if (!profileRes.error && profileRes.data?.company_verification_status) {
+    return normalizeCompanyVerificationStatus(profileRes.data.company_verification_status) as any;
+  }
+
+  return "unverified";
+}
+
 export async function GET() {
   try {
     const supabase = await createClient();
@@ -120,11 +196,22 @@ export async function GET() {
 
     if ((data as any)?.error) return NextResponse.json({ ...(data as any), route_version: ROUTE_VERSION }, { status: 400 });
 
+    const { data: profileData } = await supabase
+      .from("company_profiles")
+      .select("*")
+      .eq("company_id", activeCompanyId)
+      .maybeSingle();
+
     const companyName = await resolveCompanyName(supabase, activeCompanyId);
     const membershipRole = memberRes?.data?.role ? String(memberRes.data.role) : null;
     const subscriptionPlan = subRes?.data?.plan ? String(subRes.data.plan) : null;
     const subscriptionStatus = subRes?.data?.status ? String(subRes.data.status) : "free";
     const currentPeriodEnd = subRes?.data?.current_period_end || null;
+    const companyVerificationStatus = await resolveCompanyVerificationStatus(
+      supabase,
+      activeCompanyId,
+      subscriptionStatus
+    );
 
     // No debug fields: keep only what UI needs
     const payload = {
@@ -134,6 +221,8 @@ export async function GET() {
       plan: subscriptionPlan || "company_free",
       plan_label: normalizePlanLabel(subscriptionPlan),
       subscription_status: subscriptionStatus,
+      company_verification_status: companyVerificationStatus,
+      profile_completeness_score: Number(profileData?.profile_completeness_score ?? computeProfileCompleteness(profileData)),
       current_period_end: currentPeriodEnd,
       kpis: (data as any)?.kpis || null,
       route_version: ROUTE_VERSION,

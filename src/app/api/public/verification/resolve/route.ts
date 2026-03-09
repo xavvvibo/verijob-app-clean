@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 
 type ResolvePayload = {
   token?: string;
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
 
     const { data: requestRow, error: requestErr } = await admin
       .from("verification_requests")
-      .select("id,employment_record_id,company_id,status,external_token,external_token_expires_at,external_resolved,external_email_target,company_name_target,request_context")
+      .select("id,requested_by,employment_record_id,company_id,status,external_token,external_token_expires_at,external_resolved,external_email_target,company_name_target,request_context")
       .eq("external_token", token)
       .maybeSingle();
 
@@ -144,6 +145,10 @@ export async function POST(req: Request) {
       if (updateEmploymentErr) {
         return json(400, { error: "employment_update_failed", detail: updateEmploymentErr.message });
       }
+    }
+
+    if (requestRow.requested_by) {
+      await recalculateAndPersistCandidateTrustScore(String(requestRow.requested_by)).catch(() => {});
     }
 
     return json(200, {

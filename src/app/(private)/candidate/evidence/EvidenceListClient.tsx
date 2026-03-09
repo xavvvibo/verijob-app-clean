@@ -43,15 +43,38 @@ function writeHiddenIds(ids: Set<string>) {
 
 export default function EvidenceListClient({ initialItems }: { initialItems: EvidenceItem[] }) {
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => readHiddenIds());
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const visibleItems = useMemo(
-    () => initialItems.filter((item) => !hiddenIds.has(item.id)),
-    [initialItems, hiddenIds]
+    () => initialItems.filter((item) => !hiddenIds.has(item.id) && !removedIds.has(item.id)),
+    [initialItems, hiddenIds, removedIds]
   );
+
+  async function deleteEvidence(id: string) {
+    const ok = window.confirm(
+      "¿Seguro que quieres eliminar esta evidencia de tu panel?\n\nEl registro interno se conservará para trazabilidad."
+    );
+    if (!ok) return;
+
+    setBusyId(id);
+    try {
+      const res = await fetch(`/api/candidate/evidence/${encodeURIComponent(id)}`, { method: "DELETE" });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body?.error || "No se pudo eliminar la evidencia.");
+      }
+      setRemovedIds((prev) => new Set(prev).add(id));
+    } catch (error: any) {
+      alert(error?.message || "No se pudo eliminar la evidencia.");
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   function hideEvidence(id: string) {
     const ok = window.confirm(
-      "¿Seguro que quieres eliminar esta evidencia de tu panel?\n\nEl registro interno se conservará para trazabilidad."
+      "¿Seguro que quieres ocultar esta evidencia de tu panel?\n\nEl registro interno se conservará para trazabilidad."
     );
     if (!ok) return;
 
@@ -89,10 +112,11 @@ export default function EvidenceListClient({ initialItems }: { initialItems: Evi
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
-                    onClick={() => hideEvidence(it.id)}
+                    onClick={() => void deleteEvidence(it.id)}
+                    disabled={busyId === it.id}
                     className="inline-flex rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50"
                   >
-                    Eliminar evidencia
+                    {busyId === it.id ? "Eliminando..." : "Eliminar evidencia"}
                   </button>
                   <button
                     type="button"

@@ -325,10 +325,11 @@ function Stat({
 }
 
 function getTrustLabel(score: number) {
-  if (score >= 80) return "Credibilidad alta";
-  if (score >= 60) return "Credibilidad sólida";
-  if (score >= 40) return "Credibilidad media";
-  return "Credibilidad inicial";
+  if (score >= 90) return "Very High";
+  if (score >= 75) return "High";
+  if (score >= 55) return "Solid";
+  if (score >= 35) return "Basic";
+  return "Low";
 }
 
 function getTrustInterpretation(score: number) {

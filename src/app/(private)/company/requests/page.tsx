@@ -196,7 +196,15 @@ export default async function CompanyRequestsPage({
       <section className="rounded-3xl border border-slate-200 bg-white shadow-sm">
         {filtered.length === 0 ? (
           <div className="p-8 text-center text-sm text-slate-600">
-            No hay solicitudes en este estado. Cuando entren nuevas verificaciones, aparecerán aquí.
+            <p>
+              Cuando un candidato solicite verificar una experiencia laboral en tu empresa, aparecerá aquí.
+            </p>
+            <p className="mt-2">
+              Podrás confirmar o rechazar la experiencia en menos de 30 segundos.
+            </p>
+            <p className="mt-2 font-medium text-slate-700">
+              Verificar experiencias es gratuito.
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">

@@ -3,6 +3,7 @@ import { randomUUID } from "crypto";
 import { createPagesRouteClient } from "@/utils/supabase/pages";
 import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
 import { buildExternalExperienceVerificationEmail } from "@/lib/email/templates/externalExperienceVerification";
+import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 
 const ROUTE_VERSION = "candidate-verification-create-v6-experience-request-flow";
 
@@ -25,6 +26,82 @@ function normalizeDateInput(value: unknown): string | null {
   const y = raw.match(/^(\d{4})$/);
   if (y) return `${y[1]}-01-01`;
   return null;
+}
+
+function companyPlaceholderName(companyName: string) {
+  return `Pendiente de registro · ${companyName}`;
+}
+
+async function findCompanyByName(supabase: any, companyName: string): Promise<string | null> {
+  const name = String(companyName || "").trim();
+  if (!name) return null;
+
+  const probes: Array<Promise<any>> = [
+    supabase.from("companies").select("id").ilike("name", name).limit(1).maybeSingle(),
+    supabase.from("companies").select("id").ilike("trade_name", name).limit(1).maybeSingle(),
+    supabase.from("companies").select("id").ilike("legal_name", name).limit(1).maybeSingle(),
+  ];
+
+  for (const probe of probes) {
+    const { data, error } = await probe;
+    if (error) continue;
+    if (data?.id) return String(data.id);
+  }
+  return null;
+}
+
+async function ensurePlaceholderCompany(supabase: any, companyName: string): Promise<{ id: string | null; error?: string }> {
+  const normalized = String(companyName || "").trim();
+  if (!normalized) return { id: null, error: "company_name_freeform vacío" };
+
+  const placeholderName = companyPlaceholderName(normalized);
+  const existingByName = await findCompanyByName(supabase, placeholderName);
+  if (existingByName) return { id: existingByName };
+
+  const metadata = {
+    is_placeholder: true,
+    source: "verification_request",
+    source_version: ROUTE_VERSION,
+    original_company_name: normalized,
+  };
+
+  const seedPayloads: Array<Record<string, any>> = [
+    { name: placeholderName, company_verification_status: "unverified", metadata },
+    { name: placeholderName, metadata },
+    { legal_name: placeholderName, trade_name: normalized, metadata },
+    { name: placeholderName },
+    { legal_name: placeholderName, trade_name: normalized },
+  ];
+
+  const parseMissingColumn = (message: string): string | null => {
+    const full = message.match(/column\s+"([^"]+)"\s+of relation\s+"companies"\s+does not exist/i);
+    if (full?.[1]) return full[1];
+    const short = message.match(/column\s+([a-zA-Z0-9_]+)\s+does not exist/i);
+    return short?.[1] || null;
+  };
+
+  let lastError: any = null;
+  for (const seed of seedPayloads) {
+    let payload = { ...seed };
+    for (let i = 0; i < 8; i += 1) {
+      const { data, error } = await supabase.from("companies").insert(payload).select("id").single();
+      if (!error && data?.id) return { id: String(data.id) };
+      lastError = error;
+      const message = String(error?.message || "");
+      const missing = parseMissingColumn(message);
+      if (missing && Object.prototype.hasOwnProperty.call(payload, missing)) {
+        const { [missing]: _drop, ...rest } = payload;
+        payload = rest;
+        continue;
+      }
+      break;
+    }
+  }
+
+  const finalTry = await findCompanyByName(supabase, placeholderName);
+  if (finalTry) return { id: finalTry };
+
+  return { id: null, error: String(lastError?.message || "No se pudo resolver placeholder company_id") };
 }
 
 async function tryInsertEmploymentRecord(
@@ -137,12 +214,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .limit(1)
       .maybeSingle();
 
-    const targetCompanyId = (companyProfileByEmail as any)?.active_company_id
+    const companyIdFromEmailProfile = (companyProfileByEmail as any)?.active_company_id
       ? String((companyProfileByEmail as any).active_company_id)
       : null;
 
-    const requestStatus = targetCompanyId ? "requested" : "company_registered_pending";
+    const companyIdFromName = await findCompanyByName(supabase, company_name_freeform);
+    let targetCompanyId = companyIdFromEmailProfile || companyIdFromName;
+
+    if (!targetCompanyId) {
+      const placeholder = await ensurePlaceholderCompany(supabase, company_name_freeform);
+      if (!placeholder.id) {
+        return json(res, 400, {
+          error: "Resolve company_id failed",
+          details: placeholder.error || "No se pudo encontrar o crear company_id placeholder.",
+        });
+      }
+      targetCompanyId = placeholder.id;
+    }
+
+    const hasRegisteredReceiver = Boolean(companyIdFromEmailProfile);
+    const requestStatus = hasRegisteredReceiver ? "requested" : "company_registered_pending";
     const baseRecord: Record<string, any> = {
+      candidate_id: user.id,
+      company_id: targetCompanyId,
       company_name_freeform,
       position,
       start_date,
@@ -150,7 +244,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       verification_status: requestStatus,
       last_verification_requested_at: requestedAtIso,
     };
-    if (targetCompanyId) baseRecord.company_id = targetCompanyId;
 
     let er: any = null;
     let erErr: any = null;
@@ -175,13 +268,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         company_name_target: company_name_freeform,
         verification_channel: "email",
         requested_at: requestedAtIso,
-        external_token: targetCompanyId ? null : externalToken,
+        external_token: hasRegisteredReceiver ? null : externalToken,
         external_email_target: company_email,
-        external_token_expires_at: targetCompanyId ? null : externalTokenExpiresAt,
+        external_token_expires_at: hasRegisteredReceiver ? null : externalTokenExpiresAt,
         external_resolved: false,
         request_context: {
           experience_scope: "employment_record",
-          target_company_registered: Boolean(targetCompanyId),
+          target_company_registered: hasRegisteredReceiver,
+          company_id_resolution: {
+            from_profile_email: Boolean(companyIdFromEmailProfile),
+            from_company_name: Boolean(companyIdFromName),
+            placeholder_used: !companyIdFromEmailProfile && !companyIdFromName,
+          },
         },
       })
       .select("id")
@@ -202,7 +300,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .eq("user_id", user.id);
     }
 
-    const externalVerificationLink = targetCompanyId ? null : `${appUrl}/verify-experience/${externalToken}`;
+    const externalVerificationLink = hasRegisteredReceiver ? null : `${appUrl}/verify-experience/${externalToken}`;
     const emailTemplate = externalVerificationLink
       ? buildExternalExperienceVerificationEmail({ link: externalVerificationLink })
       : null;
@@ -223,11 +321,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         end_date,
         is_current,
         source_profile_experience_id,
-        company_registered: Boolean(targetCompanyId),
+        company_registered: hasRegisteredReceiver,
+        company_id_resolution: {
+          from_profile_email: Boolean(companyIdFromEmailProfile),
+          from_company_name: Boolean(companyIdFromName),
+          placeholder_used: !companyIdFromEmailProfile && !companyIdFromName,
+        },
         external_verification_link: externalVerificationLink,
         route_version: ROUTE_VERSION,
       },
     }).catch(() => {});
+
+    await recalculateAndPersistCandidateTrustScore(user.id).catch(() => {});
 
     return json(res, 200, {
       ok: true,

@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createPagesRouteClient } from "@/utils/supabase/pages";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 
 const ROUTE_VERSION = "reuse-pages-api-v1";
 
@@ -136,6 +137,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       return json(res, 400, { error: "reuse_insert_failed", details: insertErr.message });
+    }
+
+    const { data: requestOwner } = await svc
+      .from("verification_requests")
+      .select("requested_by")
+      .eq("id", verificationId)
+      .maybeSingle();
+    const candidateId = String((requestOwner as any)?.requested_by || "").trim();
+    if (candidateId) {
+      await recalculateAndPersistCandidateTrustScore(candidateId).catch(() => {});
     }
 
     return json(res, 200, { data: inserted, idempotent: false });

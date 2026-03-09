@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
+import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 
 type SetCompanyVerificationStatusInput = {
   verificationRequestId: string;
@@ -120,6 +121,16 @@ export async function setCompanyVerificationStatus(input: SetCompanyVerification
       })
       .eq("id", vr.employment_record_id);
     if (erErr) throw new Error(erErr.message);
+
+    const { data: employment } = await supabase
+      .from("employment_records")
+      .select("candidate_id")
+      .eq("id", vr.employment_record_id)
+      .maybeSingle();
+    const candidateId = String((employment as any)?.candidate_id || "").trim();
+    if (candidateId) {
+      await recalculateAndPersistCandidateTrustScore(candidateId).catch(() => {});
+    }
   }
 
   return { ok: true };

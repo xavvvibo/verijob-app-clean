@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createPagesRouteClient } from "@/utils/supabase/pages";
 import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
+import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 
 function json(res: NextApiResponse, status: number, body: any) {
   res.setHeader("Cache-Control", "no-store");
@@ -105,6 +106,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         file_sha256,
       },
     }).catch(() => {});
+
+    await recalculateAndPersistCandidateTrustScore(auth.user.id).catch(() => {});
 
     return json(res, 200, { ok: true, evidence: data, route: "/pages/api/candidate/evidence/confirm" });
   } catch (e: any) {

@@ -18,9 +18,25 @@ type DashboardPayload = {
   plan?: string;
   plan_label?: string;
   subscription_status?: string;
+  company_verification_status?: "unverified" | "verified_document" | "verified_paid" | string;
+  profile_completeness_score?: number;
   current_period_end?: string | null;
   kpis?: Kpis | null;
 };
+
+function verificationStatusLabel(statusRaw: unknown) {
+  const status = String(statusRaw || "").toLowerCase();
+  if (status === "verified_paid") return "Empresa verificada (plan activo)";
+  if (status === "verified_document") return "Empresa verificada por documentación";
+  return "Empresa no verificada";
+}
+
+function verificationStatusClass(statusRaw: unknown) {
+  const status = String(statusRaw || "").toLowerCase();
+  if (status === "verified_paid") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "verified_document") return "border-blue-200 bg-blue-50 text-blue-800";
+  return "border-amber-200 bg-amber-50 text-amber-800";
+}
 
 function formatDate(value?: string | null) {
   if (!value) return "No disponible";
@@ -113,6 +129,8 @@ export default function CompanyDashboard() {
   const roleLabel = payload?.membership_role ? String(payload.membership_role).toUpperCase() : "REVIEWER";
   const planLabel = payload?.plan_label || "Free";
   const subscriptionStatus = payload?.subscription_status || "free";
+  const verificationStatus = payload?.company_verification_status || "unverified";
+  const profileCompleteness = Number(payload?.profile_completeness_score ?? 0);
   const activePlan = isActiveSubscription(subscriptionStatus);
 
   const planSummary = useMemo(() => {
@@ -135,6 +153,22 @@ export default function CompanyDashboard() {
             <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">Rol: {roleLabel}</span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{planSummary}</span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">Perfil {profileCompleteness}% completado</span>
+              <span className={`rounded-full border px-3 py-1 font-semibold ${verificationStatusClass(verificationStatus)}`}>
+                {verificationStatusLabel(verificationStatus)}
+              </span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {profileCompleteness < 100 ? (
+                <a href="/company/profile" className="inline-flex rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100">
+                  Completar perfil de empresa
+                </a>
+              ) : null}
+              {String(verificationStatus).toLowerCase() === "unverified" ? (
+                <a href="/company/profile" className="inline-flex rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100">
+                  Verificar empresa
+                </a>
+              ) : null}
             </div>
           </div>
 
@@ -193,7 +227,15 @@ export default function CompanyDashboard() {
         </section>
       ) : null}
 
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
+        <ActionCard
+          title="Perfil de empresa"
+          subtitle="Actualiza datos fiscales, operativos y de contratación para aumentar credibilidad y segmentación."
+          ctaLabel="Editar perfil"
+          ctaHref="/company/profile"
+          secondaryLabel="Ajustes"
+          secondaryHref="/company/settings"
+        />
         <ActionCard
           title="Cola operativa"
           subtitle="Prioriza solicitudes pendientes y consulta el estado de cada verificación desde una única vista."

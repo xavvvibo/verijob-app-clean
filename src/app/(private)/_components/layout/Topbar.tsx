@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import CommandSearch from "@/components/global/CommandSearch";
 
 type Role = "candidate" | "company" | "owner" | string | null | undefined;
 
@@ -85,7 +86,9 @@ export default function Topbar({ role }: { role?: Role }) {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {r === "owner" ? <CommandSearch /> : null}
+
           <div className="hidden md:inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-700">
             {userPlanLabel}
           </div>
