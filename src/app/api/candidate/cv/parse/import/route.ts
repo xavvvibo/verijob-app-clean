@@ -35,20 +35,87 @@ function normalizeDateText(v: any): string | null {
   return db.slice(0, 7);
 }
 
-function expSig(row: any) {
-  const title = normalizeText(row?.title).toLowerCase();
-  const company = normalizeText(row?.company_name).toLowerCase();
-  const start = normalizeText(row?.start_date).toLowerCase();
-  const end = normalizeText(row?.end_date).toLowerCase();
+function collapseSpaces(v: string) {
+  return v.replace(/\s+/g, " ").trim();
+}
+
+function normalizedBase(v: any) {
+  return collapseSpaces(String(v || "").toLowerCase()).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+const COMPANY_SUFFIXES = new Set([
+  "sl",
+  "s.l",
+  "s l",
+  "sa",
+  "s.a",
+  "s a",
+  "slu",
+  "s.l.u",
+  "spain",
+  "espana",
+  "españa",
+  "sociedad limitada",
+  "sociedad anonima",
+]);
+
+function normalizeCompanyOrInstitution(v: any) {
+  const base = normalizedBase(v).replace(/[.,;:()]+/g, " ");
+  const parts = collapseSpaces(base).split(" ").filter(Boolean);
+  while (parts.length > 0 && COMPANY_SUFFIXES.has(parts[parts.length - 1])) {
+    parts.pop();
+  }
+  return parts.join(" ");
+}
+
+function normalizeRoleOrTitle(v: any) {
+  return collapseSpaces(normalizedBase(v).replace(/[.,;:()]+/g, " "));
+}
+
+function normalizeMonth(v: any) {
+  const s = normalizeText(v);
+  if (!s) return "";
+  const ym = s.match(/^(\d{4})-(\d{2})/);
+  if (ym) return `${ym[1]}-${ym[2]}`;
+  const y = s.match(/^(\d{4})$/);
+  if (y) return `${y[1]}-01`;
+  return s.toLowerCase();
+}
+
+function expExactSig(row: any) {
+  const title = normalizeRoleOrTitle(row?.role_title || row?.title);
+  const company = normalizeCompanyOrInstitution(row?.company_name || row?.company);
+  const start = normalizeMonth(row?.start_date);
+  const end = normalizeMonth(row?.end_date);
   return `${title}|${company}|${start}|${end}`;
 }
 
-function eduSig(row: any) {
-  const title = normalizeText(row?.title).toLowerCase();
-  const institution = normalizeText(row?.institution).toLowerCase();
-  const start = normalizeText(row?.start_date).toLowerCase();
-  const end = normalizeText(row?.end_date).toLowerCase();
+function expPossibleSig(row: any) {
+  const title = normalizeRoleOrTitle(row?.role_title || row?.title);
+  const company = normalizeCompanyOrInstitution(row?.company_name || row?.company);
+  return `${title}|${company}`;
+}
+
+function eduExactSig(row: any) {
+  const title = normalizeRoleOrTitle(row?.title || row?.degree);
+  const institution = normalizeCompanyOrInstitution(row?.institution);
+  const start = normalizeMonth(row?.start_date || row?.start);
+  const end = normalizeMonth(row?.end_date || row?.end);
   return `${title}|${institution}|${start}|${end}`;
+}
+
+async function getTableColumns(supabase: any, table: string): Promise<Set<string>> {
+  try {
+    const { data, error } = await supabase
+      .from("information_schema.columns")
+      .select("column_name")
+      .eq("table_schema", "public")
+      .eq("table_name", table);
+    if (error || !Array.isArray(data)) return new Set();
+    return new Set(data.map((x: any) => String(x?.column_name || "").trim()).filter(Boolean));
+  } catch {
+    return new Set();
+  }
 }
 
 export async function POST(req: Request) {
@@ -64,6 +131,8 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const jobId = typeof body?.job_id === "string" ? body.job_id.trim() : "";
   const section = typeof body?.section === "string" ? body.section.trim() : "";
+  const selectedItems = Array.isArray(body?.selected_items) ? body.selected_items : null;
+
   if (!jobId || !section) {
     return NextResponse.json({ error: "missing_job_id_or_section" }, { status: 400 });
   }
@@ -81,116 +150,158 @@ export async function POST(req: Request) {
   const result = (job as any)?.result_json || {};
 
   if (section === "experiences") {
-    const extracted = Array.isArray(result?.experiences) ? result.experiences : [];
-    const candidateRows = extracted
+    const extractedAll = Array.isArray(result?.experiences) ? result.experiences : [];
+    const selectedRaw = selectedItems ?? extractedAll;
+    const totalDetected = extractedAll.length;
+    const selectedCount = selectedRaw.length;
+
+    const candidateRows = selectedRaw
       .map((x: any) => {
-        const title = toNullable(x?.role_title);
-        const company = toNullable(x?.company_name);
+        const role_title = toNullable(x?.role_title || x?.title);
+        const company_name = toNullable(x?.company_name || x?.company);
         const description = toNullable(x?.description);
-        if (!title && !company && !description) return null;
+        if (!role_title && !company_name && !description) return null;
         const startDate = normalizeDateForDb(x?.start_date);
         const endDate = normalizeDateForDb(x?.end_date);
         return {
           user_id: user.id,
-          title: title || "Experiencia",
-          company_name: company || "Empresa",
+          role_title: role_title || "Experiencia",
+          company_name: company_name || "Empresa",
           start_date: startDate,
           end_date: endDate,
-          is_current: looksCurrent(endDate),
           description,
+          matched_verification_id: null,
+          confidence: null,
         };
       })
       .filter(Boolean);
 
     if (candidateRows.length === 0) {
-      return NextResponse.json({ ok: true, imported: 0, section: "experiences" });
+      return NextResponse.json({
+        ok: true,
+        section: "experiences",
+        imported: 0,
+        duplicates_skipped: 0,
+        not_selected: Math.max(totalDetected - selectedCount, 0),
+      });
     }
 
-    const { data: existingRows, error: existingErr } = await supabase
-      .from("experiences")
-      .select("title,company_name,start_date,end_date")
-      .eq("user_id", user.id);
+    const [{ data: existingRows, error: existingErr }, profileExpColumns] = await Promise.all([
+      supabase
+        .from("profile_experiences")
+        .select("role_title,company_name,start_date,end_date")
+        .eq("user_id", user.id),
+      getTableColumns(supabase, "profile_experiences"),
+    ]);
+
     if (existingErr) {
-      return NextResponse.json({ error: "experiences_existing_fetch_failed", details: existingErr.message }, { status: 400 });
+      return NextResponse.json({ error: "profile_experiences_existing_fetch_failed", details: existingErr.message }, { status: 400 });
     }
 
-    const existingSet = new Set((existingRows || []).map((x: any) => expSig(x)));
+    const existingExact = new Set((existingRows || []).map((x: any) => expExactSig(x)));
+    const existingPossible = new Set((existingRows || []).map((x: any) => expPossibleSig(x)));
+    const importedAtIso = new Date().toISOString();
+
     const toInsert: any[] = [];
     for (const row of candidateRows as any[]) {
-      const sig = expSig(row);
-      if (existingSet.has(sig)) continue;
-      existingSet.add(sig);
-      toInsert.push(row);
+      const exact = expExactSig(row);
+      const possible = expPossibleSig(row);
+      if (existingExact.has(exact) || existingPossible.has(possible)) continue;
+      existingExact.add(exact);
+      existingPossible.add(possible);
+
+      const next: any = { ...row };
+      if (profileExpColumns.has("import_source")) next.import_source = "cv_parse";
+      if (profileExpColumns.has("import_job_id")) next.import_job_id = jobId;
+      if (profileExpColumns.has("imported_at")) next.imported_at = importedAtIso;
+      if (profileExpColumns.has("metadata")) {
+        next.metadata = {
+          import_source: "cv_parse",
+          import_job_id: jobId,
+          imported_at: importedAtIso,
+        };
+      }
+      toInsert.push(next);
     }
 
-    if (toInsert.length === 0) {
-      return NextResponse.json({ ok: true, imported: 0, section: "experiences", deduped: true });
-    }
-
-    const { error: insErr } = await supabase.from("experiences").insert(toInsert as any[]);
-    if (insErr) {
-      return NextResponse.json({ error: "experiences_insert_failed", details: insErr.message }, { status: 400 });
-    }
-
-    const profileRows = (candidateRows as any[]).map((row) => ({
-      user_id: user.id,
-      role_title: row.title,
-      company_name: row.company_name,
-      start_date: row.start_date,
-      end_date: row.end_date,
-      description: row.description,
-      confidence: null,
-      matched_verification_id: null,
-    }));
-
-    const { data: existingProfileRows, error: existingProfileErr } = await supabase
-      .from("profile_experiences")
-      .select("role_title,company_name,start_date,end_date")
-      .eq("user_id", user.id);
-
-    if (!existingProfileErr) {
-      const profileSet = new Set(
-        (existingProfileRows || []).map((x: any) =>
-          `${normalizeText(x?.role_title).toLowerCase()}|${normalizeText(x?.company_name).toLowerCase()}|${normalizeText(x?.start_date).toLowerCase()}|${normalizeText(x?.end_date).toLowerCase()}`
-        )
-      );
-
-      const profileToInsert: any[] = [];
-      for (const row of profileRows) {
-        const sig = `${normalizeText(row.role_title).toLowerCase()}|${normalizeText(row.company_name).toLowerCase()}|${normalizeText(row.start_date).toLowerCase()}|${normalizeText(row.end_date).toLowerCase()}`;
-        if (profileSet.has(sig)) continue;
-        profileSet.add(sig);
-        profileToInsert.push(row);
+    if (toInsert.length > 0) {
+      const { error: insErr } = await supabase.from("profile_experiences").insert(toInsert);
+      if (insErr) {
+        return NextResponse.json({ error: "profile_experiences_insert_failed", details: insErr.message }, { status: 400 });
       }
 
-      if (profileToInsert.length > 0) {
-        await supabase.from("profile_experiences").insert(profileToInsert as any[]);
+      const { data: existingLegacyRows } = await supabase
+        .from("experiences")
+        .select("title,company_name,start_date,end_date")
+        .eq("user_id", user.id);
+
+      const legacySet = new Set((existingLegacyRows || []).map((x: any) => expExactSig(x)));
+      const legacyInsert = toInsert
+        .map((row) => ({
+          user_id: user.id,
+          title: row.role_title,
+          company_name: row.company_name,
+          start_date: row.start_date,
+          end_date: row.end_date,
+          is_current: looksCurrent(row.end_date),
+          description: row.description,
+        }))
+        .filter((row) => {
+          const sig = expExactSig(row);
+          if (legacySet.has(sig)) return false;
+          legacySet.add(sig);
+          return true;
+        });
+
+      if (legacyInsert.length > 0) {
+        await supabase.from("experiences").insert(legacyInsert);
       }
     }
 
-    return NextResponse.json({ ok: true, imported: toInsert.length, section: "experiences" });
+    return NextResponse.json({
+      ok: true,
+      section: "experiences",
+      imported: toInsert.length,
+      duplicates_skipped: Math.max(selectedCount - toInsert.length, 0),
+      not_selected: Math.max(totalDetected - selectedCount, 0),
+    });
   }
 
   if (section === "education") {
-    const extracted = Array.isArray(result?.education) ? result.education : [];
-    const normalized = extracted
+    const extractedAll = Array.isArray(result?.education) ? result.education : [];
+    const selectedRaw = selectedItems ?? extractedAll;
+    const totalDetected = extractedAll.length;
+    const selectedCount = selectedRaw.length;
+
+    const importedAt = new Date().toISOString();
+
+    const normalized = selectedRaw
       .map((x: any) => {
-        const title = toNullable(x?.title);
+        const title = toNullable(x?.title || x?.degree);
         const institution = toNullable(x?.institution);
-        const description = toNullable(x?.description);
+        const description = toNullable(x?.description || x?.notes);
         if (!title && !institution && !description) return null;
         return {
           title: title || "",
           institution: institution || "",
-          start_date: normalizeDateText(x?.start_date),
-          end_date: normalizeDateText(x?.end_date),
+          start_date: normalizeDateText(x?.start_date || x?.start),
+          end_date: normalizeDateText(x?.end_date || x?.end),
           description,
+          import_source: "cv_parse",
+          import_job_id: jobId,
+          imported_at: importedAt,
         };
       })
       .filter(Boolean);
 
     if (normalized.length === 0) {
-      return NextResponse.json({ ok: true, imported: 0, section: "education" });
+      return NextResponse.json({
+        ok: true,
+        section: "education",
+        imported: 0,
+        duplicates_skipped: 0,
+        not_selected: Math.max(totalDetected - selectedCount, 0),
+      });
     }
 
     const { data: cp, error: cpErr } = await supabase
@@ -201,34 +312,40 @@ export async function POST(req: Request) {
     if (cpErr) return NextResponse.json({ error: "profile_fetch_failed", details: cpErr.message }, { status: 400 });
 
     const currentEducation = Array.isArray((cp as any)?.education) ? (cp as any).education : [];
-    const mergedSet = new Set(currentEducation.map((x: any) => eduSig(x)));
+    const mergedExact = new Set(currentEducation.map((x: any) => eduExactSig(x)));
+    const mergedPossible = new Set(currentEducation.map((x: any) => `${normalizeRoleOrTitle(x?.title)}|${normalizeCompanyOrInstitution(x?.institution)}`));
     const toAppend: any[] = [];
     for (const row of normalized as any[]) {
-      const sig = eduSig(row);
-      if (mergedSet.has(sig)) continue;
-      mergedSet.add(sig);
+      const exact = eduExactSig(row);
+      const possible = `${normalizeRoleOrTitle(row?.title)}|${normalizeCompanyOrInstitution(row?.institution)}`;
+      if (mergedExact.has(exact) || mergedPossible.has(possible)) continue;
+      mergedExact.add(exact);
+      mergedPossible.add(possible);
       toAppend.push(row);
     }
 
-    if (toAppend.length === 0) {
-      return NextResponse.json({ ok: true, imported: 0, section: "education", deduped: true });
+    if (toAppend.length > 0) {
+      const merged = [...currentEducation, ...toAppend];
+      const { error: upErr } = await supabase
+        .from("candidate_profiles")
+        .upsert(
+          {
+            user_id: user.id,
+            education: merged,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" }
+        );
+      if (upErr) return NextResponse.json({ error: "education_upsert_failed", details: upErr.message }, { status: 400 });
     }
 
-    const merged = [...currentEducation, ...toAppend];
-
-    const { error: upErr } = await supabase
-      .from("candidate_profiles")
-      .upsert(
-        {
-          user_id: user.id,
-          education: merged,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" }
-      );
-    if (upErr) return NextResponse.json({ error: "education_upsert_failed", details: upErr.message }, { status: 400 });
-
-    return NextResponse.json({ ok: true, imported: toAppend.length, section: "education" });
+    return NextResponse.json({
+      ok: true,
+      section: "education",
+      imported: toAppend.length,
+      duplicates_skipped: Math.max(selectedCount - toAppend.length, 0),
+      not_selected: Math.max(totalDetected - selectedCount, 0),
+    });
   }
 
   return NextResponse.json({ error: "unsupported_section" }, { status: 400 });

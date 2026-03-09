@@ -11,45 +11,224 @@ type Job = {
   result_json: any;
 };
 
+type MatchStatus = "new" | "possible_duplicate" | "already_exists";
+
+type ImportResult = {
+  section: "experiences" | "education";
+  imported: number;
+  duplicatesSkipped: number;
+  notSelected: number;
+};
+
+function collapseSpaces(v: string) {
+  return v.replace(/\s+/g, " ").trim();
+}
+
+function normalizedBase(v: any) {
+  return collapseSpaces(String(v || "").toLowerCase())
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[.,;:()]+/g, " ");
+}
+
+const COMPANY_SUFFIXES = new Set([
+  "sl",
+  "s.l",
+  "s l",
+  "sa",
+  "s.a",
+  "s a",
+  "slu",
+  "s.l.u",
+  "spain",
+  "espana",
+  "españa",
+]);
+
+function normalizeCompany(v: any) {
+  const parts = collapseSpaces(normalizedBase(v)).split(" ").filter(Boolean);
+  while (parts.length > 0 && COMPANY_SUFFIXES.has(parts[parts.length - 1])) parts.pop();
+  return parts.join(" ");
+}
+
+function normalizeTitle(v: any) {
+  return collapseSpaces(normalizedBase(v));
+}
+
+function normalizeDate(v: any) {
+  const raw = String(v || "").trim().toLowerCase();
+  if (!raw) return "";
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return `${m[1]}-${m[2]}`;
+  const ym = raw.match(/^(\d{4})-(\d{2})$/);
+  if (ym) return `${ym[1]}-${ym[2]}`;
+  const y = raw.match(/^(\d{4})$/);
+  if (y) return `${y[1]}-01`;
+  return raw;
+}
+
+function expExactSig(item: any) {
+  return [
+    normalizeTitle(item?.role_title || item?.title),
+    normalizeCompany(item?.company_name || item?.company),
+    normalizeDate(item?.start_date),
+    normalizeDate(item?.end_date),
+  ].join("|");
+}
+
+function expPossibleSig(item: any) {
+  return [normalizeTitle(item?.role_title || item?.title), normalizeCompany(item?.company_name || item?.company)].join("|");
+}
+
+function eduExactSig(item: any) {
+  return [
+    normalizeTitle(item?.title || item?.degree),
+    normalizeCompany(item?.institution),
+    normalizeDate(item?.start_date || item?.start),
+    normalizeDate(item?.end_date || item?.end),
+  ].join("|");
+}
+
+function eduPossibleSig(item: any) {
+  return [normalizeTitle(item?.title || item?.degree), normalizeCompany(item?.institution)].join("|");
+}
+
+function statusBadge(status: MatchStatus) {
+  if (status === "new") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "possible_duplicate") return "border-amber-200 bg-amber-50 text-amber-700";
+  return "border-slate-200 bg-slate-100 text-slate-700";
+}
+
 export default function CvUploadAndParse() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
-  const [file, setFile] = useState<File | null>(null);
 
+  const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-
   const [jobId, setJobId] = useState<string | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [importing, setImporting] = useState<null | "experiences" | "education">(null);
+  const [dedupLoading, setDedupLoading] = useState(false);
+
+  const [expDrafts, setExpDrafts] = useState<any[]>([]);
+  const [eduDrafts, setEduDrafts] = useState<any[]>([]);
+  const [expStatuses, setExpStatuses] = useState<MatchStatus[]>([]);
+  const [eduStatuses, setEduStatuses] = useState<MatchStatus[]>([]);
+  const [expChecked, setExpChecked] = useState<boolean[]>([]);
+  const [eduChecked, setEduChecked] = useState<boolean[]>([]);
+
+  const [expExistingExact, setExpExistingExact] = useState<Set<string>>(new Set());
+  const [expExistingPossible, setExpExistingPossible] = useState<Set<string>>(new Set());
+  const [eduExistingExact, setEduExistingExact] = useState<Set<string>>(new Set());
+  const [eduExistingPossible, setEduExistingPossible] = useState<Set<string>>(new Set());
+
+  const [lastImport, setLastImport] = useState<ImportResult | null>(null);
+
+  const warnings = Array.isArray(job?.result_json?.meta?.warnings) ? job?.result_json?.meta?.warnings : [];
+
+  async function loadProfileSets() {
+    const [{ data: profileExps }, { data: profile }] = await Promise.all([
+      supabase.from("profile_experiences").select("role_title,company_name,start_date,end_date").order("created_at", { ascending: false }),
+      supabase.from("candidate_profiles").select("education").maybeSingle(),
+    ]);
+
+    const expRows = Array.isArray(profileExps) ? profileExps : [];
+    const eduRows = Array.isArray((profile as any)?.education) ? (profile as any).education : [];
+
+    setExpExistingExact(new Set(expRows.map((x: any) => expExactSig(x))));
+    setExpExistingPossible(new Set(expRows.map((x: any) => expPossibleSig(x))));
+    setEduExistingExact(new Set(eduRows.map((x: any) => eduExactSig(x))));
+    setEduExistingPossible(new Set(eduRows.map((x: any) => eduPossibleSig(x))));
+  }
+
+  function recalcStatusesAndSelection(expsArg: any[], eduArg: any[]) {
+    const nextExpStatuses = expsArg.map((x) => {
+      const exact = expExactSig(x);
+      if (expExistingExact.has(exact)) return "already_exists" as MatchStatus;
+      const possible = expPossibleSig(x);
+      if (expExistingPossible.has(possible)) return "possible_duplicate" as MatchStatus;
+      return "new" as MatchStatus;
+    });
+
+    const nextEduStatuses = eduArg.map((x) => {
+      const exact = eduExactSig(x);
+      if (eduExistingExact.has(exact)) return "already_exists" as MatchStatus;
+      const possible = eduPossibleSig(x);
+      if (eduExistingPossible.has(possible)) return "possible_duplicate" as MatchStatus;
+      return "new" as MatchStatus;
+    });
+
+    setExpStatuses(nextExpStatuses);
+    setEduStatuses(nextEduStatuses);
+
+    setExpChecked((prev) => nextExpStatuses.map((status, idx) => (typeof prev[idx] === "boolean" ? prev[idx] : status === "new")));
+    setEduChecked((prev) => nextEduStatuses.map((status, idx) => (typeof prev[idx] === "boolean" ? prev[idx] : status === "new")));
+  }
+
+  useEffect(() => {
+    if (!job || job.status !== "succeeded") return;
+    recalcStatusesAndSelection(expDrafts, eduDrafts);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expDrafts, eduDrafts, expExistingExact, expExistingPossible, eduExistingExact, eduExistingPossible]);
+
+  function applyParsedResults(nextJob: Job) {
+    const parsedExps = Array.isArray(nextJob?.result_json?.experiences) ? nextJob.result_json.experiences : [];
+    const parsedEdu = Array.isArray(nextJob?.result_json?.education) ? nextJob.result_json.education : [];
+    setExpDrafts(parsedExps.map((x: any) => ({
+      company_name: x.company_name || x.company || "",
+      role_title: x.role_title || x.title || "",
+      start_date: x.start_date || "",
+      end_date: x.end_date || "",
+      description: x.description || "",
+    })));
+    setEduDrafts(parsedEdu.map((x: any) => ({
+      institution: x.institution || "",
+      title: x.title || x.degree || "",
+      start_date: x.start_date || x.start || "",
+      end_date: x.end_date || x.end || "",
+      description: x.description || x.notes || "",
+    })));
+  }
 
   async function importSection(section: "experiences" | "education") {
-    if (!jobId) return;
+    if (!jobId || !job || job.status !== "succeeded") return;
     setImporting(section);
     setMsg(null);
+
+    const selectedItems =
+      section === "experiences"
+        ? expDrafts.filter((_: any, idx: number) => expChecked[idx])
+        : eduDrafts.filter((_: any, idx: number) => eduChecked[idx]);
+
+    if (selectedItems.length === 0) {
+      setImporting(null);
+      setMsg(section === "experiences" ? "No hay experiencias seleccionadas para importar." : "No hay formaciones seleccionadas para importar.");
+      return;
+    }
+
     try {
       const res = await fetch("/api/candidate/cv/parse/import", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ job_id: jobId, section }),
+        body: JSON.stringify({ job_id: jobId, section, selected_items: selectedItems }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "import_failed");
+
       const imported = Number(data?.imported ?? 0);
-      if (imported === 0) {
-        setMsg(
-          section === "experiences"
-            ? "No se importaron experiencias: ya existían o no había datos válidos para insertar."
-            : "No se importó formación: ya existía o no había datos válidos para insertar."
-        );
-      } else {
-        setMsg(
-          section === "experiences"
-            ? `Propuesta aplicada: ${imported} experiencias importadas con estado no verificado. Ya puedes revisarlas en /candidate/experience.`
-            : `Propuesta aplicada: ${imported} formaciones importadas. Ya están disponibles en tu perfil.`
-        );
-        router.refresh();
-      }
+      const duplicatesSkipped = Number(data?.duplicates_skipped ?? 0);
+      const notSelected = Number(data?.not_selected ?? 0);
+
+      setLastImport({ section, imported, duplicatesSkipped, notSelected });
+      setMsg(
+        section === "experiences"
+          ? `${imported} experiencias importadas · ${duplicatesSkipped} omitidas por duplicadas · ${notSelected} no seleccionadas.`
+          : `${imported} formaciones importadas · ${duplicatesSkipped} omitidas por duplicadas · ${notSelected} no seleccionadas.`
+      );
+
+      await loadProfileSets();
+      router.refresh();
     } catch (e: any) {
       setMsg(e?.message || "No se pudo aplicar la propuesta de importación.");
     } finally {
@@ -59,8 +238,15 @@ export default function CvUploadAndParse() {
 
   async function start() {
     setMsg(null);
+    setLastImport(null);
     setJob(null);
     setJobId(null);
+    setExpDrafts([]);
+    setEduDrafts([]);
+    setExpStatuses([]);
+    setEduStatuses([]);
+    setExpChecked([]);
+    setEduChecked([]);
 
     if (!file) {
       setMsg("Selecciona un CV (PDF o DOCX).");
@@ -68,11 +254,7 @@ export default function CvUploadAndParse() {
     }
 
     const mime = (file.type || "").toLowerCase();
-    const ok =
-      mime.includes("pdf") ||
-      mime.includes("wordprocessingml") ||
-      file.name.toLowerCase().endsWith(".docx");
-
+    const ok = mime.includes("pdf") || mime.includes("wordprocessingml") || file.name.toLowerCase().endsWith(".docx");
     if (!ok) {
       setMsg("Formato no soportado. Usa PDF o DOCX.");
       return;
@@ -83,7 +265,6 @@ export default function CvUploadAndParse() {
     try {
       const { data: auth, error: authErr } = await supabase.auth.getUser();
       if (authErr) throw new Error(authErr.message);
-
       const user = auth?.user;
       if (!user) throw new Error("No autorizado.");
 
@@ -91,16 +272,11 @@ export default function CvUploadAndParse() {
       const safeName = file.name.replace(/[^\w.\-]+/g, "_");
       const path = `${user.id}/${Date.now()}_${safeName}`;
 
-      const { error: upErr } = await supabase.storage
-        .from(bucket)
-        .upload(path, file, {
-          upsert: true,
-          contentType: file.type || undefined,
-        });
-
-      if (upErr) {
-        throw new Error(`upload_failed: ${upErr.message}`);
-      }
+      const { error: upErr } = await supabase.storage.from(bucket).upload(path, file, {
+        upsert: true,
+        contentType: file.type || undefined,
+      });
+      if (upErr) throw new Error(`upload_failed: ${upErr.message}`);
 
       const { data: upload, error: cvUploadErr } = await supabase
         .from("cv_uploads")
@@ -114,24 +290,14 @@ export default function CvUploadAndParse() {
         })
         .select("id")
         .single();
-
-      if (cvUploadErr || !upload) {
-        throw new Error(`cv_uploads_insert_failed: ${cvUploadErr?.message || "insert_failed"}`);
-      }
+      if (cvUploadErr || !upload) throw new Error(`cv_uploads_insert_failed: ${cvUploadErr?.message || "insert_failed"}`);
 
       const { data: parseJob, error: jobErr } = await supabase
         .from("cv_parse_jobs")
-        .insert({
-          user_id: user.id,
-          cv_upload_id: upload.id,
-          status: "queued",
-        })
+        .insert({ user_id: user.id, cv_upload_id: upload.id, status: "queued" })
         .select("id,status")
         .single();
-
-      if (jobErr || !parseJob) {
-        throw new Error(`cv_parse_jobs_insert_failed: ${jobErr?.message || "insert_failed"}`);
-      }
+      if (jobErr || !parseJob) throw new Error(`cv_parse_jobs_insert_failed: ${jobErr?.message || "insert_failed"}`);
 
       setJobId(parseJob.id);
       setMsg("Job en cola…");
@@ -150,7 +316,6 @@ export default function CvUploadAndParse() {
 
   useEffect(() => {
     if (!jobId) return;
-
     let alive = true;
 
     const tick = async () => {
@@ -160,26 +325,22 @@ export default function CvUploadAndParse() {
           .select("id,status,error,result_json")
           .eq("id", jobId)
           .single();
-
         if (error) throw new Error(error.message);
         if (!alive) return;
 
-        setJob(data as Job);
+        const casted = data as Job;
+        setJob(casted);
 
-        if (data.status === "queued") {
+        if (casted.status === "queued") {
           setMsg("Job en cola…");
-        } else if (data.status === "processing") {
+        } else if (casted.status === "processing") {
           setMsg("Procesando CV…");
-        } else if (data.status === "succeeded") {
-          const ex = Array.isArray((data as any)?.result_json?.experiences)
-            ? (data as any).result_json.experiences.length
-            : 0;
-          const ed = Array.isArray((data as any)?.result_json?.education)
-            ? (data as any).result_json.education.length
-            : 0;
-          const warnings = Array.isArray((data as any)?.result_json?.meta?.warnings)
-            ? (data as any).result_json.meta.warnings
-            : [];
+        } else if (casted.status === "succeeded") {
+          await loadProfileSets();
+          applyParsedResults(casted);
+
+          const ex = Array.isArray(casted?.result_json?.experiences) ? casted.result_json.experiences.length : 0;
+          const ed = Array.isArray(casted?.result_json?.education) ? casted.result_json.education.length : 0;
 
           if (warnings.includes("cv_text_insufficient")) {
             setMsg("Procesamiento completado con aviso: el CV tiene poco texto legible y la extracción puede ser incompleta.");
@@ -192,8 +353,8 @@ export default function CvUploadAndParse() {
           } else {
             setMsg("Listo. CV procesado con extracción laboral y académica.");
           }
-        } else if (data.status === "failed") {
-          setMsg(data.error || "Falló el parsing.");
+        } else if (casted.status === "failed") {
+          setMsg(casted.error || "Falló el parsing.");
         }
       } catch (e: any) {
         if (!alive) return;
@@ -201,28 +362,16 @@ export default function CvUploadAndParse() {
       }
     };
 
-    tick();
-    const t = setInterval(tick, 2000);
-
+    void tick();
+    const t = setInterval(() => void tick(), 2000);
     return () => {
       alive = false;
       clearInterval(t);
     };
   }, [jobId, supabase]);
 
-  const exps = Array.isArray(job?.result_json?.experiences) ? job?.result_json?.experiences : [];
-  const education = Array.isArray(job?.result_json?.education) ? job?.result_json?.education : [];
-  const warnings = Array.isArray(job?.result_json?.meta?.warnings) ? job?.result_json?.meta?.warnings : [];
   const statusLabel =
-    job?.status === "queued"
-      ? "En cola"
-      : job?.status === "processing"
-        ? "Procesando"
-        : job?.status === "succeeded"
-          ? "Completado"
-          : job?.status === "failed"
-            ? "Fallido"
-            : "—";
+    job?.status === "queued" ? "En cola" : job?.status === "processing" ? "Procesando" : job?.status === "succeeded" ? "Completado" : job?.status === "failed" ? "Fallido" : "—";
 
   return (
     <div className="space-y-3">
@@ -236,29 +385,39 @@ export default function CvUploadAndParse() {
             className="mt-1 w-full rounded-lg border px-3 py-2 text-sm bg-white"
           />
         </div>
-
-        <button
-          onClick={start}
-          disabled={busy}
-          className="rounded-lg px-3 py-2 text-sm font-medium border bg-slate-900 text-white disabled:opacity-50"
-        >
+        <button onClick={start} disabled={busy} className="rounded-lg px-3 py-2 text-sm font-medium border bg-slate-900 text-white disabled:opacity-50">
           {busy ? "Subiendo…" : "Extraer perfil desde CV"}
         </button>
       </div>
 
       {msg && <p className="text-sm text-slate-600">{msg}</p>}
 
-      {job && (
+      {lastImport ? (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+          <div>
+            {lastImport.section === "experiences" ? "Experiencias" : "Formación"}: {lastImport.imported} importadas · {lastImport.duplicatesSkipped} omitidas por duplicadas · {lastImport.notSelected} no seleccionadas.
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <a href="/candidate/experience" className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
+              Abrir experiencias
+            </a>
+            <a href="/candidate/education" className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
+              Abrir formación
+            </a>
+          </div>
+        </div>
+      ) : null}
+
+      {job ? (
         <div className="rounded-lg border p-3 bg-slate-50">
           <div className="flex items-center justify-between gap-4">
             <div className="text-sm">
-              <span className="font-medium">Estado:</span>{" "}
-              <span>{statusLabel}</span>
+              <span className="font-medium">Estado:</span> <span>{statusLabel}</span>
             </div>
-            {jobId && <div className="text-xs text-slate-500 break-all">ID del proceso: {jobId}</div>}
+            {jobId ? <div className="text-xs text-slate-500 break-all">ID del proceso: {jobId}</div> : null}
           </div>
 
-          {job.status === "succeeded" && (
+          {job.status === "succeeded" ? (
             <div className="mt-3 space-y-5">
               {warnings.length > 0 ? (
                 <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
@@ -267,82 +426,102 @@ export default function CvUploadAndParse() {
                     : "Aviso: la extracción puede estar incompleta. Revisa los datos antes de importarlos."}
                 </div>
               ) : null}
+
               <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-sm font-medium">Experiencias laborales detectadas</div>
-                  <button
-                    type="button"
-                    onClick={() => importSection("experiences")}
-                    disabled={importing !== null}
-                    className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium disabled:opacity-60"
-                  >
-                    {importing === "experiences" ? "Importando…" : "Importar a experiencias"}
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => setExpChecked(expStatuses.map(() => true))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Seleccionar todas</button>
+                    <button type="button" onClick={() => setExpChecked(expStatuses.map(() => false))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Deseleccionar todas</button>
+                    <button type="button" onClick={() => void importSection("experiences")} disabled={importing !== null || dedupLoading} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium disabled:opacity-60">
+                      {importing === "experiences" ? "Importando…" : "Importar seleccionadas"}
+                    </button>
+                  </div>
                 </div>
-              {exps.length === 0 ? (
-                <div className="text-sm text-slate-600">No se detectaron experiencias laborales.</div>
-              ) : (
-                <div className="space-y-2">
-                  {exps.map((x: any, idx: number) => (
-                    <div key={idx} className="rounded-md border bg-white p-3">
-                      <div className="text-sm font-semibold">
-                        {x.role_title || x.title || "Puesto"} — {x.company_name || x.company || "Empresa"}
+
+                {expDrafts.length === 0 ? (
+                  <div className="text-sm text-slate-600">No se detectaron experiencias laborales.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {expDrafts.map((x: any, idx: number) => (
+                      <div key={idx} className="rounded-md border bg-white p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(expChecked[idx])}
+                              onChange={(e) => setExpChecked((prev) => prev.map((v, i) => (i === idx ? e.target.checked : v)))}
+                            />
+                            Seleccionar
+                          </label>
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadge(expStatuses[idx] || "new")}`}>
+                            {expStatuses[idx] || "new"}
+                          </span>
+                        </div>
+
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <input value={x.company_name || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, company_name: e.target.value } : r)))} placeholder="Empresa" className="rounded-lg border px-3 py-2 text-sm" />
+                          <input value={x.role_title || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, role_title: e.target.value } : r)))} placeholder="Puesto" className="rounded-lg border px-3 py-2 text-sm" />
+                          <input value={x.start_date || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, start_date: e.target.value } : r)))} placeholder="Fecha inicio (YYYY-MM)" className="rounded-lg border px-3 py-2 text-sm" />
+                          <input value={x.end_date || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, end_date: e.target.value } : r)))} placeholder="Fecha fin (YYYY-MM o Actual)" className="rounded-lg border px-3 py-2 text-sm" />
+                        </div>
+                        <textarea value={x.description || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, description: e.target.value } : r)))} rows={2} placeholder="Descripción" className="mt-2 w-full rounded-lg border px-3 py-2 text-sm" />
                       </div>
-                      <div className="text-xs text-slate-600">
-                        {(x.start_date || "¿inicio?")} → {(x.end_date || "actualidad")}
-                      </div>
-                      {x.description ? (
-                        <div className="mt-2 text-sm text-slate-700">{x.description}</div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-sm font-medium">Formación académica detectada</div>
-                  <button
-                    type="button"
-                    onClick={() => importSection("education")}
-                    disabled={importing !== null}
-                    className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium disabled:opacity-60"
-                  >
-                    {importing === "education" ? "Importando…" : "Importar a formación"}
-                  </button>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => setEduChecked(eduStatuses.map(() => true))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Seleccionar todas</button>
+                    <button type="button" onClick={() => setEduChecked(eduStatuses.map(() => false))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Deseleccionar todas</button>
+                    <button type="button" onClick={() => void importSection("education")} disabled={importing !== null || dedupLoading} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium disabled:opacity-60">
+                      {importing === "education" ? "Importando…" : "Importar formación seleccionada"}
+                    </button>
+                  </div>
                 </div>
-                {education.length === 0 ? (
+
+                {eduDrafts.length === 0 ? (
                   <div className="text-sm text-slate-600">No se detectó formación académica.</div>
                 ) : (
                   <div className="space-y-2">
-                    {education.map((x: any, idx: number) => (
+                    {eduDrafts.map((x: any, idx: number) => (
                       <div key={idx} className="rounded-md border bg-white p-3">
-                        <div className="text-sm font-semibold">
-                          {x.title || "Título"} — {x.institution || "Institución"}
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(eduChecked[idx])}
+                              onChange={(e) => setEduChecked((prev) => prev.map((v, i) => (i === idx ? e.target.checked : v)))}
+                            />
+                            Seleccionar
+                          </label>
+                          <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadge(eduStatuses[idx] || "new")}`}>
+                            {eduStatuses[idx] || "new"}
+                          </span>
                         </div>
-                        <div className="text-xs text-slate-600">
-                          {(x.start_date || "¿inicio?")} → {(x.end_date || "actualidad")}
+
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <input value={x.institution || ""} onChange={(e) => setEduDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, institution: e.target.value } : r)))} placeholder="Institución" className="rounded-lg border px-3 py-2 text-sm" />
+                          <input value={x.title || ""} onChange={(e) => setEduDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, title: e.target.value } : r)))} placeholder="Título" className="rounded-lg border px-3 py-2 text-sm" />
+                          <input value={x.start_date || ""} onChange={(e) => setEduDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, start_date: e.target.value } : r)))} placeholder="Fecha inicio (YYYY-MM)" className="rounded-lg border px-3 py-2 text-sm" />
+                          <input value={x.end_date || ""} onChange={(e) => setEduDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, end_date: e.target.value } : r)))} placeholder="Fecha fin (YYYY-MM)" className="rounded-lg border px-3 py-2 text-sm" />
                         </div>
-                        {x.study_field ? (
-                          <div className="mt-1 text-xs text-slate-600">Área: {x.study_field}</div>
-                        ) : null}
-                        {x.description ? (
-                          <div className="mt-2 text-sm text-slate-700">{x.description}</div>
-                        ) : null}
+                        <textarea value={x.description || ""} onChange={(e) => setEduDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, description: e.target.value } : r)))} rows={2} placeholder="Descripción" className="mt-2 w-full rounded-lg border px-3 py-2 text-sm" />
                       </div>
                     ))}
                   </div>
                 )}
               </div>
             </div>
-          )}
-
-          {job.status === "failed" && job.error ? (
-            <div className="mt-3 text-sm text-red-700">{job.error}</div>
           ) : null}
+
+          {job.status === "failed" && job.error ? <div className="mt-3 text-sm text-red-700">{job.error}</div> : null}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
