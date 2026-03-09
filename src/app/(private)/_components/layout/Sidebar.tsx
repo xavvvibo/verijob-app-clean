@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -149,6 +150,26 @@ function getSections(role: Role): Section[] {
 export default function Sidebar({ role }: { role?: Role }) {
   const pathname = usePathname() || "/";
   const sections = getSections(role);
+  const normalizedRole = String(role || "candidate").toLowerCase();
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [companyPlanLabel, setCompanyPlanLabel] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (normalizedRole !== "company") return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/company/dashboard", { cache: "no-store" });
+        const data = await res.json().catch(() => null);
+        if (!alive || !res.ok || !data) return;
+        setCompanyName(typeof data.company_name === "string" ? data.company_name : null);
+        setCompanyPlanLabel(typeof data.plan_label === "string" ? data.plan_label : null);
+      } catch {}
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [normalizedRole]);
 
   return (
     <aside className="sticky top-0 h-screen border-r border-slate-200 bg-white">
@@ -160,8 +181,15 @@ export default function Sidebar({ role }: { role?: Role }) {
             <div className="leading-tight">
               <div className="text-sm font-extrabold text-slate-900">Verijob</div>
               <div className="text-[11px] font-semibold text-slate-500">
-                {String(role || "candidate").toUpperCase()}
+                {normalizedRole === "company"
+                  ? companyName || "Tu empresa"
+                  : String(role || "candidate").toUpperCase()}
               </div>
+              {normalizedRole === "company" ? (
+                <div className="text-[10px] text-slate-400 uppercase tracking-wide">
+                  Plan {companyPlanLabel || "Free"}
+                </div>
+              ) : null}
             </div>
           </Link>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -16,19 +16,40 @@ function normalizeRole(role: Role) {
 export default function Topbar({ role }: { role?: Role }) {
   const pathname = usePathname() || "/";
   const r = normalizeRole(role);
+  const [companyName, setCompanyName] = useState<string | null>(null);
+  const [membershipRole, setMembershipRole] = useState<string | null>(null);
+  const [companyPlanLabel, setCompanyPlanLabel] = useState<string | null>(null);
 
   const scopeLabel = useMemo(() => {
     if (r === "owner") return "Owner";
-    if (pathname === "/company" || pathname.startsWith("/company/")) return "Empresa";
+    if (pathname === "/company" || pathname.startsWith("/company/")) return companyName || "Empresa";
     if (pathname === "/candidate" || pathname.startsWith("/candidate/")) return "Candidato";
     return r === "company" ? "Empresa" : "Candidato";
-  }, [pathname, r]);
+  }, [companyName, pathname, r]);
 
   const userPlanLabel = useMemo(() => {
     if (r === "owner") return "Plan Owner";
-    if (r === "company") return "Plan Empresa Access";
+    if (r === "company") return `Plan Empresa ${companyPlanLabel || "Free"}`;
     return "Plan Candidato Pro";
-  }, [r]);
+  }, [companyPlanLabel, r]);
+
+  useEffect(() => {
+    if (!(pathname === "/company" || pathname.startsWith("/company/"))) return;
+    let alive = true;
+    (async () => {
+      try {
+        const res = await fetch("/api/company/dashboard", { cache: "no-store" });
+        const data = await res.json().catch(() => null);
+        if (!alive || !res.ok || !data) return;
+        setCompanyName(typeof data.company_name === "string" ? data.company_name : null);
+        setMembershipRole(typeof data.membership_role === "string" ? data.membership_role : null);
+        setCompanyPlanLabel(typeof data.plan_label === "string" ? data.plan_label : null);
+      } catch {}
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [pathname]);
 
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -56,8 +77,11 @@ export default function Topbar({ role }: { role?: Role }) {
             />
           </Link>
 
-          <div className="hidden md:block text-xs font-semibold text-slate-500">
-            {scopeLabel}
+          <div className="hidden md:block">
+            <div className="text-xs font-semibold text-slate-500">{scopeLabel}</div>
+            {membershipRole && (pathname === "/company" || pathname.startsWith("/company/")) ? (
+              <div className="text-[11px] text-slate-400 uppercase tracking-wide">Rol: {membershipRole}</div>
+            ) : null}
           </div>
         </div>
 

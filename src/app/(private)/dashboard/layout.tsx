@@ -21,7 +21,7 @@ export default async function DashboardLayout({
   const role = String(profile?.role ?? "").toLowerCase();
 
   // Company: dashboard empresa (tu ruta real ya existe)
-  if (role === "company") redirect("/company/dashboard");
+  if (role === "company") redirect("/company");
 
   // Candidate (y cualquier otro no-company): nuevo dashboard candidato definitivo
   redirect("/candidate/overview");

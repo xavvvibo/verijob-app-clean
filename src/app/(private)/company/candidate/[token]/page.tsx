@@ -237,12 +237,15 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
         )}
       </section>
 
-      <div className="mt-6 rounded-lg border p-4">
-        <div className="mb-2 text-sm font-semibold text-gray-900">Datos completos del perfil</div>
-        <pre className="text-xs whitespace-pre-wrap break-words">
-          {JSON.stringify(profile, null, 2)}
-        </pre>
-      </div>
+      <section className="mt-6 rounded-lg border p-4">
+        <h2 className="text-base font-semibold text-gray-900">Resumen profesional</h2>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <Field label="Nombre" value={String(profile?.full_name || profile?.name || "No disponible")} />
+          <Field label="Titular profesional" value={String(profile?.title || profile?.headline || "No especificado")} />
+          <Field label="Ubicación" value={String(profile?.location || "No especificada")} />
+          <Field label="Experiencias totales" value={String(profile?.experiences_total ?? "No disponible")} />
+        </div>
+      </section>
 
       <div className="mt-6 flex gap-3">
         <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/requests">

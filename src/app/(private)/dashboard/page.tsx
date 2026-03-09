@@ -19,6 +19,6 @@ export default async function DashboardRouter() {
 
   const r = String(profile?.role || "").toLowerCase();
   if (r === "owner") redirect("/owner/overview");
-  if (r === "company") redirect("/company/dashboard");
+  if (r === "company") redirect("/company");
   redirect("/candidate/overview");
 }
