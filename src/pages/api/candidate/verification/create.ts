@@ -18,11 +18,48 @@ function normalizeDateInput(value: unknown): string | null {
   if (low.includes("actual") || low.includes("present")) return null;
   const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const dmy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
   const ym = raw.match(/^(\d{4})-(\d{2})$/);
   if (ym) return `${ym[1]}-${ym[2]}-01`;
   const y = raw.match(/^(\d{4})$/);
   if (y) return `${y[1]}-01-01`;
   return null;
+}
+
+async function tryInsertEmploymentRecord(
+  supabase: any,
+  baseRecord: Record<string, any>,
+  userId: string
+) {
+  const variants: Array<Record<string, any>> = [
+    { ...baseRecord, candidate_id: userId, user_id: userId },
+    { ...baseRecord, candidate_id: userId },
+    { ...baseRecord, user_id: userId },
+    { ...baseRecord },
+  ];
+
+  let lastError: any = null;
+
+  for (const payload of variants) {
+    const { data, error } = await supabase
+      .from("employment_records")
+      .insert(payload)
+      .select("id, company_id")
+      .single();
+
+    if (!error) return { data, error: null };
+
+    lastError = error;
+    const msg = String(error?.message || "").toLowerCase();
+    const isUnknownColumnCandidate = msg.includes("column") && msg.includes("candidate_id");
+    const isUnknownColumnUser = msg.includes("column") && msg.includes("user_id");
+    if (isUnknownColumnCandidate || isUnknownColumnUser) {
+      continue;
+    }
+  }
+
+  return { data: null, error: lastError };
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -88,20 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     let er: any = null;
     let erErr: any = null;
-
-    ({ data: er, error: erErr } = await supabase
-      .from("employment_records")
-      .insert({ ...baseRecord, candidate_id: user.id })
-      .select("id, company_id")
-      .single());
-
-    if (erErr && String(erErr.message || "").toLowerCase().includes("candidate_id")) {
-      ({ data: er, error: erErr } = await supabase
-        .from("employment_records")
-        .insert({ ...baseRecord, user_id: user.id })
-        .select("id, company_id")
-        .single());
-    }
+    ({ data: er, error: erErr } = await tryInsertEmploymentRecord(supabase, baseRecord, user.id));
 
     if (erErr) return json(res, 400, { error: "Insert employment_records failed", details: erErr.message });
 

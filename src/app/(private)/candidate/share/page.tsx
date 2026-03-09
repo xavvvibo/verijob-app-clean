@@ -28,7 +28,7 @@ type SettingsPayload = {
   allow_company_phone_contact?: boolean;
 };
 
-const PUBLIC_PROFILE_ORIGIN = process.env.NEXT_PUBLIC_PUBLIC_SITE_URL || "https://verijob.es";
+const PUBLIC_PROFILE_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es";
 
 function formatRange(start?: string | null, end?: string | null) {
   const s = start ? String(start).slice(0, 10) : null;

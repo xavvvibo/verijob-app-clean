@@ -234,8 +234,6 @@ export default function CandidateSettings() {
           Los datos de identidad personal se editan en la sección Perfil.
         </div>
         {err ? <div className="mt-3 text-sm text-red-600">{err}</div> : null}
-        {ok ? <div className="mt-3 text-sm text-green-700">{ok}</div> : null}
-        {saving ? <div className="mt-3 text-xs text-gray-500">Guardando…</div> : null}
       </div>
 
       {s ? (
@@ -343,7 +341,21 @@ export default function CandidateSettings() {
             </div>
           </div>
 
-          <div className="pt-2">
+          <div className="pb-28" />
+        </div>
+      ) : (
+        <div className="text-sm text-gray-600">Cargando…</div>
+      )}
+
+      {s ? (
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur">
+          <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-3 px-6 py-3">
+            <div className="min-w-0">
+              {saving ? <div className="text-sm text-gray-600">Guardando cambios…</div> : null}
+              {!saving && ok ? <div className="text-sm font-semibold text-green-700">{ok}</div> : null}
+              {!saving && !ok && hasChanges ? <div className="text-sm text-gray-600">Tienes cambios pendientes de guardar.</div> : null}
+              {!saving && !ok && !hasChanges ? <div className="text-sm text-gray-500">Todo guardado.</div> : null}
+            </div>
             <button
               type="button"
               onClick={save}
@@ -354,12 +366,9 @@ export default function CandidateSettings() {
             >
               {saving ? "Guardando…" : "Guardar cambios"}
             </button>
-            {hasChanges ? <div className="mt-2 text-xs text-gray-500">Tienes cambios pendientes de guardar.</div> : null}
           </div>
         </div>
-      ) : (
-        <div className="text-sm text-gray-600">Cargando…</div>
-      )}
+      ) : null}
     </div>
   );
 }

@@ -6,6 +6,18 @@ import { useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { vjEvents } from "@/lib/analytics";
 
+function normalizeDateForInput(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const ym = raw.match(/^(\d{4})-(\d{2})$/);
+  if (ym) return `${ym[1]}-${ym[2]}-01`;
+  const y = raw.match(/^(\d{4})$/);
+  if (y) return `${y[1]}-01-01`;
+  return "";
+}
+
 export default function NewVerificationClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -13,8 +25,8 @@ export default function NewVerificationClient() {
 
   const [company, setCompany] = useState(searchParams?.get("company") || "");
   const [position, setPosition] = useState(searchParams?.get("position") || "");
-  const [start, setStart] = useState(searchParams?.get("start") || "");
-  const [end, setEnd] = useState(searchParams?.get("end") || "");
+  const [start, setStart] = useState(normalizeDateForInput(searchParams?.get("start") || ""));
+  const [end, setEnd] = useState(normalizeDateForInput(searchParams?.get("end") || ""));
   const [sourceProfileExperienceId] = useState(searchParams?.get("source_profile_experience_id") || "");
   const [companyEmail, setCompanyEmail] = useState(searchParams?.get("company_email") || "");
   const [isCurrent, setIsCurrent] = useState(false);
@@ -42,7 +54,7 @@ export default function NewVerificationClient() {
           company_email: companyEmail,
           position,
           start_date: start,
-          end_date: end,
+          end_date: isCurrent ? null : end,
           is_current: isCurrent,
           source_profile_experience_id: sourceProfileExperienceId || null,
         }),
@@ -142,7 +154,11 @@ export default function NewVerificationClient() {
           <input
             type="checkbox"
             checked={isCurrent}
-            onChange={(e) => setIsCurrent(e.target.checked)}
+            onChange={(e) => {
+              const next = e.target.checked;
+              setIsCurrent(next);
+              if (next) setEnd("");
+            }}
           />
           Sigo actualmente en este puesto
         </label>

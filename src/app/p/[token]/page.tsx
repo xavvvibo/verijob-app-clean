@@ -35,9 +35,7 @@ export const metadata: Metadata = {
 export default async function PublicCandidateProfilePage({ params }: Ctx) {
   const { token } = await params;
   const base =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    "https://app.verijob.es";
+    process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es";
 
   const res = await fetch(`${base}/api/public/candidate/${token}`, { cache: "no-store" });
   const body = await res.json().catch(() => ({}));

@@ -125,17 +125,133 @@ function listCount(raw: any) {
   return Array.isArray(raw) ? raw.length : 0;
 }
 
-function AvatarView({ fullName, avatarUrl }: { fullName?: string | null; avatarUrl?: string | null }) {
+function AvatarView({
+  fullName,
+  avatarUrl,
+  onAvatarSaved,
+}: {
+  fullName?: string | null;
+  avatarUrl?: string | null;
+  onAvatarSaved: (next: string | null) => void;
+}) {
+  const supabase = useMemo(() => createClient(), []);
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [avatarInput, setAvatarInput] = useState(avatarUrl || "");
+
+  async function saveAvatarUrl() {
+    setSaving(true);
+    setError(null);
+    try {
+      const next = String(avatarInput || "").trim();
+      const payload = next ? next : null;
+      const { data: au } = await supabase.auth.getUser();
+      if (!au?.user?.id) throw new Error("Sesión no válida");
+      const { error: upErr } = await supabase.from("profiles").update({ avatar_url: payload }).eq("id", au.user.id);
+      if (upErr) throw new Error(upErr.message);
+      onAvatarSaved(payload);
+      setOpen(false);
+    } catch (e: any) {
+      setError(e?.message || "No se pudo actualizar la foto de perfil.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (avatarUrl) {
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={avatarUrl} alt={fullName || "Avatar"} className="h-28 w-28 rounded-full border border-gray-200 object-cover" />
+      <div className="group relative">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={avatarUrl} alt={fullName || "Avatar"} className="h-28 w-28 rounded-full border border-gray-200 object-cover" />
+        <button
+          type="button"
+          onClick={() => {
+            setAvatarInput(avatarUrl || "");
+            setOpen((v) => !v);
+          }}
+          className="absolute inset-0 hidden items-center justify-center rounded-full bg-black/45 text-xs font-semibold text-white group-hover:flex"
+        >
+          Cambiar foto
+        </button>
+        {open ? (
+          <div className="absolute left-0 top-[116%] z-20 w-72 rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
+            <div className="text-xs font-semibold text-gray-900">URL de foto de perfil</div>
+            <input
+              value={avatarInput}
+              onChange={(e) => setAvatarInput(e.target.value)}
+              placeholder="https://..."
+              className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs"
+            />
+            {error ? <div className="mt-2 text-xs text-red-600">{error}</div> : null}
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                onClick={() => void saveAvatarUrl()}
+                disabled={saving}
+                className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+              >
+                {saving ? "Guardando…" : "Guardar"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAvatarInput("");
+                  void saveAvatarUrl();
+                }}
+                disabled={saving}
+                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+              >
+                Quitar
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </div>
     );
   }
   const fallback = (fullName || "C").trim().charAt(0).toUpperCase();
   return (
-    <div className="flex h-28 w-28 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-3xl font-semibold text-gray-700">
-      {fallback}
+    <div className="group relative">
+      <div className="flex h-28 w-28 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-3xl font-semibold text-gray-700">
+        {fallback}
+      </div>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="absolute inset-0 hidden items-center justify-center rounded-full bg-black/45 text-xs font-semibold text-white group-hover:flex"
+      >
+        Cambiar foto
+      </button>
+      {open ? (
+        <div className="absolute left-0 top-[116%] z-20 w-72 rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
+          <div className="text-xs font-semibold text-gray-900">URL de foto de perfil</div>
+          <input
+            value={avatarInput}
+            onChange={(e) => setAvatarInput(e.target.value)}
+            placeholder="https://..."
+            className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs"
+          />
+          {error ? <div className="mt-2 text-xs text-red-600">{error}</div> : null}
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              onClick={() => void saveAvatarUrl()}
+              disabled={saving}
+              className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+            >
+              {saving ? "Guardando…" : "Guardar"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -239,7 +355,11 @@ export default function CandidateOverview() {
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex items-start gap-4">
-              <AvatarView fullName={profile?.full_name} avatarUrl={profile?.avatar_url} />
+              <AvatarView
+                fullName={profile?.full_name}
+                avatarUrl={profile?.avatar_url}
+                onAvatarSaved={(next) => setProfile((prev) => ({ ...(prev || {}), avatar_url: next }))}
+              />
               <div className="min-w-0">
                 <p className="text-xs text-gray-500">Resumen del candidato</p>
                 <h1 className="mt-2 truncate text-4xl font-semibold text-gray-900">
@@ -332,7 +452,7 @@ export default function CandidateOverview() {
 
         <div className="mt-4 grid gap-4">
           <SummaryCard
-            title="Otros logros"
+            title="Idiomas y otros logros"
             summary={achievementsCount > 0 ? `${achievementsCount} logros o certificaciones registrados.` : "Añade certificaciones y logros para reforzar tu perfil profesional."}
             href="/candidate/achievements"
             cta="Gestionar"

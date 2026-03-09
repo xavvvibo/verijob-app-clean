@@ -107,28 +107,31 @@ export default function CandidateAchievementsPage() {
   return (
     <div className="space-y-4">
       <header className="rounded-2xl border border-gray-200 bg-white p-5">
-        <h1 className="text-2xl font-semibold text-gray-900">Logros</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Idiomas y otros logros</h1>
         <p className="mt-2 text-sm text-gray-600">
-          Gestiona certificaciones, premios, idiomas y otros méritos desde esta sección.
+          Gestiona idiomas, certificados oficiales, premios, cursos y otros méritos verificables desde esta sección.
+        </p>
+        <p className="mt-1 text-xs text-gray-500">
+          Puedes preparar aquí la información de certificación para futuras validaciones documentales.
         </p>
       </header>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-gray-900">Registros de logros</h2>
+          <h2 className="text-base font-semibold text-gray-900">Registros de idiomas y logros</h2>
           <button
             type="button"
             onClick={add}
             className="inline-flex rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
           >
-            Añadir logro
+            Añadir registro
           </button>
         </div>
 
         {loading ? <p className="mt-4 text-sm text-gray-600">Cargando…</p> : null}
 
         {!loading && items.length === 0 ? (
-          <p className="mt-4 text-sm text-gray-600">Todavía no has añadido logros o certificaciones.</p>
+          <p className="mt-4 text-sm text-gray-600">Todavía no has añadido idiomas, certificados o logros.</p>
         ) : null}
 
         <div className="mt-4 space-y-3">
@@ -149,7 +152,7 @@ export default function CandidateAchievementsPage() {
                     <option value="otro">Otro logro</option>
                   </select>
                 </label>
-                <Field label="Entidad / emisor" value={item.issuer} onChange={(v) => update(idx, { issuer: v })} />
+                <Field label="Entidad / emisor (si aplica)" value={item.issuer} onChange={(v) => update(idx, { issuer: v })} />
                 <Field label="Fecha" value={item.date} onChange={(v) => update(idx, { date: v })} placeholder="YYYY-MM" />
               </div>
 

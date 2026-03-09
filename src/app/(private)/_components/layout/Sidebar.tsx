@@ -61,23 +61,17 @@ function getSections(role: Role): Section[] {
   if (r === "owner") {
     return [
       {
-        title: "Command Center",
+        title: "CORE",
         items: [
           { href: "/owner/overview", label: "Overview" },
-          { href: "/owner/issues", label: "Issue Desk", badge: "LIVE" },
+          { href: "/owner/users", label: "Users" },
+          { href: "/owner/companies", label: "Companies" },
+          { href: "/owner/verifications", label: "Verifications" },
+          { href: "/owner/evidences", label: "Evidence" },
         ],
       },
       {
-        title: "Core",
-        items: [
-          { href: "/owner/users", label: "Usuarios" },
-          { href: "/owner/companies", label: "Empresas" },
-          { href: "/owner/verifications", label: "Verificaciones" },
-          { href: "/owner/evidences", label: "Evidencias" },
-        ],
-      },
-      {
-        title: "Growth & Revenue",
+        title: "GROWTH",
         items: [
           { href: "/owner/growth", label: "Growth" },
           { href: "/owner/marketing", label: "Marketing" },
@@ -85,10 +79,11 @@ function getSections(role: Role): Section[] {
         ],
       },
       {
-        title: "Automatización & Operaciones",
+        title: "OPERATIONS",
         items: [
-          { href: "/owner/ai-ops", label: "Procesamiento automático & Calidad" },
-          { href: "/owner/settings", label: "Configuración" },
+          { href: "/owner/ai-ops", label: "Automatic Processing" },
+          { href: "/owner/issues", label: "Issue Desk", badge: "LIVE" },
+          { href: "/owner/settings", label: "Settings" },
         ],
       },
     ];
@@ -132,7 +127,7 @@ function getSections(role: Role): Section[] {
         { href: "/candidate/profile", label: "Perfil" },
         { href: "/candidate/experiences", label: "Experiencias" },
         { href: "/candidate/education", label: "Educación" },
-        { href: "/candidate/achievements", label: "Logros" },
+        { href: "/candidate/achievements", label: "Idiomas y logros" },
         { href: "/candidate/evidence", label: "Evidencias" },
         { href: "/candidate/verifications", label: "Verificaciones" },
         { href: "/candidate/share", label: "Perfil público" },
