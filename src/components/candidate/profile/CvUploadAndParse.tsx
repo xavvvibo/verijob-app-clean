@@ -438,6 +438,9 @@ export default function CvUploadAndParse() {
                     </button>
                   </div>
                 </div>
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+                  Puedes editar estos datos antes de importarlos. La importación solo aplicará los elementos seleccionados.
+                </div>
 
                 {expDrafts.length === 0 ? (
                   <div className="text-sm text-slate-600">No se detectaron experiencias laborales.</div>
@@ -482,6 +485,9 @@ export default function CvUploadAndParse() {
                       {importing === "education" ? "Importando…" : "Importar formación seleccionada"}
                     </button>
                   </div>
+                </div>
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+                  Revisa y corrige cada formación antes de importarla. Solo se guardará la selección marcada.
                 </div>
 
                 {eduDrafts.length === 0 ? (

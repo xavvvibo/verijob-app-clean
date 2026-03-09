@@ -10,11 +10,6 @@ function toNullable(v: any) {
   return s ? s : null;
 }
 
-function looksCurrent(endDate: string | null) {
-  const v = (endDate || "").toLowerCase();
-  return !v || v.includes("actual") || v.includes("present");
-}
-
 function normalizeDateForDb(v: any): string | null {
   const s = normalizeText(v).toLowerCase();
   if (!s) return null;
@@ -70,6 +65,24 @@ function normalizeCompanyOrInstitution(v: any) {
 
 function normalizeRoleOrTitle(v: any) {
   return collapseSpaces(normalizedBase(v).replace(/[.,;:()]+/g, " "));
+}
+
+function isLikelyAcademic(item: any) {
+  const role = normalizeRoleOrTitle(item?.role_title || item?.title);
+  const company = normalizeCompanyOrInstitution(item?.company_name || item?.company);
+  const institution = normalizeCompanyOrInstitution(item?.institution);
+  if (!company && institution) return true;
+  const academicTokens = ["grado", "master", "licenciatura", "universidad", "fp", "doctorado", "curso"];
+  return academicTokens.some((token) => role.includes(token)) && !company;
+}
+
+function isLikelyWorkItem(item: any) {
+  const role = normalizeRoleOrTitle(item?.role_title || item?.title);
+  const company = normalizeCompanyOrInstitution(item?.company_name || item?.company);
+  const institution = normalizeCompanyOrInstitution(item?.institution);
+  if (company) return true;
+  if (institution && !company) return false;
+  return Boolean(role);
 }
 
 function normalizeMonth(v: any) {
@@ -156,6 +169,7 @@ export async function POST(req: Request) {
     const selectedCount = selectedRaw.length;
 
     const candidateRows = selectedRaw
+      .filter((x: any) => !isLikelyAcademic(x))
       .map((x: any) => {
         const role_title = toNullable(x?.role_title || x?.title);
         const company_name = toNullable(x?.company_name || x?.company);
@@ -229,33 +243,6 @@ export async function POST(req: Request) {
       if (insErr) {
         return NextResponse.json({ error: "profile_experiences_insert_failed", details: insErr.message }, { status: 400 });
       }
-
-      const { data: existingLegacyRows } = await supabase
-        .from("experiences")
-        .select("title,company_name,start_date,end_date")
-        .eq("user_id", user.id);
-
-      const legacySet = new Set((existingLegacyRows || []).map((x: any) => expExactSig(x)));
-      const legacyInsert = toInsert
-        .map((row) => ({
-          user_id: user.id,
-          title: row.role_title,
-          company_name: row.company_name,
-          start_date: row.start_date,
-          end_date: row.end_date,
-          is_current: looksCurrent(row.end_date),
-          description: row.description,
-        }))
-        .filter((row) => {
-          const sig = expExactSig(row);
-          if (legacySet.has(sig)) return false;
-          legacySet.add(sig);
-          return true;
-        });
-
-      if (legacyInsert.length > 0) {
-        await supabase.from("experiences").insert(legacyInsert);
-      }
     }
 
     return NextResponse.json({
@@ -276,6 +263,7 @@ export async function POST(req: Request) {
     const importedAt = new Date().toISOString();
 
     const normalized = selectedRaw
+      .filter((x: any) => !isLikelyWorkItem(x) || Boolean(normalizeCompanyOrInstitution(x?.institution)))
       .map((x: any) => {
         const title = toNullable(x?.title || x?.degree);
         const institution = toNullable(x?.institution);
@@ -326,17 +314,24 @@ export async function POST(req: Request) {
 
     if (toAppend.length > 0) {
       const merged = [...currentEducation, ...toAppend];
-      const { error: upErr } = await supabase
-        .from("candidate_profiles")
-        .upsert(
-          {
-            user_id: user.id,
-            education: merged,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: "user_id" }
-        );
-      if (upErr) return NextResponse.json({ error: "education_upsert_failed", details: upErr.message }, { status: 400 });
+      const payload = {
+        user_id: user.id,
+        education: merged,
+        updated_at: new Date().toISOString(),
+      };
+
+      let persistError: any = null;
+      if (cp) {
+        const { error } = await supabase.from("candidate_profiles").update(payload).eq("user_id", user.id);
+        persistError = error;
+      } else {
+        const { error } = await supabase.from("candidate_profiles").insert(payload);
+        persistError = error;
+      }
+
+      if (persistError) {
+        return NextResponse.json({ error: "education_persist_failed", details: persistError.message }, { status: 400 });
+      }
     }
 
     return NextResponse.json({

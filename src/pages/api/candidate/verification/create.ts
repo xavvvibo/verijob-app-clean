@@ -11,6 +11,20 @@ function json(res: NextApiResponse, status: number, body: any) {
   return res.status(status).json({ ...body, route_version: ROUTE_VERSION, route: "/pages/api/candidate/verification/create" });
 }
 
+function normalizeDateInput(value: unknown): string | null {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const low = raw.toLowerCase();
+  if (low.includes("actual") || low.includes("present")) return null;
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const ym = raw.match(/^(\d{4})-(\d{2})$/);
+  if (ym) return `${ym[1]}-${ym[2]}-01`;
+  const y = raw.match(/^(\d{4})$/);
+  if (y) return `${y[1]}-01-01`;
+  return null;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -31,7 +45,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const company_name_freeform = String(body?.company_name_freeform ?? "").trim();
     const company_email = String(body?.company_email ?? "").trim().toLowerCase();
     const position = String(body?.position ?? "").trim();
-    const start_date = String(body?.start_date ?? "").trim();
+    const start_date_raw = String(body?.start_date ?? "").trim();
     const end_date_raw = String(body?.end_date ?? "").trim();
     const is_current = Boolean(body?.is_current ?? false);
     const source_profile_experience_id = String(body?.source_profile_experience_id ?? "").trim() || null;
@@ -39,9 +53,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!company_name_freeform) return json(res, 400, { error: "Falta company_name_freeform" });
     if (!company_email || !company_email.includes("@")) return json(res, 400, { error: "Falta company_email válido" });
     if (!position) return json(res, 400, { error: "Falta position" });
-    if (!start_date) return json(res, 400, { error: "Falta start_date" });
+    const start_date = normalizeDateInput(start_date_raw);
+    if (!start_date) return json(res, 400, { error: "Falta start_date válido (YYYY-MM-DD o YYYY-MM)" });
 
-    const end_date = is_current ? null : (end_date_raw || null);
+    const end_date = is_current ? null : normalizeDateInput(end_date_raw);
 
     const requestedAtIso = new Date().toISOString();
     const externalToken = randomUUID();
@@ -61,19 +76,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       : null;
 
     const requestStatus = targetCompanyId ? "requested" : "company_registered_pending";
-    const { data: er, error: erErr } = await supabase
+    const baseRecord: Record<string, any> = {
+      company_name_freeform,
+      position,
+      start_date,
+      end_date,
+      verification_status: requestStatus,
+      last_verification_requested_at: requestedAtIso,
+    };
+    if (targetCompanyId) baseRecord.company_id = targetCompanyId;
+
+    let er: any = null;
+    let erErr: any = null;
+
+    ({ data: er, error: erErr } = await supabase
       .from("employment_records")
-      .insert({
-        candidate_id: user.id,
-        company_name_freeform,
-        position,
-        start_date,
-        end_date,
-        verification_status: requestStatus,
-        last_verification_requested_at: requestedAtIso,
-      })
+      .insert({ ...baseRecord, candidate_id: user.id })
       .select("id, company_id")
-      .single();
+      .single());
+
+    if (erErr && String(erErr.message || "").toLowerCase().includes("candidate_id")) {
+      ({ data: er, error: erErr } = await supabase
+        .from("employment_records")
+        .insert({ ...baseRecord, user_id: user.id })
+        .select("id, company_id")
+        .single());
+    }
 
     if (erErr) return json(res, 400, { error: "Insert employment_records failed", details: erErr.message });
 
