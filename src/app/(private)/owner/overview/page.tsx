@@ -57,12 +57,29 @@ async function OwnerOverviewServer() {
     if (!row.last_sync_at) return false;
     return new Date(row.last_sync_at).getTime() >= Date.now() - 24 * 60 * 60 * 1000;
   }).length;
+  const configuredOutscraper = rows.filter((row) => {
+    const config = row.provider_scraping_config;
+    return config && typeof config === "object" && Object.keys(config).length > 0;
+  }).length;
+  const importedOutscraper = rows.filter(
+    (row) => String(row.provider_scraping_last_status || "").toLowerCase() === "imported"
+  ).length;
+  const scrapingFailures = rows.filter(
+    (row) =>
+      String(row.provider_scraping_last_status || "").toLowerCase() === "failed" || Boolean(row.last_provider_error)
+  ).length;
+  const totalScrapingCost = rows.reduce((acc, row) => acc + Number(row.provider_scraping_last_cost || 0), 0);
 
   const money = new Intl.NumberFormat("es-ES", {
     style: "currency",
     currency: "EUR",
     maximumFractionDigits: 2,
   }).format(totalCampaignCost);
+  const scrapingMoney = new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 2,
+  }).format(totalScrapingCost);
 
   return (
     <div className="space-y-6">
@@ -119,6 +136,16 @@ async function OwnerOverviewServer() {
           <MetricCard title="Campaigns out of sync" value={String(outOfSyncCampaigns)} />
           <MetricCard title="Failed syncs" value={String(failedSyncs)} />
           <MetricCard title="Synced today" value={String(syncedToday)} />
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-2xl font-semibold text-slate-900">Scraping Health</h2>
+        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard title="Campaigns with Outscraper configured" value={String(configuredOutscraper)} />
+          <MetricCard title="Campaigns imported" value={String(importedOutscraper)} />
+          <MetricCard title="Scraping failures" value={String(scrapingFailures)} />
+          <MetricCard title="Total scraping cost" value={scrapingMoney} />
         </div>
       </section>
 

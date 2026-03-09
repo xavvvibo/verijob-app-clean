@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOwner } from "../../../_lib";
+import { normalizeOutscraperImport } from "../../_utils/outscraper";
 
 function json(status: number, body: any) {
   const res = NextResponse.json(body, { status });
@@ -41,6 +42,11 @@ function sampleProviderPayload(action: string, row: any) {
     },
     synced_at: new Date().toISOString(),
   };
+}
+
+function toObject(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return value as Record<string, any>;
 }
 
 export async function GET(_req: Request, ctx: any) {
@@ -166,6 +172,125 @@ export async function PATCH(req: Request, ctx: any) {
       .maybeSingle();
 
     if (error) return json(400, { error: "growth_campaign_update_execution_failed", details: error.message });
+    if (!data) return json(404, { error: "not_found" });
+    return json(200, { campaign: withEconomics(data) });
+  }
+
+  if (action === "save_outscraper_config") {
+    const currentConfig = toObject(body?.provider_scraping_config);
+    const provider_scraping_config = {
+      search_query: String(currentConfig.search_query || "").trim(),
+      country: String(currentConfig.country || "").trim(),
+      city: String(currentConfig.city || "").trim(),
+      limit: Math.max(0, Math.floor(Number(currentConfig.limit || 0))),
+      source_type: String(currentConfig.source_type || "google_maps").trim() || "google_maps",
+    };
+
+    const { data, error } = await owner.admin
+      .from("growth_campaigns")
+      .update({
+        provider_scraping: "outscraper",
+        provider_scraping_config,
+        provider_scraping_last_status: "configured",
+        updated_at: nowIso,
+      })
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+
+    if (error) return json(400, { error: "growth_campaign_save_outscraper_config_failed", details: error.message });
+    if (!data) return json(404, { error: "not_found" });
+    return json(200, { campaign: withEconomics(data) });
+  }
+
+  if (action === "sync_outscraper") {
+    const { data: current, error: curErr } = await owner.admin
+      .from("growth_campaigns")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (curErr) return json(400, { error: "growth_campaign_sync_outscraper_load_failed", details: curErr.message });
+    if (!current) return json(404, { error: "not_found" });
+
+    const nextAttempts = Number(current.sync_attempts || 0) + 1;
+    const generatedJobId = current.provider_scraping_job_id || `outscraper_${String(current.id).slice(0, 8)}_${Date.now()}`;
+    const payload = {
+      provider: "outscraper",
+      mode: "sync_outscraper",
+      config: toObject(current.provider_scraping_config),
+      job_id: generatedJobId,
+      status: "running",
+      synced_at: nowIso,
+    };
+
+    const { data, error } = await owner.admin
+      .from("growth_campaigns")
+      .update({
+        execution_status: "running",
+        provider_scraping: current.provider_scraping || "outscraper",
+        provider_scraping_job_id: generatedJobId,
+        provider_scraping_last_status: "running",
+        last_provider_error: null,
+        last_provider_payload: payload,
+        last_sync_at: nowIso,
+        sync_attempts: nextAttempts,
+        updated_at: nowIso,
+      })
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+
+    if (error) return json(400, { error: "growth_campaign_sync_outscraper_failed", details: error.message });
+    if (!data) return json(404, { error: "not_found" });
+    return json(200, { campaign: withEconomics(data) });
+  }
+
+  if (action === "import_outscraper_result") {
+    const normalized = normalizeOutscraperImport(toObject(body?.payload));
+    const nextLeads = normalized.leads;
+    const nextContacts = normalized.contactsFound || normalized.leads;
+
+    const { data, error } = await owner.admin
+      .from("growth_campaigns")
+      .update({
+        provider_scraping: "outscraper",
+        provider_scraping_job_id: normalized.jobId,
+        provider_scraping_last_status: "imported",
+        provider_scraping_last_result: normalized.payload,
+        provider_scraping_last_cost: normalized.cost,
+        provider_scraping_last_leads: normalized.leads,
+        leads_discovered: nextLeads,
+        contacts_found: nextContacts,
+        last_provider_payload: normalized.payload,
+        last_provider_error: null,
+        last_sync_at: nowIso,
+        updated_at: nowIso,
+      })
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+
+    if (error) return json(400, { error: "growth_campaign_import_outscraper_result_failed", details: error.message });
+    if (!data) return json(404, { error: "not_found" });
+    return json(200, { campaign: withEconomics(data) });
+  }
+
+  if (action === "mark_outscraper_failed") {
+    const reason = String(body?.error_message || "outscraper_sync_failed").trim();
+    const { data, error } = await owner.admin
+      .from("growth_campaigns")
+      .update({
+        provider_scraping: "outscraper",
+        provider_scraping_last_status: "failed",
+        last_provider_error: reason,
+        execution_status: "failed",
+        last_sync_at: nowIso,
+        updated_at: nowIso,
+      })
+      .eq("id", id)
+      .select("*")
+      .maybeSingle();
+    if (error) return json(400, { error: "growth_campaign_mark_outscraper_failed_failed", details: error.message });
     if (!data) return json(404, { error: "not_found" });
     return json(200, { campaign: withEconomics(data) });
   }

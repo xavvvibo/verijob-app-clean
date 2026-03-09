@@ -23,6 +23,12 @@ type Campaign = {
   provider_enrichment?: string | null;
   provider_sending?: string | null;
   external_job_id?: string | null;
+  provider_scraping_config?: Record<string, any> | null;
+  provider_scraping_job_id?: string | null;
+  provider_scraping_last_status?: string | null;
+  provider_scraping_last_result?: Record<string, any> | null;
+  provider_scraping_last_cost?: number | null;
+  provider_scraping_last_leads?: number | null;
   last_sync_at?: string | null;
   execution_started_at?: string | null;
   execution_finished_at?: string | null;
@@ -526,6 +532,7 @@ export default function GrowthControlCenterClient() {
                   <th className="px-3 py-2">Sync</th>
                   <th className="px-3 py-2">Error</th>
                   <th className="px-3 py-2">Providers</th>
+                  <th className="px-3 py-2">Scraping</th>
                   <th className="px-3 py-2">Last sync</th>
                   <th className="px-3 py-2">Next sync</th>
                   <th className="px-3 py-2">Acciones</th>
@@ -576,6 +583,17 @@ export default function GrowthControlCenterClient() {
                         )}
                       </td>
                       <td className="px-3 py-2 text-slate-700">{providersSummary(campaign)}</td>
+                      <td className="px-3 py-2 text-slate-700">
+                        <div className="text-xs font-medium text-slate-900">
+                          {campaign.provider_scraping_last_status || "—"}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          Coste: {money(Number(campaign.provider_scraping_last_cost || 0))}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          Leads: {Number(campaign.provider_scraping_last_leads || 0)}
+                        </div>
+                      </td>
                       <td className="px-3 py-2 text-slate-700">
                         {campaign.last_sync_at ? new Date(campaign.last_sync_at).toLocaleString("es-ES") : "—"}
                       </td>

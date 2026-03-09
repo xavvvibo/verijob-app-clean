@@ -22,6 +22,12 @@ type Campaign = {
   provider_enrichment?: string | null;
   provider_sending?: string | null;
   external_job_id?: string | null;
+  provider_scraping_config?: Record<string, any> | null;
+  provider_scraping_job_id?: string | null;
+  provider_scraping_last_status?: string | null;
+  provider_scraping_last_result?: Record<string, any> | null;
+  provider_scraping_last_cost?: number | null;
+  provider_scraping_last_leads?: number | null;
   last_sync_at?: string | null;
   execution_started_at?: string | null;
   execution_finished_at?: string | null;
@@ -127,6 +133,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [savingCosts, setSavingCosts] = useState(false);
   const [savingExecution, setSavingExecution] = useState(false);
+  const [savingOutscraper, setSavingOutscraper] = useState(false);
   const [costForm, setCostForm] = useState({
     cost_scraping: "0",
     cost_enrichment: "0",
@@ -140,6 +147,13 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
     provider_enrichment: "",
     provider_sending: "",
     external_job_id: "",
+  });
+  const [outscraperForm, setOutscraperForm] = useState({
+    search_query: "",
+    country: "",
+    city: "",
+    limit: "100",
+    source_type: "google_maps",
   });
 
   useEffect(() => {
@@ -167,6 +181,14 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
               provider_enrichment: String(next.provider_enrichment || ""),
               provider_sending: String(next.provider_sending || ""),
               external_job_id: String(next.external_job_id || ""),
+            });
+            const config = next.provider_scraping_config || {};
+            setOutscraperForm({
+              search_query: String(config.search_query || ""),
+              country: String(config.country || ""),
+              city: String(config.city || ""),
+              limit: String(Number(config.limit || 100)),
+              source_type: String(config.source_type || "google_maps"),
             });
           }
         }
@@ -257,6 +279,72 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
     } finally {
       setSavingExecution(false);
     }
+  }
+
+  function applyCampaign(next: Campaign | null) {
+    if (!next) return;
+    setCampaign(next);
+    setExecutionForm({
+      provider_scraping: String(next.provider_scraping || ""),
+      provider_enrichment: String(next.provider_enrichment || ""),
+      provider_sending: String(next.provider_sending || ""),
+      external_job_id: String(next.external_job_id || ""),
+    });
+    const config = next.provider_scraping_config || {};
+    setOutscraperForm({
+      search_query: String(config.search_query || ""),
+      country: String(config.country || ""),
+      city: String(config.city || ""),
+      limit: String(Number(config.limit || 100)),
+      source_type: String(config.source_type || "google_maps"),
+    });
+  }
+
+  async function runOutscraperAction(action: string, extra: Record<string, any> = {}) {
+    if (!campaign) return;
+    setSavingOutscraper(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/internal/owner/growth/campaigns/${campaign.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action, ...extra }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.error || `No se pudo ejecutar ${action}`);
+      applyCampaign(json?.campaign || null);
+    } catch (e: any) {
+      setError(e?.message || "No se pudo actualizar Outscraper");
+    } finally {
+      setSavingOutscraper(false);
+    }
+  }
+
+  async function saveOutscraperConfig(e: React.FormEvent) {
+    e.preventDefault();
+    await runOutscraperAction("save_outscraper_config", {
+      provider_scraping_config: {
+        search_query: outscraperForm.search_query || "",
+        country: outscraperForm.country || "",
+        city: outscraperForm.city || "",
+        limit: Number(outscraperForm.limit || 0),
+        source_type: outscraperForm.source_type || "google_maps",
+      },
+    });
+  }
+
+  async function importSampleOutscraper() {
+    await runOutscraperAction("import_outscraper_result", {
+      payload: {
+        job_id: `outscraper_job_${campaignId.slice(0, 6)}`,
+        status: "completed",
+        cost: 12.5,
+        leads: 84,
+        contacts_found: 51,
+        source: outscraperForm.source_type || "google_maps",
+        query: outscraperForm.search_query || "asesorias laborales granada",
+      },
+    });
   }
 
   const economics = useMemo(() => {
@@ -452,6 +540,99 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
               className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-60"
             >
               {savingExecution ? "Guardando..." : "Save Execution Setup"}
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-2xl font-semibold text-slate-900">Outscraper</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          Configura scraping por campaña y sincroniza/importa resultados para actualizar métricas del dashboard.
+        </p>
+
+        <dl className="mt-4 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+          <Row label="provider_scraping_job_id" value={campaign.provider_scraping_job_id || "—"} />
+          <Row label="provider_scraping_last_status" value={campaign.provider_scraping_last_status || "—"} />
+          <Row label="provider_scraping_last_cost" value={money(Number(campaign.provider_scraping_last_cost || 0))} />
+          <Row label="provider_scraping_last_leads" value={String(Number(campaign.provider_scraping_last_leads || 0))} />
+        </dl>
+
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm font-semibold text-slate-700">provider_scraping_last_result</p>
+          <pre className="mt-2 overflow-x-auto text-xs text-slate-600">
+            {JSON.stringify(campaign.provider_scraping_last_result || {}, null, 2).slice(0, 1200)}
+          </pre>
+        </div>
+
+        <form onSubmit={saveOutscraperConfig} className="mt-6 grid gap-4 md:grid-cols-2">
+          <TextInput
+            label="Search query"
+            value={outscraperForm.search_query}
+            onChange={(value) => setOutscraperForm((s) => ({ ...s, search_query: value }))}
+            placeholder="asesorias laborales granada"
+          />
+          <TextInput
+            label="Country"
+            value={outscraperForm.country}
+            onChange={(value) => setOutscraperForm((s) => ({ ...s, country: value }))}
+            placeholder="ES"
+          />
+          <TextInput
+            label="City"
+            value={outscraperForm.city}
+            onChange={(value) => setOutscraperForm((s) => ({ ...s, city: value }))}
+            placeholder="Granada"
+          />
+          <CostInput
+            label="Limit"
+            value={outscraperForm.limit}
+            onChange={(value) => setOutscraperForm((s) => ({ ...s, limit: value }))}
+            step="1"
+          />
+          <label className="block">
+            <span className="text-sm font-medium text-slate-700">Source type</span>
+            <select
+              value={outscraperForm.source_type}
+              onChange={(e) => setOutscraperForm((s) => ({ ...s, source_type: e.target.value }))}
+              className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900"
+            >
+              <option value="google_maps">google_maps</option>
+              <option value="company_search">company_search</option>
+              <option value="places_search">places_search</option>
+            </select>
+          </label>
+          <div className="md:col-span-2 flex flex-wrap gap-2">
+            <button
+              type="submit"
+              disabled={savingOutscraper}
+              className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-60"
+            >
+              {savingOutscraper ? "Guardando..." : "Save Outscraper Config"}
+            </button>
+            <button
+              type="button"
+              onClick={() => void runOutscraperAction("sync_outscraper")}
+              disabled={savingOutscraper}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+            >
+              Sync Outscraper
+            </button>
+            <button
+              type="button"
+              onClick={() => void importSampleOutscraper()}
+              disabled={savingOutscraper}
+              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+            >
+              Import Sample Result
+            </button>
+            <button
+              type="button"
+              onClick={() => void runOutscraperAction("mark_outscraper_failed", { error_message: "manual_outscraper_failure" })}
+              disabled={savingOutscraper}
+              className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700 hover:bg-rose-100 disabled:opacity-60"
+            >
+              Mark Outscraper Failed
             </button>
           </div>
         </form>
