@@ -33,16 +33,31 @@ export default async function CandidateExperiencePage() {
     .eq("user_id", au.user.id);
 
   const verificationIds = (rows || []).map((x: any) => x.matched_verification_id).filter(Boolean);
-  const verificationMap = new Map<string, { status: string | null; is_revoked: boolean | null }>();
+  const verificationMap = new Map<string, { status: string | null; is_revoked: boolean | null; requested_at?: string | null; resolved_at?: string | null }>();
   if (verificationIds.length > 0) {
-    const { data: linkedRows } = await supabase
+    const [{ data: linkedRows }, { data: requestRows }] = await Promise.all([
+      supabase
       .from("verification_summary")
       .select("verification_id,status,is_revoked")
-      .in("verification_id", verificationIds as string[]);
+      .in("verification_id", verificationIds as string[]),
+      supabase
+      .from("verification_requests")
+      .select("id,status,requested_at,resolved_at")
+      .in("id", verificationIds as string[]),
+    ]);
     for (const row of linkedRows || []) {
       verificationMap.set((row as any).verification_id, {
         status: (row as any).status ?? null,
         is_revoked: (row as any).is_revoked ?? false,
+      });
+    }
+    for (const row of requestRows || []) {
+      const existing = verificationMap.get((row as any).id) || { status: null, is_revoked: false };
+      verificationMap.set((row as any).id, {
+        ...existing,
+        status: (row as any).status ?? existing.status,
+        requested_at: (row as any).requested_at ?? null,
+        resolved_at: (row as any).resolved_at ?? null,
       });
     }
   }
@@ -66,7 +81,19 @@ export default async function CandidateExperiencePage() {
     if (linked.is_revoked) return "Revocado";
     const status = String(linked.status || "").toLowerCase();
     if (status === "verified" || status === "approved") return "Verificado";
+    if (status === "revoked") return "Revocado";
+    if (status === "rejected") return "Sin verificar";
     return "En verificación";
+  }
+
+  function lastActionLabel(row: any) {
+    const linkedId = row?.matched_verification_id as string | null;
+    if (!linkedId) return "Sin solicitudes enviadas";
+    const linked = verificationMap.get(linkedId);
+    if (!linked) return "Solicitud enviada";
+    if (linked.resolved_at) return `Resuelta: ${linked.resolved_at}`;
+    if (linked.requested_at) return `Enviada: ${linked.requested_at}`;
+    return "Solicitud en curso";
   }
 
   return (
@@ -154,9 +181,13 @@ export default async function CandidateExperiencePage() {
                       Verifica esta experiencia para aumentar tu credibilidad.
                     </div>
                   ) : null}
+                  <div className="mt-1 text-xs text-gray-500">
+                    Última acción: {lastActionLabel(r)}
+                  </div>
 
                   <div className="mt-4 space-y-3">
                     <form action="/candidate/verifications/new" method="get" className="rounded-xl border border-gray-200 p-3">
+                      <input type="hidden" name="source_profile_experience_id" value={r.id || ""} />
                       <input type="hidden" name="company" value={r.company_name || ""} />
                       <input type="hidden" name="position" value={r.role_title || ""} />
                       <input type="hidden" name="start" value={r.start_date || ""} />

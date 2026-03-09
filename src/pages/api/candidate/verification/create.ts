@@ -1,8 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { randomUUID } from "crypto";
 import { createPagesRouteClient } from "@/utils/supabase/pages";
 import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
+import { buildExternalExperienceVerificationEmail } from "@/lib/email/templates/externalExperienceVerification";
 
-const ROUTE_VERSION = "candidate-verification-create-v5-companyid-on-vr-pages";
+const ROUTE_VERSION = "candidate-verification-create-v6-experience-request-flow";
 
 function json(res: NextApiResponse, status: number, body: any) {
   res.setHeader("Cache-Control", "no-store");
@@ -32,6 +34,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const start_date = String(body?.start_date ?? "").trim();
     const end_date_raw = String(body?.end_date ?? "").trim();
     const is_current = Boolean(body?.is_current ?? false);
+    const source_profile_experience_id = String(body?.source_profile_experience_id ?? "").trim() || null;
 
     if (!company_name_freeform) return json(res, 400, { error: "Falta company_name_freeform" });
     if (!company_email || !company_email.includes("@")) return json(res, 400, { error: "Falta company_email válido" });
@@ -40,6 +43,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const end_date = is_current ? null : (end_date_raw || null);
 
+    const requestedAtIso = new Date().toISOString();
+    const externalToken = randomUUID();
+    const externalTokenExpiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es";
+
+    const { data: companyProfileByEmail } = await supabase
+      .from("profiles")
+      .select("id,active_company_id,role,email")
+      .eq("email", company_email)
+      .eq("role", "company")
+      .limit(1)
+      .maybeSingle();
+
+    const targetCompanyId = (companyProfileByEmail as any)?.active_company_id
+      ? String((companyProfileByEmail as any).active_company_id)
+      : null;
+
+    const requestStatus = targetCompanyId ? "requested" : "company_registered_pending";
     const { data: er, error: erErr } = await supabase
       .from("employment_records")
       .insert({
@@ -48,6 +69,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         position,
         start_date,
         end_date,
+        verification_status: requestStatus,
+        last_verification_requested_at: requestedAtIso,
       })
       .select("id, company_id")
       .single();
@@ -59,31 +82,77 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .insert({
         employment_record_id: er.id,
         requested_by: user.id,
+        company_id: targetCompanyId,
+        status: requestStatus,
+        company_email_target: company_email,
+        company_name_target: company_name_freeform,
+        verification_channel: "email",
+        requested_at: requestedAtIso,
+        external_token: targetCompanyId ? null : externalToken,
+        external_email_target: company_email,
+        external_token_expires_at: targetCompanyId ? null : externalTokenExpiresAt,
+        external_resolved: false,
+        request_context: {
+          experience_scope: "employment_record",
+          target_company_registered: Boolean(targetCompanyId),
+        },
       })
       .select("id")
       .single();
 
     if (vrErr) return json(res, 400, { error: "Insert verification_requests failed", details: vrErr.message });
 
+    await supabase
+      .from("employment_records")
+      .update({ last_verification_request_id: vr.id })
+      .eq("id", er.id);
+
+    if (source_profile_experience_id) {
+      await supabase
+        .from("profile_experiences")
+        .update({ matched_verification_id: vr.id })
+        .eq("id", source_profile_experience_id)
+        .eq("user_id", user.id);
+    }
+
+    const externalVerificationLink = targetCompanyId ? null : `${appUrl}/verify-experience/${externalToken}`;
+    const emailTemplate = externalVerificationLink
+      ? buildExternalExperienceVerificationEmail({ link: externalVerificationLink })
+      : null;
+
     trackEventAdmin({
       event_name: "verification_created",
       user_id: user.id,
-      company_id: null,
+      company_id: targetCompanyId,
       entity_type: "verification_request",
       entity_id: vr.id,
       metadata: {
         employment_record_id: er.id,
+        experience_verification: true,
         company_name_freeform,
         company_email,
         position,
         start_date,
         end_date,
         is_current,
+        source_profile_experience_id,
+        company_registered: Boolean(targetCompanyId),
+        external_verification_link: externalVerificationLink,
         route_version: ROUTE_VERSION,
       },
     }).catch(() => {});
 
-    return json(res, 200, { ok: true, verification_request_id: vr.id });
+    return json(res, 200, {
+      ok: true,
+      verification_request_id: vr.id,
+      external_verification: targetCompanyId
+        ? null
+        : {
+            link: externalVerificationLink,
+            expires_at: externalTokenExpiresAt,
+            email_template: emailTemplate,
+          },
+    });
   } catch (e: any) {
     return json(res, 500, { error: "server_error", details: String(e?.message || e) });
   }

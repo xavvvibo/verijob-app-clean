@@ -2,25 +2,54 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 
+type VerificationRequestRow = {
+  id: string;
+  requested_by: string | null;
+  status: string | null;
+  requested_at: string | null;
+  resolved_at: string | null;
+  company_name_target: string | null;
+  employment_records:
+    | {
+        position: string | null;
+        company_name_freeform: string | null;
+        start_date: string | null;
+        end_date: string | null;
+      }
+    | {
+        position: string | null;
+        company_name_freeform: string | null;
+        start_date: string | null;
+        end_date: string | null;
+      }[]
+    | null;
+};
+
 type ReqRow = {
   verification_id: string;
+  candidate_id: string | null;
+  candidate_name: string | null;
   position: string | null;
   status_effective: string | null;
   start_date: string | null;
+  end_date: string | null;
   company_name_freeform: string | null;
 };
 
 function statusLabel(v: string | null) {
   if (v === "verified") return "Verificada";
-  if (v === "reviewing") return "En revisión";
+  if (v === "requested" || v === "reviewing") return "En revisión";
+  if (v === "company_registered_pending") return "Empresa registrada (pendiente)";
+  if (v === "rejected") return "Rechazada";
   if (v === "revoked") return "Revocada";
   return "Sin estado";
 }
 
 function statusClass(v: string | null) {
   if (v === "verified") return "bg-emerald-100 text-emerald-800 border-emerald-200";
-  if (v === "reviewing") return "bg-amber-100 text-amber-800 border-amber-200";
-  if (v === "revoked") return "bg-rose-100 text-rose-800 border-rose-200";
+  if (v === "requested" || v === "reviewing") return "bg-amber-100 text-amber-800 border-amber-200";
+  if (v === "company_registered_pending") return "bg-indigo-100 text-indigo-800 border-indigo-200";
+  if (v === "rejected" || v === "revoked") return "bg-rose-100 text-rose-800 border-rose-200";
   return "bg-slate-100 text-slate-700 border-slate-200";
 }
 
@@ -29,6 +58,10 @@ function formatDate(value: string | null) {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "No disponible";
   return d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function periodLabel(startDate: string | null, endDate: string | null) {
+  return `${formatDate(startDate)} — ${endDate ? formatDate(endDate) : "Actualidad"}`;
 }
 
 export default async function CompanyRequestsPage({
@@ -58,8 +91,8 @@ export default async function CompanyRequestsPage({
 
   const [{ data: allData }, { data: subData }] = await Promise.all([
     supabase
-      .from("verification_summary")
-      .select("verification_id,position,status_effective,start_date,company_name_freeform")
+      .from("verification_requests")
+      .select("id,requested_by,status,requested_at,resolved_at,company_name_target,employment_records(position,company_name_freeform,start_date,end_date)")
       .eq("company_id", profile.active_company_id),
     supabase
       .from("subscriptions")
@@ -72,16 +105,52 @@ export default async function CompanyRequestsPage({
 
   const planActive = ["active", "trialing"].includes(String(subData?.status || "").toLowerCase());
 
-  const rows = (allData || []) as ReqRow[];
+  const baseRows = (allData || []) as VerificationRequestRow[];
+  const candidateIds = Array.from(new Set(baseRows.map((row) => row.requested_by).filter(Boolean))) as string[];
+  const candidateNameMap = new Map<string, string>();
+
+  if (candidateIds.length > 0) {
+    const { data: candidateRows } = await supabase
+      .from("profiles")
+      .select("id,full_name")
+      .in("id", candidateIds);
+
+    for (const row of candidateRows || []) {
+      candidateNameMap.set(String((row as any).id), String((row as any).full_name || ""));
+    }
+  }
+
+  const rows: ReqRow[] = baseRows.map((row) => {
+    const employment = Array.isArray(row.employment_records) ? row.employment_records[0] : row.employment_records;
+    return {
+      verification_id: row.id,
+      candidate_id: row.requested_by,
+      candidate_name: row.requested_by ? candidateNameMap.get(row.requested_by) || null : null,
+      position: employment?.position || null,
+      status_effective: row.status || null,
+      start_date: employment?.start_date || null,
+      end_date: employment?.end_date || null,
+      company_name_freeform: employment?.company_name_freeform || row.company_name_target || null,
+    };
+  });
+
   const counts = {
     all: rows.length,
-    reviewing: rows.filter((r) => r.status_effective === "reviewing").length,
+    reviewing: rows.filter((r) => r.status_effective === "reviewing" || r.status_effective === "requested").length,
     verified: rows.filter((r) => r.status_effective === "verified").length,
-    revoked: rows.filter((r) => r.status_effective === "revoked").length,
+    revoked: rows.filter((r) => r.status_effective === "revoked" || r.status_effective === "rejected").length,
   };
 
   let filtered = rows;
-  if (statusFilter !== "all") filtered = rows.filter((r) => r.status_effective === statusFilter);
+  if (statusFilter !== "all") {
+    if (statusFilter === "reviewing") {
+      filtered = rows.filter((r) => r.status_effective === "reviewing" || r.status_effective === "requested");
+    } else if (statusFilter === "revoked") {
+      filtered = rows.filter((r) => r.status_effective === "revoked" || r.status_effective === "rejected");
+    } else {
+      filtered = rows.filter((r) => r.status_effective === statusFilter);
+    }
+  }
 
   filtered = filtered.sort((a, b) => {
     const da = a.start_date ? new Date(a.start_date).getTime() : 0;
@@ -94,11 +163,11 @@ export default async function CompanyRequestsPage({
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Solicitudes y verificaciones</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Gestiona la cola operativa de tu empresa, prioriza revisiones y abre el detalle de cada verificación.
+          Gestiona solicitudes de verificación de experiencias laborales, prioriza revisiones y abre el detalle de cada caso.
         </p>
         {!planActive ? (
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            Estás operando con acceso básico. Mejora tu plan para ampliar volumen y funciones avanzadas de revisión.
+            Tu empresa puede revisar y responder solicitudes de verificación en modo free. Mejora tu plan solo si quieres más capacidad premium en otras áreas.
             <Link href="/company/upgrade" className="ml-2 font-semibold underline underline-offset-2">
               Ver opciones
             </Link>
@@ -135,10 +204,11 @@ export default async function CompanyRequestsPage({
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-4 py-3">Verificación</th>
+                  <th className="px-4 py-3">Candidato</th>
                   <th className="px-4 py-3">Puesto</th>
                   <th className="px-4 py-3">Empresa</th>
+                  <th className="px-4 py-3">Periodo</th>
                   <th className="px-4 py-3">Estado</th>
-                  <th className="px-4 py-3">Inicio</th>
                   <th className="px-4 py-3">Acción</th>
                 </tr>
               </thead>
@@ -146,17 +216,18 @@ export default async function CompanyRequestsPage({
                 {filtered.map((row) => (
                   <tr key={row.verification_id} className="border-b border-slate-100">
                     <td className="px-4 py-3 font-mono text-xs text-slate-700">{row.verification_id.slice(0, 10)}…</td>
+                    <td className="px-4 py-3 text-slate-700">{row.candidate_name || row.candidate_id || "Candidato"}</td>
                     <td className="px-4 py-3 text-slate-900">{row.position || "No especificado"}</td>
                     <td className="px-4 py-3 text-slate-700">{row.company_name_freeform || "No especificada"}</td>
+                    <td className="px-4 py-3 text-slate-700">{periodLabel(row.start_date, row.end_date)}</td>
                     <td className="px-4 py-3">
                       <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(row.status_effective)}`}>
                         {statusLabel(row.status_effective)}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{formatDate(row.start_date)}</td>
                     <td className="px-4 py-3">
                       <Link href={`/company/verification/${row.verification_id}`} className="font-semibold text-slate-900 underline underline-offset-2">
-                        Ver detalle
+                        Revisar experiencia
                       </Link>
                     </td>
                   </tr>

@@ -12,7 +12,44 @@ async function requireUser() {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
   if (!auth?.user) throw new Error("Unauthorized");
-  return supabase;
+  return { supabase, user: auth.user };
+}
+
+async function resolveCompanyVerificationStatus(supabase: any, companyId: string, userId: string) {
+  const { data: sub } = await supabase
+    .from("subscriptions")
+    .select("status")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const subscriptionStatus = String(sub?.status || "").toLowerCase();
+  if (subscriptionStatus === "active" || subscriptionStatus === "trialing") return "verified_paid";
+
+  const { data: company } = await supabase
+    .from("companies")
+    .select("company_verification_status,name,trade_name,legal_name")
+    .eq("id", companyId)
+    .maybeSingle();
+
+  if (company?.company_verification_status) {
+    return {
+      status: String(company.company_verification_status),
+      companyName: String(company.name || company.trade_name || company.legal_name || ""),
+    };
+  }
+
+  const { data: companyProfile } = await supabase
+    .from("company_profiles")
+    .select("company_verification_status,name,trade_name,legal_name")
+    .eq("company_id", companyId)
+    .maybeSingle();
+
+  return {
+    status: String(companyProfile?.company_verification_status || "unverified"),
+    companyName: String(companyProfile?.name || companyProfile?.trade_name || companyProfile?.legal_name || ""),
+  };
 }
 
 /**
@@ -20,16 +57,70 @@ async function requireUser() {
  * setCompanyVerificationStatus({ verificationRequestId, nextStatus, note })
  */
 export async function setCompanyVerificationStatus(input: SetCompanyVerificationStatusInput) {
-  const supabase = await requireUser();
+  const { supabase, user } = await requireUser();
 
-  const { verificationRequestId, nextStatus } = input;
+  const { verificationRequestId, nextStatus, note } = input;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("active_company_id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const activeCompanyId = (profile as any)?.active_company_id;
+  if (!activeCompanyId) throw new Error("No active company context");
+
+  const { data: vr } = await supabase
+    .from("verification_requests")
+    .select("id,employment_record_id,company_id")
+    .eq("id", verificationRequestId)
+    .maybeSingle();
+
+  if (!vr?.id) throw new Error("Verification request not found");
+  if (vr.company_id && String(vr.company_id) !== String(activeCompanyId)) {
+    throw new Error("Verification request does not belong to active company");
+  }
+
+  const resolvedAt = new Date().toISOString();
+  const companyStatus = await resolveCompanyVerificationStatus(supabase, String(activeCompanyId), user.id);
+  const companyVerificationStatusSnapshot =
+    typeof companyStatus === "string" ? companyStatus : companyStatus.status;
+  const companyNameSnapshot =
+    typeof companyStatus === "string" ? null : companyStatus.companyName || null;
 
   const { error } = await supabase
     .from("verification_requests")
-    .update({ status: nextStatus })
+    .update({
+      status: nextStatus,
+      resolved_by: user.id,
+      resolved_at: resolvedAt,
+      resolution_notes: note || null,
+      company_id_snapshot: activeCompanyId,
+      company_name_snapshot: companyNameSnapshot,
+      company_verification_status_snapshot: companyVerificationStatusSnapshot,
+      snapshot_at: resolvedAt,
+    })
     .eq("id", verificationRequestId);
 
   if (error) throw new Error(error.message);
+
+  const normalizedEmploymentStatus =
+    nextStatus === "verified" ? "verified" : nextStatus === "rejected" ? "rejected" : "requested";
+
+  if (vr.employment_record_id) {
+    const { error: erErr } = await supabase
+      .from("employment_records")
+      .update({
+        verification_status: normalizedEmploymentStatus,
+        verification_result: nextStatus,
+        verification_resolved_at: resolvedAt,
+        verified_by_company_id: activeCompanyId,
+        company_verification_status_snapshot: companyVerificationStatusSnapshot,
+        last_verification_request_id: verificationRequestId,
+      })
+      .eq("id", vr.employment_record_id);
+    if (erErr) throw new Error(erErr.message);
+  }
 
   return { ok: true };
 }
@@ -39,7 +130,7 @@ export async function setCompanyVerificationStatus(input: SetCompanyVerification
  * Tries verification_summary first (view), falls back to verification_requests.
  */
 export async function getCompanyVerificationDetail(verificationRequestId: string) {
-  const supabase = await requireUser();
+  const { supabase } = await requireUser();
 
   // 1) Try view: verification_summary
   const { data: summary, error: summaryErr } = await supabase

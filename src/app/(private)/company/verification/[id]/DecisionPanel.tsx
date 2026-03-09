@@ -44,8 +44,7 @@ export default function DecisionPanel(props: {
         Decisión
       </h2>
       <p style={{ opacity: 0.8, marginTop: 6 }}>
-        Al aprobar o rechazar, se actualiza el estado y se registra el evento en
-        verification_actions.
+        Al aprobar o rechazar, se actualiza la solicitud de verificación de esta experiencia laboral y se registra la trazabilidad.
       </p>
 
       <div style={{ marginTop: 12 }}>

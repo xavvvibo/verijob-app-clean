@@ -1,56 +1,82 @@
-import { createClient } from "@/utils/supabase/server"
+import { createClient } from "@/utils/supabase/server";
+
+function toEsDate(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function mapStatus(statusRaw: unknown, revokedAt?: string | null) {
+  if (revokedAt) return "Revocada";
+  const status = String(statusRaw || "").toLowerCase();
+  if (status === "verified" || status === "approved") return "Verificada";
+  if (status === "requested" || status === "reviewing") return "En verificación";
+  if (status === "company_registered_pending") return "Empresa registrada (pendiente)";
+  if (status === "rejected") return "Rechazada";
+  if (status === "revoked") return "Revocada";
+  return "En verificación";
+}
+
+function mapCompanyVerificationStatus(statusRaw: unknown) {
+  const status = String(statusRaw || "").toLowerCase();
+  if (status === "verified_paid") return "Empresa verificada (suscripción activa)";
+  if (status === "verified_document") return "Empresa verificada por documentación";
+  if (status === "unverified") return "Empresa no verificada";
+  return "Estado de empresa no disponible";
+}
 
 export default async function CandidateVerificationPage(props: any) {
-  const params = await props?.params
-  const id = params?.id as string | undefined
+  const params = await props?.params;
+  const id = params?.id as string | undefined;
 
-  const supabase = await createClient()
+  const supabase = await createClient();
 
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user || !id) return null
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  // 1) ownership + token desde verification_requests
+  if (!user || !id) return null;
+
   const { data: vr } = await supabase
     .from("verification_requests")
-    .select("id, status, revoked_at, public_token, requested_by")
+    .select("id,status,revoked_at,requested_by,requested_at,resolved_at,resolution_notes,company_name_target,company_name_snapshot,company_verification_status_snapshot,employment_record_id")
     .eq("id", id)
-    .maybeSingle()
+    .maybeSingle();
 
   if (!vr || vr.requested_by !== user.id) {
     return (
       <div className="p-8">
         <div className="text-xl font-semibold">No encontramos esa página</div>
       </div>
-    )
+    );
   }
 
-  // 2) detalle UI desde verification_summary (es donde están position/company/evidences)
-  const { data: vs } = await supabase
-    .from("verification_summary")
-    .select("*")
-    .eq("verification_id", id)
-    .maybeSingle()
+  const { data: er } = vr.employment_record_id
+    ? await supabase
+        .from("employment_records")
+        .select("position,company_name_freeform,start_date,end_date,verification_status")
+        .eq("id", vr.employment_record_id)
+        .maybeSingle()
+    : { data: null as any };
 
   const { data: cp } = await supabase
     .from("candidate_profiles")
     .select("trust_score")
     .eq("user_id", user.id)
-    .maybeSingle()
+    .maybeSingle();
 
-  const title =
-    vs?.position
-      ? `${vs.position} · ${vs.company_name_freeform || "Empresa"}`
-      : `Verificación · ${id}`
-
-  const statusLabel = vs?.is_revoked || vr.revoked_at ? "Revocada" : (vs?.status || vr.status || "—")
-
-  const publicUrl = vr.public_token ? `https://app.verijob.es/v/${vr.public_token}` : null
+  const statusLabel = mapStatus(vr.status, vr.revoked_at);
+  const companyVerificationLabel = mapCompanyVerificationStatus(vr.company_verification_status_snapshot);
+  const companyName = vr.company_name_snapshot || er?.company_name_freeform || vr.company_name_target || "Empresa";
 
   return (
     <div className="p-8 space-y-6">
       <div className="bg-white border border-gray-200 rounded-3xl p-7">
-        <div className="text-xs text-gray-500">Verificación</div>
-        <div className="mt-2 text-2xl font-semibold text-gray-900">{title}</div>
+        <div className="text-xs text-gray-500">Solicitud de verificación</div>
+        <div className="mt-2 text-2xl font-semibold text-gray-900">
+          {er?.position || "Experiencia"} · {companyName}
+        </div>
 
         <div className="mt-4 flex items-center gap-3">
           {statusLabel === "Revocada" ? (
@@ -62,36 +88,37 @@ export default async function CandidateVerificationPage(props: any) {
               {statusLabel}
             </span>
           )}
-
-          {publicUrl ? (
-            <a className="text-sm font-semibold text-blue-600 hover:text-blue-700" href={publicUrl} target="_blank">
-              Abrir CV público
-            </a>
-          ) : (
-            <span className="text-sm text-gray-400">CV público pendiente</span>
-          )}
+          <span className="text-sm text-gray-600">{toEsDate(vr.requested_at)} · {toEsDate(vr.resolved_at)}</span>
         </div>
 
-        {vs ? (
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="border border-gray-200 rounded-2xl p-4">
-              <div className="text-xs text-gray-500">Evidencias</div>
-              <div className="mt-1 text-xl font-semibold text-gray-900">{vs.evidence_count ?? 0}</div>
-            </div>
-            <div className="border border-gray-200 rounded-2xl p-4">
-              <div className="text-xs text-gray-500">Acciones</div>
-              <div className="mt-1 text-xl font-semibold text-gray-900">{vs.actions_count ?? 0}</div>
-            </div>
-            <div className="border border-gray-200 rounded-2xl p-4">
-              <div className="text-xs text-gray-500">Trust (perfil global)</div>
-              <div className="mt-1 text-xl font-semibold text-gray-900">{cp?.trust_score ?? 0}</div>
-              {typeof vs?.trust_score === "number" ? (
-                <div className="mt-1 text-xs text-gray-500">Contexto verificación: {vs.trust_score}</div>
-              ) : null}
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="border border-gray-200 rounded-2xl p-4">
+            <div className="text-xs text-gray-500">Periodo laboral</div>
+            <div className="mt-1 text-sm font-semibold text-gray-900">
+              {toEsDate(er?.start_date)} — {er?.end_date ? toEsDate(er.end_date) : "Actualidad"}
             </div>
           </div>
+          <div className="border border-gray-200 rounded-2xl p-4">
+            <div className="text-xs text-gray-500">Estado empresa emisora</div>
+            <div className="mt-1 text-sm font-semibold text-gray-900">{companyVerificationLabel}</div>
+          </div>
+          <div className="border border-gray-200 rounded-2xl p-4">
+            <div className="text-xs text-gray-500">Trust (perfil global)</div>
+            <div className="mt-1 text-xl font-semibold text-gray-900">{cp?.trust_score ?? 0}</div>
+          </div>
+        </div>
+
+        {vr.resolution_notes ? (
+          <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+            <span className="font-semibold text-gray-900">Notas de resolución: </span>
+            {vr.resolution_notes}
+          </div>
         ) : null}
+
+        <div className="mt-4 text-sm text-gray-600">
+          Esta solicitud aplica a una experiencia laboral concreta. El resultado no certifica todo el CV ni todo el perfil.
+        </div>
       </div>
     </div>
-  )
+  );
 }
