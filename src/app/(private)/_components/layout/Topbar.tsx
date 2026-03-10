@@ -75,7 +75,7 @@ export default function Topbar({ role }: { role?: Role }) {
             <img
               src="/branding/verijob-logo-horizontal.png"
               alt="Verijob"
-              className="h-auto w-[170px] max-w-[42vw]"
+              className="h-auto w-[182px] max-w-[46vw] object-contain"
               loading="eager"
             />
           </Link>

@@ -11,9 +11,9 @@ export default function LoginPage() {
           <div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/branding/verijob-logo-horizontal-white.png"
+              src="/branding/verijob-logo-horizontal.png"
               alt="Verijob"
-              className="h-auto w-[240px] object-contain"
+              className="h-auto w-[252px] object-contain [filter:drop-shadow(0_8px_20px_rgba(15,23,42,0.35))]"
             />
           </div>
 
