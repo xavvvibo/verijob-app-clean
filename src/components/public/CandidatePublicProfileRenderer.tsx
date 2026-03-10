@@ -17,14 +17,25 @@ export type PublicCandidateTeaser = {
   education_total?: number | null;
   achievements_total?: number | null;
   profile_visibility?: string | null;
+  trust_score_breakdown?: {
+    verification?: number;
+    evidence?: number;
+    consistency?: number;
+    reuse?: number;
+  } | null;
 };
 
 export type PublicCandidateExperience = {
   experience_id?: string | null;
+  position?: string | null;
+  company_name?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
   status_text?: string | null;
   score?: number | null;
   evidence_count?: number | null;
   reuse_count?: number | null;
+  company_verification_status_snapshot?: string | null;
 };
 
 export type PublicCandidateContact = {
@@ -47,9 +58,9 @@ const modeLabels: Record<PublicProfilePreviewMode, string> = {
 
 function getModeCapabilities(mode: PublicProfilePreviewMode) {
   return {
-    showTrustScore: mode !== "public" ? true : true,
-    showExperienceCards: mode !== "public" ? true : true,
-    showTrustSignals: mode !== "public" ? true : false,
+    showTrustScore: mode !== "public",
+    showExperienceCards: true,
+    showTrustSignals: true,
     showContact: mode === "full",
     maxExperiences: mode === "public" ? 2 : mode === "registered" ? 4 : 8,
     showSummary: mode === "requesting" || mode === "full",
@@ -113,6 +124,7 @@ export function CandidatePublicProfileRenderer({
     evidencesTotal: Number(teaser?.evidences_total ?? 0),
     reuseTotal: Number(teaser?.reuse_total ?? 0),
   });
+  const trustBreakdown = teaser?.trust_score_breakdown || {};
 
   const token = payload?.token;
   const nextPath = token ? `/company/candidate/${token}` : "/company/candidates";
@@ -197,11 +209,40 @@ export function CandidatePublicProfileRenderer({
             </div>
           ) : null}
 
+          <div className="mt-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-base font-semibold text-slate-900">Cómo se construye la credibilidad</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Verijob consolida la confianza combinando validación empresarial, soporte documental, coherencia del historial y reutilización en procesos reales.
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <SignalItem
+                title="Verificaciones empresariales"
+                value={`${Number(trustBreakdown.verification ?? 0)} / 40`}
+                description="Confirmaciones emitidas por empresas sobre experiencias concretas."
+              />
+              <SignalItem
+                title="Evidencias documentales"
+                value={`${Number(trustBreakdown.evidence ?? 0)} / 30`}
+                description="Documentación asociada que refuerza la trazabilidad."
+              />
+              <SignalItem
+                title="Coherencia del historial"
+                value={`${Number(trustBreakdown.consistency ?? 0)} / 15`}
+                description="Consistencia temporal y estructural de la trayectoria profesional."
+              />
+              <SignalItem
+                title="Reutilización por empresas"
+                value={`${Number(trustBreakdown.reuse ?? 0)} / 15`}
+                description="Uso de verificaciones del perfil en flujos empresariales."
+              />
+            </div>
+          </div>
+
           {capabilities.showExperienceCards ? (
             <div className="mt-10">
-              <h3 className="text-base font-semibold text-slate-900">Experiencias verificables</h3>
+              <h3 className="text-base font-semibold text-slate-900">Trayectoria profesional verificable</h3>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                Historial profesional con estado, score y evidencias asociadas.
+                Cada experiencia se presenta con su estado, trazabilidad documental y señales de validación.
               </p>
               {Number(teaser?.experiences_total ?? 0) === 0 ? (
                 <p className="mt-2 text-sm text-slate-500">
@@ -210,16 +251,25 @@ export function CandidatePublicProfileRenderer({
               ) : null}
 
               {experiences.length ? (
-                <div className="mt-5 grid gap-3 md:grid-cols-2">
+                <div className="mt-5 space-y-3">
                   {experiences.map((exp, index) => {
                     const badge = getStatusBadge(exp?.status_text);
+                    const companyStatusBadge = getCompanyStatusBadge(exp?.company_verification_status_snapshot);
                     return (
                       <article
                         key={String(exp?.experience_id || `exp-${index}`)}
-                        className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                        className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <h4 className="text-sm font-semibold text-slate-900">Experiencia {index + 1}</h4>
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h4 className="text-base font-semibold text-slate-900">
+                              {exp?.position || `Experiencia ${index + 1}`}
+                            </h4>
+                            <p className="mt-1 text-sm text-slate-600">
+                              {exp?.company_name || "Empresa no especificada"}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">{formatPeriod(exp?.start_date, exp?.end_date)}</p>
+                          </div>
                           <span
                             className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${badge.className}`}
                           >
@@ -227,13 +277,9 @@ export function CandidatePublicProfileRenderer({
                           </span>
                         </div>
 
-                        <dl className="mt-3 space-y-2 text-sm">
+                        <dl className="mt-4 grid gap-2.5 text-sm sm:grid-cols-2">
                           <div className="flex items-center justify-between gap-3">
-                            <dt className="text-slate-500">Estado</dt>
-                            <dd className="font-medium text-slate-800">{exp?.status_text || "unknown"}</dd>
-                          </div>
-                          <div className="flex items-center justify-between gap-3">
-                            <dt className="text-slate-500">Score</dt>
+                            <dt className="text-slate-500">Credibilidad</dt>
                             <dd className="font-medium text-slate-900">{Number(exp?.score ?? 0)}</dd>
                           </div>
                           <div className="flex items-center justify-between gap-3">
@@ -243,6 +289,12 @@ export function CandidatePublicProfileRenderer({
                           <div className="flex items-center justify-between gap-3">
                             <dt className="text-slate-500">Reutilizaciones</dt>
                             <dd className="font-medium text-slate-900">{Number(exp?.reuse_count ?? 0)}</dd>
+                          </div>
+                          <div className="flex items-center justify-between gap-3">
+                            <dt className="text-slate-500">Estado empresa</dt>
+                            <dd className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${companyStatusBadge.className}`}>
+                              {companyStatusBadge.label}
+                            </dd>
                           </div>
                         </dl>
                       </article>
@@ -349,12 +401,30 @@ function Stat({
   );
 }
 
+function SignalItem({
+  title,
+  value,
+  description,
+}: {
+  title: string;
+  value: string;
+  description: string;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      <p className="mt-1 text-base font-semibold text-slate-900">{value}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-600">{description}</p>
+    </div>
+  );
+}
+
 export function getTrustLabel(score: number) {
-  if (score >= 90) return "Very High";
-  if (score >= 75) return "High";
-  if (score >= 55) return "Solid";
-  if (score >= 35) return "Basic";
-  return "Low";
+  if (score >= 90) return "Muy alta";
+  if (score >= 75) return "Alta";
+  if (score >= 55) return "Sólida";
+  if (score >= 35) return "Básica";
+  return "Inicial";
 }
 
 function getTrustInterpretation(score: number) {
@@ -373,20 +443,23 @@ function getProfileVisibilityLabel(raw?: string | null) {
 function getStatusBadge(statusText?: string | null) {
   const status = String(statusText || "").toLowerCase().trim();
 
-  if (status === "verified") {
-    return { label: "verified", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+  if (status === "verified" || status === "approved") {
+    return { label: "Verificada", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
   }
-  if (status === "reviewing") {
-    return { label: "reviewing", className: "border-amber-200 bg-amber-50 text-amber-700" };
+  if (status === "reviewing" || status === "requested") {
+    return { label: "En revisión", className: "border-amber-200 bg-amber-50 text-amber-700" };
   }
   if (status === "pending_company") {
-    return { label: "pending_company", className: "border-slate-300 bg-slate-100 text-slate-700" };
+    return { label: "Pendiente empresa", className: "border-slate-300 bg-slate-100 text-slate-700" };
   }
   if (status === "rejected") {
-    return { label: "rejected", className: "border-rose-200 bg-rose-50 text-rose-700" };
+    return { label: "Rechazada", className: "border-rose-200 bg-rose-50 text-rose-700" };
+  }
+  if (status === "revoked") {
+    return { label: "Revocada", className: "border-rose-200 bg-rose-50 text-rose-700" };
   }
 
-  return { label: statusText || "unknown", className: "border-slate-300 bg-slate-100 text-slate-700" };
+  return { label: "Sin estado", className: "border-slate-300 bg-slate-100 text-slate-700" };
 }
 
 function getTrustSignals(input: {
@@ -405,4 +478,32 @@ function getTrustSignals(input: {
   if (input.trustScore >= 80) signals.push("Perfil con señales sólidas de credibilidad");
 
   return signals;
+}
+
+function formatPeriod(start?: string | null, end?: string | null) {
+  const startText = formatMonthYear(start);
+  const endText = end ? formatMonthYear(end) : "Actualidad";
+  if (!startText && !end) return "Periodo no especificado";
+  return `${startText || "Inicio no definido"} · ${endText}`;
+}
+
+function formatMonthYear(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("es-ES", { month: "short", year: "numeric" });
+}
+
+function getCompanyStatusBadge(statusText?: string | null) {
+  const status = String(statusText || "").toLowerCase();
+  if (status === "verified_paid") {
+    return { label: "Empresa verificada (plan activo)", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+  }
+  if (status === "verified_document") {
+    return { label: "Empresa verificada por documentación", className: "border-blue-200 bg-blue-50 text-blue-700" };
+  }
+  if (status === "unverified_external") {
+    return { label: "Verificación externa", className: "border-violet-200 bg-violet-50 text-violet-700" };
+  }
+  return { label: "Empresa no verificada", className: "border-amber-200 bg-amber-50 text-amber-700" };
 }

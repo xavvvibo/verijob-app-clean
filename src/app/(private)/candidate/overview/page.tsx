@@ -511,12 +511,20 @@ export default function CandidateOverview() {
           <h2 className="text-lg font-semibold text-gray-900">Trust Score: {metrics.score} / 100</h2>
           <p className="text-xs text-gray-500">Desglose del cálculo</p>
         </div>
+        <p className="mt-3 text-sm leading-6 text-gray-600">
+          Tu credibilidad se calcula combinando verificaciones empresariales, evidencias documentales, coherencia de historial y reutilización en procesos de selección.
+        </p>
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <Kpi label="Verificaciones empresariales" value={`${Number(trustBreakdown.verification ?? 0)} / 40`} />
           <Kpi label="Evidencias documentales" value={`${Number(trustBreakdown.evidence ?? 0)} / 30`} />
           <Kpi label="Coherencia del historial" value={`${Number(trustBreakdown.consistency ?? 0)} / 15`} />
           <Kpi label="Reutilización por empresas" value={`${Number(trustBreakdown.reuse ?? 0)} / 15`} />
         </div>
+        <ul className="mt-4 space-y-1 text-xs text-gray-500">
+          <li>• Más verificaciones confirmadas aumentan tu bloque de confianza empresarial.</li>
+          <li>• Evidencias vinculadas y orden temporal consistente mejoran la puntuación.</li>
+          <li>• Cuando empresas reutilizan tus verificaciones, tu perfil gana señal adicional.</li>
+        </ul>
       </section>
 
       <section className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">

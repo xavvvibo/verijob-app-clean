@@ -163,7 +163,7 @@ export default async function CompanyRequestsPage({
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Solicitudes y verificaciones</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Gestiona solicitudes de verificación de experiencias laborales, prioriza revisiones y abre el detalle de cada caso.
+          Revisa solicitudes de verificación de experiencias laborales concretas: identifica candidato, periodo trabajado y resuelve en un solo paso.
         </p>
         {!planActive ? (
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -213,7 +213,7 @@ export default async function CompanyRequestsPage({
                 <tr>
                   <th className="px-4 py-3">Verificación</th>
                   <th className="px-4 py-3">Candidato</th>
-                  <th className="px-4 py-3">Puesto</th>
+                  <th className="px-4 py-3">Experiencia</th>
                   <th className="px-4 py-3">Empresa</th>
                   <th className="px-4 py-3">Periodo</th>
                   <th className="px-4 py-3">Estado</th>
@@ -235,7 +235,7 @@ export default async function CompanyRequestsPage({
                     </td>
                     <td className="px-4 py-3">
                       <Link href={`/company/verification/${row.verification_id}`} className="font-semibold text-slate-900 underline underline-offset-2">
-                        Revisar experiencia
+                        Revisar y resolver
                       </Link>
                     </td>
                   </tr>

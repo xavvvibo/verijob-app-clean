@@ -33,91 +33,57 @@ export default function DecisionPanel(props: {
   }
 
   return (
-    <div
-      style={{
-        border: "1px solid rgba(255,255,255,0.12)",
-        borderRadius: 12,
-        padding: 16,
-      }}
-    >
-      <h2 style={{ fontSize: 16, fontWeight: 700, marginTop: 0 }}>
-        Decisión
-      </h2>
-      <p style={{ opacity: 0.8, marginTop: 6 }}>
-        Al aprobar o rechazar, se actualiza la solicitud de verificación de esta experiencia laboral y se registra la trazabilidad.
-      </p>
-
-      <div style={{ marginTop: 12 }}>
-        <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>
-          Nota (opcional)
+    <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold text-slate-900">Resolver verificación</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-600">
+            Confirma o rechaza esta experiencia laboral. La resolución quedará registrada con trazabilidad.
+          </p>
         </div>
+        <div className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700">
+          Estado actual: <span className="font-semibold text-slate-900">{currentStatus}</span>
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <div className="mb-1.5 text-xs font-medium text-slate-600">Nota interna (opcional)</div>
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
           rows={3}
-          style={{
-            width: "100%",
-            padding: 10,
-            borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.18)",
-            background: "transparent",
-          }}
+          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none ring-blue-500/50 placeholder:text-slate-400 focus:ring-2"
           placeholder="Ej: Evidencia válida / Faltan documentos / Fechas inconsistentes..."
           disabled={disabled}
         />
       </div>
 
       {error ? (
-        <div style={{ marginTop: 10, opacity: 0.95 }}>
-          {error}
+        <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          {error || "No se pudo registrar la decisión."}
         </div>
       ) : null}
 
-      <div style={{ display: "flex", gap: 10, marginTop: 12 }}>
+      <div className="mt-4 flex flex-wrap gap-2">
         <button
           onClick={() => act("verified")}
           disabled={disabled}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.18)",
-            background: "transparent",
-            cursor: disabled ? "not-allowed" : "pointer",
-            opacity: disabled ? 0.6 : 1,
-          }}
+          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Aprobar
+          Confirmar experiencia
         </button>
 
         <button
           onClick={() => act("rejected")}
           disabled={disabled}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: "1px solid rgba(255,255,255,0.18)",
-            background: "transparent",
-            cursor: disabled ? "not-allowed" : "pointer",
-            opacity: disabled ? 0.6 : 1,
-          }}
+          className="rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Rechazar
+          Rechazar experiencia
         </button>
-
-        <div
-          style={{
-            marginLeft: "auto",
-            fontSize: 12,
-            opacity: 0.75,
-            alignSelf: "center",
-          }}
-        >
-          Estado:{" "}
-          <span style={{ fontWeight: 700, opacity: 1 }}>
-            {currentStatus}
-          </span>
-        </div>
       </div>
-    </div>
+      <p className="mt-3 text-xs text-slate-500">
+        Verificar experiencias recibidas es gratuito para empresas.
+      </p>
+    </section>
   );
 }

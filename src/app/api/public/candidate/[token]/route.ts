@@ -94,6 +94,11 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     .eq("candidate_id", candidateId);
 
   const rows = Array.isArray(verifications) ? verifications : [];
+  const verificationById = new Map<string, any>();
+  for (const row of rows) {
+    const verificationId = String((row as any)?.verification_id || "");
+    if (verificationId) verificationById.set(verificationId, row);
+  }
   const verificationIds = rows.map((r: any) => r.verification_id).filter(Boolean);
 
   let reuseEvents = 0;
@@ -133,6 +138,58 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     trustScore,
   });
 
+  const { data: employmentRecords } = await admin
+    .from("employment_records")
+    .select("id,position,company_name_freeform,start_date,end_date,verification_status,last_verification_request_id,company_verification_status_snapshot")
+    .eq("candidate_id", candidateId)
+    .order("start_date", { ascending: false })
+    .limit(24);
+
+  const experiencesFromEmployment = (Array.isArray(employmentRecords) ? employmentRecords : []).map((record: any) => {
+    const linkedVerification = verificationById.get(String(record?.last_verification_request_id || ""));
+    const statusText = String(
+      linkedVerification?.status_effective ||
+      linkedVerification?.status ||
+      record?.verification_status ||
+      "unknown"
+    );
+    const score = Number(linkedVerification?.score ?? 0);
+    const evidenceCount = Number(
+      linkedVerification?.evidence_count ?? linkedVerification?.evidences_count ?? 0
+    );
+    const reuseCount = Number(linkedVerification?.reuse_count ?? 0);
+    return {
+      experience_id: String(record?.id || ""),
+      position: record?.position || null,
+      company_name: record?.company_name_freeform || null,
+      start_date: record?.start_date || null,
+      end_date: record?.end_date || null,
+      status_text: statusText,
+      score,
+      evidence_count: evidenceCount,
+      reuse_count: reuseCount,
+      company_verification_status_snapshot:
+        linkedVerification?.company_verification_status_snapshot ||
+        record?.company_verification_status_snapshot ||
+        null,
+    };
+  });
+
+  const experiencesFallback = rows.slice(0, 24).map((row: any, index: number) => ({
+    experience_id: String(row?.verification_id || `fallback-${index}`),
+    position: row?.position || null,
+    company_name: row?.company_name || row?.company_name_target || null,
+    start_date: row?.start_date || null,
+    end_date: row?.end_date || null,
+    status_text: String(row?.status_effective || row?.status || "unknown"),
+    score: Number(row?.score ?? 0),
+    evidence_count: Number(row?.evidence_count ?? row?.evidences_count ?? 0),
+    reuse_count: Number(row?.reuse_count ?? 0),
+    company_verification_status_snapshot: row?.company_verification_status_snapshot || null,
+  }));
+
+  const experiences = experiencesFromEmployment.length ? experiencesFromEmployment : experiencesFallback;
+
   return json(200, {
     route_version: "public-candidate-token-v1",
     token,
@@ -159,5 +216,6 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       profile_status: profileStatus,
       profile_visibility: "public_link",
     },
+    experiences,
   });
 }

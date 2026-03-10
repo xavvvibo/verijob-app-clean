@@ -19,6 +19,16 @@ function badge(status: string) {
   return "bg-gray-100 text-gray-700";
 }
 
+function requestStatusLabel(statusRaw: unknown) {
+  const status = String(statusRaw || "").toLowerCase();
+  if (status === "verified") return "Verificada";
+  if (status === "rejected") return "Rechazada";
+  if (status === "revoked") return "Revocada";
+  if (status === "company_registered_pending") return "Empresa registrada (pendiente)";
+  if (status === "requested" || status === "reviewing") return "En revisión";
+  return "Sin estado";
+}
+
 function fmtDate(v?: string | null) {
   if (!v) return "—";
   const t = Date.parse(v);
@@ -152,7 +162,7 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
       <div className="flex items-center justify-between">
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold">Detalle de solicitud de verificación</h1>
-          <div className="text-sm text-gray-500">VID: {id}</div>
+          <div className="text-sm text-gray-500">Código interno: {id}</div>
         </div>
 
         <Link href="/company/requests" className="text-sm underline text-gray-700">
@@ -174,10 +184,13 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
             <div className="mt-1 text-sm text-gray-600">
               <span className="font-medium text-gray-800">Candidato:</span> {candidateProfile?.full_name || requestRow.requested_by || "Candidato"}
             </div>
+            <div className="mt-1 text-sm text-gray-600">
+              <span className="font-medium text-gray-800">Acción esperada:</span> confirma o rechaza si esta persona trabajó en ese periodo.
+            </div>
           </div>
 
           <span className={`shrink-0 px-3 py-1 text-xs font-medium rounded-full ${badge(statusEffective)}`}>
-            {String(statusEffective).toUpperCase()}
+            {requestStatusLabel(statusEffective)}
           </span>
         </div>
 
@@ -187,6 +200,9 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
             Enviada: {fmtDate(requestRow.requested_at || summary?.created_at || null)} ·
             Resuelta: {fmtDate(requestRow.resolved_at || null)}
           </div>
+          <p className="mt-2 text-xs text-gray-600">
+            Esta validación solo afecta a esta experiencia laboral concreta. No valida el perfil completo del candidato.
+          </p>
           {requestRow.resolution_notes ? (
             <div className="mt-2 text-gray-700">
               <span className="font-medium text-gray-800">Notas:</span> {requestRow.resolution_notes}
