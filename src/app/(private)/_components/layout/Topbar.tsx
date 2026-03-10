@@ -31,8 +31,10 @@ export default function Topbar({ role }: { role?: Role }) {
   const userPlanLabel = useMemo(() => {
     if (r === "owner") return "Plan Owner";
     if (r === "company") return `Plan Empresa ${companyPlanLabel || "Free"}`;
-    return "Plan Candidato Pro";
+    return "Plan Candidato";
   }, [companyPlanLabel, r]);
+
+  const isCandidateArea = pathname === "/candidate" || pathname.startsWith("/candidate/");
 
   useEffect(() => {
     if (!(pathname === "/company" || pathname.startsWith("/company/"))) return;
@@ -92,6 +94,23 @@ export default function Topbar({ role }: { role?: Role }) {
           <div className="hidden md:inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-700">
             {userPlanLabel}
           </div>
+
+          {isCandidateArea ? (
+            <>
+              <Link
+                href="/candidate/subscription"
+                className="hidden lg:inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+              >
+                Planes
+              </Link>
+              <Link
+                href="/candidate/settings"
+                className="hidden lg:inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+              >
+                Ajustes
+              </Link>
+            </>
+          ) : null}
 
           <a
             href="https://verijob.es"

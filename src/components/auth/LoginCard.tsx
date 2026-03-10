@@ -88,7 +88,7 @@ export default function LoginCard() {
   }
 
   return (
-    <div className="w-full max-w-[420px] rounded-xl border border-slate-200 bg-white p-8 shadow-lg">
+    <div className="w-full rounded-2xl border border-slate-200/80 bg-white/95 p-8 shadow-[0_12px_32px_rgba(15,23,42,0.10)]">
       <h1 className="text-2xl font-semibold text-slate-900">Accede a Verijob</h1>
 
       <form onSubmit={step === "email" ? sendOtp : verifyOtp} className="mt-6 space-y-4">

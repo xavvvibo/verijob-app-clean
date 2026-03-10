@@ -13,6 +13,14 @@ function MetricCard({ title, value, note }: { title: string; value: string; note
   );
 }
 
+function money(v: number) {
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 2,
+  }).format(v);
+}
+
 export default function OwnerOverviewPage() {
   return <OwnerOverviewServer />;
 }
@@ -20,93 +28,100 @@ export default function OwnerOverviewPage() {
 async function OwnerOverviewServer() {
   const supabase = await createClient();
   const now = Date.now();
-  const weekAgoIso = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
 
-  const { data: campaigns } = await supabase
-    .from("growth_campaigns")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(500);
+  const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes] = await Promise.all([
+    supabase.from("profiles").select("id", { count: "exact", head: true }),
+    supabase.from("companies").select("id", { count: "exact", head: true }),
+    supabase.from("verification_requests").select("id,status,requested_at"),
+    supabase.from("evidences").select("id", { count: "exact", head: true }),
+    supabase.from("subscriptions").select("id,status,amount,created_at"),
+    supabase.from("growth_campaigns").select("*"),
+    supabase.from("cv_parse_jobs").select("id,status,created_at"),
+  ]);
 
-  const rows = Array.isArray(campaigns) ? campaigns : [];
-  const activeCampaigns = rows.filter((row) => String(row.status || "").toLowerCase() === "running").length;
-  const weekRows = rows.filter((row) => new Date(row.created_at).getTime() >= new Date(weekAgoIso).getTime());
-  const leadsThisWeek = weekRows.reduce((acc, row) => acc + Number(row.leads_discovered || 0), 0);
-  const demosThisWeek = weekRows.reduce((acc, row) => acc + Number(row.demos_count || 0), 0);
-  const totalCampaignCost = rows.reduce((acc, row) => {
-    return (
-      acc +
-      Number(row.cost_scraping || 0) +
-      Number(row.cost_enrichment || 0) +
-      Number(row.cost_sending || 0) +
-      Number(row.cost_infra || 0)
-    );
+  const usersTotal = Number(profilesRes.count || 0);
+  const companiesTotal = Number(companiesRes.count || 0);
+
+  const requests = Array.isArray(requestsRes.data) ? requestsRes.data : [];
+  const verificationsTotal = requests.length;
+  const pendingVerifications = requests.filter((r: any) => {
+    const s = String(r.status || "").toLowerCase();
+    return s.includes("request") || s.includes("pending");
+  }).length;
+
+  const evidencesTotal = Number(evidenceRes.count || 0);
+
+  const subscriptions = Array.isArray(subscriptionsRes.data) ? subscriptionsRes.data : [];
+  const activeSubs = subscriptions.filter((s: any) => {
+    const st = String(s.status || "").toLowerCase();
+    return st === "active" || st === "trialing";
+  });
+  const mrr = activeSubs.reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
+
+  const campaigns = Array.isArray(campaignsRes.data) ? campaignsRes.data : [];
+  const activeCampaigns = campaigns.filter((row: any) => String(row.status || "").toLowerCase() === "running").length;
+  const weekCampaigns = campaigns.filter((row: any) => row.created_at && new Date(row.created_at).getTime() >= weekAgo);
+  const leadsThisWeek = weekCampaigns.reduce((acc: number, row: any) => acc + Number(row.leads_discovered || 0), 0);
+  const demosThisWeek = weekCampaigns.reduce((acc: number, row: any) => acc + Number(row.demos_count || 0), 0);
+  const totalCampaignCost = campaigns.reduce((acc: number, row: any) => {
+    return acc + Number(row.cost_scraping || 0) + Number(row.cost_enrichment || 0) + Number(row.cost_sending || 0) + Number(row.cost_infra || 0);
   }, 0);
-  const queuedCampaigns = rows.filter((row) => String(row.execution_status || "idle").toLowerCase() === "queued").length;
-  const runningCampaigns = rows.filter((row) => String(row.execution_status || "idle").toLowerCase() === "running").length;
-  const failedCampaigns = rows.filter((row) => String(row.execution_status || "idle").toLowerCase() === "failed").length;
-  const completedCampaigns = rows.filter((row) => String(row.execution_status || "idle").toLowerCase() === "completed").length;
-  const outOfSyncCampaigns = rows.filter((row) => {
+
+  const queuedCampaigns = campaigns.filter((row: any) => String(row.execution_status || "").toLowerCase() === "queued").length;
+  const runningCampaigns = campaigns.filter((row: any) => String(row.execution_status || "").toLowerCase() === "running").length;
+  const failedCampaigns = campaigns.filter((row: any) => String(row.execution_status || "").toLowerCase() === "failed").length;
+  const completedCampaigns = campaigns.filter((row: any) => String(row.execution_status || "").toLowerCase() === "completed").length;
+
+  const outOfSyncCampaigns = campaigns.filter((row: any) => {
     const status = String(row.execution_status || "idle").toLowerCase();
     if (!["queued", "running", "paused"].includes(status)) return false;
     if (!row.last_sync_at) return true;
     return new Date(row.last_sync_at).getTime() < Date.now() - 24 * 60 * 60 * 1000;
   }).length;
-  const failedSyncs = rows.filter((row) => Boolean(row.last_provider_error)).length;
-  const syncedToday = rows.filter((row) => {
+  const failedSyncs = campaigns.filter((row: any) => Boolean(row.last_provider_error)).length;
+  const syncedToday = campaigns.filter((row: any) => {
     if (!row.last_sync_at) return false;
     return new Date(row.last_sync_at).getTime() >= Date.now() - 24 * 60 * 60 * 1000;
   }).length;
-  const configuredOutscraper = rows.filter((row) => {
+
+  const configuredOutscraper = campaigns.filter((row: any) => {
     const config = row.provider_scraping_config;
     return config && typeof config === "object" && Object.keys(config).length > 0;
   }).length;
-  const importedOutscraper = rows.filter(
-    (row) => String(row.provider_scraping_last_status || "").toLowerCase() === "imported"
-  ).length;
-  const scrapingFailures = rows.filter(
-    (row) =>
-      String(row.provider_scraping_last_status || "").toLowerCase() === "failed" || Boolean(row.last_provider_error)
-  ).length;
-  const totalScrapingCost = rows.reduce((acc, row) => acc + Number(row.provider_scraping_last_cost || 0), 0);
+  const importedOutscraper = campaigns.filter((row: any) => String(row.provider_scraping_last_status || "").toLowerCase() === "imported").length;
+  const scrapingFailures = campaigns.filter((row: any) => String(row.provider_scraping_last_status || "").toLowerCase() === "failed" || Boolean(row.last_provider_error)).length;
+  const totalScrapingCost = campaigns.reduce((acc: number, row: any) => acc + Number(row.provider_scraping_last_cost || 0), 0);
 
-  const money = new Intl.NumberFormat("es-ES", {
-    style: "currency",
-    currency: "EUR",
-    maximumFractionDigits: 2,
-  }).format(totalCampaignCost);
-  const scrapingMoney = new Intl.NumberFormat("es-ES", {
-    style: "currency",
-    currency: "EUR",
-    maximumFractionDigits: 2,
-  }).format(totalScrapingCost);
+  const jobs = Array.isArray(jobsRes.data) ? jobsRes.data : [];
+  const errorRate = jobs.length ? Math.round((jobs.filter((j: any) => String(j.status || "").toLowerCase() === "failed").length / jobs.length) * 100) : 0;
 
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Owner Control Center</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Vista operativa para crecimiento, marketing, salud del sistema y acciones rápidas.
+          Centro operativo para crecimiento, marketing, monetización y salud de plataforma con datos internos en tiempo real.
         </p>
       </section>
 
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-slate-900">Key Metrics</h2>
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Users total" value="—" note="Conecta KPI real en iteración siguiente" />
-          <MetricCard title="Companies" value="—" note="Conecta KPI real en iteración siguiente" />
-          <MetricCard title="Verifications" value="—" note="Conecta KPI real en iteración siguiente" />
-          <MetricCard title="MRR" value="—" note="Placeholder hasta Stripe LIVE definitivo" />
+          <MetricCard title="Users total" value={String(usersTotal)} />
+          <MetricCard title="Companies" value={String(companiesTotal)} />
+          <MetricCard title="Verifications" value={String(verificationsTotal)} />
+          <MetricCard title="MRR" value={money(mrr)} note="Stripe LIVE conectado en subscriptions" />
         </div>
       </section>
 
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-slate-900">System Health</h2>
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Error rate" value="—" />
-          <MetricCard title="Pending verifications" value="—" />
-          <MetricCard title="Evidence pending" value="—" />
-          <MetricCard title="CV parsing jobs" value="—" />
+          <MetricCard title="Error rate" value={`${errorRate}%`} />
+          <MetricCard title="Pending verifications" value={String(pendingVerifications)} />
+          <MetricCard title="Evidence volume" value={String(evidencesTotal)} />
+          <MetricCard title="CV parsing jobs" value={String(jobs.length)} />
         </div>
       </section>
 
@@ -116,7 +131,7 @@ async function OwnerOverviewServer() {
           <MetricCard title="Active campaigns" value={String(activeCampaigns)} />
           <MetricCard title="Leads generated this week" value={String(leadsThisWeek)} />
           <MetricCard title="Demos booked this week" value={String(demosThisWeek)} />
-          <MetricCard title="Total campaign cost" value={money} />
+          <MetricCard title="Total campaign cost" value={money(totalCampaignCost)} />
         </div>
       </section>
 
@@ -142,10 +157,10 @@ async function OwnerOverviewServer() {
       <section className="space-y-4">
         <h2 className="text-2xl font-semibold text-slate-900">Scraping Health</h2>
         <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Campaigns with Outscraper configured" value={String(configuredOutscraper)} />
-          <MetricCard title="Campaigns imported" value={String(importedOutscraper)} />
+          <MetricCard title="Outscraper configured" value={String(configuredOutscraper)} />
+          <MetricCard title="Imported campaigns" value={String(importedOutscraper)} />
           <MetricCard title="Scraping failures" value={String(scrapingFailures)} />
-          <MetricCard title="Total scraping cost" value={scrapingMoney} />
+          <MetricCard title="Total scraping cost" value={money(totalScrapingCost)} />
         </div>
       </section>
 

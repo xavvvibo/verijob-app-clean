@@ -360,7 +360,8 @@ export default function CandidateOverview() {
 
   return (
     <div className="space-y-6">
-      <header className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">
+      <header className="relative overflow-hidden rounded-3xl border border-blue-100 bg-gradient-to-br from-white via-blue-50/70 to-white p-7 shadow-sm">
+        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-blue-100/60 blur-3xl" />
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex items-start gap-4">
@@ -370,7 +371,7 @@ export default function CandidateOverview() {
                 onAvatarSaved={(next) => setProfile((prev) => ({ ...(prev || {}), avatar_url: next }))}
               />
               <div className="min-w-0">
-                <p className="text-xs text-gray-500">Resumen del candidato</p>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">Perfil profesional verificable</p>
                 <h1 className="mt-2 truncate text-4xl font-semibold text-gray-900">
                   {profile?.full_name || "Tu resumen profesional"}
                 </h1>
@@ -384,7 +385,7 @@ export default function CandidateOverview() {
                   </Link>
                   <Link
                     href="/candidate/experience"
-                    className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+                    className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-800"
                   >
                     Experiencias
                   </Link>
@@ -408,6 +409,27 @@ export default function CandidateOverview() {
                   </Link>
                 </div>
               </div>
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Link
+                href="/candidate/share"
+                className="inline-flex rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-50"
+              >
+                Ver perfil público
+              </Link>
+              <Link
+                href="/candidate/verifications"
+                className="inline-flex rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Gestionar verificaciones
+              </Link>
+              <Link
+                href="/candidate/evidence"
+                className="inline-flex rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Revisar evidencias
+              </Link>
             </div>
 
             {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
