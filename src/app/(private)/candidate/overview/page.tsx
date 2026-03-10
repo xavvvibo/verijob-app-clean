@@ -95,10 +95,61 @@ function TrustRing({ score }: { score: number }) {
 
 function Kpi({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4">
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className="mt-2 text-2xl font-semibold tabular-nums text-gray-900">{value}</div>
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">{label}</div>
+      <div className="mt-3 text-3xl font-semibold tabular-nums text-gray-900">{value}</div>
     </div>
+  );
+}
+
+function SectionTab({
+  href,
+  label,
+  highlighted = false,
+}: {
+  href: string;
+  label: string;
+  highlighted?: boolean;
+}) {
+  return (
+    <Link
+      href={href}
+      className={[
+        "inline-flex items-center rounded-full border px-4 py-2 text-sm font-semibold transition",
+        highlighted
+          ? "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
+          : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
+      ].join(" ")}
+    >
+      {label}
+    </Link>
+  );
+}
+
+function QuickActionCard({
+  title,
+  description,
+  href,
+  cta,
+}: {
+  title: string;
+  description: string;
+  href: string;
+  cta: string;
+}) {
+  return (
+    <article className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
+      <p className="mt-2 text-sm text-gray-600">{description}</p>
+      <div className="mt-4">
+        <Link
+          href={href}
+          className="inline-flex rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-900 hover:bg-gray-50"
+        >
+          {cta}
+        </Link>
+      </div>
+    </article>
   );
 }
 
@@ -359,10 +410,25 @@ export default function CandidateOverview() {
     return Math.round((done / checks.length) * 100);
   }, [profile?.full_name, experienceCount, educationCount, achievementsCount, metrics.evidences]);
 
+  const profileStage = useMemo(() => {
+    if (profileCompletion >= 85) return "Perfil sólido";
+    if (profileCompletion >= 55) return "Perfil en progreso";
+    return "Perfil inicial";
+  }, [profileCompletion]);
+
+  const availabilityText = useMemo(() => {
+    const raw = String(candidateProfile?.job_search_status || "").toLowerCase();
+    if (raw.includes("active")) return "Buscando activamente";
+    if (raw.includes("open")) return "Abierto a oportunidades";
+    if (raw.includes("not")) return "No disponible temporalmente";
+    return "Disponibilidad no definida";
+  }, [candidateProfile?.job_search_status]);
+
   return (
     <div className="space-y-6">
       <header className="relative overflow-hidden rounded-3xl border border-blue-100 bg-gradient-to-br from-white via-blue-50/70 to-white p-7 shadow-sm">
         <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-blue-100/60 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-0 h-44 w-72 rounded-full bg-blue-100/40 blur-3xl" />
         <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <div className="flex items-start gap-4">
@@ -376,63 +442,17 @@ export default function CandidateOverview() {
                 <h1 className="mt-2 truncate text-4xl font-semibold text-gray-900">
                   {profile?.full_name || "Tu resumen profesional"}
                 </h1>
-                <p className="mt-2 text-base text-gray-600">{profile?.location || "Ubicación no definida"}</p>
+                <p className="mt-2 text-base text-gray-600">{profile?.title || "Profesional verificable en Verijob"}</p>
+                <p className="mt-1 text-sm text-gray-500">{profile?.location || "Ubicación no definida"}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <Link
-                    href="/candidate/profile"
-                    className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
-                  >
-                    Perfil
-                  </Link>
-                  <Link
-                    href="/candidate/experience"
-                    className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-blue-800"
-                  >
-                    Experiencias
-                  </Link>
-                  <Link
-                    href="/candidate/settings"
-                    className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
-                  >
-                    Ajustes
-                  </Link>
-                  <Link
-                    href="/candidate/education"
-                    className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
-                  >
-                    Educación
-                  </Link>
-                  <Link
-                    href="/candidate/achievements"
-                    className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
-                  >
-                    Logros
-                  </Link>
+                  <TrustLevelBadge score={metrics.score} />
+                  <VerificationBadge tone="trust_visible">Trust Score visible para empresas registradas</VerificationBadge>
+                  <VerificationBadge tone={profileCompletion >= 55 ? "company_verified" : "in_progress"}>
+                    {profileStage}
+                  </VerificationBadge>
+                  <VerificationBadge tone="business">{availabilityText}</VerificationBadge>
                 </div>
               </div>
-            </div>
-
-            <div className="mt-5 flex flex-wrap gap-2">
-              <TrustLevelBadge score={metrics.score} />
-              <VerificationBadge tone="trust_visible">Trust Score visible para empresas registradas</VerificationBadge>
-              <Link
-                href="/candidate/share"
-                className="inline-flex rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-50"
-              >
-                Ver perfil público
-              </Link>
-              <Link
-                href="/candidate/verifications"
-                className="inline-flex rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Gestionar verificaciones
-              </Link>
-              <Link
-                href="/candidate/evidence"
-                className="inline-flex rounded-full border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-              >
-                Revisar evidencias
-              </Link>
             </div>
 
             {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
@@ -445,12 +465,45 @@ export default function CandidateOverview() {
         </div>
       </header>
 
+      <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap gap-2">
+          <SectionTab href="/candidate/profile" label="Perfil" highlighted />
+          <SectionTab href="/candidate/experience" label="Experiencias" />
+          <SectionTab href="/candidate/settings" label="Ajustes" />
+          <SectionTab href="/candidate/education" label="Educación" />
+          <SectionTab href="/candidate/achievements" label="Logros" />
+          <SectionTab href="/candidate/evidence" label="Evidencias" />
+          <SectionTab href="/candidate/verifications" label="Verificaciones" />
+        </div>
+      </section>
+
       <section className="grid gap-4 md:grid-cols-5">
         <Kpi label="Trust Score" value={`${metrics.score}%`} />
         <Kpi label="Progreso del perfil" value={`${profileCompletion}%`} />
         <Kpi label="Verificaciones" value={metrics.total} />
         <Kpi label="Aprobadas" value={metrics.verified} />
         <Kpi label="Evidencias" value={metrics.evidences} />
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-3">
+        <QuickActionCard
+          title="Perfil público"
+          description="Revisa cómo te ven las empresas antes de compartir tu enlace verificable."
+          href="/candidate/share"
+          cta="Ver perfil público"
+        />
+        <QuickActionCard
+          title="Verificaciones"
+          description="Gestiona solicitudes y mejora la solidez de tu historial con validaciones reales."
+          href="/candidate/verifications"
+          cta="Gestionar verificaciones"
+        />
+        <QuickActionCard
+          title="Evidencias"
+          description="Añade documentos para reforzar experiencias y acelerar tu credibilidad."
+          href="/candidate/evidence"
+          cta="Revisar evidencias"
+        />
       </section>
 
       <section className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">
