@@ -143,25 +143,8 @@ export default function LoginCard() {
         ) : null}
       </form>
 
-      <div className="my-6 flex items-center gap-3 text-xs text-slate-400">
-        <div className="h-px flex-1 bg-slate-200" />
-        <span>o</span>
-        <div className="h-px flex-1 bg-slate-200" />
-      </div>
-
-      <div className="space-y-2">
-        <button
-          type="button"
-          className="w-full rounded-lg border border-slate-200 bg-white py-3 font-medium text-slate-800 hover:bg-slate-50"
-        >
-          Continuar con Google
-        </button>
-        <button
-          type="button"
-          className="w-full rounded-lg border border-slate-200 bg-white py-3 font-medium text-slate-800 hover:bg-slate-50"
-        >
-          Continuar con SSO
-        </button>
+      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
+        Acceso disponible mediante código enviado por email.
       </div>
 
       <div className="mt-6 space-y-2 text-sm text-slate-600">
