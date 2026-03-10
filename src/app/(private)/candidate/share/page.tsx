@@ -41,6 +41,10 @@ export default function CandidatePublicProfilePage() {
     if (!token) return null;
     return `${PUBLIC_PROFILE_ORIGIN}/p/${token}`;
   }, [token]);
+  const qrSvgUrl = useMemo(() => {
+    if (!token) return null;
+    return `/api/public/candidate/${token}/qr.svg`;
+  }, [token]);
 
   const fetchPreview = useCallback(async (publicToken: string) => {
     const res = await fetch(`/api/public/candidate/${publicToken}`, { cache: "no-store" });
@@ -97,6 +101,27 @@ export default function CandidatePublicProfilePage() {
     alert("Enlace copiado");
   }
 
+  async function downloadQr() {
+    if (!qrSvgUrl || !token) return;
+
+    const res = await fetch(qrSvgUrl, { cache: "no-store" });
+    if (!res.ok) {
+      setError("No se pudo generar el QR.");
+      return;
+    }
+
+    const svgText = await res.text();
+    const blob = new Blob([svgText], { type: "image/svg+xml;charset=utf-8" });
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = `verijob-perfil-publico-${token}.svg`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+  }
+
   const contact = useMemo(() => {
     if (mode !== "full") return undefined;
 
@@ -149,30 +174,57 @@ export default function CandidatePublicProfilePage() {
       )}
 
       <section className="rounded-2xl border border-gray-200 bg-white p-6">
-        <h3 className="text-base font-semibold text-gray-900">Enlace público</h3>
-        <p className="mt-2 text-sm text-gray-600">{link || "https://app.verijob.es/p/[token]"}</p>
-        <p className="mt-1 text-xs text-gray-500">Caduca en 7 días</p>
+        <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
+          <div>
+            <h3 className="text-base font-semibold text-gray-900">Enlace público</h3>
+            <p className="mt-2 text-sm text-gray-600">{link || "https://app.verijob.es/p/[token]"}</p>
+            <p className="mt-1 text-xs text-gray-500">Caduca en 7 días</p>
 
-        <div className="mt-4 flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={copyLink}
-            disabled={!link}
-            className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-50"
-          >
-            Copiar enlace
-          </button>
-          <button
-            type="button"
-            onClick={generateOrRefreshLink}
-            disabled={loadingLink}
-            className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
-          >
-            {loadingLink ? "Regenerando…" : "Regenerar enlace"}
-          </button>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={copyLink}
+                disabled={!link}
+                className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-50"
+              >
+                Copiar enlace
+              </button>
+              <button
+                type="button"
+                onClick={generateOrRefreshLink}
+                disabled={loadingLink}
+                className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+              >
+                {loadingLink ? "Regenerando…" : "Regenerar enlace"}
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <h4 className="text-sm font-semibold text-gray-900">QR del perfil</h4>
+            <p className="mt-1 text-xs text-gray-600">Escanéalo para abrir tu perfil público verificable.</p>
+
+            <div className="mt-3 flex min-h-[180px] items-center justify-center rounded-lg border border-gray-200 bg-white p-3">
+              {qrSvgUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={qrSvgUrl} alt="QR de perfil público" className="h-40 w-40 object-contain" />
+              ) : (
+                <span className="text-xs text-gray-500">Genera el enlace para ver el QR.</span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={downloadQr}
+              disabled={!qrSvgUrl}
+              className="mt-3 inline-flex w-full justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-100 disabled:opacity-50"
+            >
+              Descargar QR
+            </button>
+          </div>
         </div>
 
-        {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
       </section>
     </div>
   );

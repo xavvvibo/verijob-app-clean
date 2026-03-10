@@ -8,10 +8,13 @@ export default function LoginPage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.22),transparent_35%),radial-gradient(circle_at_80%_15%,rgba(255,255,255,0.18),transparent_30%),radial-gradient(circle_at_70%_80%,rgba(15,23,42,0.22),transparent_35%)]" />
       <div className="relative mx-auto grid min-h-screen w-full max-w-[1280px] items-center gap-8 px-6 py-10 lg:grid-cols-[1.1fr_0.9fr] lg:px-10">
         <section className="hidden px-2 py-6 text-white md:block">
-          <div className="flex items-center gap-3">
+          <div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/branding/verijob-mark.png" alt="Verijob" className="h-9 w-9 object-contain" />
-            <span className="text-xs font-semibold uppercase tracking-[0.18em] text-white/85">VERIJOB</span>
+            <img
+              src="/branding/verijob-logo-horizontal-white.png"
+              alt="Verijob"
+              className="h-auto w-[240px] object-contain"
+            />
           </div>
 
           <h1 className="mt-10 max-w-2xl text-4xl font-semibold leading-tight lg:text-5xl">
