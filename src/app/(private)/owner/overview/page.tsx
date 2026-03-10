@@ -1,15 +1,36 @@
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
+import type { ReactNode } from "react";
 
 export const dynamic = "force-dynamic";
 
 function MetricCard({ title, value, note }: { title: string; value: string; note?: string }) {
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-      <p className="text-sm font-medium text-slate-500">{title}</p>
-      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
-      {note ? <p className="mt-2 text-xs text-slate-500">{note}</p> : null}
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      <p className="mt-1 text-2xl font-semibold text-slate-900">{value}</p>
+      {note ? <p className="mt-1 text-xs text-slate-500">{note}</p> : null}
     </article>
+  );
+}
+
+function Section({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
+        <p className="text-sm text-slate-600">{subtitle}</p>
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -33,9 +54,9 @@ async function OwnerOverviewServer() {
   const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes] = await Promise.all([
     supabase.from("profiles").select("id", { count: "exact", head: true }),
     supabase.from("companies").select("id", { count: "exact", head: true }),
-    supabase.from("verification_requests").select("id,status,requested_at"),
-    supabase.from("evidences").select("id", { count: "exact", head: true }),
-    supabase.from("subscriptions").select("id,status,amount,created_at"),
+    supabase.from("verification_requests").select("id,status,requested_at,company_id"),
+    supabase.from("evidences").select("id,evidence_type,verification_request_id", { count: "exact" }),
+    supabase.from("subscriptions").select("id,status,amount,created_at,plan"),
     supabase.from("growth_campaigns").select("*"),
     supabase.from("cv_parse_jobs").select("id,status,created_at"),
   ]);
@@ -50,7 +71,18 @@ async function OwnerOverviewServer() {
     return s.includes("request") || s.includes("pending");
   }).length;
 
-  const evidencesTotal = Number(evidenceRes.count || 0);
+  const requestsThisWeek = requests.filter((r: any) => {
+    if (!r.requested_at) return false;
+    return new Date(r.requested_at).getTime() >= weekAgo;
+  }).length;
+
+  const inactiveCompanies = companiesTotal
+    ? companiesTotal - new Set(requests.map((r: any) => r.company_id).filter(Boolean)).size
+    : 0;
+
+  const evidenceRows = Array.isArray(evidenceRes.data) ? evidenceRes.data : [];
+  const evidencesTotal = Number(evidenceRes.count || evidenceRows.length || 0);
+  const evidencesUnlinked = evidenceRows.filter((e: any) => !e.verification_request_id).length;
 
   const subscriptions = Array.isArray(subscriptionsRes.data) ? subscriptionsRes.data : [];
   const activeSubs = subscriptions.filter((s: any) => {
@@ -94,90 +126,98 @@ async function OwnerOverviewServer() {
   const totalScrapingCost = campaigns.reduce((acc: number, row: any) => acc + Number(row.provider_scraping_last_cost || 0), 0);
 
   const jobs = Array.isArray(jobsRes.data) ? jobsRes.data : [];
-  const errorRate = jobs.length ? Math.round((jobs.filter((j: any) => String(j.status || "").toLowerCase() === "failed").length / jobs.length) * 100) : 0;
+  const failedJobs = jobs.filter((j: any) => String(j.status || "").toLowerCase() === "failed").length;
+  const pendingJobs = jobs.filter((j: any) => String(j.status || "").toLowerCase().includes("pending")).length;
+  const errorRate = jobs.length ? Math.round((failedJobs / jobs.length) * 100) : 0;
 
   return (
     <div className="space-y-6">
-      <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Owner Control Center</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Centro operativo para crecimiento, marketing, monetización y salud de plataforma con datos internos en tiempo real.
+        <p className="mt-1 text-sm text-slate-600">
+          Panel ejecutivo para decisión rápida en operaciones, crecimiento, verificaciones y monetización.
         </p>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-slate-900">Key Metrics</h2>
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <Section title="Key Metrics" subtitle="Lectura principal de negocio y actividad en plataforma.">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard title="Users total" value={String(usersTotal)} />
-          <MetricCard title="Companies" value={String(companiesTotal)} />
-          <MetricCard title="Verifications" value={String(verificationsTotal)} />
-          <MetricCard title="MRR" value={money(mrr)} note="Stripe LIVE conectado en subscriptions" />
+          <MetricCard title="Companies" value={String(companiesTotal)} note={`${inactiveCompanies} sin actividad`} />
+          <MetricCard title="Verifications" value={String(verificationsTotal)} note={`${requestsThisWeek} esta semana`} />
+          <MetricCard title="MRR" value={money(mrr)} note={`${activeSubs.length} suscripciones activas`} />
         </div>
-      </section>
+      </Section>
 
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-slate-900">System Health</h2>
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Error rate" value={`${errorRate}%`} />
+      <Section title="System Health" subtitle="Estado operativo de verificaciones, evidencias y parsing.">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard title="Error rate" value={`${errorRate}%`} note={`${failedJobs} fallidos`} />
           <MetricCard title="Pending verifications" value={String(pendingVerifications)} />
-          <MetricCard title="Evidence volume" value={String(evidencesTotal)} />
-          <MetricCard title="CV parsing jobs" value={String(jobs.length)} />
+          <MetricCard title="Evidence volume" value={String(evidencesTotal)} note={`${evidencesUnlinked} sin vinculación`} />
+          <MetricCard title="CV parsing jobs" value={String(jobs.length)} note={`${pendingJobs} pendientes`} />
         </div>
-      </section>
+      </Section>
 
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-slate-900">Growth Economics</h2>
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <Section title="Growth Economics" subtitle="Coste y rendimiento agregado de campañas.">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard title="Active campaigns" value={String(activeCampaigns)} />
-          <MetricCard title="Leads generated this week" value={String(leadsThisWeek)} />
-          <MetricCard title="Demos booked this week" value={String(demosThisWeek)} />
+          <MetricCard title="Leads this week" value={String(leadsThisWeek)} />
+          <MetricCard title="Demos this week" value={String(demosThisWeek)} />
           <MetricCard title="Total campaign cost" value={money(totalCampaignCost)} />
         </div>
-      </section>
+      </Section>
 
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-slate-900">Execution Health</h2>
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Queued campaigns" value={String(queuedCampaigns)} />
-          <MetricCard title="Running campaigns" value={String(runningCampaigns)} />
-          <MetricCard title="Failed campaigns" value={String(failedCampaigns)} />
-          <MetricCard title="Completed campaigns" value={String(completedCampaigns)} />
-        </div>
-      </section>
+      <div className="grid gap-6 xl:grid-cols-2">
+        <Section title="Execution Health" subtitle="Estado de ejecución de campañas.">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <MetricCard title="Queued" value={String(queuedCampaigns)} />
+            <MetricCard title="Running" value={String(runningCampaigns)} />
+            <MetricCard title="Failed" value={String(failedCampaigns)} />
+            <MetricCard title="Completed" value={String(completedCampaigns)} />
+          </div>
+        </Section>
 
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-slate-900">Provider Health</h2>
-        <div className="grid gap-6 md:grid-cols-3">
-          <MetricCard title="Campaigns out of sync" value={String(outOfSyncCampaigns)} />
-          <MetricCard title="Failed syncs" value={String(failedSyncs)} />
-          <MetricCard title="Synced today" value={String(syncedToday)} />
-        </div>
-      </section>
+        <Section title="Provider Health" subtitle="Sincronización y salud de proveedores.">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <MetricCard title="Out of sync" value={String(outOfSyncCampaigns)} />
+            <MetricCard title="Failed syncs" value={String(failedSyncs)} />
+            <MetricCard title="Synced today" value={String(syncedToday)} />
+          </div>
+        </Section>
+      </div>
 
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-slate-900">Scraping Health</h2>
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <Section title="Scraping Health" subtitle="Rendimiento actual del conector de scraping.">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard title="Outscraper configured" value={String(configuredOutscraper)} />
           <MetricCard title="Imported campaigns" value={String(importedOutscraper)} />
           <MetricCard title="Scraping failures" value={String(scrapingFailures)} />
-          <MetricCard title="Total scraping cost" value={money(totalScrapingCost)} />
+          <MetricCard title="Scraping cost" value={money(totalScrapingCost)} />
         </div>
-      </section>
+      </Section>
 
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-slate-900">Quick Actions</h2>
-        <div className="grid gap-6 md:grid-cols-3">
-          <Link href="/owner/growth" className="inline-flex items-center justify-center rounded-lg bg-blue-700 px-4 py-3 text-sm font-medium text-white hover:bg-blue-800">
-            Launch Growth Campaign
+      <Section title="Quick Actions" subtitle="Accesos directos para la operación diaria del founder/admin.">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <Link href="/owner/issues" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+            Incidencias abiertas
+            <span className="mt-1 block text-xs font-normal text-slate-500">{failedJobs} jobs fallidos</span>
           </Link>
-          <Link href="/owner/marketing" className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-900 hover:bg-slate-50">
-            Create Promo Code
+          <Link href="/owner/companies?activity=inactive" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+            Empresas sin actividad
+            <span className="mt-1 block text-xs font-normal text-slate-500">{inactiveCompanies} detectadas</span>
           </Link>
-          <Link href="/owner/issues" className="inline-flex items-center justify-center rounded-lg border border-slate-300 bg-white px-4 py-3 text-sm font-medium text-slate-900 hover:bg-slate-50">
-            Review Issues
+          <Link href="/owner/verifications?status=pendiente" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+            Verificaciones pendientes
+            <span className="mt-1 block text-xs font-normal text-slate-500">{pendingVerifications} por revisar</span>
+          </Link>
+          <Link href="/owner/monetization" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+            Revisar monetización
+            <span className="mt-1 block text-xs font-normal text-slate-500">MRR {money(mrr)}</span>
+          </Link>
+          <Link href="/owner/growth" className="rounded-lg bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800">
+            Lanzar campaign
+            <span className="mt-1 block text-xs font-normal text-blue-100">{activeCampaigns} activas</span>
           </Link>
         </div>
-      </section>
+      </Section>
     </div>
   );
 }

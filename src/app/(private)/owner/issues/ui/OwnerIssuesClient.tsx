@@ -14,17 +14,35 @@ type Item = {
 };
 
 function fmtDate(s: string) {
-  try { return new Date(s).toLocaleString(); } catch { return s; }
+  try {
+    return new Date(s).toLocaleString("es-ES");
+  } catch {
+    return s;
+  }
+}
+
+function severityLabel(v: string) {
+  if (v === "high") return "Alta";
+  if (v === "med") return "Media";
+  return "Baja";
+}
+
+function statusLabel(v: string) {
+  if (v === "in_progress") return "En curso";
+  if (v === "resolved") return "Resuelta";
+  return "Abierta";
 }
 
 export default function OwnerIssuesClient() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<"all" | "open" | "in_progress" | "resolved">("all");
+  const [filterSeverity, setFilterSeverity] = useState<"all" | "low" | "med" | "high">("all");
 
   const [form, setForm] = useState({
-    severity: "low",
-    http_status: 404,
+    severity: "med",
+    http_status: 500,
     error_code: "",
     path: "",
     message: "",
@@ -45,9 +63,25 @@ export default function OwnerIssuesClient() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
-  const sorted = useMemo(() => items, [items]);
+  const stats = useMemo(() => {
+    const open = items.filter((x) => x.status === "open").length;
+    const inProgress = items.filter((x) => x.status === "in_progress").length;
+    const resolved = items.filter((x) => x.status === "resolved").length;
+    const high = items.filter((x) => x.severity === "high").length;
+    return { open, inProgress, resolved, high };
+  }, [items]);
+
+  const filtered = useMemo(() => {
+    return items.filter((item) => {
+      if (filterStatus !== "all" && item.status !== filterStatus) return false;
+      if (filterSeverity !== "all" && item.severity !== filterSeverity) return false;
+      return true;
+    });
+  }, [items, filterSeverity, filterStatus]);
 
   async function createManual() {
     setErr(null);
@@ -68,7 +102,7 @@ export default function OwnerIssuesClient() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error ?? "failed");
-      setForm({ severity: "low", http_status: 404, error_code: "", path: "", message: "" });
+      setForm({ severity: "med", http_status: 500, error_code: "", path: "", message: "" });
       await load();
     } catch (e: any) {
       setErr(e?.message ?? "error");
@@ -92,103 +126,169 @@ export default function OwnerIssuesClient() {
   }
 
   return (
-    <div className="mx-auto max-w-[1400px] p-6">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Issue Desk</h1>
-          <p className="mt-1 text-sm text-slate-600">Incidencias reportadas (404/500) y entradas manuales.</p>
-        </div>
+    <div className="space-y-5">
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h1 className="text-2xl font-semibold text-slate-900">Issue Desk</h1>
+        <p className="mt-1 text-sm text-slate-600">
+          Centro operativo de incidencias para seguimiento, priorización y resolución.
+        </p>
 
-        <button
-          onClick={createManual}
-          className="inline-flex rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-        >
-          Nueva incidencia
-        </button>
-      </div>
-
-      {err ? (
-        <div className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{err}</div>
-      ) : null}
-
-      <div className="mt-6 grid gap-4 md:grid-cols-5">
-        <div className="md:col-span-5 rounded-2xl border border-slate-200 bg-white p-4">
-          <div className="grid gap-3 md:grid-cols-6">
-            <select
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              value={form.severity}
-              onChange={(e) => setForm((s) => ({ ...s, severity: e.target.value }))}
-            >
-              <option value="low">low</option>
-              <option value="med">med</option>
-              <option value="high">high</option>
-            </select>
-
-            <input
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              type="number"
-              value={form.http_status}
-              onChange={(e) => setForm((s) => ({ ...s, http_status: Number(e.target.value) }))}
-              placeholder="HTTP"
-            />
-
-            <input
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm md:col-span-2"
-              value={form.path}
-              onChange={(e) => setForm((s) => ({ ...s, path: e.target.value }))}
-              placeholder="Ruta (ej. /company/reuse)"
-            />
-
-            <input
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm"
-              value={form.error_code}
-              onChange={(e) => setForm((s) => ({ ...s, error_code: e.target.value }))}
-              placeholder="Code (opcional)"
-            />
-
-            <input
-              className="rounded-xl border border-slate-200 px-3 py-2 text-sm md:col-span-6"
-              value={form.message}
-              onChange={(e) => setForm((s) => ({ ...s, message: e.target.value }))}
-              placeholder="Mini descripción"
-            />
+        <div className="mt-4 grid gap-3 sm:grid-cols-4">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Abiertas</div>
+            <div className="text-xl font-semibold text-slate-900">{stats.open}</div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">En curso</div>
+            <div className="text-xl font-semibold text-slate-900">{stats.inProgress}</div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Resueltas</div>
+            <div className="text-xl font-semibold text-slate-900">{stats.resolved}</div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Severidad alta</div>
+            <div className="text-xl font-semibold text-slate-900">{stats.high}</div>
           </div>
         </div>
-      </div>
+      </section>
 
-      <div className="mt-6 rounded-2xl border border-slate-200 bg-white">
+      {err ? (
+        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">{err}</div>
+      ) : null}
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Nueva incidencia manual</h2>
+        <p className="mt-1 text-sm text-slate-600">Registra incidencias operativas detectadas fuera del flujo automático.</p>
+
+        <div className="mt-4 grid gap-3 md:grid-cols-6">
+          <select
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            value={form.severity}
+            onChange={(e) => setForm((s) => ({ ...s, severity: e.target.value }))}
+          >
+            <option value="low">Baja</option>
+            <option value="med">Media</option>
+            <option value="high">Alta</option>
+          </select>
+
+          <input
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            type="number"
+            value={form.http_status}
+            onChange={(e) => setForm((s) => ({ ...s, http_status: Number(e.target.value) }))}
+            placeholder="HTTP"
+          />
+
+          <input
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm md:col-span-2"
+            value={form.path}
+            onChange={(e) => setForm((s) => ({ ...s, path: e.target.value }))}
+            placeholder="Ruta (ej. /company/reuse)"
+          />
+
+          <input
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            value={form.error_code}
+            onChange={(e) => setForm((s) => ({ ...s, error_code: e.target.value }))}
+            placeholder="Código"
+          />
+
+          <button
+            onClick={createManual}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          >
+            Crear incidencia
+          </button>
+
+          <input
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm md:col-span-6"
+            value={form.message}
+            onChange={(e) => setForm((s) => ({ ...s, message: e.target.value }))}
+            placeholder="Descripción operativa"
+          />
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex flex-wrap gap-2">
+          <select
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value as any)}
+          >
+            <option value="all">Estado: todos</option>
+            <option value="open">Abiertas</option>
+            <option value="in_progress">En curso</option>
+            <option value="resolved">Resueltas</option>
+          </select>
+
+          <select
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
+            value={filterSeverity}
+            onChange={(e) => setFilterSeverity(e.target.value as any)}
+          >
+            <option value="all">Severidad: todas</option>
+            <option value="high">Alta</option>
+            <option value="med">Media</option>
+            <option value="low">Baja</option>
+          </select>
+
+          <button
+            onClick={() => {
+              setFilterStatus("all");
+              setFilterSeverity("all");
+            }}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+          >
+            Limpiar filtros
+          </button>
+        </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-slate-500">
+          <table className="w-full min-w-[980px] text-sm">
+            <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
               <tr className="border-b border-slate-200">
-                <th className="px-4 py-3">Fecha</th>
-                <th className="px-4 py-3">Sev</th>
-                <th className="px-4 py-3">HTTP</th>
-                <th className="px-4 py-3">Code</th>
-                <th className="px-4 py-3">Ruta</th>
-                <th className="px-4 py-3">Estado</th>
-                <th className="px-4 py-3"></th>
+                <th className="px-3 py-3">Fecha</th>
+                <th className="px-3 py-3">Severidad</th>
+                <th className="px-3 py-3">HTTP</th>
+                <th className="px-3 py-3">Code</th>
+                <th className="px-3 py-3">Ruta</th>
+                <th className="px-3 py-3">Mensaje</th>
+                <th className="px-3 py-3">Estado</th>
+                <th className="px-3 py-3">Acciones</th>
               </tr>
             </thead>
 
             <tbody className="text-slate-800">
               {loading ? (
-                <tr><td className="px-4 py-6 text-slate-600" colSpan={7}>Cargando…</td></tr>
-              ) : sorted.length === 0 ? (
-                <tr><td className="px-4 py-6 text-slate-600" colSpan={7}>No hay incidencias todavía.</td></tr>
+                <tr><td className="px-3 py-6 text-slate-600" colSpan={8}>Cargando incidencias…</td></tr>
+              ) : filtered.length === 0 ? (
+                <tr><td className="px-3 py-6 text-slate-600" colSpan={8}>No hay incidencias para los filtros aplicados.</td></tr>
               ) : (
-                sorted.map((it) => (
+                filtered.map((it) => (
                   <tr key={it.id} className="border-b border-slate-100">
-                    <td className="px-4 py-3 whitespace-nowrap">{fmtDate(it.created_at)}</td>
-                    <td className="px-4 py-3">{it.severity}</td>
-                    <td className="px-4 py-3">{it.http_status}</td>
-                    <td className="px-4 py-3">{it.error_code ?? "-"}</td>
-                    <td className="px-4 py-3 font-medium">{it.path}</td>
-                    <td className="px-4 py-3">{it.status}</td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-3 whitespace-nowrap">{fmtDate(it.created_at)}</td>
+                    <td className="px-3 py-3 font-semibold text-slate-900">{severityLabel(it.severity)}</td>
+                    <td className="px-3 py-3">{it.http_status || "—"}</td>
+                    <td className="px-3 py-3">{it.error_code ?? "-"}</td>
+                    <td className="px-3 py-3 font-medium">{it.path}</td>
+                    <td className="px-3 py-3 max-w-[340px] truncate" title={it.message}>{it.message || "Sin descripción"}</td>
+                    <td className="px-3 py-3">{statusLabel(it.status)}</td>
+                    <td className="px-3 py-3">
                       <div className="flex gap-2">
-                        <button onClick={() => setStatus(it.id, "in_progress")} className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold hover:opacity-90">En curso</button>
-                        <button onClick={() => setStatus(it.id, "resolved")} className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white hover:opacity-90">Resolver</button>
+                        <button
+                          onClick={() => setStatus(it.id, "in_progress")}
+                          className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold hover:bg-slate-50"
+                        >
+                          En curso
+                        </button>
+                        <button
+                          onClick={() => setStatus(it.id, "resolved")}
+                          className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
+                        >
+                          Resolver
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -197,7 +297,7 @@ export default function OwnerIssuesClient() {
             </tbody>
           </table>
         </div>
-      </div>
+      </section>
     </div>
   );
 }
