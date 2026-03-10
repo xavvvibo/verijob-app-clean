@@ -30,9 +30,9 @@ export default function PublicAuthShell({
         <div className="mx-auto flex max-w-[1200px] items-center justify-between px-6 py-4">
           <a href="https://verijob.es" className="flex items-center gap-3">
             <img
-              src="/brand/logo.png"
+              src="/branding/verijob-logo-horizontal.png"
               alt="Verijob"
-              className="h-6 w-auto"
+              className="h-auto w-40"
               loading="eager"
             />
           </a>

@@ -174,7 +174,7 @@ export default function Sidebar({ role }: { role?: Role }) {
         <div className="px-4 py-4 border-b border-slate-200">
           <Link href="/dashboard" className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/brand/logo.png" alt="Verijob" className="h-8 w-auto" />
+            <img src="/branding/verijob-logo-compact.png" alt="Verijob" className="h-8 w-auto" />
             <div className="leading-tight">
               <div className="text-sm font-extrabold text-slate-900">Verijob</div>
               <div className="text-[11px] font-semibold text-slate-500">

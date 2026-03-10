@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/browser";
+import { TrustLevelBadge, VerificationBadge } from "@/components/brand/VerificationBadge";
 
 type ProfileLite = {
   full_name?: string | null;
@@ -412,6 +413,8 @@ export default function CandidateOverview() {
             </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
+              <TrustLevelBadge score={metrics.score} />
+              <VerificationBadge tone="trust_visible">Trust Score visible para empresas registradas</VerificationBadge>
               <Link
                 href="/candidate/share"
                 className="inline-flex rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-semibold text-blue-800 hover:bg-blue-50"

@@ -73,9 +73,9 @@ export default function Topbar({ role }: { role?: Role }) {
           <Link href="/dashboard" className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/brand/logo.png"
+              src="/branding/verijob-logo-horizontal.png"
               alt="Verijob"
-              className="h-10 w-auto"
+              className="h-auto w-[170px] max-w-[42vw]"
               loading="eager"
             />
           </Link>
