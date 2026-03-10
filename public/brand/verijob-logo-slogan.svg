@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="2048" height="1024" viewBox="0 0 2048 1024">
+<rect width="100%" height="100%" fill="none"/>
+<g transform="translate(300,230) scale(1.4)">
+<path d="M120 200 C40 200 0 120 60 80 C120 40 160 120 200 120 C240 120 260 80 300 40 C340 0 400 40 360 80 C320 120 280 200 200 200 C160 200 160 200 120 200 Z"
+fill="url(#grad)"/>
+<text x="420" y="150" font-family="Inter, Arial, sans-serif" font-size="160" fill="#4B526B">Verijob</text>
+<circle cx="770" cy="40" r="12" fill="#FFC400"/>
+<circle cx="800" cy="40" r="12" fill="#52C41A"/>
+<text x="420" y="230" font-family="Inter, Arial, sans-serif" font-size="60" fill="#6B7280">
+La verdad laboral, verificada.
+</text>
+</g>
+<defs>
+<linearGradient id="grad" x1="0%" y1="0%" x2="100%" y2="100%">
+<stop offset="0%" stop-color="#8FD3FF"/>
+<stop offset="100%" stop-color="#1F4BD8"/>
+</linearGradient>
+</defs>
+</svg>
