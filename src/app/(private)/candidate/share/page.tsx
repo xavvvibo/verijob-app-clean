@@ -133,98 +133,106 @@ export default function CandidatePublicProfilePage() {
 
   return (
     <div className="space-y-6">
-      <header className="rounded-2xl border border-gray-200 bg-white p-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Perfil público</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Así verán tu perfil las empresas cuando compartas tu enlace verificable.
-        </p>
+      <section className="grid gap-6 xl:grid-cols-[1.45fr_0.75fr]">
+        <div className="space-y-6">
+          <header className="rounded-2xl border border-gray-200 bg-white p-6">
+            <h1 className="text-2xl font-semibold text-gray-900">Perfil público</h1>
+            <p className="mt-2 text-sm text-gray-600">
+              Así verán tu perfil las empresas cuando compartas tu enlace verificable.
+            </p>
 
-        <div className="mt-4 max-w-sm">
-          <label className="block text-sm font-semibold text-gray-900">Ver como</label>
-          <select
-            value={mode}
-            onChange={(e) => setMode(e.target.value as PublicProfilePreviewMode)}
-            className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-          >
-            {previewModes.map((item) => (
-              <option key={item.value} value={item.value}>
-                {item.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </header>
-
-      <section className="rounded-2xl border border-blue-100 bg-blue-50 p-5 text-sm text-blue-900">
-        Tu perfil no se muestra igual a todos los empleadores. Según el tipo de empresa y su nivel de acceso,
-        Verijob protege tu privacidad y muestra más o menos señales verificables.
-      </section>
-
-      {previewPayload ? (
-        <CandidatePublicProfileRenderer
-          payload={previewPayload}
-          mode={mode}
-          companyAccess={false}
-          contact={contact}
-        />
-      ) : (
-        <section className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
-          {previewError || "Generando enlace y cargando vista previa real del perfil público..."}
-        </section>
-      )}
-
-      <section className="rounded-2xl border border-gray-200 bg-white p-6">
-        <div className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
-          <div>
-            <h3 className="text-base font-semibold text-gray-900">Enlace público</h3>
-            <p className="mt-2 text-sm text-gray-600">{link || "https://app.verijob.es/p/[token]"}</p>
-            <p className="mt-1 text-xs text-gray-500">Caduca en 7 días</p>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={copyLink}
-                disabled={!link}
-                className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-50"
+            <div className="mt-4 max-w-sm">
+              <label className="block text-sm font-semibold text-gray-900">Ver como</label>
+              <select
+                value={mode}
+                onChange={(e) => setMode(e.target.value as PublicProfilePreviewMode)}
+                className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
               >
-                Copiar enlace
-              </button>
-              <button
-                type="button"
-                onClick={generateOrRefreshLink}
-                disabled={loadingLink}
-                className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
-              >
-                {loadingLink ? "Regenerando…" : "Regenerar enlace"}
-              </button>
+                {previewModes.map((item) => (
+                  <option key={item.value} value={item.value}>
+                    {item.label}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            <p className="mt-4 text-sm text-blue-900">
+              Tu perfil no se muestra igual a todos los empleadores. Según el tipo de empresa y su nivel de acceso,
+              Verijob protege tu privacidad y muestra más o menos señales verificables.
+            </p>
+          </header>
+
+          {previewPayload ? (
+            <CandidatePublicProfileRenderer
+              payload={previewPayload}
+              mode={mode}
+              companyAccess={false}
+              contact={contact}
+            />
+          ) : (
+            <section className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
+              {previewError || "Generando enlace y cargando vista previa real del perfil público..."}
+            </section>
+          )}
+        </div>
+
+        <aside className="h-fit rounded-2xl border border-gray-200 bg-white p-6 xl:sticky xl:top-6">
+          <h3 className="text-lg font-semibold text-gray-900">Comparte tu perfil</h3>
+          <p className="mt-1 text-sm text-gray-600">
+            Este es tu enlace público y su código QR verificable.
+          </p>
+
+          <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Enlace público</div>
+            <p className="mt-2 break-all text-sm text-gray-700">{link || "https://app.verijob.es/p/[token]"}</p>
+            <p className="mt-1 text-xs text-gray-500">Caduca en 7 días</p>
           </div>
 
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <h4 className="text-sm font-semibold text-gray-900">QR del perfil</h4>
-            <p className="mt-1 text-xs text-gray-600">Escanéalo para abrir tu perfil público verificable.</p>
-
-            <div className="mt-3 flex min-h-[180px] items-center justify-center rounded-lg border border-gray-200 bg-white p-3">
+          <div className="mt-5 rounded-xl border border-gray-200 bg-slate-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">QR del perfil</div>
+            <p className="mt-1 text-xs text-gray-600">Escanea para validar este perfil.</p>
+            <div className="mt-3 flex min-h-[300px] items-center justify-center rounded-lg border border-gray-200 bg-white p-3">
               {qrSvgUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={qrSvgUrl} alt="QR de perfil público" className="h-40 w-40 object-contain" />
+                <img src={qrSvgUrl} alt="QR de perfil público" className="h-auto w-full max-w-[220px] object-contain" />
               ) : (
                 <span className="text-xs text-gray-500">Genera el enlace para ver el QR.</span>
               )}
             </div>
+            <p className="mt-2 text-[11px] text-gray-500">
+              Verificación segura mediante enlace único.
+            </p>
+          </div>
 
+          <div className="mt-5 grid gap-2">
+            <button
+              type="button"
+              onClick={copyLink}
+              disabled={!link}
+              className="inline-flex w-full justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Copiar enlace
+            </button>
             <button
               type="button"
               onClick={downloadQr}
               disabled={!qrSvgUrl}
-              className="mt-3 inline-flex w-full justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-100 disabled:opacity-50"
+              className="inline-flex w-full justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-100 disabled:opacity-50"
             >
               Descargar QR
             </button>
+            <button
+              type="button"
+              onClick={generateOrRefreshLink}
+              disabled={loadingLink}
+              className="inline-flex w-full justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+            >
+              {loadingLink ? "Regenerando…" : "Regenerar enlace"}
+            </button>
           </div>
-        </div>
 
-        {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+          {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+        </aside>
       </section>
     </div>
   );
