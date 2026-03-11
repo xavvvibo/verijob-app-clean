@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import ResolveExperienceForm from "./ResolveExperienceForm";
 
@@ -25,7 +24,18 @@ function formatDate(value?: string | null) {
 
 export default async function VerifyExperienceByTokenPage({ params }: PageProps) {
   const { token } = await params;
-  if (!token) notFound();
+  if (!token) {
+    return (
+      <main className="min-h-screen bg-slate-50 px-6 py-10">
+        <div className="mx-auto max-w-3xl rounded-2xl border border-amber-200 bg-white p-6 shadow-sm">
+          <h1 className="text-xl font-semibold text-slate-900">Enlace no válido</h1>
+          <p className="mt-2 text-sm text-slate-600">
+            Este enlace no contiene un token de verificación válido. Revisa el email recibido y vuelve a intentarlo.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   const admin = createServiceRoleClient();
 
@@ -35,7 +45,19 @@ export default async function VerifyExperienceByTokenPage({ params }: PageProps)
     .eq("external_token", token)
     .maybeSingle();
 
-  if (!requestRow?.id) notFound();
+  if (!requestRow?.id) {
+    return (
+      <main className="min-h-screen bg-slate-50 px-6 py-10">
+        <div className="mx-auto max-w-3xl rounded-2xl border border-amber-200 bg-white p-6 shadow-sm">
+          <h1 className="text-xl font-semibold text-slate-900">Enlace no encontrado</h1>
+          <p className="mt-2 text-sm text-slate-600">
+            Este enlace de verificación no existe o ya no está disponible. Solicita al candidato que genere un nuevo
+            enlace.
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   const expiresAt = requestRow.external_token_expires_at ? Date.parse(String(requestRow.external_token_expires_at)) : NaN;
   if (!Number.isNaN(expiresAt) && expiresAt <= Date.now()) {
