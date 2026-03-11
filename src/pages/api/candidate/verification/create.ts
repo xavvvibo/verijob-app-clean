@@ -5,7 +5,7 @@ import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
 import { buildExternalExperienceVerificationEmail } from "@/lib/email/templates/externalExperienceVerification";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 
-const ROUTE_VERSION = "candidate-verification-create-v6-experience-request-flow";
+const ROUTE_VERSION = "candidate-verification-create-v7-nullable-company-id";
 
 function json(res: NextApiResponse, status: number, body: any) {
   res.setHeader("Cache-Control", "no-store");
@@ -28,10 +28,6 @@ function normalizeDateInput(value: unknown): string | null {
   return null;
 }
 
-function companyPlaceholderName(companyName: string) {
-  return `Pendiente de registro · ${companyName}`;
-}
-
 async function findCompanyByName(supabase: any, companyName: string): Promise<string | null> {
   const name = String(companyName || "").trim();
   if (!name) return null;
@@ -48,60 +44,6 @@ async function findCompanyByName(supabase: any, companyName: string): Promise<st
     if (data?.id) return String(data.id);
   }
   return null;
-}
-
-async function ensurePlaceholderCompany(supabase: any, companyName: string): Promise<{ id: string | null; error?: string }> {
-  const normalized = String(companyName || "").trim();
-  if (!normalized) return { id: null, error: "company_name_freeform vacío" };
-
-  const placeholderName = companyPlaceholderName(normalized);
-  const existingByName = await findCompanyByName(supabase, placeholderName);
-  if (existingByName) return { id: existingByName };
-
-  const metadata = {
-    is_placeholder: true,
-    source: "verification_request",
-    source_version: ROUTE_VERSION,
-    original_company_name: normalized,
-  };
-
-  const seedPayloads: Array<Record<string, any>> = [
-    { name: placeholderName, company_verification_status: "unverified", metadata },
-    { name: placeholderName, metadata },
-    { legal_name: placeholderName, trade_name: normalized, metadata },
-    { name: placeholderName },
-    { legal_name: placeholderName, trade_name: normalized },
-  ];
-
-  const parseMissingColumn = (message: string): string | null => {
-    const full = message.match(/column\s+"([^"]+)"\s+of relation\s+"companies"\s+does not exist/i);
-    if (full?.[1]) return full[1];
-    const short = message.match(/column\s+([a-zA-Z0-9_]+)\s+does not exist/i);
-    return short?.[1] || null;
-  };
-
-  let lastError: any = null;
-  for (const seed of seedPayloads) {
-    let payload = { ...seed };
-    for (let i = 0; i < 8; i += 1) {
-      const { data, error } = await supabase.from("companies").insert(payload).select("id").single();
-      if (!error && data?.id) return { id: String(data.id) };
-      lastError = error;
-      const message = String(error?.message || "");
-      const missing = parseMissingColumn(message);
-      if (missing && Object.prototype.hasOwnProperty.call(payload, missing)) {
-        const { [missing]: _drop, ...rest } = payload;
-        payload = rest;
-        continue;
-      }
-      break;
-    }
-  }
-
-  const finalTry = await findCompanyByName(supabase, placeholderName);
-  if (finalTry) return { id: finalTry };
-
-  return { id: null, error: String(lastError?.message || "No se pudo resolver placeholder company_id") };
 }
 
 async function tryInsertEmploymentRecord(
@@ -168,6 +110,64 @@ async function tryInsertEmploymentRecord(
   return { data: null, error: lastError };
 }
 
+async function tryInsertVerificationRequest(
+  supabase: any,
+  basePayload: Record<string, any>
+) {
+  const parseMissingColumn = (message: string): string | null => {
+    const full = message.match(/column\s+"([^"]+)"\s+of relation\s+"verification_requests"\s+does not exist/i);
+    if (full?.[1]) return full[1];
+    const short = message.match(/column\s+([a-zA-Z0-9_]+)\s+does not exist/i);
+    return short?.[1] || null;
+  };
+
+  const payloadVariants: Array<Record<string, any>> = [
+    {
+      ...basePayload,
+      verification_method: "email",
+      verification_email: basePayload.company_email_target,
+      verification_channel: "email",
+    },
+    {
+      ...basePayload,
+      verification_channel: "email",
+    },
+    {
+      ...basePayload,
+      verification_method: "email",
+      verification_email: basePayload.company_email_target,
+    },
+    {
+      ...basePayload,
+    },
+  ];
+
+  let lastError: any = null;
+  for (const seedPayload of payloadVariants) {
+    let payload = { ...seedPayload };
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const { data, error } = await supabase
+        .from("verification_requests")
+        .insert(payload)
+        .select("id")
+        .single();
+
+      if (!error) return { data, error: null };
+      lastError = error;
+
+      const missing = parseMissingColumn(String(error?.message || ""));
+      if (missing && Object.prototype.hasOwnProperty.call(payload, missing)) {
+        const { [missing]: _drop, ...rest } = payload;
+        payload = rest;
+        continue;
+      }
+      break;
+    }
+  }
+
+  return { data: null, error: lastError };
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -219,18 +219,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       : null;
 
     const companyIdFromName = await findCompanyByName(supabase, company_name_freeform);
-    let targetCompanyId = companyIdFromEmailProfile || companyIdFromName;
-
-    if (!targetCompanyId) {
-      const placeholder = await ensurePlaceholderCompany(supabase, company_name_freeform);
-      if (!placeholder.id) {
-        return json(res, 400, {
-          error: "Resolve company_id failed",
-          details: placeholder.error || "No se pudo encontrar o crear company_id placeholder.",
-        });
-      }
-      targetCompanyId = placeholder.id;
-    }
+    const targetCompanyId = companyIdFromEmailProfile || companyIdFromName || null;
 
     const hasRegisteredReceiver = Boolean(companyIdFromEmailProfile);
     const requestStatus = hasRegisteredReceiver ? "requested" : "company_registered_pending";
@@ -257,33 +246,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const { data: vr, error: vrErr } = await supabase
-      .from("verification_requests")
-      .insert({
-        employment_record_id: er.id,
-        requested_by: user.id,
-        company_id: targetCompanyId,
-        status: requestStatus,
-        company_email_target: company_email,
-        company_name_target: company_name_freeform,
-        verification_channel: "email",
-        requested_at: requestedAtIso,
-        external_token: hasRegisteredReceiver ? null : externalToken,
-        external_email_target: company_email,
-        external_token_expires_at: hasRegisteredReceiver ? null : externalTokenExpiresAt,
-        external_resolved: false,
-        request_context: {
-          experience_scope: "employment_record",
-          target_company_registered: hasRegisteredReceiver,
-          company_id_resolution: {
-            from_profile_email: Boolean(companyIdFromEmailProfile),
-            from_company_name: Boolean(companyIdFromName),
-            placeholder_used: !companyIdFromEmailProfile && !companyIdFromName,
-          },
+    const vrPayload = {
+      employment_record_id: er.id,
+      requested_by: user.id,
+      company_id: targetCompanyId,
+      status: requestStatus,
+      company_email_target: company_email,
+      company_name_target: company_name_freeform,
+      requested_at: requestedAtIso,
+      external_token: hasRegisteredReceiver ? null : externalToken,
+      external_email_target: company_email,
+      external_token_expires_at: hasRegisteredReceiver ? null : externalTokenExpiresAt,
+      external_resolved: false,
+      request_context: {
+        experience_scope: "employment_record",
+        target_company_registered: hasRegisteredReceiver,
+        company_id_resolution: {
+          from_profile_email: Boolean(companyIdFromEmailProfile),
+          from_company_name: Boolean(companyIdFromName),
+          unresolved_to_null: !companyIdFromEmailProfile && !companyIdFromName,
         },
-      })
-      .select("id")
-      .single();
+      },
+    };
+    const { data: vr, error: vrErr } = await tryInsertVerificationRequest(supabase, vrPayload);
 
     if (vrErr) return json(res, 400, { error: "Insert verification_requests failed", details: vrErr.message });
 
@@ -325,7 +310,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         company_id_resolution: {
           from_profile_email: Boolean(companyIdFromEmailProfile),
           from_company_name: Boolean(companyIdFromName),
-          placeholder_used: !companyIdFromEmailProfile && !companyIdFromName,
+          unresolved_to_null: !companyIdFromEmailProfile && !companyIdFromName,
         },
         external_verification_link: externalVerificationLink,
         route_version: ROUTE_VERSION,
