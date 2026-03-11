@@ -1,31 +1,32 @@
-import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
 
 export default async function handler(req, res) {
   try {
-    const supabase = createClient(
+
+    const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      { cookies }
     );
 
     const {
-      employment_record_id,
-      company_id
-    } = req.body;
+      data: { user },
+      error: userError
+    } = await supabase.auth.getUser();
 
-    const user = await supabase.auth.getUser(req.headers.authorization);
-
-    if (!user || !user.data || !user.data.user) {
+    if (userError || !user) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const userId = user.data.user.id;
+    const { employment_record_id, company_id } = req.body;
 
     const { data, error } = await supabase
       .from("verification_requests")
       .insert({
         employment_record_id,
         company_id,
-        requested_by: userId,
+        requested_by: user.id,
         status: "pending_company",
         verification_type: "employment"
       })
