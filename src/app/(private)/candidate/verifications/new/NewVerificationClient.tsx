@@ -46,6 +46,10 @@ export default function NewVerificationClient() {
       setErr("Introduce un email válido.");
       return;
     }
+    if (!sourceProfileExperienceId) {
+      setErr("Falta la experiencia asociada. Inicia la solicitud desde tu sección de experiencia.");
+      return;
+    }
     setSaving(true);
     setButtonLabel("Enviando solicitud...");
 
@@ -60,6 +64,7 @@ export default function NewVerificationClient() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          employment_record_id: sourceProfileExperienceId,
           company_name_freeform: company,
           company_email: companyEmail,
           position,

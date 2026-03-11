@@ -126,6 +126,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          employment_record_id: row.id,
           company_name_freeform: row.company_name || "",
           company_email: email,
           position: row.role_title || "",
