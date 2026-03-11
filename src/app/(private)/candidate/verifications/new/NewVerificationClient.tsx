@@ -62,6 +62,7 @@ export default function NewVerificationClient() {
 
       const res = await fetch("/api/candidate/verification/create", {
         method: "POST",
+        credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           employment_record_id: sourceProfileExperienceId,

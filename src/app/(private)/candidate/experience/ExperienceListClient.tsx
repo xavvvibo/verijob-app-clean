@@ -124,6 +124,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
     try {
       const res = await fetch("/api/candidate/verification/create", {
         method: "POST",
+        credentials: "include",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           employment_record_id: row.id,

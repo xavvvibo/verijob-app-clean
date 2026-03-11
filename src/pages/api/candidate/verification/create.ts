@@ -183,6 +183,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { data: authData, error: authError } = await sessionClient.auth.getUser();
   const user = authData?.user;
   if (authError || !user) {
+    console.error("Unauthorized in /api/candidate/verification/create", {
+      auth_error: authError?.message || null,
+      has_cookie_header: Boolean(req.headers.cookie),
+      cookie_names: Object.keys(req.cookies || {}),
+      method: req.method,
+      origin: req.headers.origin || null,
+      referer: req.headers.referer || null,
+    });
     return res.status(401).json({ error: "Unauthorized" });
   }
 
