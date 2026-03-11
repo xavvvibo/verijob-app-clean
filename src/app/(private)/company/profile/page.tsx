@@ -89,6 +89,13 @@ export default function CompanyProfilePage() {
   }, []);
 
   const completeness = Number(profile?.profile_completeness_score || 0);
+  const hasInitialData = Boolean(
+    profile?.legal_name ||
+      profile?.trade_name ||
+      profile?.contact_email ||
+      profile?.website_url ||
+      profile?.tax_id
+  );
   const canEdit = membershipRole === "admin";
   const commonRolesText = useMemo(() => (profile?.common_roles_hired || []).join(", "), [profile?.common_roles_hired]);
   const languagesText = useMemo(() => (profile?.common_languages_required || []).join(", "), [profile?.common_languages_required]);
@@ -157,6 +164,11 @@ export default function CompanyProfilePage() {
         </div>
         {error ? <p className="mt-4 text-sm text-rose-600">{error}</p> : null}
         {message ? <p className="mt-4 text-sm text-emerald-700">{message}</p> : null}
+        {!error && !hasInitialData ? (
+          <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+            Perfil inicial sin completar. Añade los datos básicos de tu empresa y guarda para activar la configuración operativa.
+          </div>
+        ) : null}
       </section>
 
       <Section title="Identidad de empresa" subtitle="Información legal y de contacto principal para operaciones B2B.">
@@ -267,7 +279,7 @@ export default function CompanyProfilePage() {
           {saving ? "Guardando…" : "Guardar perfil de empresa"}
         </button>
         {!canEdit ? (
-          <p className="self-center text-sm text-slate-600">Solo usuarios admin pueden editar este perfil.</p>
+          <p className="self-center text-sm text-slate-600">Solo usuarios admin pueden editar este perfil. Puedes revisar la información en modo lectura.</p>
         ) : null}
       </div>
     </div>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 
 const ROUTE_VERSION = "company-profile-v1";
 
@@ -185,7 +186,21 @@ async function resolveContext(supabase: any) {
     return { error: NextResponse.json({ error: "profiles_read_failed", details: profileErr.message }, { status: 400 }) };
   }
 
-  const companyId = (profile as any)?.active_company_id;
+  let companyId = (profile as any)?.active_company_id ? String((profile as any).active_company_id) : null;
+  if (!companyId) {
+    const { data: inferredMembership } = await supabase
+      .from("company_members")
+      .select("company_id,created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    companyId = inferredMembership?.[0]?.company_id ? String(inferredMembership[0].company_id) : null;
+    if (companyId) {
+      await supabase.from("profiles").update({ active_company_id: companyId }).eq("id", user.id);
+    }
+  }
+
   if (!companyId) {
     return { error: NextResponse.json({ error: "no_active_company" }, { status: 400 }) };
   }
@@ -221,12 +236,13 @@ async function getEffectiveVerificationStatus(supabase: any, userId: string, pro
 export async function GET() {
   try {
     const supabase = await createClient();
+    const admin = createServiceRoleClient();
     const ctx = await resolveContext(supabase);
     if ((ctx as any).error) return (ctx as any).error;
 
     const { user, companyId } = ctx as any;
 
-    const { data, error } = await supabase
+    const { data, error } = await admin
       .from("company_profiles")
       .select("*")
       .eq("company_id", companyId)
@@ -253,7 +269,7 @@ export async function GET() {
 
     const profileCompletenessScore = computeCompleteness(baseProfile);
     const effectiveVerificationStatus = await getEffectiveVerificationStatus(
-      supabase,
+      admin,
       user.id,
       baseProfile.company_verification_status
     );
@@ -275,6 +291,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const supabase = await createClient();
+    const admin = createServiceRoleClient();
     const ctx = await resolveContext(supabase);
     if ((ctx as any).error) return (ctx as any).error;
 
@@ -321,13 +338,13 @@ export async function POST(request: Request) {
     patch.updated_at = new Date().toISOString();
 
     const effectiveVerificationStatus = await getEffectiveVerificationStatus(
-      supabase,
+      admin,
       user.id,
       patch.company_verification_status
     );
     patch.company_verification_status = effectiveVerificationStatus;
 
-    const { data, error } = await supabase
+    const { data, error } = await admin
       .from("company_profiles")
       .upsert(patch, { onConflict: "company_id" })
       .select("*")

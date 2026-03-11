@@ -23,7 +23,11 @@ export default async function CandidateLayout({ children }: { children: React.Re
     .maybeSingle();
 
   const role = String(profile?.role || "").toLowerCase();
-  if (role !== "candidate") redirect("/dashboard");
+  if (role !== "candidate") {
+    if (role === "company") redirect("/company?forbidden=1&from=candidate");
+    if (role === "owner" || role === "admin") redirect("/owner/overview?forbidden=1&from=candidate");
+    redirect("/dashboard?forbidden=1&from=candidate");
+  }
 
   if (!profile?.onboarding_completed) redirect("/onboarding?blocked=1&source=candidate");
 

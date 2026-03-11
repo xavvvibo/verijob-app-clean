@@ -16,7 +16,11 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
     .maybeSingle();
 
   const role = String(profile?.role || "").toLowerCase();
-  if (role !== "owner" && role !== "admin") redirect("/dashboard");
+  if (role !== "owner" && role !== "admin") {
+    if (role === "candidate") redirect("/candidate/overview?forbidden=1&from=owner");
+    if (role === "company") redirect("/company?forbidden=1&from=owner");
+    redirect("/dashboard?forbidden=1&from=owner");
+  }
 
   return <>{children}</>;
 }

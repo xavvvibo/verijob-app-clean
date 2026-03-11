@@ -96,6 +96,11 @@ export default function CandidateSubscriptionPage() {
     () => labelForSubscriptionStatus(subscription?.status),
     [subscription?.status]
   );
+  const renewalLabel = useMemo(() => {
+    if (!subscription) return "No aplica";
+    if (!subscription.current_period_end) return "No aplica";
+    return formatDateEs(subscription.current_period_end);
+  }, [subscription]);
 
   async function loadSubscriptionState(): Promise<SubscriptionRow | null> {
     setLoadingSubscription(true);
@@ -312,15 +317,17 @@ export default function CandidateSubscriptionPage() {
           <dl className="mt-3 space-y-2 text-sm text-gray-700">
             <div className="flex items-center justify-between gap-3">
               <dt className="text-gray-500">Plan actual</dt>
-              <dd className="font-medium text-gray-900">{loadingSubscription ? "Cargando…" : labelForTier(currentTier)}</dd>
+              <dd className="font-medium text-gray-900">{labelForTier(currentTier)}</dd>
             </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="text-gray-500">Estado de suscripción</dt>
-              <dd className="font-medium text-gray-900">{loadingSubscription ? "Cargando…" : subscriptionStatusLabel}</dd>
+              <dd className="font-medium text-gray-900">
+                {subscription ? subscriptionStatusLabel : "Sin suscripción de pago activa"}
+              </dd>
             </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="text-gray-500">Próxima renovación</dt>
-              <dd className="font-medium text-gray-900">{loadingSubscription ? "Cargando…" : formatDateEs(subscription?.current_period_end)}</dd>
+              <dd className="font-medium text-gray-900">{renewalLabel}</dd>
             </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="text-gray-500">Cambio programado</dt>
@@ -408,6 +415,12 @@ export default function CandidateSubscriptionPage() {
           </div>
         </section>
       </div>
+
+      {!loadingSubscription && !subscription ? (
+        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+          Estás en plan <span className="font-semibold text-slate-900">Free</span>. Activa un plan de pago para desbloquear funciones avanzadas.
+        </div>
+      ) : null}
 
       {message ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{message}</div>

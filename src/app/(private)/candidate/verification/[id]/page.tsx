@@ -42,7 +42,7 @@ export default async function CandidateVerificationPage(props: any) {
 
   const { data: vr } = await supabase
     .from("verification_requests")
-    .select("id,status,revoked_at,requested_by,requested_at,resolved_at,resolution_notes,company_name_target,company_name_snapshot,company_verification_status_snapshot,employment_record_id")
+    .select("id,status,verification_channel,request_context,revoked_at,requested_by,requested_at,created_at,updated_at,resolved_at,resolution_notes,company_name_target,company_name_snapshot,company_verification_status_snapshot,employment_record_id")
     .eq("id", id)
     .maybeSingle();
 
@@ -57,10 +57,16 @@ export default async function CandidateVerificationPage(props: any) {
   const { data: er } = vr.employment_record_id
     ? await supabase
         .from("employment_records")
-        .select("position,company_name_freeform,start_date,end_date,verification_status")
+        .select("position,company_name_freeform,start_date,end_date,verification_status,description")
         .eq("id", vr.employment_record_id)
         .maybeSingle()
     : { data: null as any };
+
+  const { data: evidences } = await supabase
+    .from("evidences")
+    .select("id,evidence_type,created_at")
+    .eq("verification_request_id", vr.id)
+    .order("created_at", { ascending: false });
 
   const { data: cp } = await supabase
     .from("candidate_profiles")
@@ -71,6 +77,7 @@ export default async function CandidateVerificationPage(props: any) {
   const statusLabel = mapStatus(vr.status, vr.revoked_at);
   const companyVerificationLabel = mapCompanyVerificationStatus(vr.company_verification_status_snapshot);
   const companyName = vr.company_name_snapshot || er?.company_name_freeform || vr.company_name_target || "Empresa";
+  const evidenceRows = Array.isArray(evidences) ? evidences : [];
 
   return (
     <div className="p-8 space-y-6">
@@ -110,10 +117,57 @@ export default async function CandidateVerificationPage(props: any) {
           </div>
         </div>
 
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+          <div className="border border-gray-200 rounded-2xl p-4">
+            <div className="text-xs text-gray-500">Canal</div>
+            <div className="mt-1 text-sm font-semibold text-gray-900">{vr.verification_channel || "email"}</div>
+          </div>
+          <div className="border border-gray-200 rounded-2xl p-4">
+            <div className="text-xs text-gray-500">Creada</div>
+            <div className="mt-1 text-sm font-semibold text-gray-900">{toEsDate(vr.requested_at || vr.created_at)}</div>
+          </div>
+          <div className="border border-gray-200 rounded-2xl p-4">
+            <div className="text-xs text-gray-500">Última actualización</div>
+            <div className="mt-1 text-sm font-semibold text-gray-900">{toEsDate(vr.updated_at || vr.resolved_at)}</div>
+          </div>
+        </div>
+
+        {er?.description ? (
+          <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+            <span className="font-semibold text-gray-900">Descripción de la experiencia: </span>
+            {er.description}
+          </div>
+        ) : null}
+
+        <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+          <div className="text-sm font-semibold text-gray-900">Evidencias asociadas</div>
+          {evidenceRows.length > 0 ? (
+            <ul className="mt-2 space-y-2 text-sm text-gray-700">
+              {evidenceRows.map((ev: any) => (
+                <li key={ev.id} className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2">
+                  <span>{String(ev.evidence_type || "Documento")}</span>
+                  <span className="text-xs text-gray-500">{toEsDate(ev.created_at)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-gray-600">No hay evidencias documentales vinculadas a esta solicitud todavía.</p>
+          )}
+        </div>
+
         {vr.resolution_notes ? (
           <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
             <span className="font-semibold text-gray-900">Notas de resolución: </span>
             {vr.resolution_notes}
+          </div>
+        ) : null}
+
+        {vr.request_context ? (
+          <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+            <span className="font-semibold text-gray-900">Contexto de solicitud: </span>
+            {typeof vr.request_context === "string"
+              ? vr.request_context
+              : JSON.stringify(vr.request_context)}
           </div>
         ) : null}
 

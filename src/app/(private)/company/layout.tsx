@@ -24,7 +24,11 @@ export default async function CompanyLayout({ children }: Props) {
     .maybeSingle();
 
   const role = String(profile?.role || "").toLowerCase();
-  if (role !== "company") redirect("/dashboard");
+  if (role !== "company") {
+    if (role === "candidate") redirect("/candidate/overview?forbidden=1&from=company");
+    if (role === "owner" || role === "admin") redirect("/owner/overview?forbidden=1&from=company");
+    redirect("/dashboard?forbidden=1&from=company");
+  }
 
   if (!profile?.onboarding_completed) redirect("/onboarding");
 

@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import CommandSearch from "@/components/global/CommandSearch";
 
 type Role = "candidate" | "company" | "owner" | string | null | undefined;
@@ -16,6 +16,7 @@ function normalizeRole(role: Role) {
 
 export default function Topbar({ role }: { role?: Role }) {
   const pathname = usePathname() || "/";
+  const searchParams = useSearchParams();
   const r = normalizeRole(role);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [membershipRole, setMembershipRole] = useState<string | null>(null);
@@ -35,6 +36,8 @@ export default function Topbar({ role }: { role?: Role }) {
   }, [companyPlanLabel, r]);
 
   const isCandidateArea = pathname === "/candidate" || pathname.startsWith("/candidate/");
+  const forbiddenFlag = searchParams?.get("forbidden") === "1";
+  const forbiddenFrom = String(searchParams?.get("from") || "");
 
   useEffect(() => {
     if (!(pathname === "/company" || pathname.startsWith("/company/"))) return;
@@ -68,7 +71,13 @@ export default function Topbar({ role }: { role?: Role }) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/85 backdrop-blur">
-      <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-3">
+      <div className="mx-auto flex max-w-[1400px] flex-col px-6 py-3">
+        {forbiddenFlag ? (
+          <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            No tienes permisos para acceder a la zona <span className="font-semibold">{forbiddenFrom || "solicitada"}</span>. Te hemos llevado a tu área permitida.
+          </div>
+        ) : null}
+        <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Link href="/dashboard" className="flex items-center gap-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -128,6 +137,7 @@ export default function Topbar({ role }: { role?: Role }) {
             {loggingOut ? "Cerrando…" : "Cerrar sesión"}
           </button>
         </div>
+      </div>
       </div>
     </header>
   );
