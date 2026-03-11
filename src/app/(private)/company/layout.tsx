@@ -19,9 +19,12 @@ export default async function CompanyLayout({ children }: Props) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("onboarding_completed, active_company_id")
+    .select("role,onboarding_completed, active_company_id")
     .eq("id", au.user.id)
     .maybeSingle();
+
+  const role = String(profile?.role || "").toLowerCase();
+  if (role !== "company") redirect("/dashboard");
 
   if (!profile?.onboarding_completed) redirect("/onboarding");
 

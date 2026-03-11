@@ -15,10 +15,9 @@ export default async function DashboardRouter() {
     .eq("id", user.id)
     .single();
 
-  if (!profile?.onboarding_completed) redirect("/onboarding");
-
   const r = String(profile?.role || "").toLowerCase();
-  if (r === "owner") redirect("/owner/overview");
+  if (r === "owner" || r === "admin") redirect("/owner/overview");
+  if (!profile?.onboarding_completed) redirect("/onboarding");
   if (r === "company") redirect("/company");
   redirect("/candidate/overview");
 }

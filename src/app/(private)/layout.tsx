@@ -15,12 +15,13 @@ export default async function PrivateLayout({ children }: { children: ReactNode 
     .select("role")
     .eq("id", user.id)
     .single();
+  const role = String(profile?.role || "candidate").toLowerCase();
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", minHeight: "100vh", background: "#F8FAFC" }}>
-      <Sidebar role={profile.role} />
+      <Sidebar role={role} />
       <div>
-        <Topbar role={profile.role} />
+        <Topbar role={role} />
         <main style={{ padding: "32px" }}>{children}</main>
       </div>
     </div>

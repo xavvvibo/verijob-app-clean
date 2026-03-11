@@ -18,9 +18,12 @@ export default async function CandidateLayout({ children }: { children: React.Re
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("onboarding_completed")
+    .select("role,onboarding_completed")
     .eq("id", au.user.id)
     .maybeSingle();
+
+  const role = String(profile?.role || "").toLowerCase();
+  if (role !== "candidate") redirect("/dashboard");
 
   if (!profile?.onboarding_completed) redirect("/onboarding");
 
