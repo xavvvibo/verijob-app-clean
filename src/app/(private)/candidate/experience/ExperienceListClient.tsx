@@ -110,6 +110,14 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
       return;
     }
 
+    const { data: au } = await supabase.auth.getUser();
+    const user = au?.user;
+    if (!user) {
+      setVerifyStateById((prev) => ({ ...prev, [row.id]: "error" }));
+      setVerifyMessageById((prev) => ({ ...prev, [row.id]: "Usuario no autenticado." }));
+      return;
+    }
+
     setVerifyStateById((prev) => ({ ...prev, [row.id]: "loading" }));
     setVerifyMessageById((prev) => ({ ...prev, [row.id]: null }));
 

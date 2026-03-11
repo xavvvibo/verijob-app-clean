@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { createClient } from "@supabase/supabase-js"
+import { createPagesRouteClient } from "@/utils/supabase/pages"
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,6 +13,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: "Method not allowed" })
   }
 
+  const sessionClient = createPagesRouteClient(req, res)
+  const { data: authData, error: authError } = await sessionClient.auth.getUser()
+  const user = authData?.user
+  if (authError || !user) {
+    return res.status(401).json({ error: "Unauthorized" })
+  }
+
   const {
     company_name_freeform,
     company_email,
@@ -20,17 +28,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     end_date,
     is_current,
     source_profile_experience_id,
-    requested_by
+    requested_by: _ignoredRequestedBy
   } = req.body
-
-  if (!requested_by) {
-    return res.status(400).json({ error: "requested_by required" })
-  }
 
   const { data, error } = await supabase
     .from("verification_requests")
     .insert({
-      requested_by,
+      requested_by: user.id,
       verification_type: "employment",
       company_name_target: company_name_freeform,
       company_email_target: company_email,
