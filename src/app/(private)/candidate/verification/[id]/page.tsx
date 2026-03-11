@@ -11,8 +11,8 @@ function mapStatus(statusRaw: unknown, revokedAt?: string | null) {
   if (revokedAt) return "Revocada";
   const status = String(statusRaw || "").toLowerCase();
   if (status === "verified" || status === "approved") return "Verificada";
-  if (status === "requested" || status === "reviewing") return "En verificación";
-  if (status === "company_registered_pending") return "Empresa registrada (pendiente)";
+  if (status === "pending_company" || status === "reviewing") return "En verificación";
+  if (status === "pending_company") return "Empresa registrada (pendiente)";
   if (status === "rejected") return "Rechazada";
   if (status === "revoked") return "Revocada";
   return "En verificación";

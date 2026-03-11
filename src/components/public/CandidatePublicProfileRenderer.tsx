@@ -446,7 +446,7 @@ function getStatusBadge(statusText?: string | null) {
   if (status === "verified" || status === "approved") {
     return { label: "Verificada", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
   }
-  if (status === "reviewing" || status === "requested") {
+  if (status === "reviewing" || status === "pending_company") {
     return { label: "En revisión", className: "border-amber-200 bg-amber-50 text-amber-700" };
   }
   if (status === "pending_company") {

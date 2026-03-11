@@ -6,9 +6,9 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type RequestStatus =
-  | "requested"
+  | "pending_company"
   | "reviewing"
-  | "company_registered_pending"
+  | "pending_company"
   | "verified"
   | "rejected"
   | "revoked"
@@ -16,9 +16,9 @@ type RequestStatus =
 
 function normalizeStatus(status: string | null): RequestStatus {
   const s = String(status || "").toLowerCase();
-  if (s === "requested") return "requested";
+  if (s === "pending_company") return "pending_company";
   if (s === "reviewing") return "reviewing";
-  if (s === "company_registered_pending") return "company_registered_pending";
+  if (s === "pending_company") return "pending_company";
   if (s === "verified" || s === "approved") return "verified";
   if (s === "rejected") return "rejected";
   if (s === "revoked") return "revoked";
@@ -26,9 +26,9 @@ function normalizeStatus(status: string | null): RequestStatus {
 }
 
 function statusLabel(status: RequestStatus) {
-  if (status === "requested") return "En verificación";
+  if (status === "pending_company") return "En verificación";
   if (status === "reviewing") return "En verificación";
-  if (status === "company_registered_pending") return "Empresa registrada (pendiente)";
+  if (status === "pending_company") return "Empresa registrada (pendiente)";
   if (status === "verified") return "Verificado";
   if (status === "rejected") return "Rechazada";
   if (status === "revoked") return "Revocada";
@@ -38,7 +38,7 @@ function statusLabel(status: RequestStatus) {
 function statusTone(status: RequestStatus) {
   if (status === "verified") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (status === "rejected" || status === "revoked") return "border-rose-200 bg-rose-50 text-rose-700";
-  if (status === "company_registered_pending") return "border-indigo-200 bg-indigo-50 text-indigo-700";
+  if (status === "pending_company") return "border-indigo-200 bg-indigo-50 text-indigo-700";
   return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
@@ -100,7 +100,7 @@ export default async function CandidateVerificationsPage() {
           (rows || []).map((r: any) => {
             const employment = Array.isArray(r.employment_records) ? r.employment_records[0] : r.employment_records;
             const normalized = normalizeStatus(r.status);
-            const reminderEnabled = normalized === "requested" || normalized === "reviewing" || normalized === "company_registered_pending";
+            const reminderEnabled = normalized === "pending_company" || normalized === "reviewing" || normalized === "pending_company";
 
             return (
               <div key={r.id} className="rounded-xl border border-gray-200 bg-white p-4">

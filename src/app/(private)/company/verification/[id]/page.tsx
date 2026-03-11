@@ -15,7 +15,7 @@ function badge(status: string) {
   if (s === "revoked") return "bg-gray-200 text-gray-800";
   if (s.includes("approved") || s.includes("verified")) return "bg-green-100 text-green-800";
   if (s.includes("rejected")) return "bg-red-100 text-red-800";
-  if (s.includes("requested") || s.includes("pending") || s.includes("review")) return "bg-yellow-100 text-yellow-800";
+  if (s.includes("pending_company") || s.includes("pending") || s.includes("review")) return "bg-yellow-100 text-yellow-800";
   return "bg-gray-100 text-gray-700";
 }
 
@@ -24,8 +24,8 @@ function requestStatusLabel(statusRaw: unknown) {
   if (status === "verified") return "Verificada";
   if (status === "rejected") return "Rechazada";
   if (status === "revoked") return "Revocada";
-  if (status === "company_registered_pending") return "Empresa registrada (pendiente)";
-  if (status === "requested" || status === "reviewing") return "En revisión";
+  if (status === "pending_company") return "Empresa registrada (pendiente)";
+  if (status === "pending_company" || status === "reviewing") return "En revisión";
   return "Sin estado";
 }
 
@@ -88,8 +88,8 @@ function mapRequestStatusToDisplay(statusRaw: unknown) {
   if (status === "verified") return "verified";
   if (status === "rejected") return "rejected";
   if (status === "revoked") return "revoked";
-  if (status === "company_registered_pending") return "company_registered_pending";
-  if (status === "requested" || status === "reviewing") return "reviewing";
+  if (status === "pending_company") return "pending_company";
+  if (status === "pending_company" || status === "reviewing") return "reviewing";
   return status || "unknown";
 }
 

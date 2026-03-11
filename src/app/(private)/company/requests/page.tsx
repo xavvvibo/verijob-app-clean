@@ -38,8 +38,8 @@ type ReqRow = {
 
 function statusLabel(v: string | null) {
   if (v === "verified") return "Verificada";
-  if (v === "requested" || v === "reviewing") return "En revisión";
-  if (v === "company_registered_pending") return "Empresa registrada (pendiente)";
+  if (v === "pending_company" || v === "reviewing") return "En revisión";
+  if (v === "pending_company") return "Empresa registrada (pendiente)";
   if (v === "rejected") return "Rechazada";
   if (v === "revoked") return "Revocada";
   return "Sin estado";
@@ -47,8 +47,8 @@ function statusLabel(v: string | null) {
 
 function statusClass(v: string | null) {
   if (v === "verified") return "bg-emerald-100 text-emerald-800 border-emerald-200";
-  if (v === "requested" || v === "reviewing") return "bg-amber-100 text-amber-800 border-amber-200";
-  if (v === "company_registered_pending") return "bg-indigo-100 text-indigo-800 border-indigo-200";
+  if (v === "pending_company" || v === "reviewing") return "bg-amber-100 text-amber-800 border-amber-200";
+  if (v === "pending_company") return "bg-indigo-100 text-indigo-800 border-indigo-200";
   if (v === "rejected" || v === "revoked") return "bg-rose-100 text-rose-800 border-rose-200";
   return "bg-slate-100 text-slate-700 border-slate-200";
 }
@@ -136,7 +136,7 @@ export default async function CompanyRequestsPage({
 
   const counts = {
     all: rows.length,
-    reviewing: rows.filter((r) => r.status_effective === "reviewing" || r.status_effective === "requested").length,
+    reviewing: rows.filter((r) => r.status_effective === "reviewing" || r.status_effective === "pending_company").length,
     verified: rows.filter((r) => r.status_effective === "verified").length,
     revoked: rows.filter((r) => r.status_effective === "revoked" || r.status_effective === "rejected").length,
   };
@@ -144,7 +144,7 @@ export default async function CompanyRequestsPage({
   let filtered = rows;
   if (statusFilter !== "all") {
     if (statusFilter === "reviewing") {
-      filtered = rows.filter((r) => r.status_effective === "reviewing" || r.status_effective === "requested");
+      filtered = rows.filter((r) => r.status_effective === "reviewing" || r.status_effective === "pending_company");
     } else if (statusFilter === "revoked") {
       filtered = rows.filter((r) => r.status_effective === "revoked" || r.status_effective === "rejected");
     } else {
