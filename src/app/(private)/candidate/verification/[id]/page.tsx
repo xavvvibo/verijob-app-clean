@@ -10,9 +10,9 @@ function toEsDate(value?: string | null) {
 function mapStatus(statusRaw: unknown, revokedAt?: string | null) {
   if (revokedAt) return "Revocada";
   const status = String(statusRaw || "").toLowerCase();
-  if (status === "verified" || status === "approved") return "Verificada";
-  if (status === "pending_company" || status === "reviewing") return "En verificación";
-  if (status === "pending_company") return "Empresa registrada (pendiente)";
+  if (status === "verified" || status === "approved") return "Verificada por empresa vía email corporativo";
+  if (status === "pending_company") return "Pendiente de respuesta de empresa";
+  if (status === "reviewing") return "En revisión";
   if (status === "rejected") return "Rechazada";
   if (status === "revoked") return "Revocada";
   return "En verificación";
@@ -20,8 +20,10 @@ function mapStatus(statusRaw: unknown, revokedAt?: string | null) {
 
 function mapCompanyVerificationStatus(statusRaw: unknown) {
   const status = String(statusRaw || "").toLowerCase();
+  if (status === "registered_in_verijob") return "Empresa registrada en VERIJOB";
   if (status === "verified_paid") return "Empresa verificada (suscripción activa)";
-  if (status === "verified_document") return "Empresa verificada por documentación";
+  if (status === "verified_document") return "Empresa verificadora validada documentalmente";
+  if (status === "unverified_external") return "Verificación por email corporativo";
   if (status === "unverified") return "Empresa no verificada";
   return "Estado de empresa no disponible";
 }

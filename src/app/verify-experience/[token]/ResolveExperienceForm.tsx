@@ -4,9 +4,19 @@ import { useState } from "react";
 
 type Props = {
   token: string;
+  primaryCtaHref: string;
+  primaryCtaLabel: string;
+  secondaryCtaHref: string;
+  secondaryCtaLabel: string;
 };
 
-export default function ResolveExperienceForm({ token }: Props) {
+export default function ResolveExperienceForm({
+  token,
+  primaryCtaHref,
+  primaryCtaLabel,
+  secondaryCtaHref,
+  secondaryCtaLabel,
+}: Props) {
   const [decision, setDecision] = useState<"confirm" | "reject">("confirm");
   const [verifierName, setVerifierName] = useState("");
   const [verifierRole, setVerifierRole] = useState("");
@@ -49,18 +59,32 @@ export default function ResolveExperienceForm({ token }: Props) {
   }
 
   if (done) {
+    const successTitle = decision === "confirm" ? "Verificación completada" : "Respuesta registrada";
+    const successCopy =
+      decision === "confirm"
+        ? "Hemos registrado la confirmación de esta experiencia laboral."
+        : "Hemos registrado el rechazo de esta experiencia laboral.";
+
     return (
       <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
-        <h2 className="text-lg font-semibold text-emerald-900">Gracias. La experiencia ha sido registrada.</h2>
+        <h2 className="text-lg font-semibold text-emerald-900">{successTitle}</h2>
         <p className="mt-2 text-sm text-emerald-800">
-          Tu respuesta ha quedado guardada en VERIJOB para trazabilidad de esta experiencia.
+          {successCopy} Tu respuesta ha quedado guardada en VERIJOB para trazabilidad de esta experiencia.
         </p>
-        <a
-          href="/signup?mode=company"
-          className="mt-4 inline-flex rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
-        >
-          Crear cuenta de empresa para gestionar verificaciones
-        </a>
+        <div className="mt-4 flex flex-wrap gap-3">
+          <a
+            href={primaryCtaHref}
+            className="inline-flex rounded-xl bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+          >
+            {primaryCtaLabel}
+          </a>
+          <a
+            href={secondaryCtaHref}
+            className="inline-flex rounded-xl border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-50"
+          >
+            {secondaryCtaLabel}
+          </a>
+        </div>
       </div>
     );
   }

@@ -70,10 +70,12 @@ export async function POST(req: Request) {
 
       if ((matchedProfile as any)?.active_company_id) {
         snapshotCompanyId = String((matchedProfile as any).active_company_id);
+        snapshotCompanyVerificationStatus = "registered_in_verijob";
       }
     }
 
     if (snapshotCompanyId) {
+      snapshotCompanyVerificationStatus = "registered_in_verijob";
       const { data: company } = await admin
         .from("companies")
         .select("name,trade_name,legal_name,company_verification_status")
@@ -88,7 +90,7 @@ export async function POST(req: Request) {
         snapshotCompanyName;
 
       const companyStatus = asText((company as any)?.company_verification_status, 60);
-      snapshotCompanyVerificationStatus = companyStatus || "verified_document";
+      if (companyStatus) snapshotCompanyVerificationStatus = companyStatus;
     }
 
     const resolvedAt = new Date().toISOString();

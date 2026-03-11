@@ -7,12 +7,21 @@ export const revalidate = 0;
 
 function statusLabel(status: string | null | undefined) {
   const raw = String(status || "").toLowerCase();
-  if (raw === "pending_company") return "Empresa pendiente";
+  if (raw === "pending_company") return "Pendiente de respuesta de empresa";
   if (raw === "reviewing") return "En revisión";
-  if (raw === "verified") return "Verificada";
+  if (raw === "verified") return "Verificada por empresa vía email corporativo";
   if (raw === "rejected") return "Rechazada";
   if (raw === "revoked") return "Revocada";
   return "Desconocido";
+}
+
+function companySignalLabel(status: string | null | undefined) {
+  const raw = String(status || "").toLowerCase();
+  if (raw === "registered_in_verijob") return "Empresa registrada en VERIJOB";
+  if (raw === "verified_document") return "Empresa verificadora validada documentalmente";
+  if (raw === "verified_paid") return "Empresa verificada (suscripción activa)";
+  if (raw === "unverified_external") return "Verificación por email corporativo";
+  return "Sin señal adicional";
 }
 
 function fmt(value: string | null | undefined) {
@@ -34,7 +43,7 @@ export default async function CandidateVerificationsPage() {
   const { data: rows, error } = await supabase
     .from("verification_requests")
     .select(
-      "id,status,verification_channel,requested_at,created_at,company_name_target,company_email_target,request_context",
+      "id,status,verification_channel,requested_at,created_at,company_name_target,company_email_target,request_context,company_verification_status_snapshot",
     )
     .eq("requested_by", au.user.id)
     .order("requested_at", { ascending: false, nullsFirst: false })
@@ -71,6 +80,7 @@ export default async function CandidateVerificationsPage() {
                 <th className="px-4 py-3 font-semibold">Empresa</th>
                 <th className="px-4 py-3 font-semibold">Estado</th>
                 <th className="px-4 py-3 font-semibold">Canal</th>
+                <th className="px-4 py-3 font-semibold">Señal empresa</th>
                 <th className="px-4 py-3 font-semibold">Fecha</th>
                 <th className="px-4 py-3 font-semibold">Acción</th>
               </tr>
@@ -84,6 +94,7 @@ export default async function CandidateVerificationsPage() {
                   </td>
                   <td className="px-4 py-3 text-slate-700">{statusLabel(row.status)}</td>
                   <td className="px-4 py-3 text-slate-700">{row.verification_channel || "email"}</td>
+                  <td className="px-4 py-3 text-slate-700">{companySignalLabel(row.company_verification_status_snapshot)}</td>
                   <td className="px-4 py-3 text-slate-700">{fmt(row.requested_at || row.created_at)}</td>
                   <td className="px-4 py-3">
                     <Link

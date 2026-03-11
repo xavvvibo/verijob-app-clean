@@ -151,7 +151,7 @@ export default async function CandidateExperiencePage() {
 
           <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
             Estado de experiencia: <span className="font-semibold">Importado</span>, <span className="font-semibold">Sin verificar</span>, <span className="font-semibold">En verificación</span>, <span className="font-semibold">Verificado</span> o <span className="font-semibold">Revocado</span>.
-            Solo una validación real convierte una experiencia en verificada.
+            Verificado implica confirmación por empresa (vía email corporativo) o validación documental.
           </div>
 
           <div className="mt-4">

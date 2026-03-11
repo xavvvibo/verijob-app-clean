@@ -38,7 +38,7 @@ export default function CandidateVerificationPage() {
         const { data, error } = await supabase
           .from("verification_requests")
           .select("id, created_at")
-          .eq("candidate_id", userId)
+          .eq("requested_by", userId)
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();

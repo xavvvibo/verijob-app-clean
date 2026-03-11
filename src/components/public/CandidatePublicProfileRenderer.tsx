@@ -444,13 +444,13 @@ function getStatusBadge(statusText?: string | null) {
   const status = String(statusText || "").toLowerCase().trim();
 
   if (status === "verified" || status === "approved") {
-    return { label: "Verificada", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+    return { label: "Verificada por empresa (email)", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
   }
-  if (status === "reviewing" || status === "pending_company") {
+  if (status === "reviewing") {
     return { label: "En revisión", className: "border-amber-200 bg-amber-50 text-amber-700" };
   }
   if (status === "pending_company") {
-    return { label: "Pendiente empresa", className: "border-slate-300 bg-slate-100 text-slate-700" };
+    return { label: "Pendiente de empresa", className: "border-slate-300 bg-slate-100 text-slate-700" };
   }
   if (status === "rejected") {
     return { label: "Rechazada", className: "border-rose-200 bg-rose-50 text-rose-700" };
@@ -496,14 +496,17 @@ function formatMonthYear(value?: string | null) {
 
 function getCompanyStatusBadge(statusText?: string | null) {
   const status = String(statusText || "").toLowerCase();
+  if (status === "registered_in_verijob") {
+    return { label: "Empresa registrada en VERIJOB", className: "border-indigo-200 bg-indigo-50 text-indigo-700" };
+  }
   if (status === "verified_paid") {
     return { label: "Empresa verificada (plan activo)", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
   }
   if (status === "verified_document") {
-    return { label: "Empresa verificada por documentación", className: "border-blue-200 bg-blue-50 text-blue-700" };
+    return { label: "Empresa verificadora validada documentalmente", className: "border-blue-200 bg-blue-50 text-blue-700" };
   }
   if (status === "unverified_external") {
-    return { label: "Verificación externa", className: "border-violet-200 bg-violet-50 text-violet-700" };
+    return { label: "Verificación por email corporativo", className: "border-violet-200 bg-violet-50 text-violet-700" };
   }
   return { label: "Empresa no verificada", className: "border-amber-200 bg-amber-50 text-amber-700" };
 }
