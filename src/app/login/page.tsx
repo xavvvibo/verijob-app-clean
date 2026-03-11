@@ -1,24 +1,17 @@
 import { Suspense } from "react";
 import LoginClient from "./LoginClient";
+import PublicAuthShell from "@/components/public/PublicAuthShell";
 
 export default function LoginPage() {
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-10">
-      <div className="mx-auto flex min-h-[calc(100vh-5rem)] w-full max-w-6xl items-center justify-center">
-        <div className="w-full max-w-md">
-          <div className="mb-8 flex justify-center">
-            <img
-              src="/brand/verijob-logo.svg"
-              alt="Verijob"
-              className="h-auto w-full max-w-[320px] object-contain md:max-w-[360px]"
-            />
-          </div>
-
-          <Suspense fallback={null}>
-            <LoginClient />
-          </Suspense>
-        </div>
-      </div>
-    </main>
+    <PublicAuthShell
+      title="Accede a tu perfil profesional verificable"
+      subtitle="Entra con código por email para gestionar verificaciones, evidencias y compartir tu perfil."
+      leftPanelMode="flow"
+    >
+      <Suspense fallback={null}>
+        <LoginClient />
+      </Suspense>
+    </PublicAuthShell>
   );
 }

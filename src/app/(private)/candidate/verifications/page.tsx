@@ -1,31 +1,104 @@
-"use client";
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createServerSupabaseClient } from "@/utils/supabase/server";
 
-import React from "react";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
-type VerificationStatus =
-  | "pending_company"
-  | "reviewing"
-  | "verified"
-  | "rejected"
-  | "revoked"
-  | "unknown";
-
-function getStatusLabel(status: VerificationStatus) {
-  if (status === "pending_company") return "Empresa pendiente";
-  if (status === "reviewing") return "En verificación";
-  if (status === "verified") return "Verificado";
-  if (status === "rejected") return "Rechazada";
-  if (status === "revoked") return "Revocada";
+function statusLabel(status: string | null | undefined) {
+  const raw = String(status || "").toLowerCase();
+  if (raw === "pending_company") return "Empresa pendiente";
+  if (raw === "reviewing") return "En revisión";
+  if (raw === "verified") return "Verificada";
+  if (raw === "rejected") return "Rechazada";
+  if (raw === "revoked") return "Revocada";
   return "Desconocido";
 }
 
-export default function CandidateVerificationsPage() {
+function fmt(value: string | null | undefined) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString("es-ES", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+export default async function CandidateVerificationsPage() {
+  const supabase = await createServerSupabaseClient();
+  const { data: au } = await supabase.auth.getUser();
+  if (!au.user) redirect("/login?next=/candidate/verifications");
+
+  const { data: rows, error } = await supabase
+    .from("verification_requests")
+    .select(
+      "id,status,verification_channel,requested_at,created_at,company_name_target,company_email_target,request_context",
+    )
+    .eq("requested_by", au.user.id)
+    .order("requested_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false, nullsFirst: false });
+
   return (
-    <div className="p-6">
-      <h1 className="text-xl font-semibold">Verificaciones</h1>
-      <p className="text-sm text-gray-600 mt-2">
-        Aquí aparecerán tus solicitudes de verificación.
-      </p>
+    <div className="space-y-4 p-6">
+      <div>
+        <h1 className="text-xl font-semibold text-slate-900">Verificaciones</h1>
+        <p className="mt-1 text-sm text-slate-600">Aquí verás todas tus solicitudes de verificación enviadas a empresas.</p>
+      </div>
+
+      {error ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          No se han podido cargar tus verificaciones: {error.message}
+        </div>
+      ) : null}
+
+      {!error && (!rows || rows.length === 0) ? (
+        <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+          Aún no tienes solicitudes. Crea la primera desde{" "}
+          <Link href="/candidate/experience" className="font-semibold text-blue-700 hover:underline">
+            Experiencia
+          </Link>
+          .
+        </div>
+      ) : null}
+
+      {!error && rows && rows.length > 0 ? (
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+          <table className="min-w-full text-sm">
+            <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3 font-semibold">Empresa</th>
+                <th className="px-4 py-3 font-semibold">Estado</th>
+                <th className="px-4 py-3 font-semibold">Canal</th>
+                <th className="px-4 py-3 font-semibold">Fecha</th>
+                <th className="px-4 py-3 font-semibold">Acción</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((row: any) => (
+                <tr key={row.id}>
+                  <td className="px-4 py-3 text-slate-900">
+                    <div className="font-medium">{row.company_name_target || "Empresa no indicada"}</div>
+                    <div className="text-xs text-slate-500">{row.company_email_target || "Sin email"}</div>
+                  </td>
+                  <td className="px-4 py-3 text-slate-700">{statusLabel(row.status)}</td>
+                  <td className="px-4 py-3 text-slate-700">{row.verification_channel || "email"}</td>
+                  <td className="px-4 py-3 text-slate-700">{fmt(row.requested_at || row.created_at)}</td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={`/candidate/verification?verification_request_id=${encodeURIComponent(row.id)}`}
+                      className="text-blue-700 hover:underline"
+                    >
+                      Ver detalle
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   );
 }

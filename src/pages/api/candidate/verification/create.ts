@@ -1,11 +1,61 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createClient } from "@supabase/supabase-js";
 import { createPagesRouteClient } from "@/utils/supabase/pages";
+import { buildExternalExperienceVerificationEmail } from "@/lib/email/templates/externalExperienceVerification";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+async function sendVerificationEmail(params: { to: string; link: string }) {
+  const apiKey = String(process.env.RESEND_API_KEY || "").trim();
+  const from = String(process.env.RESEND_FROM_EMAIL || process.env.EMAIL_FROM || "").trim();
+  if (!apiKey || !from) {
+    return {
+      ok: false,
+      error: "Email provider no configurado (faltan RESEND_API_KEY y/o RESEND_FROM_EMAIL|EMAIL_FROM)",
+    };
+  }
+
+  try {
+    const tpl = buildExternalExperienceVerificationEmail({ verificationLink: params.link });
+    const payload = {
+      from,
+      to: [params.to],
+      subject: tpl.subject,
+      html: tpl.html || "",
+      text: tpl.text || tpl.body || "",
+    };
+
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const body = await response.text();
+    if (!response.ok) {
+      const error = new Error(`Resend API error ${response.status}: ${body}`);
+      console.error("Send verification email failed", error);
+      return {
+        ok: false,
+        error: error.message,
+      };
+    }
+
+    return { ok: true, error: null as string | null };
+  } catch (error: any) {
+    console.error("Send verification email failed", error);
+    return {
+      ok: false,
+      error: String(error?.message || "unknown_send_error"),
+    };
+  }
+}
 
 function normalizeDateInput(value: unknown): string | null {
   const raw = String(value ?? "").trim();
@@ -155,6 +205,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const endDate = Boolean(is_current) ? null : normalizeDateInput(end_date);
   const sourceProfileExperienceId = String(source_profile_experience_id || "").trim() || null;
   const employmentRecordIdRaw = String(employment_record_id || "").trim();
+  const externalToken = crypto.randomUUID().replace(/-/g, "");
+  const externalTokenExpiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 7).toISOString();
+  const appUrl = String(process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es").replace(/\/$/, "");
+  const verificationLink = `${appUrl}/verify-experience/${externalToken}`;
 
   if (!companyName) return res.status(400).json({ error: "company_name_freeform required" });
   if (!companyEmail || !companyEmail.includes("@")) return res.status(400).json({ error: "company_email required" });
@@ -187,6 +241,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       verification_type: "employment",
       company_name_target: companyName,
       company_email_target: companyEmail,
+      external_email_target: companyEmail,
+      external_token: externalToken,
+      external_token_expires_at: externalTokenExpiresAt,
       verification_channel: "email",
       status: "pending_company",
       requested_at: new Date().toISOString(),
@@ -214,10 +271,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     });
   }
 
+  const emailResult = await sendVerificationEmail({
+    to: companyEmail,
+    link: verificationLink,
+  });
+
+  if (!emailResult.ok) {
+    console.error("Send verification email failed", {
+      verification_request_id: data?.id || null,
+      company_email_target: companyEmail,
+      error: emailResult.error,
+    });
+    return res.status(502).json({
+      error: `Verification request creada pero fallo al enviar email: ${emailResult.error}`,
+      verification_request_id: data?.id || null,
+      email_sent: false,
+    });
+  }
+
   return res.status(200).json({
     ok: true,
     verification_request: data,
     verification_request_id: data?.id || null,
     employment_record_id: resolvedEmployment.id,
+    email_sent: true,
   });
 }

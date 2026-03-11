@@ -10,6 +10,7 @@ export default function SignupClient() {
   const [step, setStep] = useState<"email" | "otp">("email");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const isError = !!msg && msg.toLowerCase().includes("error");
 
   async function sendOtp(e: React.FormEvent) {
     e.preventDefault();
@@ -69,91 +70,82 @@ export default function SignupClient() {
   }
 
   return (
-    <form onSubmit={step === "email" ? sendOtp : verifyCode} style={{ padding: 24, maxWidth: 420 }}>
-      <h1 style={{ margin: 0, fontSize: 22 }}>Crear cuenta</h1>
-      <p style={{ marginTop: 8, color: "#444" }}>
+    <div className="w-full rounded-2xl border border-slate-200/80 bg-white/95 p-8 shadow-[0_12px_32px_rgba(15,23,42,0.10)]">
+      <h1 className="text-2xl font-semibold text-slate-900">Crear cuenta</h1>
+      <p className="mt-2 text-sm text-slate-500">
         {step === "email"
           ? "Te enviaremos un código para acceder."
           : "Introduce el código que has recibido por email."}
       </p>
 
-      <div style={{ marginTop: 14 }}>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="tu@email.com"
-          required
-          disabled={step === "otp"}
-          style={{
-            width: "100%",
-            padding: 10,
-            borderRadius: 10,
-            border: "1px solid #ccc",
-            background: step === "otp" ? "#f9fafb" : "#fff",
-          }}
-        />
-      </div>
-
-      {step === "otp" ? (
-        <div style={{ marginTop: 12 }}>
-          <input
-            type="text"
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            placeholder="123456"
-            required
-            style={{
-              width: "100%",
-              padding: 10,
-              borderRadius: 10,
-              border: "1px solid #ccc",
-            }}
-          />
-        </div>
-      ) : null}
-
-      <button
-        type="submit"
-        disabled={loading}
-        style={{
-          marginTop: 12,
-          padding: "10px 12px",
-          borderRadius: 10,
-          border: "1px solid #111",
-          background: "#111",
-          color: "#fff",
-        }}
+      <form
+        onSubmit={step === "email" ? sendOtp : verifyCode}
+        className="mt-6 space-y-4"
       >
-        {loading
-          ? "Procesando…"
-          : step === "email"
-            ? "Enviar código"
-            : "Verificar código"}
-      </button>
+        <label className="block">
+          <span className="text-sm text-slate-700">Email</span>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="tu@email.com"
+            required
+            disabled={step === "otp"}
+            className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:bg-slate-50"
+          />
+        </label>
 
-      {step === "otp" ? (
+        {step === "otp" ? (
+          <label className="block">
+            <span className="text-sm text-slate-700">Código</span>
+            <input
+              type="text"
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder="123456"
+              required
+              className="mt-2 w-full rounded-lg border border-slate-300 px-4 py-3 text-slate-900 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-600"
+            />
+          </label>
+        ) : null}
+
+        {msg ? (
+          <div
+            className={`rounded-lg border p-3 text-sm ${
+              isError
+                ? "border-rose-200 bg-rose-50 text-rose-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            {msg}
+          </div>
+        ) : null}
+
         <button
-          type="button"
+          type="submit"
           disabled={loading}
-          onClick={() => void sendOtp({ preventDefault() {} } as React.FormEvent)}
-          style={{
-            marginTop: 12,
-            marginLeft: 8,
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: "1px solid #ccc",
-            background: "#fff",
-            color: "#111",
-          }}
+          className="w-full rounded-lg bg-blue-600 py-3 font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Reenviar código
+          {loading
+            ? "Procesando…"
+            : step === "email"
+              ? "Enviar código"
+              : "Verificar código"}
         </button>
-      ) : null}
 
-      {msg && (
-        <p style={{ marginTop: 12, fontSize: 13, color: "#333" }}>{msg}</p>
-      )}
-    </form>
+        {step === "otp" ? (
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() =>
+              void sendOtp({ preventDefault() {} } as React.FormEvent)
+            }
+            className="w-full rounded-lg border border-slate-200 bg-white py-3 font-medium text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Reenviar código
+          </button>
+        ) : null}
+      </form>
+    </div>
   );
 }
