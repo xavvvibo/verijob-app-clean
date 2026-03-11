@@ -24,7 +24,17 @@ function formatDate(value?: string | null) {
 
 export default async function VerifyExperienceByTokenPage({ params }: PageProps) {
   const { token } = await params;
-  if (!token) {
+  const normalizedToken = decodeURIComponent(String(token || ""))
+    .trim()
+    .replace(/\s+/g, "");
+
+  console.info("[verify-experience] token received", {
+    raw_length: String(token || "").length,
+    normalized_length: normalizedToken.length,
+    token_prefix: normalizedToken.slice(0, 8),
+  });
+
+  if (!normalizedToken) {
     return (
       <main className="min-h-screen bg-slate-50 px-6 py-10">
         <div className="mx-auto max-w-3xl rounded-2xl border border-amber-200 bg-white p-6 shadow-sm">
@@ -39,11 +49,29 @@ export default async function VerifyExperienceByTokenPage({ params }: PageProps)
 
   const admin = createServiceRoleClient();
 
-  const { data: requestRow } = await admin
+  const { data: requestRows, error: requestErr } = await admin
     .from("verification_requests")
     .select("id,requested_by,company_name_target,external_token_expires_at,external_resolved,employment_record_id")
-    .eq("external_token", token)
-    .maybeSingle();
+    .eq("external_token", normalizedToken)
+    .order("created_at", { ascending: false })
+    .limit(1);
+
+  if (requestErr) {
+    console.error("[verify-experience] token lookup failed", {
+      token_prefix: normalizedToken.slice(0, 8),
+      code: (requestErr as any)?.code || null,
+      message: requestErr.message,
+      details: (requestErr as any)?.details || null,
+    });
+  }
+
+  const requestRow = Array.isArray(requestRows) && requestRows.length > 0 ? requestRows[0] : null;
+
+  console.info("[verify-experience] token lookup result", {
+    token_prefix: normalizedToken.slice(0, 8),
+    found: Boolean(requestRow?.id),
+    rows: Array.isArray(requestRows) ? requestRows.length : 0,
+  });
 
   if (!requestRow?.id) {
     return (
@@ -127,7 +155,7 @@ export default async function VerifyExperienceByTokenPage({ params }: PageProps)
           ) : null}
         </section>
 
-        {!requestRow.external_resolved ? <ResolveExperienceForm token={token} /> : null}
+        {!requestRow.external_resolved ? <ResolveExperienceForm token={normalizedToken} /> : null}
       </div>
     </main>
   );
