@@ -6,6 +6,7 @@
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
+    "test": "node --test tests/**/*.test.mjs",
     "lint": "eslint",
     "postbuild": "node scripts/vercel-fix-missing-manifests.cjs",
     "stripe:catalog:live": "node scripts/stripe/create-live-catalog.cjs scripts/stripe/verijob-catalog-live-v2.json"

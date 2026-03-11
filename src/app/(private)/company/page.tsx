@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { shouldShowCompanyNoActivityState } from "@/lib/company-dashboard-kpis";
 
 type Kpis = {
   pending_requests: number;
@@ -9,6 +10,9 @@ type Kpis = {
   risk_signals: number;
   reuse_events_30d: number;
   reuse_events_total: number;
+  completed_requests?: number;
+  avg_resolution_hours?: number | null;
+  verified_candidates?: number;
 };
 
 type DashboardPayload = {
@@ -210,6 +214,24 @@ export default function CompanyDashboard() {
         />
       </section>
 
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <MetricCard
+          title="Solicitudes completadas"
+          value={kpis ? String(Number(kpis.completed_requests || 0)) : "—"}
+          helper="Verificadas, rechazadas o revocadas"
+        />
+        <MetricCard
+          title="Tiempo medio resolución"
+          value={kpis && kpis.avg_resolution_hours !== null && kpis.avg_resolution_hours !== undefined ? `${kpis.avg_resolution_hours}h` : "—"}
+          helper="Desde solicitud hasta resolución"
+        />
+        <MetricCard
+          title="Candidatos verificados"
+          value={kpis ? String(Number(kpis.verified_candidates || 0)) : "—"}
+          helper="Con al menos una verificación validada"
+        />
+      </section>
+
       {!activePlan ? (
         <section className="rounded-3xl border border-amber-200 bg-amber-50 p-6">
           <h2 className="text-base font-semibold text-amber-900">Acceso limitado del plan actual</h2>
@@ -265,11 +287,17 @@ export default function CompanyDashboard() {
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-base font-semibold text-slate-900">Actividad reciente</h2>
         {kpis ? (
-          <ul className="mt-3 space-y-2 text-sm text-slate-600">
-            <li>• Reutilizaciones en 30 días: <span className="font-medium text-slate-900">{kpis.reuse_events_30d}</span></li>
-            <li>• Reutilizaciones acumuladas: <span className="font-medium text-slate-900">{kpis.reuse_events_total}</span></li>
-            <li>• Solicitudes pendientes para hoy: <span className="font-medium text-slate-900">{kpis.pending_requests}</span></li>
-          </ul>
+          shouldShowCompanyNoActivityState(kpis) ? (
+            <p className="mt-3 text-sm text-slate-600">
+              Aún no hay actividad de verificación. Empieza revisando solicitudes o compartiendo token de candidato para iniciar validaciones.
+            </p>
+          ) : (
+            <ul className="mt-3 space-y-2 text-sm text-slate-600">
+              <li>• Reutilizaciones en 30 días: <span className="font-medium text-slate-900">{kpis.reuse_events_30d}</span></li>
+              <li>• Reutilizaciones acumuladas: <span className="font-medium text-slate-900">{kpis.reuse_events_total}</span></li>
+              <li>• Solicitudes pendientes para hoy: <span className="font-medium text-slate-900">{kpis.pending_requests}</span></li>
+            </ul>
+          )
         ) : (
           <p className="mt-3 text-sm text-slate-600">
             Cuando empieces a recibir solicitudes y revisar candidatos, aquí verás el resumen de actividad de tu equipo.

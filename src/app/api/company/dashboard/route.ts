@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import {
+  computeCompanyKpiFallback,
+  mergeCompanyKpis,
+} from "@/lib/company-dashboard-kpis";
 
 const ROUTE_VERSION = "company-dashboard-kpis-v2-clean-2026-03-05";
 
@@ -175,7 +179,7 @@ export async function GET() {
 
     if (!activeCompanyId) return NextResponse.json({ error: "no_active_company", route_version: ROUTE_VERSION }, { status: 400 });
 
-    const [{ data, error: rpcErr }, memberRes, subRes] = await Promise.all([
+    const [{ data, error: rpcErr }, memberRes, subRes, requestsRes, reuseRes] = await Promise.all([
       supabase.rpc("company_dashboard_kpis_v2"),
       supabase
         .from("company_members")
@@ -190,11 +194,25 @@ export async function GET() {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
+      supabase
+        .from("verification_requests")
+        .select("id,status,requested_at,created_at,resolved_at,requested_by")
+        .eq("company_id", activeCompanyId),
+      supabase
+        .from("verification_reuse_events")
+        .select("id,reused_at,verification_id")
+        .eq("company_id", activeCompanyId),
     ]);
 
     if (rpcErr) return NextResponse.json({ error: "rpc_failed", details: rpcErr.message, route_version: ROUTE_VERSION }, { status: 400 });
 
     if ((data as any)?.error) return NextResponse.json({ ...(data as any), route_version: ROUTE_VERSION }, { status: 400 });
+
+    const requests = Array.isArray(requestsRes.data) ? requestsRes.data : [];
+    const reuseEvents = Array.isArray(reuseRes.data) ? reuseRes.data : [];
+    const fallbackKpis = computeCompanyKpiFallback({ requests, reuseEvents });
+    const kpisFromRpc = (data as any)?.kpis && typeof (data as any).kpis === "object" ? (data as any).kpis : {};
+    const mergedKpis = mergeCompanyKpis(kpisFromRpc, fallbackKpis);
 
     const { data: profileData } = await supabase
       .from("company_profiles")
@@ -224,7 +242,7 @@ export async function GET() {
       company_verification_status: companyVerificationStatus,
       profile_completeness_score: Number(profileData?.profile_completeness_score ?? computeProfileCompleteness(profileData)),
       current_period_end: currentPeriodEnd,
-      kpis: (data as any)?.kpis || null,
+      kpis: mergedKpis,
       route_version: ROUTE_VERSION,
     };
 
