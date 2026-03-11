@@ -117,7 +117,7 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
 
   const verifiedEmploymentCount = employment.filter((row: any) => {
     const status = normalizeText(row?.verification_status);
-    return status === "verified" || status === "approved";
+    return status === "verified" || status === "approved" || status === "verified_document";
   }).length;
 
   const verificationBlock =

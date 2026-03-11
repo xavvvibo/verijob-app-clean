@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import CommandSearch from "@/components/global/CommandSearch";
+import { createClient } from "@/utils/supabase/client";
+import { getCandidatePlanLabel } from "@/lib/candidate/plan-label";
 
 type Role = "candidate" | "company" | "owner" | string | null | undefined;
 
@@ -15,25 +17,19 @@ function normalizeRole(role: Role) {
 }
 
 export default function Topbar({ role }: { role?: Role }) {
+  const supabase = useMemo(() => createClient(), []);
   const pathname = usePathname() || "/";
   const searchParams = useSearchParams();
   const r = normalizeRole(role);
-  const [companyName, setCompanyName] = useState<string | null>(null);
   const [membershipRole, setMembershipRole] = useState<string | null>(null);
   const [companyPlanLabel, setCompanyPlanLabel] = useState<string | null>(null);
-
-  const scopeLabel = useMemo(() => {
-    if (r === "owner") return "Owner";
-    if (pathname === "/company" || pathname.startsWith("/company/")) return companyName || "Empresa";
-    if (pathname === "/candidate" || pathname.startsWith("/candidate/")) return "Candidato";
-    return r === "company" ? "Empresa" : "Candidato";
-  }, [companyName, pathname, r]);
+  const [candidatePlanLabel, setCandidatePlanLabel] = useState<string>("CANDIDATO FREE");
 
   const userPlanLabel = useMemo(() => {
     if (r === "owner") return "Plan Owner";
     if (r === "company") return `Plan Empresa ${companyPlanLabel || "Free"}`;
-    return "Plan Candidato";
-  }, [companyPlanLabel, r]);
+    return candidatePlanLabel;
+  }, [candidatePlanLabel, companyPlanLabel, r]);
 
   const isCandidateArea = pathname === "/candidate" || pathname.startsWith("/candidate/");
   const forbiddenFlag = searchParams?.get("forbidden") === "1";
@@ -47,7 +43,6 @@ export default function Topbar({ role }: { role?: Role }) {
         const res = await fetch("/api/company/dashboard", { cache: "no-store" });
         const data = await res.json().catch(() => null);
         if (!alive || !res.ok || !data) return;
-        setCompanyName(typeof data.company_name === "string" ? data.company_name : null);
         setMembershipRole(typeof data.membership_role === "string" ? data.membership_role : null);
         setCompanyPlanLabel(typeof data.plan_label === "string" ? data.plan_label : null);
       } catch {}
@@ -56,6 +51,34 @@ export default function Topbar({ role }: { role?: Role }) {
       alive = false;
     };
   }, [pathname]);
+
+  useEffect(() => {
+    if (!(pathname === "/candidate" || pathname.startsWith("/candidate/"))) return;
+    let alive = true;
+    (async () => {
+      try {
+        const { data: auth } = await supabase.auth.getUser();
+        const user = auth?.user;
+        if (!user) return;
+        const { data } = await supabase
+          .from("subscriptions")
+          .select("plan,status")
+          .eq("user_id", user.id)
+          .in("status", ["active", "trialing", "trial", "past_due", "incomplete"])
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!alive) return;
+        setCandidatePlanLabel(getCandidatePlanLabel((data as any)?.plan));
+      } catch {
+        if (!alive) return;
+        setCandidatePlanLabel("CANDIDATO FREE");
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [pathname, supabase]);
 
   const [loggingOut, setLoggingOut] = useState(false);
 
@@ -88,20 +111,23 @@ export default function Topbar({ role }: { role?: Role }) {
               loading="eager"
             />
           </Link>
-
-          <div className="hidden md:block">
-            <div className="text-xs font-semibold text-slate-500">{scopeLabel}</div>
-            {membershipRole && (pathname === "/company" || pathname.startsWith("/company/")) ? (
-              <div className="text-[11px] text-slate-400 uppercase tracking-wide">Rol: {membershipRole}</div>
-            ) : null}
-          </div>
         </div>
 
         <div className="flex items-center gap-3">
           {r === "owner" ? <CommandSearch /> : null}
 
-          <div className="hidden md:inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-700">
-            {userPlanLabel}
+          <div className="hidden md:inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/branding/verijob-mark.png"
+              alt="Verijob"
+              className="h-4 w-4 object-contain"
+              loading="lazy"
+            />
+            <span>{userPlanLabel}</span>
+            {membershipRole && (pathname === "/company" || pathname.startsWith("/company/")) ? (
+              <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">· {membershipRole}</span>
+            ) : null}
           </div>
 
           {isCandidateArea ? (

@@ -149,14 +149,20 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
             ? {
                 ...r,
                 status: "En verificación",
-                last_action: "Solicitud enviada",
+                last_action: json?.already_exists === true ? "Solicitud activa reutilizada" : "Solicitud enviada",
               }
             : r,
         ),
       );
 
       setVerifyStateById((prev) => ({ ...prev, [row.id]: "success" }));
-      setVerifyMessageById((prev) => ({ ...prev, [row.id]: "Solicitud enviada correctamente." }));
+      setVerifyMessageById((prev) => ({
+        ...prev,
+        [row.id]:
+          json?.already_exists === true
+            ? "Ya existía una solicitud activa para esta experiencia y este email. Hemos reutilizado la solicitud existente."
+            : "Solicitud enviada correctamente.",
+      }));
     } catch (err: any) {
       setVerifyStateById((prev) => ({ ...prev, [row.id]: "error" }));
       setVerifyMessageById((prev) => ({
@@ -297,7 +303,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                     value={verificationEmailById[r.id] || ""}
                     onChange={(e) => {
                       setVerificationEmailById((prev) => ({ ...prev, [r.id]: e.target.value }));
-                      if (verifyStateById[r.id] === "error") {
+                      if (verifyStateById[r.id] !== "idle") {
                         setVerifyStateById((prev) => ({ ...prev, [r.id]: "idle" }));
                         setVerifyMessageById((prev) => ({ ...prev, [r.id]: null }));
                       }
@@ -310,10 +316,14 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                 <button
                   type="button"
                   onClick={() => void requestVerification(r)}
-                  disabled={verifyState === "loading"}
+                  disabled={verifyState === "loading" || verifyState === "success"}
                   className="inline-flex items-center justify-center rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
                 >
-                  {verifyState === "loading" ? "Enviando solicitud..." : "Solicitar verificación a la empresa"}
+                  {verifyState === "loading"
+                    ? "Enviando solicitud..."
+                    : verifyState === "success"
+                      ? "Solicitud activa"
+                      : "Solicitar verificación a la empresa"}
                 </button>
 
                 <Link

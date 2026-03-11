@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import {
+  normalizeCvLanguages,
+  selectLanguagesPersistenceTarget,
+  shouldImportEducationRow,
+} from "@/lib/candidate/cv-parse-normalize";
 
 function normalizeText(v: any) {
   return typeof v === "string" ? v.trim() : "";
@@ -131,6 +136,84 @@ async function getTableColumns(supabase: any, table: string): Promise<Set<string
   }
 }
 
+async function persistLanguagesFromExtract(params: {
+  supabase: any;
+  userId: string;
+  jobId: string;
+  languagesRaw: any[];
+}) {
+  const { supabase, userId, jobId, languagesRaw } = params;
+  const normalizedLanguages = normalizeCvLanguages(
+    (Array.isArray(languagesRaw) ? languagesRaw : []).map((x: any) => normalizeText(x).trim()),
+    50
+  );
+
+  if (normalizedLanguages.length === 0) {
+    return { imported: 0, duplicatesSkipped: 0 };
+  }
+
+  const [profileColumns, cpRes] = await Promise.all([
+    getTableColumns(supabase, "profiles"),
+    supabase.from("candidate_profiles").select("achievements").eq("user_id", userId).maybeSingle(),
+  ]);
+
+  const persistenceTarget = selectLanguagesPersistenceTarget(profileColumns);
+  if (persistenceTarget === "profiles.languages") {
+    const { data: profileRow } = await supabase.from("profiles").select("languages").eq("id", userId).maybeSingle();
+    const current = Array.isArray((profileRow as any)?.languages)
+      ? (profileRow as any).languages.map((x: any) => normalizeText(x)).filter(Boolean)
+      : [];
+    const currentSet = new Set(current.map((x: string) => x.toLowerCase()));
+    const toAppend = normalizedLanguages.filter((lang: string) => !currentSet.has(lang.toLowerCase()));
+
+    if (toAppend.length > 0) {
+      const merged = [...current, ...toAppend];
+      const { error: upErr } = await supabase
+        .from("profiles")
+        .update({ languages: merged, updated_at: new Date().toISOString() })
+        .eq("id", userId);
+      if (upErr) throw new Error(`languages_profile_update_failed:${upErr.message}`);
+    }
+    return { imported: toAppend.length, duplicatesSkipped: normalizedLanguages.length - toAppend.length };
+  }
+
+  const currentAchievements = Array.isArray((cpRes.data as any)?.achievements) ? (cpRes.data as any).achievements : [];
+  const currentLangSet = new Set(
+    currentAchievements
+      .filter((x: any) => String(x?.category || "").toLowerCase() === "idioma")
+      .map((x: any) => normalizeText(x?.title).toLowerCase())
+      .filter(Boolean)
+  );
+  const toAppend = normalizedLanguages.filter((lang: string) => !currentLangSet.has(lang.toLowerCase()));
+
+  if (toAppend.length > 0) {
+    const nowIso = new Date().toISOString();
+    const merged = [
+      ...currentAchievements,
+      ...toAppend.map((lang: string) => ({
+        title: lang,
+        category: "idioma",
+        issuer: null,
+        date: null,
+        description: null,
+        import_source: "cv_parse",
+        import_job_id: jobId,
+        imported_at: nowIso,
+      })),
+    ];
+    const payload = {
+      user_id: userId,
+      achievements: merged,
+      updated_at: nowIso,
+    };
+    const { error: persistErr } = cpRes.data
+      ? await supabase.from("candidate_profiles").update(payload).eq("user_id", userId)
+      : await supabase.from("candidate_profiles").insert(payload);
+    if (persistErr) throw new Error(`languages_candidate_profile_persist_failed:${persistErr.message}`);
+  }
+  return { imported: toAppend.length, duplicatesSkipped: normalizedLanguages.length - toAppend.length };
+}
+
 export async function POST(req: Request) {
   const supabase = await createClient();
   const {
@@ -245,12 +328,21 @@ export async function POST(req: Request) {
       }
     }
 
+    const langImport = await persistLanguagesFromExtract({
+      supabase,
+      userId: user.id,
+      jobId,
+      languagesRaw: Array.isArray(result?.languages) ? result.languages : [],
+    }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) }));
+
     return NextResponse.json({
       ok: true,
       section: "experiences",
       imported: toInsert.length,
       duplicates_skipped: Math.max(selectedCount - toInsert.length, 0),
       not_selected: Math.max(totalDetected - selectedCount, 0),
+      languages_imported: Number((langImport as any)?.imported || 0),
+      languages_error: (langImport as any)?.error || null,
     });
   }
 
@@ -263,12 +355,11 @@ export async function POST(req: Request) {
     const importedAt = new Date().toISOString();
 
     const normalized = selectedRaw
-      .filter((x: any) => !isLikelyWorkItem(x) || Boolean(normalizeCompanyOrInstitution(x?.institution)))
       .map((x: any) => {
         const title = toNullable(x?.title || x?.degree);
         const institution = toNullable(x?.institution);
         const description = toNullable(x?.description || x?.notes);
-        if (!title && !institution && !description) return null;
+        if (!shouldImportEducationRow({ title, institution, description })) return null;
         return {
           title: title || "",
           institution: institution || "",
@@ -334,12 +425,50 @@ export async function POST(req: Request) {
       }
     }
 
+    const langImport = await persistLanguagesFromExtract({
+      supabase,
+      userId: user.id,
+      jobId,
+      languagesRaw: Array.isArray(result?.languages) ? result.languages : [],
+    }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) }));
+
     return NextResponse.json({
       ok: true,
       section: "education",
       imported: toAppend.length,
       duplicates_skipped: Math.max(selectedCount - toAppend.length, 0),
       not_selected: Math.max(totalDetected - selectedCount, 0),
+      languages_imported: Number((langImport as any)?.imported || 0),
+      languages_error: (langImport as any)?.error || null,
+    });
+  }
+
+  if (section === "languages") {
+    const extractedAll = Array.isArray(result?.languages) ? result.languages : [];
+    const selectedRaw = selectedItems ?? extractedAll;
+    if ((Array.isArray(selectedRaw) ? selectedRaw : []).length === 0) {
+      return NextResponse.json({
+        ok: true,
+        section: "languages",
+        imported: 0,
+        duplicates_skipped: 0,
+        not_selected: Math.max(extractedAll.length - selectedRaw.length, 0),
+      });
+    }
+
+    const langResult = await persistLanguagesFromExtract({
+      supabase,
+      userId: user.id,
+      jobId,
+      languagesRaw: selectedRaw,
+    });
+
+    return NextResponse.json({
+      ok: true,
+      section: "languages",
+      imported: langResult.imported,
+      duplicates_skipped: langResult.duplicatesSkipped,
+      not_selected: Math.max(extractedAll.length - selectedRaw.length, 0),
     });
   }
 

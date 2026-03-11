@@ -12,14 +12,14 @@ export default async function SignupPage() {
 
   return (
     <PublicAuthShell
-      title="Crea tu perfil profesional verificable"
-      subtitle="Verifica tu experiencia laboral y comparte un perfil que las empresas pueden comprobar."
+      title="Activa tu acceso a VERIJOB en minutos"
+      subtitle="Empieza por email y deja preparado tu entorno como candidato o empresa, con acceso inmediato y seguro."
       leftPanelMode="bullets"
       signupBullets={[
-        "Experiencias verificadas",
-        "Evidencias profesionales",
-        "Trust Score verificable",
-        "Perfil compartible",
+        "Alta rápida por email",
+        "Perfil verificable",
+        "Evidencias documentales",
+        "Acceso para candidato y empresa",
       ]}
     >
       <SignupClient />

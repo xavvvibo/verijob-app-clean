@@ -241,6 +241,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: resolvedEmployment.error || "employment_record_id inválido" });
   }
 
+  async function findActiveExistingVerificationRequest() {
+    const { data: activeRows, error: activeErr } = await supabase
+      .from("verification_requests")
+      .select("id,external_resolved,status,created_at")
+      .eq("requested_by", user.id)
+      .eq("employment_record_id", resolvedEmployment.id)
+      .eq("verification_channel", "email")
+      .eq("external_email_target", companyEmail)
+      .neq("status", "revoked")
+      .or("external_resolved.is.null,external_resolved.eq.false")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (activeErr) {
+      return { data: null as any, error: activeErr };
+    }
+
+    return {
+      data: Array.isArray(activeRows) && activeRows.length > 0 ? activeRows[0] : null,
+      error: null as any,
+    };
+  }
+
+  const preInsertLookup = await findActiveExistingVerificationRequest();
+  if (preInsertLookup.error) {
+    const activeErr = preInsertLookup.error;
+    console.error("Lookup active verification_requests failed", activeErr);
+    return res.status(400).json({
+      error: `Lookup active verification_requests failed: ${String(activeErr.message || "unknown_error")}`,
+    });
+  }
+
+  const activeExisting = preInsertLookup.data;
+  if (activeExisting?.id) {
+    return res.status(200).json({
+      ok: true,
+      already_exists: true,
+      verification_request_id: activeExisting.id,
+      email_sent: false,
+    });
+  }
+
   const { data, error } = await supabase
     .from("verification_requests")
     .insert({
@@ -267,6 +309,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     .single();
 
   if (error) {
+    if ((error as any)?.code === "23505") {
+      const dedupeLookup = await findActiveExistingVerificationRequest();
+      if (dedupeLookup.data?.id) {
+        return res.status(200).json({
+          ok: true,
+          already_exists: true,
+          verification_request_id: dedupeLookup.data.id,
+          email_sent: false,
+        });
+      }
+    }
     console.error("Insert verification_requests failed", error);
     return res.status(400).json({
       error: `Insert verification_requests failed: ${String(error.message || "unknown_error")}`,
@@ -299,6 +352,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   return res.status(200).json({
     ok: true,
+    already_exists: false,
     verification_request: data,
     verification_request_id: data?.id || null,
     employment_record_id: resolvedEmployment.id,

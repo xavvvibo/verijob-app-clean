@@ -85,8 +85,12 @@ export default function NewVerificationClient() {
       if (!vid) throw new Error("Respuesta inválida (sin verification_id)");
 
       vjEvents.verification_created(vid);
-      setSuccess("Solicitud enviada correctamente.");
-      setButtonLabel("Solicitud enviada");
+      setSuccess(
+        json?.already_exists === true
+          ? "Ya existía una solicitud activa para esta experiencia y este email. Hemos reutilizado la solicitud existente."
+          : "Solicitud enviada correctamente.",
+      );
+      setButtonLabel(json?.already_exists === true ? "Solicitud ya activa" : "Solicitud enviada");
       setTimeout(() => {
         router.replace(`/candidate/verification?verification_request_id=${encodeURIComponent(vid)}`);
         router.refresh();

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
+import { normalizeCvLanguages, shouldApplyParsedResultOnce } from "@/lib/candidate/cv-parse-normalize";
 
 type Job = {
   id: string;
@@ -14,7 +15,7 @@ type Job = {
 type MatchStatus = "new" | "possible_duplicate" | "already_exists";
 
 type ImportResult = {
-  section: "experiences" | "education";
+  section: "experiences" | "education" | "languages";
   imported: number;
   duplicatesSkipped: number;
   notSelected: number;
@@ -108,7 +109,7 @@ export default function CvUploadAndParse() {
   const [msg, setMsg] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [job, setJob] = useState<Job | null>(null);
-  const [importing, setImporting] = useState<null | "experiences" | "education">(null);
+  const [importing, setImporting] = useState<null | "experiences" | "education" | "languages">(null);
   const [dedupLoading, setDedupLoading] = useState(false);
 
   const [expDrafts, setExpDrafts] = useState<any[]>([]);
@@ -124,6 +125,9 @@ export default function CvUploadAndParse() {
   const [eduExistingPossible, setEduExistingPossible] = useState<Set<string>>(new Set());
 
   const [lastImport, setLastImport] = useState<ImportResult | null>(null);
+  const [languagesDraft, setLanguagesDraft] = useState<string[]>([]);
+  const [languagesChecked, setLanguagesChecked] = useState<boolean[]>([]);
+  const [lastAppliedJobId, setLastAppliedJobId] = useState<string | null>(null);
 
   const warnings = Array.isArray(job?.result_json?.meta?.warnings) ? job?.result_json?.meta?.warnings : [];
 
@@ -175,6 +179,7 @@ export default function CvUploadAndParse() {
   function applyParsedResults(nextJob: Job) {
     const parsedExps = Array.isArray(nextJob?.result_json?.experiences) ? nextJob.result_json.experiences : [];
     const parsedEdu = Array.isArray(nextJob?.result_json?.education) ? nextJob.result_json.education : [];
+    const parsedLanguages = Array.isArray(nextJob?.result_json?.languages) ? nextJob.result_json.languages : [];
     setExpDrafts(parsedExps.map((x: any) => ({
       company_name: x.company_name || x.company || "",
       role_title: x.role_title || x.title || "",
@@ -189,9 +194,13 @@ export default function CvUploadAndParse() {
       end_date: x.end_date || x.end || "",
       description: x.description || x.notes || "",
     })));
+    const normalizedLanguages = normalizeCvLanguages(parsedLanguages, 30);
+    setLanguagesDraft(normalizedLanguages);
+    setLanguagesChecked(normalizedLanguages.map(() => true));
+    setLastAppliedJobId(nextJob.id);
   }
 
-  async function importSection(section: "experiences" | "education") {
+  async function importSection(section: "experiences" | "education" | "languages") {
     if (!jobId || !job || job.status !== "succeeded") return;
     setImporting(section);
     setMsg(null);
@@ -199,7 +208,9 @@ export default function CvUploadAndParse() {
     const selectedItems =
       section === "experiences"
         ? expDrafts.filter((_: any, idx: number) => expChecked[idx])
-        : eduDrafts.filter((_: any, idx: number) => eduChecked[idx]);
+        : section === "education"
+          ? eduDrafts.filter((_: any, idx: number) => eduChecked[idx])
+          : languagesDraft.filter((_: any, idx: number) => languagesChecked[idx]);
 
     if (selectedItems.length === 0) {
       setImporting(null);
@@ -224,7 +235,9 @@ export default function CvUploadAndParse() {
       setMsg(
         section === "experiences"
           ? `${imported} experiencias importadas · ${duplicatesSkipped} omitidas por duplicadas · ${notSelected} no seleccionadas.`
-          : `${imported} formaciones importadas · ${duplicatesSkipped} omitidas por duplicadas · ${notSelected} no seleccionadas.`
+          : section === "education"
+            ? `${imported} formaciones importadas · ${duplicatesSkipped} omitidas por duplicadas · ${notSelected} no seleccionadas.`
+            : `${imported} idiomas importados · ${duplicatesSkipped} omitidos por duplicados · ${notSelected} no seleccionados.`
       );
 
       await loadProfileSets();
@@ -247,6 +260,9 @@ export default function CvUploadAndParse() {
     setEduStatuses([]);
     setExpChecked([]);
     setEduChecked([]);
+    setLanguagesDraft([]);
+    setLanguagesChecked([]);
+    setLastAppliedJobId(null);
 
     if (!file) {
       setMsg("Selecciona un CV (PDF o DOCX).");
@@ -336,8 +352,10 @@ export default function CvUploadAndParse() {
         } else if (casted.status === "processing") {
           setMsg("Procesando CV…");
         } else if (casted.status === "succeeded") {
-          await loadProfileSets();
-          applyParsedResults(casted);
+          if (shouldApplyParsedResultOnce({ nextJobId: casted.id, lastAppliedJobId })) {
+            await loadProfileSets();
+            applyParsedResults(casted);
+          }
 
           const ex = Array.isArray(casted?.result_json?.experiences) ? casted.result_json.experiences.length : 0;
           const ed = Array.isArray(casted?.result_json?.education) ? casted.result_json.education.length : 0;
@@ -368,7 +386,7 @@ export default function CvUploadAndParse() {
       alive = false;
       clearInterval(t);
     };
-  }, [jobId, supabase]);
+  }, [jobId, supabase, lastAppliedJobId]);
 
   const statusLabel =
     job?.status === "queued" ? "En cola" : job?.status === "processing" ? "Procesando" : job?.status === "succeeded" ? "Completado" : job?.status === "failed" ? "Fallido" : "—";
@@ -395,7 +413,11 @@ export default function CvUploadAndParse() {
       {lastImport ? (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
           <div>
-            {lastImport.section === "experiences" ? "Experiencias" : "Formación"}: {lastImport.imported} importadas · {lastImport.duplicatesSkipped} omitidas por duplicadas · {lastImport.notSelected} no seleccionadas.
+            {lastImport.section === "experiences"
+              ? "Experiencias"
+              : lastImport.section === "education"
+                ? "Formación"
+                : "Idiomas"}: {lastImport.imported} importadas · {lastImport.duplicatesSkipped} omitidas por duplicadas · {lastImport.notSelected} no seleccionadas.
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
             <a href="/candidate/experience" className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
@@ -517,6 +539,49 @@ export default function CvUploadAndParse() {
                           <input value={x.end_date || ""} onChange={(e) => setEduDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, end_date: e.target.value } : r)))} placeholder="Fecha fin (YYYY-MM)" className="rounded-lg border px-3 py-2 text-sm" />
                         </div>
                         <textarea value={x.description || ""} onChange={(e) => setEduDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, description: e.target.value } : r)))} rows={2} placeholder="Descripción" className="mt-2 w-full rounded-lg border px-3 py-2 text-sm" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-medium">Idiomas detectados</div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => setLanguagesChecked(languagesDraft.map(() => true))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Seleccionar todos</button>
+                    <button type="button" onClick={() => setLanguagesChecked(languagesDraft.map(() => false))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Deseleccionar todos</button>
+                    <button type="button" onClick={() => void importSection("languages")} disabled={importing !== null || dedupLoading} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium disabled:opacity-60">
+                      Importar idiomas seleccionados
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+                  Los idiomas importados se añadirán al perfil del candidato y estarán disponibles en la vista pública.
+                </div>
+
+                {languagesDraft.length === 0 ? (
+                  <div className="text-sm text-slate-600">No se detectaron idiomas en el CV.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {languagesDraft.map((lang: string, idx: number) => (
+                      <div key={`${lang}-${idx}`} className="rounded-md border bg-white p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(languagesChecked[idx])}
+                              onChange={(e) => setLanguagesChecked((prev) => prev.map((v, i) => (i === idx ? e.target.checked : v)))}
+                            />
+                            Seleccionar
+                          </label>
+                        </div>
+                        <input
+                          value={lang}
+                          onChange={(e) => setLanguagesDraft((prev) => prev.map((r, i) => (i === idx ? e.target.value : r)))}
+                          placeholder="Idioma"
+                          className="w-full rounded-lg border px-3 py-2 text-sm"
+                        />
                       </div>
                     ))}
                   </div>

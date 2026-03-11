@@ -13,8 +13,8 @@ export default async function LoginPage() {
 
   return (
     <PublicAuthShell
-      title="Accede a tu perfil profesional verificable"
-      subtitle="Entra con código por email para gestionar verificaciones, evidencias y compartir tu perfil."
+      title="Acceso seguro a tu entorno VERIJOB"
+      subtitle="Entra por código de un solo uso para gestionar verificaciones, evidencias y decisiones con trazabilidad."
       leftPanelMode="flow"
     >
       <Suspense fallback={null}>

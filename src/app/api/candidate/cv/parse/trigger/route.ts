@@ -3,6 +3,7 @@ import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { z } from "zod";
 import { extractCvTextFromBuffer } from "@/utils/cv/extractText";
+import { normalizeCvLanguages } from "@/lib/candidate/cv-parse-normalize";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,6 +69,7 @@ const CvExtractSchema = z.object({
   email: z.string().nullable().optional(),
   phone: z.string().nullable().optional(),
   headline: z.string().nullable().optional(),
+  languages: z.array(z.string()).optional().default([]),
   experiences: z.array(ExperienceSchema).optional().default([]),
   education: z.array(EducationSchema).optional().default([]),
 });
@@ -84,6 +86,7 @@ function buildCvExtractionPrompt(cvText: string) {
     '  "email": string|null,',
     '  "phone": string|null,',
     '  "headline": string|null,',
+    '  "languages": string[],',
     '  "experiences": [',
     "    {",
     '      "company_name": string|null,',
@@ -136,6 +139,7 @@ function normalizeExtract(raw: any) {
     email: parsed.email ?? null,
     phone: parsed.phone ?? null,
     headline: parsed.headline ?? null,
+    languages: normalizeCvLanguages(parsed.languages, 30),
     experiences: parsed.experiences.map((x) => ({
       company_name: x.company_name ?? null,
       role_title: x.role_title ?? null,
@@ -158,7 +162,7 @@ function normalizeExtract(raw: any) {
   };
 }
 
-function buildWarnings(input: { cvText: string; experiences: any[]; education: any[] }) {
+function buildWarnings(input: { cvText: string; experiences: any[]; education: any[]; languages?: string[] }) {
   const warnings: string[] = [];
   const plain = input.cvText.replace(/\s+/g, " ").trim();
   const wordCount = plain ? plain.split(" ").length : 0;
@@ -171,6 +175,9 @@ function buildWarnings(input: { cvText: string; experiences: any[]; education: a
   }
   if (input.education.length === 0) {
     warnings.push("no_education_detected");
+  }
+  if (!Array.isArray(input.languages) || input.languages.length === 0) {
+    warnings.push("no_languages_detected");
   }
   return { warnings, chars: plain.length, words: wordCount };
 }
@@ -319,6 +326,7 @@ export async function POST(req: Request) {
       cvText: extractedText,
       experiences: normalized.experiences,
       education: normalized.education,
+      languages: normalized.languages,
     });
 
     await (supabase as any)

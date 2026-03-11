@@ -1,4 +1,5 @@
 import React from "react";
+import { normalizePublicLanguages } from "@/lib/public/profile-languages";
 
 export type PublicProfilePreviewMode = "public" | "registered" | "requesting" | "full";
 
@@ -6,6 +7,7 @@ export type PublicCandidateTeaser = {
   full_name?: string | null;
   title?: string | null;
   location?: string | null;
+  languages?: string[] | null;
   summary?: string | null;
   trust_score?: number | null;
   experiences_total?: number | null;
@@ -84,6 +86,7 @@ export function CandidatePublicProfileRenderer({
     : [];
   const capabilities = getModeCapabilities(mode);
   const experiences = allExperiences.slice(0, capabilities.maxExperiences);
+  const publicLanguages = normalizePublicLanguages(teaser?.languages);
 
   const trust = Number(teaser?.trust_score ?? 0);
   const trustLabel = getTrustLabel(trust);
@@ -147,6 +150,11 @@ export function CandidatePublicProfileRenderer({
               {teaser?.full_name || "Candidato verificado"}
             </h1>
             {teaser?.location ? <p className="mt-2 text-sm text-blue-100/90">Ubicación: {teaser.location}</p> : null}
+            {publicLanguages.length > 0 ? (
+              <p className="mt-2 text-sm text-blue-100/90">
+                Idiomas: {publicLanguages.join(", ")}
+              </p>
+            ) : null}
             <p className="mt-3 text-sm leading-6 text-blue-100/95">
               Perfil profesional con credenciales laborales estructuradas y evidencias verificables en VERIJOB.
             </p>

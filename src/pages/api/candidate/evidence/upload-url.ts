@@ -1,6 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { randomUUID, createHash } from "crypto";
 import { createPagesRouteClient } from "@/utils/supabase/pages";
+import {
+  buildDocumentaryVerificationInsert,
+  buildEmploymentRecordDocumentaryRequestedUpdate,
+  getActiveDocumentaryVerificationId,
+} from "@/lib/candidate/documentary-flow";
 
 const BUCKET = "evidence";
 const MAX_MB = 20;
@@ -38,6 +43,10 @@ function isHexSha256(s?: string) {
   return /^[a-f0-9]{64}$/i.test(s);
 }
 
+function isUuid(v: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -59,14 +68,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
 
     const verification_request_id = String(body?.verification_request_id ?? "").trim();
+    const employment_record_id = String(body?.employment_record_id ?? "").trim();
     const mime = String(body?.mime ?? "").trim();
     const size_bytes = Number(body?.size_bytes ?? 0);
     const original_name = safeFilename(String(body?.filename ?? "file"));
     const evidence_type = body?.evidence_type ? String(body.evidence_type).slice(0, 50) : null;
     const file_sha256 = body?.file_sha256 ? String(body.file_sha256).toLowerCase() : null;
 
-    if (!verification_request_id) {
-      return json(res, 400, { error: "Falta verification_request_id", route: "/pages/api/candidate/evidence/upload-url" });
+    if (!verification_request_id && !employment_record_id) {
+      return json(res, 400, {
+        error: "Falta verification_request_id o employment_record_id",
+        route: "/pages/api/candidate/evidence/upload-url",
+      });
     }
     if (!ALLOWED_MIME.has(mime)) {
       return json(res, 400, { error: "Tipo de archivo no permitido", route: "/pages/api/candidate/evidence/upload-url", mime });
@@ -84,10 +97,106 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    let resolvedVerificationRequestId = verification_request_id;
+    let resolvedEmploymentRecordId = employment_record_id;
+
+    if (resolvedEmploymentRecordId && !isUuid(resolvedEmploymentRecordId)) {
+      return json(res, 400, {
+        error: "employment_record_id inválido",
+        route: "/pages/api/candidate/evidence/upload-url",
+      });
+    }
+
+    if (resolvedEmploymentRecordId) {
+      const { data: er, error: erErr } = await supabase
+        .from("employment_records")
+        .select("id,candidate_id,company_name_freeform,position")
+        .eq("id", resolvedEmploymentRecordId)
+        .maybeSingle();
+      if (erErr) {
+        return json(res, 400, {
+          error: "Error consultando employment_records",
+          route: "/pages/api/candidate/evidence/upload-url",
+          details: erErr.message,
+        });
+      }
+      if (!er || String((er as any).candidate_id || "") !== auth.user.id) {
+        return json(res, 404, {
+          error: "employment_record no encontrado o sin acceso",
+          route: "/pages/api/candidate/evidence/upload-url",
+        });
+      }
+
+      if (!resolvedVerificationRequestId) {
+        const { data: existingRows, error: existingErr } = await supabase
+          .from("verification_requests")
+          .select("id")
+          .eq("requested_by", auth.user.id)
+          .eq("employment_record_id", resolvedEmploymentRecordId)
+          .eq("verification_channel", "documentary")
+          .neq("status", "revoked")
+          .or("external_resolved.is.null,external_resolved.eq.false")
+          .order("created_at", { ascending: false })
+          .limit(1);
+
+        if (existingErr) {
+          return json(res, 400, {
+            error: "Error consultando verification_requests activas",
+            route: "/pages/api/candidate/evidence/upload-url",
+            details: existingErr.message,
+          });
+        }
+
+        const activeDocumentaryId = getActiveDocumentaryVerificationId(existingRows);
+        if (activeDocumentaryId) {
+          resolvedVerificationRequestId = activeDocumentaryId;
+        } else {
+          const nowIso = new Date().toISOString();
+          const payload = buildDocumentaryVerificationInsert({
+            employmentRecordId: resolvedEmploymentRecordId,
+            userId: auth.user.id,
+            companyName: (er as any)?.company_name_freeform,
+            position: (er as any)?.position,
+            nowIso,
+          });
+          const { data: createdVr, error: createVrErr } = await supabase
+            .from("verification_requests")
+            .insert(payload)
+            .select("id")
+            .single();
+          if (createVrErr || !createdVr?.id) {
+            return json(res, 400, {
+              error: "No se pudo crear verification_request documental",
+              route: "/pages/api/candidate/evidence/upload-url",
+              details: createVrErr?.message || null,
+            });
+          }
+          resolvedVerificationRequestId = String(createdVr.id);
+        }
+      }
+
+      const nowIso = new Date().toISOString();
+      const employmentUpdate = buildEmploymentRecordDocumentaryRequestedUpdate({
+        verificationRequestId: resolvedVerificationRequestId,
+        nowIso,
+      });
+      await supabase
+        .from("employment_records")
+        .update(employmentUpdate)
+        .eq("id", resolvedEmploymentRecordId);
+    }
+
+    if (!resolvedVerificationRequestId) {
+      return json(res, 400, {
+        error: "No se pudo resolver verification_request_id",
+        route: "/pages/api/candidate/evidence/upload-url",
+      });
+    }
+
     const { data: vr, error: vrErr } = await supabase
       .from("verification_requests")
-      .select("id")
-      .eq("id", verification_request_id)
+      .select("id,employment_record_id,requested_by")
+      .eq("id", resolvedVerificationRequestId)
       .maybeSingle();
 
     if (vrErr) {
@@ -97,17 +206,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         details: vrErr.message,
       });
     }
-    if (!vr) {
+    if (!vr || String((vr as any).requested_by || "") !== auth.user.id) {
       return json(res, 404, {
         error: "verification_request no encontrada o sin acceso",
         route: "/pages/api/candidate/evidence/upload-url",
       });
     }
 
+    resolvedEmploymentRecordId = resolvedEmploymentRecordId || String((vr as any).employment_record_id || "");
+
     const userId = auth.user.id;
     const uuid = randomUUID();
     const ext = extFromMime(mime, original_name);
-    const storage_path = `evidence/${userId}/${verification_request_id}/${uuid}.${ext}`;
+    const storage_path = `evidence/${userId}/${resolvedVerificationRequestId}/${uuid}.${ext}`;
     const evidence_client_ref = createHash("sha256").update(storage_path).digest("hex").slice(0, 16);
 
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(storage_path);
@@ -122,6 +233,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     return json(res, 200, {
       storage_path,
+      verification_request_id: resolvedVerificationRequestId,
+      employment_record_id: resolvedEmploymentRecordId || null,
       signed_url: data.signedUrl,
       token: data.token,
       mime,
@@ -129,7 +242,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       evidence_type,
       file_sha256,
       evidence_client_ref,
-      note: "Sube el archivo usando signed_url y luego llama a POST /api/candidate/evidence/confirm para registrar la evidencia en DB.",
+      note: "Sube el archivo usando signed_url y luego llama a POST /api/candidate/evidence/confirm para registrar evidencia y ejecutar extracción documental.",
       route: "/pages/api/candidate/evidence/upload-url",
     });
   } catch (e: any) {

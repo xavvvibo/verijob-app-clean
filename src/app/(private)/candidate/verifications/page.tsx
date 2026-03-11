@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+import DeleteVerificationInlineButton from "./DeleteVerificationInlineButton";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -43,11 +44,15 @@ export default async function CandidateVerificationsPage() {
   const { data: rows, error } = await supabase
     .from("verification_requests")
     .select(
-      "id,status,verification_channel,requested_at,created_at,company_name_target,company_email_target,request_context,company_verification_status_snapshot",
+      "id,status,revoked_at,verification_channel,requested_at,created_at,company_name_target,company_email_target,request_context,company_verification_status_snapshot",
     )
     .eq("requested_by", au.user.id)
     .order("requested_at", { ascending: false, nullsFirst: false })
     .order("created_at", { ascending: false, nullsFirst: false });
+  const visibleRows = (rows || []).filter((row: any) => {
+    const status = String(row?.status || "").toLowerCase();
+    return !row?.revoked_at && status !== "revoked";
+  });
 
   return (
     <div className="space-y-4 p-6">
@@ -62,7 +67,7 @@ export default async function CandidateVerificationsPage() {
         </div>
       ) : null}
 
-      {!error && (!rows || rows.length === 0) ? (
+      {!error && (!visibleRows || visibleRows.length === 0) ? (
         <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
           Aún no tienes solicitudes. Crea la primera desde{" "}
           <Link href="/candidate/experience" className="font-semibold text-blue-700 hover:underline">
@@ -72,7 +77,7 @@ export default async function CandidateVerificationsPage() {
         </div>
       ) : null}
 
-      {!error && rows && rows.length > 0 ? (
+      {!error && visibleRows && visibleRows.length > 0 ? (
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
@@ -86,7 +91,7 @@ export default async function CandidateVerificationsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {rows.map((row: any) => (
+              {visibleRows.map((row: any) => (
                 <tr key={row.id}>
                   <td className="px-4 py-3 text-slate-900">
                     <div className="font-medium">{row.company_name_target || "Empresa no indicada"}</div>
@@ -97,12 +102,15 @@ export default async function CandidateVerificationsPage() {
                   <td className="px-4 py-3 text-slate-700">{companySignalLabel(row.company_verification_status_snapshot)}</td>
                   <td className="px-4 py-3 text-slate-700">{fmt(row.requested_at || row.created_at)}</td>
                   <td className="px-4 py-3">
-                    <Link
-                      href={`/candidate/verification?verification_request_id=${encodeURIComponent(row.id)}`}
-                      className="text-blue-700 hover:underline"
-                    >
-                      Ver detalle
-                    </Link>
+                    <div className="flex items-center gap-3">
+                      <Link
+                        href={`/candidate/verification?verification_request_id=${encodeURIComponent(row.id)}`}
+                        className="text-blue-700 hover:underline"
+                      >
+                        Ver detalle
+                      </Link>
+                      <DeleteVerificationInlineButton verificationId={String(row.id)} />
+                    </div>
                   </td>
                 </tr>
               ))}

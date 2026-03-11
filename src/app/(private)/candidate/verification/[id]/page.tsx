@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import DeleteVerificationButton from "./DeleteVerificationButton";
 
 function toEsDate(value?: string | null) {
   if (!value) return "—";
@@ -174,6 +175,8 @@ export default async function CandidateVerificationPage(props: any) {
         <div className="mt-4 text-sm text-gray-600">
           Esta solicitud aplica a una experiencia laboral concreta. El resultado no certifica todo el CV ni todo el perfil.
         </div>
+
+        <DeleteVerificationButton verificationId={String(vr.id)} />
       </div>
     </div>
   );

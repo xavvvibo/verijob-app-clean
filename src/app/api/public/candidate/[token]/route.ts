@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import { normalizePublicLanguages } from "@/lib/public/profile-languages";
 
 type Params = { token: string };
 
@@ -78,7 +79,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
 
   const { data: profile } = await admin
     .from("profiles")
-    .select("full_name,title,location")
+    .select("full_name,title,location,languages")
     .eq("id", candidateId)
     .maybeSingle();
 
@@ -198,6 +199,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       full_name: profile?.full_name || "Candidato verificado",
       title: profile?.title || null,
       location: profile?.location || null,
+      languages: normalizePublicLanguages((profile as any)?.languages),
       summary: cp?.summary || null,
       trust_score: trustScore,
       trust_score_breakdown: cp?.trust_score_breakdown || null,
