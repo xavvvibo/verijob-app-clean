@@ -51,11 +51,10 @@ async function tryInsertEmploymentRecord(
   baseRecord: Record<string, any>,
   userId: string
 ) {
+  const attemptsDebug: Array<Record<string, any>> = [];
   const variants: Array<Record<string, any>> = [
     { ...baseRecord, candidate_id: userId, user_id: userId },
     { ...baseRecord, candidate_id: userId },
-    { ...baseRecord, user_id: userId },
-    { ...baseRecord },
   ];
 
   const parseMissingColumn = (message: string): string | null => {
@@ -77,8 +76,15 @@ async function tryInsertEmploymentRecord(
         .select("id, company_id")
         .single();
 
-      if (!error) return { data, error: null };
+      if (!error) return { data, error: null, debug: attemptsDebug };
       lastError = error;
+      attemptsDebug.push({
+        payload_keys: Object.keys(payload),
+        code: (error as any)?.code ?? null,
+        message: String((error as any)?.message || ""),
+        details: (error as any)?.details ?? null,
+        hint: (error as any)?.hint ?? null,
+      });
 
       const message = String(error?.message || "");
       const lower = message.toLowerCase();
@@ -107,7 +113,7 @@ async function tryInsertEmploymentRecord(
     }
   }
 
-  return { data: null, error: lastError };
+  return { data: null, error: lastError, debug: attemptsDebug };
 }
 
 async function tryInsertVerificationRequest(
@@ -222,7 +228,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const targetCompanyId = companyIdFromEmailProfile || companyIdFromName || null;
 
     const hasRegisteredReceiver = Boolean(companyIdFromEmailProfile);
-    const requestStatus = hasRegisteredReceiver ? "requested" : "company_registered_pending";
+    const requestStatus = "pending_company";
     const baseRecord: Record<string, any> = {
       candidate_id: user.id,
       company_id: targetCompanyId,
@@ -236,13 +242,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     let er: any = null;
     let erErr: any = null;
-    ({ data: er, error: erErr } = await tryInsertEmploymentRecord(supabase, baseRecord, user.id));
+    const erInsert = await tryInsertEmploymentRecord(supabase, baseRecord, user.id);
+    er = erInsert.data;
+    erErr = erInsert.error;
 
     if (erErr) {
       return json(res, 400, {
-        error: "Insert employment_records failed",
-        details: erErr.message,
-        hint: "Revisa columnas requeridas de employment_records y formato de fechas.",
+        error: `Insert employment_records failed: ${String((erErr as any)?.message || "unknown_error")}`,
+        details: {
+          code: (erErr as any)?.code ?? null,
+          message: String((erErr as any)?.message || ""),
+          pg_details: (erErr as any)?.details ?? null,
+          hint: (erErr as any)?.hint ?? null,
+          candidate_id: user.id,
+          company_id: targetCompanyId,
+          company_name_freeform,
+          position,
+          start_date,
+          end_date,
+          attempts: erInsert.debug || [],
+        },
       });
     }
 
