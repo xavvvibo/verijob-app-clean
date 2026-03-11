@@ -25,7 +25,7 @@ export default async function CandidateLayout({ children }: { children: React.Re
   const role = String(profile?.role || "").toLowerCase();
   if (role !== "candidate") redirect("/dashboard");
 
-  if (!profile?.onboarding_completed) redirect("/onboarding");
+  if (!profile?.onboarding_completed) redirect("/onboarding?blocked=1&source=candidate");
 
   return <>{children}</>;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { vjEvents } from "@/lib/analytics";
 
@@ -41,6 +41,7 @@ function StepCard({
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const supabase = useMemo(() => createClient(), []);
 
   const [loading, setLoading] = useState(true);
@@ -57,6 +58,16 @@ export default function OnboardingPage() {
   const [showAchievements, setShowAchievements] = useState(true);
 
   const [currentStep, setCurrentStep] = useState<StepKey>("personal");
+  const blockedGate = searchParams.get("blocked") === "1";
+  const blockedSource = searchParams.get("source");
+  const sourceLabel =
+    blockedSource === "candidate"
+      ? "perfil candidato"
+      : blockedSource === "dashboard"
+      ? "dashboard"
+      : "otras secciones privadas";
+  const isPasswordOptional = pw.length === 0 && pw2.length === 0;
+  const personalStepDone = isPasswordOptional || (isStrongEnough(pw) && pw === pw2);
 
   useEffect(() => {
     let cancelled = false;
@@ -110,26 +121,26 @@ export default function OnboardingPage() {
     {
       key: "personal" as StepKey,
       title: "Datos personales",
-      description: "Configura contraseña y decide cómo quieres mostrar tu perfil público.",
-      done: isStrongEnough(pw) && pw === pw2,
+      description: "Configura visibilidad de perfil y, si quieres, define una contraseña de respaldo.",
+      done: currentStep === "personal" ? personalStepDone : true,
     },
     {
       key: "experience" as StepKey,
       title: "Experiencia laboral",
       description: "Añade o revisa tu experiencia laboral para que tu CV verificable tenga base real.",
-      done: showExperience,
+      done: currentStep === "education" || currentStep === "achievements",
     },
     {
       key: "education" as StepKey,
       title: "Datos académicos",
       description: "Incluye tu formación académica y verifícala para reforzar el valor de tu perfil.",
-      done: showEducation,
+      done: currentStep === "achievements",
     },
     {
       key: "achievements" as StepKey,
       title: "Otros logros",
       description: "Añade certificados, premios u otros hitos. Si no tienes nada ahora, esta sección podrá quedar mínima.",
-      done: true,
+      done: false,
     },
   ];
 
@@ -167,9 +178,9 @@ export default function OnboardingPage() {
   async function onContinue(step: StepKey) {
     setErr(null);
 
-    if (step === "personal") {
+    if (step === "personal" && !isPasswordOptional) {
       if (!isStrongEnough(pw)) {
-        setErr("La contraseña debe tener al menos 8 caracteres.");
+        setErr("Si defines contraseña, debe tener al menos 8 caracteres.");
         return;
       }
       if (pw !== pw2) {
@@ -187,7 +198,7 @@ export default function OnboardingPage() {
         return;
       }
 
-      if (step === "personal") {
+      if (step === "personal" && !isPasswordOptional) {
         const { error: upErr } = await supabase.auth.updateUser({ password: pw });
         if (upErr) throw upErr;
       }
@@ -274,6 +285,15 @@ export default function OnboardingPage() {
             <p className="mt-3 text-sm text-slate-600">
               Te guiaremos por cuatro bloques: datos personales, experiencia laboral, datos académicos y otros logros.
             </p>
+            {blockedGate ? (
+              <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                <div className="font-semibold">Tu cuenta aún no ha terminado el onboarding</div>
+                <p className="mt-1">
+                  Hemos bloqueado temporalmente el acceso al {sourceLabel} para evitar acciones con el perfil incompleto.
+                  Completa los pasos de esta pantalla para desbloquear el resto del área candidata.
+                </p>
+              </div>
+            ) : null}
 
             <div className="mt-6">
               <div className="mb-2 flex items-center justify-between text-sm text-slate-600">
@@ -288,8 +308,8 @@ export default function OnboardingPage() {
             <div className="mt-8 space-y-4">
               <StepCard
                 title="1. Datos personales"
-                description="Configura tu acceso y decide qué partes de tu perfil serán visibles."
-                done={isStrongEnough(pw) && pw === pw2}
+                description="Configura visibilidad y seguridad básica de cuenta."
+                done={currentStep === "personal" ? personalStepDone : true}
               />
               <StepCard
                 title="2. Experiencia laboral"
@@ -309,7 +329,7 @@ export default function OnboardingPage() {
             </div>
           </section>
 
-          <section className="rounded-3xl border bg-white p-8 shadow-sm">
+          <section id="onboarding-action-panel" className="rounded-3xl border bg-white p-8 shadow-sm">
             <div className="text-sm font-semibold text-slate-900">
               Paso actual: {currentStep === "personal" ? "Datos personales" :
                 currentStep === "experience" ? "Experiencia laboral" :
@@ -319,26 +339,31 @@ export default function OnboardingPage() {
             {currentStep === "personal" && (
               <div className="mt-6 space-y-5">
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Contraseña</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Contraseña (opcional)</label>
                   <input
                     type="password"
                     value={pw}
                     onChange={(e) => setPw(e.target.value)}
                     autoComplete="new-password"
+                    placeholder="Déjalo vacío para seguir con acceso por código email"
                     className="w-full rounded-xl border px-3 py-2.5 text-sm"
                   />
                 </div>
 
                 <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-700">Repite contraseña</label>
+                  <label className="mb-2 block text-sm font-medium text-slate-700">Repite contraseña (opcional)</label>
                   <input
                     type="password"
                     value={pw2}
                     onChange={(e) => setPw2(e.target.value)}
                     autoComplete="new-password"
+                    placeholder="Solo si quieres guardar contraseña"
                     className="w-full rounded-xl border px-3 py-2.5 text-sm"
                   />
                 </div>
+                <p className="text-xs text-slate-500">
+                  Verijob permite acceso por código de email. La contraseña es opcional como método de respaldo.
+                </p>
 
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-700">Visibilidad pública del perfil</label>

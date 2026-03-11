@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 
 type Role = "candidate" | "company" | "owner" | string | null | undefined;
 
-type Item = { href: string; label: string; badge?: string };
+type Item = { href: string; label: string; badge?: string; disabled?: boolean };
 type Section = { title: string; items: Item[] };
 
 function isActive(pathname: string, href: string) {
@@ -26,6 +26,20 @@ function NavSection({ title, items, pathname }: { title: string; items: Item[]; 
       <div className="mt-2 space-y-1">
         {items.map((it) => {
           const active = isActive(pathname, it.href);
+          if (it.disabled) {
+            return (
+              <div
+                key={it.href}
+                className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-semibold text-slate-400"
+                title="Completa el onboarding para desbloquear esta sección"
+              >
+                <span className="truncate">{it.label}</span>
+                <span className="ml-3 rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                  BLOQUEADO
+                </span>
+              </div>
+            );
+          }
           return (
             <Link
               key={it.href}
@@ -52,7 +66,7 @@ function NavSection({ title, items, pathname }: { title: string; items: Item[]; 
   );
 }
 
-function getSections(role: Role): Section[] {
+function getSections(role: Role, candidateOnboardingLocked = false): Section[] {
   const r = String(role || "").toLowerCase();
 
   // ==================
@@ -123,22 +137,22 @@ function getSections(role: Role): Section[] {
     {
       title: "Candidato",
       items: [
-        { href: "/candidate/overview", label: "Inicio" },
-        { href: "/candidate/profile", label: "Perfil" },
-        { href: "/candidate/experience", label: "Experiencias" },
-        { href: "/candidate/education", label: "Educación" },
-        { href: "/candidate/achievements", label: "Idiomas y logros" },
-        { href: "/candidate/evidence", label: "Evidencias" },
-        { href: "/candidate/verifications", label: "Verificaciones" },
-        { href: "/candidate/share", label: "Perfil público" },
+        { href: "/candidate/overview", label: "Inicio", disabled: candidateOnboardingLocked },
+        { href: "/candidate/profile", label: "Perfil", disabled: candidateOnboardingLocked },
+        { href: "/candidate/experience", label: "Experiencias", disabled: candidateOnboardingLocked },
+        { href: "/candidate/education", label: "Educación", disabled: candidateOnboardingLocked },
+        { href: "/candidate/achievements", label: "Idiomas y logros", disabled: candidateOnboardingLocked },
+        { href: "/candidate/evidence", label: "Evidencias", disabled: candidateOnboardingLocked },
+        { href: "/candidate/verifications", label: "Verificaciones", disabled: candidateOnboardingLocked },
+        { href: "/candidate/share", label: "Perfil público", disabled: candidateOnboardingLocked },
       ],
     },
     {
       title: "Cuenta",
       items: [
-        { href: "/candidate/subscription", label: "Suscripción" },
-        { href: "/candidate/settings", label: "Ajustes" },
-        { href: "/candidate/help", label: "Ayuda" },
+        { href: "/candidate/subscription", label: "Suscripción", disabled: candidateOnboardingLocked },
+        { href: "/candidate/settings", label: "Ajustes", disabled: candidateOnboardingLocked },
+        { href: "/candidate/help", label: "Ayuda", disabled: candidateOnboardingLocked },
       ],
     },
   ];
@@ -146,8 +160,9 @@ function getSections(role: Role): Section[] {
 
 export default function Sidebar({ role }: { role?: Role }) {
   const pathname = usePathname() || "/";
-  const sections = getSections(role);
   const normalizedRole = String(role || "candidate").toLowerCase();
+  const candidateOnboardingLocked = normalizedRole === "candidate" && pathname.startsWith("/onboarding");
+  const sections = getSections(role, candidateOnboardingLocked);
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [companyPlanLabel, setCompanyPlanLabel] = useState<string | null>(null);
 
@@ -192,6 +207,11 @@ export default function Sidebar({ role }: { role?: Role }) {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
+          {candidateOnboardingLocked ? (
+            <div className="mb-4 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-900">
+              Completa el onboarding para desbloquear el resto del panel candidato.
+            </div>
+          ) : null}
           {sections.map((s) => (
             <NavSection key={s.title} title={s.title} items={s.items} pathname={pathname} />
           ))}
