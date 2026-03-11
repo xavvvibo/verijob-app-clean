@@ -12,11 +12,9 @@ export default async function PrivateLayout({ children }: { children: ReactNode 
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, onboarding_completed")
+    .select("role")
     .eq("id", user.id)
     .single();
-
-  if (!profile?.onboarding_completed) redirect("/onboarding");
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", minHeight: "100vh", background: "#F8FAFC" }}>

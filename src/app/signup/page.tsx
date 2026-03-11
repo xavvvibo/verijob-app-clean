@@ -1,9 +1,15 @@
 import SignupClient from "./SignupClient";
 import PublicAuthShell from "@/components/public/PublicAuthShell";
+import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default function SignupPage() {
+export default async function SignupPage() {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (auth?.user) redirect("/dashboard");
+
   return (
     <PublicAuthShell
       title="Crea tu perfil profesional verificable"

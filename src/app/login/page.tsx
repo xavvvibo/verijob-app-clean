@@ -1,8 +1,16 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import LoginClient from "./LoginClient";
 import PublicAuthShell from "@/components/public/PublicAuthShell";
+import { createClient } from "@/utils/supabase/server";
 
-export default function LoginPage() {
+export const dynamic = "force-dynamic";
+
+export default async function LoginPage() {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (auth?.user) redirect("/dashboard");
+
   return (
     <PublicAuthShell
       title="Accede a tu perfil profesional verificable"

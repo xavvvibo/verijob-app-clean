@@ -6,10 +6,28 @@ import { useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/browser";
 
 function safeNext(raw: string | null) {
-  const fallback = "/candidate/overview";
+  const fallback = "/dashboard";
   if (!raw) return fallback;
   if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
   return fallback;
+}
+
+function mapOtpErrorMessage(raw: string | null | undefined) {
+  const msg = String(raw || "").trim();
+  const normalized = msg.toLowerCase();
+  if (!msg) return "No se pudo completar la operación. Inténtalo de nuevo.";
+  if (
+    normalized.includes("expired") ||
+    normalized.includes("invalid") ||
+    normalized.includes("otp_expired") ||
+    normalized.includes("token")
+  ) {
+    return "El código es inválido o ha caducado. Solicita un nuevo código e inténtalo otra vez.";
+  }
+  if (normalized.includes("rate") || normalized.includes("too many")) {
+    return "Has realizado demasiados intentos. Espera unos minutos y vuelve a intentarlo.";
+  }
+  return msg;
 }
 
 export default function LoginCard() {
@@ -21,10 +39,12 @@ export default function LoginCard() {
   const [step, setStep] = useState<"email" | "otp">("email");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   async function sendOtp(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
 
     const v = email.trim().toLowerCase();
     if (!v) {
@@ -37,12 +57,13 @@ export default function LoginCard() {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithOtp({ email: v });
       if (error) {
-        setError(error.message);
+        setError(mapOtpErrorMessage(error.message));
         return;
       }
       setStep("otp");
+      setNotice(step === "otp" ? "Hemos reenviado un nuevo código a tu email." : "Código enviado. Revisa tu correo.");
     } catch (err: any) {
-      setError(err?.message ?? "Error inesperado.");
+      setError(mapOtpErrorMessage(err?.message ?? "Error inesperado."));
     } finally {
       setLoading(false);
     }
@@ -51,6 +72,7 @@ export default function LoginCard() {
   async function verifyOtp(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
 
     const v = email.trim().toLowerCase();
     const code = token.trim();
@@ -75,13 +97,13 @@ export default function LoginCard() {
       });
 
       if (error) {
-        setError(error.message);
+        setError(mapOtpErrorMessage(error.message));
         return;
       }
 
       window.location.href = next;
     } catch (err: any) {
-      setError(err?.message ?? "Error inesperado.");
+      setError(mapOtpErrorMessage(err?.message ?? "Error inesperado."));
     } finally {
       setLoading(false);
     }
@@ -122,6 +144,9 @@ export default function LoginCard() {
 
         {error ? (
           <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div>
+        ) : null}
+        {notice ? (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div>
         ) : null}
 
         <button

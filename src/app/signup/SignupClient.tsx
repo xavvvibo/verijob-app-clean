@@ -4,18 +4,37 @@ import { useState } from "react";
 import { vjEvents } from "@/lib/analytics";
 import { createClient } from "@/utils/supabase/browser";
 
+function mapOtpErrorMessage(raw: string | null | undefined) {
+  const msg = String(raw || "").trim();
+  const normalized = msg.toLowerCase();
+  if (!msg) return "No se pudo completar la operación. Inténtalo de nuevo.";
+  if (
+    normalized.includes("expired") ||
+    normalized.includes("invalid") ||
+    normalized.includes("otp_expired") ||
+    normalized.includes("token")
+  ) {
+    return "El código es inválido o ha caducado. Solicita un nuevo código e inténtalo otra vez.";
+  }
+  if (normalized.includes("rate") || normalized.includes("too many")) {
+    return "Has realizado demasiados intentos. Espera unos minutos y vuelve a intentarlo.";
+  }
+  return msg;
+}
+
 export default function SignupClient() {
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
   const [step, setStep] = useState<"email" | "otp">("email");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
-  const isError = !!msg && msg.toLowerCase().includes("error");
+  const [isError, setIsError] = useState(false);
 
   async function sendOtp(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     setMsg(null);
+    setIsError(false);
 
     try {
       const supabase = createClient();
@@ -26,14 +45,17 @@ export default function SignupClient() {
       });
 
       if (error) {
-        setMsg(`Error enviando código (${error.message})`);
+        setIsError(true);
+        setMsg(mapOtpErrorMessage(error.message));
         return;
       }
 
       vjEvents.signup("candidate");
       setStep("otp");
-      setMsg("Código enviado. Revisa tu email.");
+      setIsError(false);
+      setMsg(step === "otp" ? "Hemos reenviado un nuevo código a tu email." : "Código enviado. Revisa tu email.");
     } catch {
+      setIsError(true);
       setMsg("Error inesperado enviando código");
     } finally {
       setLoading(false);
@@ -44,6 +66,7 @@ export default function SignupClient() {
     e.preventDefault();
     setLoading(true);
     setMsg(null);
+    setIsError(false);
 
     try {
       const supabase = createClient();
@@ -57,12 +80,14 @@ export default function SignupClient() {
       });
 
       if (error) {
-        setMsg(`Error verificando código (${error.message})`);
+        setIsError(true);
+        setMsg(mapOtpErrorMessage(error.message));
         return;
       }
 
-      window.location.href = "/onboarding";
+      window.location.href = "/dashboard";
     } catch {
+      setIsError(true);
       setMsg("Error inesperado verificando código");
     } finally {
       setLoading(false);
