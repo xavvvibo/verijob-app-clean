@@ -127,7 +127,7 @@ export default async function CandidateExperiencePage() {
                 Subir CV
               </Link>
               <Link
-                href="#manual-experience"
+                href="/candidate/experience?new=1#manual-experience"
                 className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
               >
                 Añadir experiencia manual

@@ -32,12 +32,22 @@ export default function NewVerificationClient() {
   const [isCurrent, setIsCurrent] = useState(false);
 
   const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [buttonLabel, setButtonLabel] = useState("Solicitar verificación a empresa");
+
+  const emailIsValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(companyEmail || "").trim());
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
+    setSuccess(null);
+    if (!emailIsValid) {
+      setErr("Introduce un email válido.");
+      return;
+    }
     setSaving(true);
+    setButtonLabel("Enviando solicitud...");
 
     try {
       const { data: au } = await supabase.auth.getUser();
@@ -69,11 +79,15 @@ export default function NewVerificationClient() {
       if (!vid) throw new Error("Respuesta inválida (sin verification_id)");
 
       vjEvents.verification_created(vid);
-
-      router.replace(`/candidate/verification?verification_request_id=${encodeURIComponent(vid)}`);
-      router.refresh();
+      setSuccess("Solicitud enviada correctamente.");
+      setButtonLabel("Solicitud enviada");
+      setTimeout(() => {
+        router.replace(`/candidate/verification?verification_request_id=${encodeURIComponent(vid)}`);
+        router.refresh();
+      }, 700);
     } catch (e: any) {
-      setErr(e?.message || "Error");
+      setErr(e?.message || "No hemos podido enviar la solicitud. Revisa el email o inténtalo de nuevo.");
+      setButtonLabel("Solicitar verificación a empresa");
     } finally {
       setSaving(false);
     }
@@ -89,6 +103,7 @@ export default function NewVerificationClient() {
 {err}
         </pre>
       )}
+      {success && <div className="mt-4 rounded-lg border border-green-200 bg-green-50 p-3 text-xs text-green-700">{success}</div>}
 
       <form onSubmit={submit} className="mt-6 space-y-4">
         <div>
@@ -103,7 +118,7 @@ export default function NewVerificationClient() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium">Email de verificación de la empresa</label>
+          <label className="block text-sm font-medium">Email de la persona o empresa que puede validar esta experiencia</label>
           <input
             type="email"
             value={companyEmail}
@@ -168,7 +183,7 @@ export default function NewVerificationClient() {
           disabled={saving}
           className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
         >
-          {saving ? "Creando…" : "Crear solicitud"}
+          {saving ? "Enviando solicitud..." : buttonLabel}
         </button>
       </form>
     </div>
