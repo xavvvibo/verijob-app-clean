@@ -10,8 +10,14 @@ export const metadata: Metadata = {
     "Perfil profesional verificable con señales públicas de credibilidad laboral para evaluación empresarial.",
 };
 
-export default async function PublicCandidateProfilePage({ params }: Ctx) {
+export default async function PublicCandidateProfilePage({
+  params,
+  searchParams,
+}: Ctx & { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const { token } = await params;
+  const qs = (await searchParams) || {};
+  const printFlag = String(qs.print || qs.cv || "").toLowerCase();
+  const printMode = printFlag === "1" || printFlag === "true" || printFlag === "pdf";
   const base =
     process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es";
 
@@ -60,7 +66,12 @@ export default async function PublicCandidateProfilePage({ params }: Ctx) {
   return (
     <main className="min-h-screen bg-blue-50/40 px-5 py-10 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-6xl">
-        <CandidatePublicProfileRenderer payload={{ ...body, token }} mode="public" companyAccess />
+        <CandidatePublicProfileRenderer
+          payload={{ ...body, token }}
+          mode="public"
+          companyAccess
+          renderMode={printMode ? "print" : "screen"}
+        />
       </div>
     </main>
   );

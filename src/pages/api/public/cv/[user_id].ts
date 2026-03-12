@@ -15,6 +15,21 @@ function getSupabaseUrl(): string {
   return process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
 }
 
+function isExpired(expiresAt?: string | null) {
+  if (!expiresAt) return false;
+  const t = Date.parse(expiresAt);
+  if (Number.isNaN(t)) return false;
+  return t <= Date.now();
+}
+
+function getAppOrigin(req: NextApiRequest) {
+  const envBase = process.env.NEXT_PUBLIC_APP_URL;
+  if (envBase) return String(envBase).replace(/\/$/, "");
+  const protocol = String(req.headers["x-forwarded-proto"] || "https");
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "app.verijob.es");
+  return `${protocol}://${host}`;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
     res.setHeader("Allow", "GET");
@@ -42,71 +57,48 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
-  // Legacy support: keep old metrics table for backward-compatible counters.
-  const { data: trustLegacy, error: trustErr } = await supabase
-    .from("candidate_cv_trust_scores")
-    .select("cv_trust_score,experiences_total,verified_experiences,evidences_total,reuse_total")
-    .eq("user_id", userId)
-    .maybeSingle();
+  const { data: links, error: linkErr } = await supabase
+    .from("candidate_public_links")
+    .select("public_token,expires_at,is_active,created_at")
+    .eq("candidate_id", userId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .limit(10);
 
-  if (trustErr) {
+  if (linkErr) {
     return res.status(400).json({
-      route_version: "public-cv-v6-pages",
+      error: "public_link_query_failed",
+      details: linkErr.message,
       route: "/pages/api/public/cv/[user_id]",
-      error: "trust_query_failed",
-      details: trustErr.message,
     });
   }
 
-  const { data: exps, error: expErr } = await supabase
-    .from("candidate_cv_experiences")
-    .select("id,exp_index")
-    .eq("user_id", userId)
-    .order("exp_index", { ascending: true });
-
-  if (expErr) {
-    return res.status(400).json({
-      route_version: "public-cv-v6-pages",
+  const activeLink = (Array.isArray(links) ? links : []).find((row: any) => !isExpired(row?.expires_at));
+  const token = String(activeLink?.public_token || "");
+  if (!token) {
+    return res.status(404).json({
+      error: "no_active_public_token",
       route: "/pages/api/public/cv/[user_id]",
-      error: "experiences_query_failed",
-      details: expErr.message,
     });
   }
 
-  const expIds = Array.isArray(exps) ? exps.map((e: any) => e.id) : [];
-
-  let scoresMap = new Map<string, any>();
-  if (expIds.length > 0) {
-    const { data: scores, error: scoreErr } = await supabase
-      .from("candidate_experience_scores")
-      .select("experience_id,status_text,score,evidence_count,reuse_count")
-      .in("experience_id", expIds);
-
-    if (scoreErr) {
-      return res.status(400).json({
-        route_version: "public-cv-v6-pages",
-        route: "/pages/api/public/cv/[user_id]",
-        error: "scores_query_failed",
-        details: scoreErr.message,
-      });
-    }
-
-    if (Array.isArray(scores)) {
-      for (const s of scores) scoresMap.set(String(s.experience_id), s);
-    }
-  }
-
-  const experiences = (Array.isArray(exps) ? exps : []).map((e: any) => {
-    const s = scoresMap.get(String(e.id));
-    return {
-      experience_id: e.id,
-      status_text: s?.status_text ?? "none",
-      score: typeof s?.score === "number" ? s.score : 0,
-      evidence_count: typeof s?.evidence_count === "number" ? s.evidence_count : 0,
-      reuse_count: typeof s?.reuse_count === "number" ? s.reuse_count : 0,
-    };
+  const appOrigin = getAppOrigin(req);
+  const canonicalRes = await fetch(`${appOrigin}/api/public/candidate/${token}`, {
+    method: "GET",
+    headers: { "x-vercel-protection-bypass": String(process.env.VERCEL_AUTOMATION_BYPASS_SECRET || "") },
+    cache: "no-store",
   });
+  const canonicalBody = await canonicalRes.json().catch(() => ({}));
+  if (!canonicalRes.ok) {
+    return res.status(canonicalRes.status).json({
+      error: "canonical_public_candidate_failed",
+      details: canonicalBody?.error || null,
+      route: "/pages/api/public/cv/[user_id]",
+      token,
+    });
+  }
 
+  const teaser = canonicalBody?.teaser || {};
   trackEventAdmin({
     event_name: "public_cv_viewed",
     user_id: null,
@@ -114,42 +106,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     entity_type: "candidate",
     entity_id: userId,
     metadata: {
-      route_version: "public-cv-v6-pages",
-      experiences_total: trustLegacy?.experiences_total ?? 0,
-      verified_experiences: trustLegacy?.verified_experiences ?? 0,
-      evidences_total: trustLegacy?.evidences_total ?? 0,
-      reuse_total: trustLegacy?.reuse_total ?? 0,
-      cv_trust_score: trustLegacy?.cv_trust_score ?? 0,
+      route_version: "public-cv-v7-canonical-token",
+      token,
+      experiences_total: Number(teaser?.experiences_total ?? 0),
+      verified_experiences: Number(teaser?.verified_experiences ?? 0),
+      evidences_total: Number(teaser?.evidences_total ?? teaser?.evidences_count ?? 0),
+      reuse_total: Number(teaser?.reuse_total ?? 0),
+      trust_score: Number(teaser?.trust_score ?? 0),
     },
   }).catch(() => {});
 
-  const { data: canonical, error: canonicalErr } = await supabase
-    .from("candidate_profiles")
-    .select("trust_score,trust_score_breakdown")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (canonicalErr) {
-    return res.status(400).json({
-      route_version: "public-cv-v6-pages",
-      route: "/pages/api/public/cv/[user_id]",
-      error: "canonical_trust_query_failed",
-      details: canonicalErr.message,
-    });
-  }
-
   res.setHeader("Cache-Control", "no-store");
   return res.status(200).json({
-    route_version: "public-cv-v6-pages",
+    ...canonicalBody,
+    route_version: "public-cv-v7-canonical-token",
     route: "/pages/api/public/cv/[user_id]",
-    candidate_id: userId,
-    trust_score: Number((canonical as any)?.trust_score ?? trustLegacy?.cv_trust_score ?? 0),
-    experiences_total: Number((canonical as any)?.trust_score_breakdown?.total ?? trustLegacy?.experiences_total ?? 0),
-    verified_experiences: Number((canonical as any)?.trust_score_breakdown?.approved ?? trustLegacy?.verified_experiences ?? 0),
-    evidences_total: Number((canonical as any)?.trust_score_breakdown?.evidences ?? trustLegacy?.evidences_total ?? 0),
-    reuse_total: Number((canonical as any)?.trust_score_breakdown?.reuseEvents ?? trustLegacy?.reuse_total ?? 0),
-    source_of_truth: "candidate_profiles.trust_score",
-    legacy_metrics_table_used: Boolean(trustLegacy),
-    experiences,
+    source_of_truth: "/api/public/candidate/[token]",
+    candidate_id: canonicalBody?.candidate_id || userId,
+    token,
+    trust_score: Number(teaser?.trust_score ?? 0),
+    experiences_total: Number(teaser?.experiences_total ?? 0),
+    verified_experiences: Number(teaser?.verified_experiences ?? 0),
+    evidences_total: Number(teaser?.evidences_total ?? teaser?.evidences_count ?? 0),
+    reuse_total: Number(teaser?.reuse_total ?? 0),
   });
 }

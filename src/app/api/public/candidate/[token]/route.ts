@@ -347,16 +347,24 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     ])
   ).slice(0, 14);
 
+  const profileFullName = asText((profile as any)?.full_name, 140) || "Candidato verificado";
+  const profileTitle = asText((profile as any)?.title, 140) || null;
+  const profileLocation = asText((profile as any)?.location, 140) || null;
+  const profileSummary = asText((cp as any)?.summary, 1200) || null;
+  const availability = asText((cp as any)?.job_search_status, 80) || null;
+  const workMode = asText((cp as any)?.preferred_workday, 80) || null;
+  const sector = asText(asArray((cp as any)?.preferred_roles)?.[0], 120) || null;
+
   return json(200, {
     route_version: "public-candidate-token-v1",
     token,
     candidate_id: candidateId,
     teaser: {
-      full_name: (profile as any)?.full_name || "Candidato verificado",
-      title: (profile as any)?.title || null,
-      location: (profile as any)?.location || null,
+      full_name: profileFullName,
+      title: profileTitle,
+      location: profileLocation,
       languages: normalizePublicLanguages((profile as any)?.languages),
-      summary: cp?.summary || null,
+      summary: profileSummary,
       trust_score: trustScore,
       trust_score_breakdown: cp?.trust_score_breakdown || null,
       experiences_total: rows.length,
@@ -377,9 +385,9 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       subscription_plan: latestSub?.plan || "free",
       subscription_status: normalizeSubscriptionStatus(latestSub?.status),
       qr_enabled: canShowPublicQr(latestSub?.plan, latestSub?.status),
-      availability: asText((cp as any)?.job_search_status, 80) || null,
-      work_mode: asText((cp as any)?.preferred_workday, 80) || null,
-      sector: asText(asArray((cp as any)?.preferred_roles)?.[0], 120) || null,
+      availability,
+      work_mode: workMode,
+      sector,
     },
     experiences: experiencesEnriched,
     education: educationItems,

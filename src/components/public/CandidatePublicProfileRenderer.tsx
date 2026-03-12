@@ -116,12 +116,14 @@ export function CandidatePublicProfileRenderer({
   mode = "public",
   companyAccess = true,
   internalPreview = false,
+  renderMode = "screen",
   contact,
 }: {
   payload: PublicCandidatePayload;
   mode?: PublicProfilePreviewMode;
   companyAccess?: boolean;
   internalPreview?: boolean;
+  renderMode?: "screen" | "print";
   contact?: PublicCandidateContact;
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
@@ -172,6 +174,7 @@ export function CandidatePublicProfileRenderer({
   }, [teaser, experiences]);
 
   const isExternalCleanView = !internalPreview;
+  const isPrintMode = renderMode === "print";
   const hasExperiences = experiences.length > 0;
   const hasEducation = education.length > 0;
   const hasRecommendations = recommendations.length > 0;
@@ -210,11 +213,17 @@ export function CandidatePublicProfileRenderer({
     return hints;
   }, [internalPreview, teaser?.title, hasLanguages, hasEducation, hasAchievements]);
 
+  const showProfileTab = isPrintMode || activeTab === "profile";
+  const showExperienceTab = isPrintMode || activeTab === "experience";
+  const showEducationTab = isPrintMode || activeTab === "education";
+  const showRecommendationsTab = isPrintMode || activeTab === "recommendations";
+  const showLanguagesTab = isPrintMode || activeTab === "languages";
+
   return (
     <section className="rounded-[30px] border border-slate-200 bg-slate-50/60 p-3 shadow-sm print:rounded-none print:border-0 print:bg-white print:p-0 print:shadow-none sm:p-4">
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className={`grid gap-5 ${isPrintMode ? "grid-cols-1" : "lg:grid-cols-[minmax(0,1fr)_320px]"}`}>
         <div className="space-y-5">
-          <header className="sticky top-4 z-20 rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-lg backdrop-blur print:static print:top-auto print:rounded-none print:border-0 print:p-0 print:shadow-none sm:p-7">
+          <header className={`${isPrintMode ? "static" : "sticky top-4 z-20"} rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-lg backdrop-blur print:static print:top-auto print:rounded-none print:border-0 print:p-0 print:shadow-none sm:p-7`}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex min-w-0 items-start gap-4">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 text-xl font-bold text-white shadow-sm">
@@ -228,9 +237,11 @@ export function CandidatePublicProfileRenderer({
                       alt="Verijob"
                       className="h-6 w-auto object-contain"
                     />
-                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
-                      {modeLabels[mode]}
-                    </div>
+                    {!isPrintMode ? (
+                      <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                        {modeLabels[mode]}
+                      </div>
+                    ) : null}
                   </div>
                   <h1 className="mt-1 truncate text-2xl font-semibold text-slate-900 sm:text-3xl">
                     {teaser?.full_name || "Candidato verificado"}
@@ -253,6 +264,7 @@ export function CandidatePublicProfileRenderer({
               </div>
 
               <div className="flex flex-wrap gap-2">
+                {!isPrintMode ? (
                 <button
                   type="button"
                   onClick={async () => {
@@ -268,12 +280,23 @@ export function CandidatePublicProfileRenderer({
                 >
                   Compartir perfil verificado
                 </button>
+                ) : null}
+                {!isPrintMode && token ? (
+                  <a
+                    href={`/p/${encodeURIComponent(token)}?print=1`}
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Descargar CV (PDF)
+                  </a>
+                ) : null}
+                {!isPrintMode ? (
                 <a
                   href={loginUrl}
                   className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                 >
                   Ver evaluación empresa
                 </a>
+                ) : null}
               </div>
             </div>
             {shareMessage ? (
@@ -287,7 +310,8 @@ export function CandidatePublicProfileRenderer({
                 "Perfil profesional verificable con historial laboral estructurado, señales de confianza y validación por empresa/documentación sin exponer archivos privados."}
             </p>
 
-            <div className="mt-5 flex flex-wrap gap-2">
+            {!isPrintMode ? (
+            <div className="mt-5 flex flex-wrap gap-2 print:hidden">
               {visibleTabs.map((tab) => (
                 <button
                   key={tab.key}
@@ -303,10 +327,22 @@ export function CandidatePublicProfileRenderer({
                 </button>
               ))}
             </div>
+            ) : null}
           </header>
 
           <main className="space-y-4">
-            {activeTab === "profile" ? (
+            {isPrintMode ? (
+              <Card title="Trust Score y verificación" subtitle="Resumen público de confianza del perfil.">
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <Stat label="Trust Score" value={trust} />
+                  <Stat label="Experiencias verificadas" value={verificationSummary.verified} />
+                  <Stat label="Evidencias validadas" value={verificationSummary.evidences} />
+                  <Stat label="Verificaciones empresariales" value={Number(teaser?.confirmed_experiences ?? 0)} />
+                </div>
+              </Card>
+            ) : null}
+
+            {showProfileTab ? (
               <>
                 <Card title="Resumen profesional" subtitle="Información principal del perfil verificable.">
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -362,7 +398,7 @@ export function CandidatePublicProfileRenderer({
               </>
             ) : null}
 
-            {activeTab === "experience" ? (
+            {showExperienceTab ? (
               <Card title="Experiencia profesional" subtitle="Historial en formato verificable con badges de validación (sin documentos privados).">
                 {experiences.length ? (
                   <div className="space-y-3">
@@ -416,7 +452,7 @@ export function CandidatePublicProfileRenderer({
               </Card>
             ) : null}
 
-            {activeTab === "education" ? (
+            {showEducationTab ? (
               <Card title="Formación" subtitle="Trayectoria académica visible del candidato.">
                 {education.length ? (
                   <div className="space-y-3">
@@ -438,7 +474,7 @@ export function CandidatePublicProfileRenderer({
               </Card>
             ) : null}
 
-            {activeTab === "recommendations" ? (
+            {showRecommendationsTab ? (
               <Card title="Recomendaciones" subtitle="Validaciones profesionales visibles en el perfil público.">
                 {recommendations.length ? (
                   <div className="space-y-3">
@@ -466,7 +502,7 @@ export function CandidatePublicProfileRenderer({
               </Card>
             ) : null}
 
-            {activeTab === "languages" ? (
+            {showLanguagesTab ? (
               <Card title="Idiomas y logros" subtitle="Competencias e hitos públicos del perfil.">
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -504,6 +540,7 @@ export function CandidatePublicProfileRenderer({
           </main>
         </div>
 
+        {!isPrintMode ? (
         <aside className="space-y-4 print:mt-4 lg:sticky lg:top-4 lg:self-start">
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Trust Score</h3>
@@ -638,9 +675,11 @@ export function CandidatePublicProfileRenderer({
             </section>
           ) : null}
         </aside>
+        ) : null}
       </div>
 
-      <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-5 text-center shadow-sm">
+      {!isPrintMode ? (
+      <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-5 text-center shadow-sm print:hidden">
         <button
           type="button"
           onClick={async () => {
@@ -657,6 +696,7 @@ export function CandidatePublicProfileRenderer({
           Compartir perfil verificado
         </button>
       </div>
+      ) : null}
     </section>
   );
 }
