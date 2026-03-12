@@ -180,7 +180,17 @@ export function CandidatePublicProfileRenderer({
                   {getInitials(teaser?.full_name || "Candidato")}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">VERIJOB · {modeLabels[mode]}</div>
+                  <div className="flex items-center gap-2">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src="/brand/verijob-logo.svg"
+                      alt="Verijob"
+                      className="h-6 w-auto object-contain"
+                    />
+                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+                      {modeLabels[mode]}
+                    </div>
+                  </div>
                   <h1 className="mt-1 truncate text-2xl font-semibold text-slate-900 sm:text-3xl">
                     {teaser?.full_name || "Candidato verificado"}
                   </h1>
