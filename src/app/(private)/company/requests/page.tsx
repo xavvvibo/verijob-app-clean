@@ -86,7 +86,7 @@ export default async function CompanyRequestsPage({
     .eq("id", user.id)
     .single();
 
-  if (!profile?.onboarding_completed) redirect("/onboarding");
+  if (!profile?.onboarding_completed) redirect("/onboarding/company?blocked=1&source=company");
   if (!profile?.active_company_id) redirect("/company");
 
   const [{ data: allData }, { data: subData }] = await Promise.all([

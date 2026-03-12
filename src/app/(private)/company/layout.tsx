@@ -30,7 +30,7 @@ export default async function CompanyLayout({ children }: Props) {
     redirect("/dashboard?forbidden=1&from=company");
   }
 
-  if (!profile?.onboarding_completed) redirect("/onboarding");
+  if (!profile?.onboarding_completed) redirect("/onboarding/company?blocked=1&source=company");
 
   if (!profile?.active_company_id) redirect("/company/reuse");
 

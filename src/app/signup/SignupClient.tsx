@@ -33,7 +33,11 @@ function mapOtpErrorMessage(raw: string | null | undefined) {
 
 export default function SignupClient() {
   const sp = useSearchParams();
-  const mode = sp.get("mode");
+  const modeParam = sp.get("mode");
+  const roleParam = sp.get("role");
+  const initialAccountType = modeParam === "company" || roleParam === "company" ? "company" : "candidate";
+  const [accountType, setAccountType] = useState<"candidate" | "company">(initialAccountType);
+  const mode = accountType === "company" ? "company" : null;
   const rawNext = sp.get("next");
   const next = useMemo(() => safeNext(rawNext), [rawNext]);
   const loginHref = useMemo(() => {
@@ -43,7 +47,7 @@ export default function SignupClient() {
     const qs = params.toString();
     return qs ? `/login?${qs}` : "/login";
   }, [mode, rawNext, next]);
-  const isCompanyMode = mode === "company";
+  const isCompanyMode = accountType === "company";
 
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
@@ -107,7 +111,26 @@ export default function SignupClient() {
         return;
       }
 
-      window.location.href = next;
+      const bootstrapRes = await fetch("/api/auth/bootstrap-profile", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ account_type: accountType }),
+      });
+      const bootstrapData = await bootstrapRes.json().catch(() => ({}));
+      if (!bootstrapRes.ok) {
+        setIsError(true);
+        setMsg(bootstrapData?.details || bootstrapData?.error || "No se pudo preparar el perfil inicial.");
+        return;
+      }
+
+      const fallbackNext = isCompanyMode ? "/onboarding/company" : "/onboarding";
+      const finalNext = rawNext
+        ? next === "/onboarding"
+          ? fallbackNext
+          : next
+        : fallbackNext;
+
+      window.location.href = finalNext;
     } catch {
       setIsError(true);
       setMsg("Error inesperado verificando código");
@@ -119,6 +142,32 @@ export default function SignupClient() {
   return (
     <div className="w-full rounded-2xl border border-slate-200/80 bg-white/95 p-8 shadow-[0_12px_32px_rgba(15,23,42,0.10)]">
       <div className="mb-5 flex flex-wrap items-center gap-2">
+        <div className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setAccountType("candidate")}
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                accountType === "candidate"
+                  ? "bg-slate-900 text-white"
+                  : "bg-white text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              Candidato
+            </button>
+            <button
+              type="button"
+              onClick={() => setAccountType("company")}
+              className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+                accountType === "company"
+                  ? "bg-slate-900 text-white"
+                  : "bg-white text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              Empresa
+            </button>
+          </div>
+        </div>
         <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">
           {isCompanyMode ? "Alta empresa" : "Alta candidato"}
         </span>

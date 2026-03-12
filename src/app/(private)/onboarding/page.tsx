@@ -87,13 +87,16 @@ export default function OnboardingPage() {
       const { data: profile, error: pErr } = await supabase
         .from("profiles")
         .select(
-          "id, onboarding_completed, onboarding_step, profile_visibility, show_personal, show_experience, show_education, show_achievements"
+          "id, role, onboarding_completed, onboarding_step, profile_visibility, show_personal, show_experience, show_education, show_achievements"
         )
         .eq("id", user.id)
         .maybeSingle();
 
       if (pErr) {
         if (!cancelled) setErr("No se pudo leer tu perfil. Intenta recargar.");
+      } else if (String(profile?.role || "").toLowerCase() === "company") {
+        if (!cancelled) router.replace("/onboarding/company?blocked=1&source=onboarding");
+        return;
       } else if (profile?.onboarding_completed) {
         if (!cancelled) router.replace("/dashboard");
         return;
@@ -157,15 +160,15 @@ export default function OnboardingPage() {
 
     const { error } = await supabase
       .from("profiles")
-      .update({
+      .upsert({
+        id: user.id,
         onboarding_step: step,
         profile_visibility: profileVisibility,
         show_personal: showPersonal,
         show_experience: showExperience,
         show_education: showEducation,
         show_achievements: showAchievements,
-      })
-      .eq("id", user.id);
+      }, { onConflict: "id" });
 
     if (error) {
       setErr(error.message || "No se pudieron guardar las preferencias.");
@@ -240,11 +243,11 @@ export default function OnboardingPage() {
 
       const { error } = await supabase
         .from("profiles")
-        .update({
+        .upsert({
+          id: user.id,
           onboarding_completed: true,
           onboarding_step: "achievements",
-        })
-        .eq("id", user.id);
+        }, { onConflict: "id" });
 
       if (error) throw error;
 

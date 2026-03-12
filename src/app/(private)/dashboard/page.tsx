@@ -17,7 +17,10 @@ export default async function DashboardRouter() {
 
   const r = String(profile?.role || "").toLowerCase();
   if (r === "owner" || r === "admin") redirect("/owner/overview");
-  if (!profile?.onboarding_completed) redirect("/onboarding?blocked=1&source=dashboard");
+  if (!profile?.onboarding_completed) {
+    if (r === "company") redirect("/onboarding/company?blocked=1&source=dashboard");
+    redirect("/onboarding?blocked=1&source=dashboard");
+  }
   if (r === "company") redirect("/company");
   redirect("/candidate/overview");
 }
