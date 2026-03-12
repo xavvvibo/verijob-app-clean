@@ -18,7 +18,8 @@ export async function requireOwner() {
     return { ok: false as const, status: 403, error: "profile_not_found" };
   }
 
-  if (String(profile.role || "").toLowerCase() !== "owner") {
+  const role = String(profile.role || "").toLowerCase();
+  if (role !== "owner" && role !== "admin") {
     return { ok: false as const, status: 403, error: "forbidden" };
   }
 

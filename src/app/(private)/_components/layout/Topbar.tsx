@@ -100,70 +100,72 @@ export default function Topbar({ role }: { role?: Role }) {
             No tienes permisos para acceder a la zona <span className="font-semibold">{forbiddenFrom || "solicitada"}</span>. Te hemos llevado a tu área permitida.
           </div>
         ) : null}
-        <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link href="/dashboard" className="flex items-center gap-3">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/branding/verijob-logo-horizontal.png"
-              alt="Verijob"
-              className="h-auto w-[182px] max-w-[46vw] object-contain"
-              loading="eager"
-            />
-          </Link>
-        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex min-w-0 items-center gap-4 lg:gap-6">
+            <Link href="/dashboard" className="flex items-center">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/branding/verijob-logo-horizontal.png"
+                alt="Verijob"
+                className="h-10 w-auto object-contain lg:h-12"
+                loading="eager"
+              />
+            </Link>
 
-        <div className="flex items-center gap-3">
-          {r === "owner" ? <CommandSearch /> : null}
-
-          <div className="hidden md:inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/branding/verijob-mark.png"
-              alt="Verijob"
-              className="h-4 w-4 object-contain"
-              loading="lazy"
-            />
-            <span>{userPlanLabel}</span>
-            {membershipRole && (pathname === "/company" || pathname.startsWith("/company/")) ? (
-              <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">· {membershipRole}</span>
-            ) : null}
+            <div className="hidden md:inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/branding/verijob-mark.png"
+                alt="Verijob"
+                className="h-4 w-4 object-contain"
+                loading="lazy"
+              />
+              <span>{userPlanLabel}</span>
+              {membershipRole && (pathname === "/company" || pathname.startsWith("/company/")) ? (
+                <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">· {membershipRole}</span>
+              ) : null}
+            </div>
           </div>
 
-          {isCandidateArea ? (
-            <>
-              <Link
-                href="/candidate/subscription"
-                className="hidden lg:inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
-              >
-                Planes
-              </Link>
-              <Link
-                href="/candidate/settings"
-                className="hidden lg:inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
-              >
-                Ajustes
-              </Link>
-            </>
-          ) : null}
+          <div className="hidden flex-1 justify-center px-4 lg:flex">
+            {r === "owner" ? <CommandSearch /> : null}
+          </div>
 
-          <a
-            href="https://verijob.es"
-            className="hidden sm:inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:opacity-90"
-          >
-            Web
-          </a>
+          <div className="ml-auto flex items-center gap-2 lg:gap-3">
+            {isCandidateArea ? (
+              <>
+                <Link
+                  href="/candidate/subscription"
+                  className="hidden lg:inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                >
+                  Planes
+                </Link>
+                <Link
+                  href="/candidate/settings"
+                  className="hidden lg:inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                >
+                  Ajustes
+                </Link>
+              </>
+            ) : null}
 
-          <button
-            onClick={logout}
-            disabled={loggingOut}
-            className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
-            title="Cerrar sesión"
-          >
-            {loggingOut ? "Cerrando…" : "Cerrar sesión"}
-          </button>
+            <a
+              href="https://verijob.es"
+              className="hidden sm:inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:opacity-90"
+            >
+              Web
+            </a>
+
+            <button
+              onClick={logout}
+              disabled={loggingOut}
+              className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+              title="Cerrar sesión"
+            >
+              {loggingOut ? "Cerrando…" : "Cerrar sesión"}
+            </button>
+          </div>
         </div>
-      </div>
       </div>
     </header>
   );
