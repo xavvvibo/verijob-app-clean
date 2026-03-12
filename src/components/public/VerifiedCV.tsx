@@ -1,68 +1,113 @@
-type Props = {
-  data: any
-}
+import type { PublicCandidatePayload } from "@/components/public/CandidatePublicProfileRenderer";
 
-function labelStatus(status?: string) {
-  const s = (status || "").toLowerCase()
-  if (s === "approved" || s === "verified") return "Verificado"
-  if (s === "revoked") return "Revocado"
-  if (s === "rejected") return "Rechazado"
-  if (s === "reviewing") return "En revisión"
-  if (s === "pending") return "Pendiente"
-  return status || "unknown"
+type Props = {
+  data: PublicCandidatePayload;
+};
+
+function formatPeriod(start?: string | null, end?: string | null) {
+  const startText = start ? new Date(start).toLocaleDateString("es-ES", { month: "short", year: "numeric" }) : "";
+  const endText = end ? new Date(end).toLocaleDateString("es-ES", { month: "short", year: "numeric" }) : "Actualidad";
+  if (!startText && !end) return "";
+  return `${startText || "Inicio no definido"} · ${endText}`;
 }
 
 export default function VerifiedCV({ data }: Props) {
-  const verification = data?.verification || {}
-  const metrics = data?.metrics || {}
-
-  const evidenceCount = Number(metrics.evidence_count ?? verification.evidence_count ?? 0)
-  const reuseCount = Number(metrics.reuse_count ?? 0)
-  const companyConfirmed = Boolean(verification.company_confirmed)
-
-  const score =
-    (companyConfirmed ? 20 : 0) +
-    evidenceCount * 5 +
-    (reuseCount >= 1 ? 10 : 0) +
-    (reuseCount >= 3 ? 20 : 0)
+  const teaser = data?.teaser || {};
+  const experiences = Array.isArray(data?.experiences) ? data.experiences : [];
+  const education = Array.isArray(data?.education) ? data.education : [];
+  const recommendations = Array.isArray(data?.recommendations) ? data.recommendations : [];
+  const languages = Array.isArray(teaser?.languages) ? teaser.languages : [];
+  const achievements = Array.isArray(data?.achievements) ? data.achievements : [];
 
   return (
-    <div className="max-w-3xl mx-auto py-16 px-6">
-      <div className="border rounded-xl p-8 bg-white shadow-sm">
-        <h1 className="text-2xl font-semibold mb-2">Verificación profesional</h1>
-        <p className="text-sm text-gray-500 mb-6">
-          Infraestructura de confianza laboral · Verijob
-        </p>
-
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
-          <div className="border rounded-lg p-4">
-            <p className="text-xs text-gray-500">Trust score</p>
-            <p className="text-xl font-semibold">{score}</p>
-          </div>
-
-          <div className="border rounded-lg p-4">
-            <p className="text-xs text-gray-500">Evidencias</p>
-            <p className="text-xl font-semibold">{evidenceCount}</p>
-          </div>
-
-          <div className="border rounded-lg p-4">
-            <p className="text-xs text-gray-500">Empresas reuse</p>
-            <p className="text-xl font-semibold">{reuseCount}</p>
-          </div>
+    <div className="mx-auto max-w-4xl bg-white px-6 py-10 text-slate-900">
+      <header className="border-b border-slate-200 pb-6">
+        <h1 className="text-3xl font-semibold">{teaser?.full_name || "Candidato verificado"}</h1>
+        {teaser?.title ? <p className="mt-1 text-base text-slate-700">{teaser.title}</p> : null}
+        <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
+          {teaser?.location ? <span className="rounded-full border border-slate-200 px-2.5 py-1">{teaser.location}</span> : null}
+          <span className="rounded-full border border-slate-200 px-2.5 py-1">Trust Score: {Number(teaser?.trust_score ?? 0)}</span>
+          <span className="rounded-full border border-slate-200 px-2.5 py-1">Verificadas: {Number(teaser?.verified_experiences ?? 0)}</span>
+          <span className="rounded-full border border-slate-200 px-2.5 py-1">Evidencias: {Number(teaser?.evidences_total ?? 0)}</span>
         </div>
+      </header>
 
-        <div className="border-t pt-6">
-          <p className="text-sm text-gray-500 mb-2">Estado verificación</p>
-          <p className="text-lg font-medium">{labelStatus(verification.status_public ?? verification.status)}</p>
+      {teaser?.summary ? (
+        <section className="mt-6 break-inside-avoid rounded-xl border border-slate-200 p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Resumen</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-700">{teaser.summary}</p>
+        </section>
+      ) : null}
 
-          {verification.is_revoked ? (
-            <div className="mt-4 text-sm text-gray-600">
-              <p><span className="font-medium">Revocada:</span> {verification.revoked_at ?? "—"}</p>
-              <p><span className="font-medium">Motivo:</span> {verification.revoked_reason ?? "—"}</p>
-            </div>
+      {experiences.length ? (
+        <section className="mt-6">
+          <h2 className="text-lg font-semibold">Experiencia</h2>
+          <div className="mt-3 space-y-3">
+            {experiences.map((exp, index) => (
+              <article
+                key={String(exp?.experience_id || `exp-${index}`)}
+                className="break-inside-avoid rounded-xl border border-slate-200 p-4"
+              >
+                <h3 className="font-semibold">{exp?.position || "Experiencia"}</h3>
+                <p className="text-sm text-slate-700">{exp?.company_name || "Empresa no indicada"}</p>
+                <p className="mt-1 text-xs text-slate-500">{formatPeriod(exp?.start_date, exp?.end_date)}</p>
+                {Array.isArray(exp?.verification_badges) && exp.verification_badges.length ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {exp.verification_badges.map((badge) => (
+                      <span key={`${exp?.experience_id}-${badge}`} className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                        {badge}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {education.length ? (
+        <section className="mt-6">
+          <h2 className="text-lg font-semibold">Formación</h2>
+          <div className="mt-3 space-y-3">
+            {education.map((item, idx) => (
+              <article key={String(item?.id || `edu-${idx}`)} className="break-inside-avoid rounded-xl border border-slate-200 p-4">
+                <h3 className="font-semibold">{item?.title || "Formación"}</h3>
+                {item?.institution ? <p className="text-sm text-slate-700">{item.institution}</p> : null}
+                {(item?.start_date || item?.end_date) ? <p className="mt-1 text-xs text-slate-500">{formatPeriod(item?.start_date, item?.end_date)}</p> : null}
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {(languages.length || achievements.length) ? (
+        <section className="mt-6 break-inside-avoid rounded-xl border border-slate-200 p-4">
+          <h2 className="text-lg font-semibold">Idiomas y logros</h2>
+          {languages.length ? <p className="mt-2 text-sm text-slate-700"><span className="font-medium">Idiomas:</span> {languages.join(", ")}</p> : null}
+          {achievements.length ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-700">
+              {achievements.map((item, idx) => <li key={`${item}-${idx}`}>{item}</li>)}
+            </ul>
           ) : null}
-        </div>
-      </div>
+        </section>
+      ) : null}
+
+      {recommendations.length ? (
+        <section className="mt-6">
+          <h2 className="text-lg font-semibold">Recomendaciones</h2>
+          <div className="mt-3 space-y-3">
+            {recommendations.map((item, idx) => (
+              <article key={String(item?.id || `rec-${idx}`)} className="break-inside-avoid rounded-xl border border-slate-200 p-4">
+                <p className="text-sm leading-6 text-slate-700">{item?.text || "Validación profesional registrada."}</p>
+                <p className="mt-2 text-xs text-slate-500">
+                  {item?.name || "Responsable"} · {item?.role || "Verificación profesional"} {item?.company ? `· ${item.company}` : ""}
+                </p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
-  )
+  );
 }

@@ -394,5 +394,30 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     recommendations: derivedRecommendations,
     achievements: achievementItems,
     verified_skills: verifiedSkills,
+    candidate_public_profile: {
+      identity: {
+        candidate_id: candidateId,
+        full_name: profileFullName,
+      },
+      headline: profileTitle,
+      location: profileLocation,
+      languages: normalizePublicLanguages((profile as any)?.languages),
+      education: educationItems,
+      experiences: experiencesEnriched,
+      verifications: {
+        total: totalVerifications,
+        verified_work_count: verifiedWork,
+        verified_education_count: verifiedEducation,
+        confirmed_experiences: confirmed,
+        evidences_total: evidences,
+        reuse_total: reuseEvents,
+      },
+      trust_score: {
+        value: trustScore,
+        breakdown: cp?.trust_score_breakdown || null,
+      },
+      recommendations: derivedRecommendations,
+      skills: verifiedSkills,
+    },
   });
 }
