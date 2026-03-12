@@ -128,6 +128,7 @@ export default async function OwnerUserDetailPage({ params }: any) {
   const experiences = Array.isArray(experiencesRes.data) ? experiencesRes.data : [];
   const actions = Array.isArray(actionsRes.data) ? actionsRes.data : [];
   const trustScore = candidateProfileRes.data?.trust_score ?? null;
+  const currentPlan = String(latestSub?.plan || "free");
 
   const activityDates = [
     user.created_at,
@@ -301,7 +302,21 @@ export default async function OwnerUserDetailPage({ params }: any) {
         )}
       </section>
 
-      <OwnerUserActionsClient targetUserId={targetUserId} />
+      <OwnerUserActionsClient
+        targetUserId={targetUserId}
+        role={String(user.role || "")}
+        currentPlan={currentPlan}
+        experiences={experiences.map((row: any) => ({
+          id: String(row.id),
+          label: `${row.position || "Experiencia"} — ${row.company_name_freeform || "Empresa"}`,
+          status: String(row.verification_status || ""),
+        }))}
+        evidences={evidences.map((row: any) => ({
+          id: String(row.id),
+          label: `${row.document_type || row.evidence_type || "Documento"} · ${row.validation_status || "sin estado"}`,
+          status: String(row.validation_status || ""),
+        }))}
+      />
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Historial owner</h2>
