@@ -139,6 +139,16 @@ function asStringArray(value: unknown) {
     .slice(0, 100);
 }
 
+function isUuid(value: unknown) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
+}
+
+function makeFallbackCompanyName(emailRaw: unknown) {
+  const email = String(emailRaw || "").trim().toLowerCase();
+  const local = email.split("@")[0] || "empresa";
+  return `Empresa ${local.slice(0, 40)}`;
+}
+
 function normalizeVerificationStatus(value: unknown) {
   const v = String(value || "").toLowerCase();
   if (v === "verified_document") return "verified_document";
@@ -225,7 +235,7 @@ async function resolveContext(supabase: any, admin: any) {
 
   const { data: profile, error: profileErr } = await admin
     .from("profiles")
-    .select("active_company_id")
+    .select("active_company_id,role,onboarding_completed")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -233,23 +243,84 @@ async function resolveContext(supabase: any, admin: any) {
     return { error: NextResponse.json({ error: "profiles_read_failed", details: profileErr.message }, { status: 400 }) };
   }
 
-  let companyId = (profile as any)?.active_company_id ? String((profile as any).active_company_id) : null;
-  if (!companyId) {
-    const { data: inferredMembership } = await supabase
-      .from("company_members")
-      .select("company_id,created_at")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1);
+  const profileRole = String((profile as any)?.role || "").toLowerCase();
+  const onboardingCompleted = Boolean((profile as any)?.onboarding_completed);
 
-    companyId = inferredMembership?.[0]?.company_id ? String(inferredMembership[0].company_id) : null;
-    if (companyId) {
-      await admin.from("profiles").update({ active_company_id: companyId }).eq("id", user.id);
+  const { data: latestMembership } = await admin
+    .from("company_members")
+    .select("company_id,role,created_at")
+    .eq("user_id", user.id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const activeCompanyIdRaw = (profile as any)?.active_company_id;
+  const activeCompanyId = isUuid(activeCompanyIdRaw) ? String(activeCompanyIdRaw) : null;
+
+  let companyId: string | null = null;
+  let membershipRole = "reviewer";
+
+  if (activeCompanyId) {
+    const { data: activeMembership } = await admin
+      .from("company_members")
+      .select("role")
+      .eq("company_id", activeCompanyId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (activeMembership) {
+      companyId = activeCompanyId;
+      membershipRole = String((activeMembership as any)?.role || "reviewer").toLowerCase();
     }
   }
 
   if (!companyId) {
+    const membershipCompanyId = isUuid(latestMembership?.company_id) ? String(latestMembership?.company_id) : null;
+    if (membershipCompanyId) {
+      companyId = membershipCompanyId;
+      membershipRole = String((latestMembership as any)?.role || "reviewer").toLowerCase();
+      await admin.from("profiles").update({ active_company_id: companyId }).eq("id", user.id);
+    }
+  }
+
+  if (!companyId && profileRole === "company") {
+    const { data: createdCompany, error: createCompanyErr } = await admin
+      .from("companies")
+      .insert({ name: makeFallbackCompanyName(user.email) })
+      .select("id")
+      .single();
+    if (createCompanyErr || !createdCompany?.id) {
+      return {
+        error: NextResponse.json(
+          { error: "companies_create_failed", details: createCompanyErr?.message || null },
+          { status: 400 }
+        ),
+      };
+    }
+    companyId = String(createdCompany.id);
+    membershipRole = "admin";
+    const { error: memberInsertErr } = await admin.from("company_members").insert({
+      company_id: companyId,
+      user_id: user.id,
+      role: "admin",
+    });
+    if (memberInsertErr) {
+      return {
+        error: NextResponse.json(
+          { error: "company_members_insert_failed", details: memberInsertErr.message },
+          { status: 400 }
+        ),
+      };
+    }
+    await admin.from("profiles").update({ active_company_id: companyId, onboarding_completed: false }).eq("id", user.id);
+  }
+
+  if (!companyId) {
     return { error: NextResponse.json({ error: "no_active_company" }, { status: 400 }) };
+  }
+
+  const { data: companyRow } = await admin.from("companies").select("id").eq("id", companyId).maybeSingle();
+  if (!companyRow?.id) {
+    return { error: NextResponse.json({ error: "company_not_found" }, { status: 400 }) };
   }
 
   const { data: membership, error: membershipErr } = await admin
@@ -261,14 +332,50 @@ async function resolveContext(supabase: any, admin: any) {
   if (membershipErr) {
     return { error: NextResponse.json({ error: "company_members_read_failed", details: membershipErr.message }, { status: 400 }) };
   }
-  if (!membership) {
+  if (!membership && profileRole === "company" && !onboardingCompleted) {
+    const { error: insertMembershipErr } = await admin.from("company_members").insert({
+      company_id: companyId,
+      user_id: user.id,
+      role: "admin",
+    });
+    if (insertMembershipErr) {
+      return {
+        error: NextResponse.json(
+          { error: "company_membership_repair_failed", details: insertMembershipErr.message },
+          { status: 400 }
+        ),
+      };
+    }
+    membershipRole = "admin";
+  } else if (!membership) {
     return { error: NextResponse.json({ error: "company_membership_required" }, { status: 403 }) };
+  } else {
+    membershipRole = String((membership as any)?.role || "reviewer").toLowerCase();
   }
+
+  if (membershipRole !== "admin" && profileRole === "company" && !onboardingCompleted) {
+    const { error: roleUpdateErr } = await admin
+      .from("company_members")
+      .update({ role: "admin" })
+      .eq("company_id", companyId)
+      .eq("user_id", user.id);
+    if (!roleUpdateErr) membershipRole = "admin";
+  }
+
+  await admin
+    .from("company_profiles")
+    .upsert(
+      {
+        company_id: companyId,
+        contact_email: user.email || null,
+      },
+      { onConflict: "company_id" }
+    );
 
   return {
     user,
     companyId: String(companyId),
-    membershipRole: String((membership as any)?.role || "reviewer").toLowerCase(),
+    membershipRole,
   };
 }
 
