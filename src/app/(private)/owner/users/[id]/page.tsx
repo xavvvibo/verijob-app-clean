@@ -301,7 +301,7 @@ export default async function OwnerUserDetailPage({ params }: any) {
               <ul className="mt-2 space-y-2 text-sm text-slate-700">
                 {evidences.map((row: any) => (
                   <li key={row.id} className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
-                    {row.document_type || row.evidence_type || "Documento"} · {row.validation_status || "sin estado"}
+                    {row.document_type || row.evidence_type || "Documento"} · {row.validation_status || "pendiente de validación"}
                   </li>
                 ))}
               </ul>
@@ -351,7 +351,7 @@ export default async function OwnerUserDetailPage({ params }: any) {
         }))}
         evidences={evidences.map((row: any) => ({
           id: String(row.id),
-          label: `${row.document_type || row.evidence_type || "Documento"} · ${row.validation_status || "sin estado"}`,
+          label: `${row.document_type || row.evidence_type || "Documento"} · ${row.validation_status || "pendiente de validación"}`,
           status: String(row.validation_status || ""),
         }))}
       />

@@ -22,7 +22,16 @@ function normalizeCompanyStatus(companyStatus: unknown, profileStatus: unknown) 
   if (p.includes("verified")) return "verified";
   if (c === "unverified" || c === "pending" || c === "draft") return "unverified";
   if (p.includes("unverified") || p.includes("pending")) return "unverified";
-  return c || p || "unknown";
+  return c || p || "pending_review";
+}
+
+function companyStatusLabel(status: string) {
+  const s = String(status || "").toLowerCase();
+  if (s === "verified" || s === "verified_document" || s === "verified_paid") return "Verificada";
+  if (s === "unverified") return "Sin verificar";
+  if (s === "pending" || s === "pending_review") return "Pendiente de revisión";
+  if (s === "draft") return "En configuración";
+  return "Pendiente de clasificación";
 }
 
 export default async function OwnerCompaniesPage({
@@ -246,7 +255,7 @@ export default async function OwnerCompaniesPage({
                 {filtered.map((entry) => (
                   <tr key={entry.id} className="border-b border-slate-100 text-slate-800">
                     <td className="px-3 py-3 font-semibold text-slate-900">{entry.row.name || "Empresa sin nombre"}</td>
-                    <td className="px-3 py-3"><Badge label={entry.status} /></td>
+                    <td className="px-3 py-3"><Badge label={companyStatusLabel(entry.status)} /></td>
                     <td className="px-3 py-3">{entry.members}</td>
                     <td className="px-3 py-3">{entry.reqCount}</td>
                     <td className="px-3 py-3">{entry.pending}</td>

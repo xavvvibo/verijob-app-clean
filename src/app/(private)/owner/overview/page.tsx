@@ -18,11 +18,22 @@ type AlertItem = {
 
 export const dynamic = "force-dynamic";
 
-function MetricCard({ title, value, note }: { title: ReactNode; value: string; note?: string }) {
+function MetricCard({
+  title,
+  value,
+  note,
+  trend,
+}: {
+  title: ReactNode;
+  value: string;
+  note?: string;
+  trend?: string;
+}) {
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
       <p className="mt-1 text-2xl font-semibold text-slate-900">{value}</p>
+      {trend ? <p className="mt-1 text-xs font-medium text-slate-700">{trend}</p> : null}
       {note ? <p className="mt-1 text-xs text-slate-500">{note}</p> : null}
     </article>
   );
@@ -116,6 +127,16 @@ function pct(numerator: number, denominator: number) {
   return Math.round((numerator / denominator) * 100);
 }
 
+function deltaLabel(current: number, previous: number, suffix = "") {
+  const delta = current - previous;
+  const sign = delta > 0 ? "+" : "";
+  const value = `${sign}${delta}${suffix}`;
+  if (previous <= 0) return `${value} vs periodo anterior`;
+  const ratio = Math.round((delta / previous) * 100);
+  const ratioSign = ratio > 0 ? "+" : "";
+  return `${value} (${ratioSign}${ratio}%) vs periodo anterior`;
+}
+
 async function countAuthUsers(admin: ReturnType<typeof createServiceRoleClient>) {
   const perPage = 200;
   let page = 1;
@@ -154,11 +175,13 @@ async function OwnerOverviewServer() {
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
   const weekAgo = now - 7 * dayMs;
+  const twoWeeksAgo = now - 14 * dayMs;
   const monthAgo = now - 30 * dayMs;
+  const twoMonthsAgo = now - 60 * dayMs;
 
   const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicProfilesRes, issuesRes, employmentRes, authUsersTotal] = await Promise.all([
     admin.from("profiles").select("id,role,onboarding_completed,created_at,last_activity_at"),
-    admin.from("companies").select("id,created_at,updated_at,status", { count: "exact" }),
+    admin.from("companies").select("id,name,created_at,updated_at,status", { count: "exact" }),
     admin.from("verification_requests").select("id,status,requested_at,created_at,resolved_at,company_id,requested_by,verification_channel,external_resolved"),
     admin.from("evidences").select("id,evidence_type,document_type,validation_status,verification_request_id,uploaded_by,created_at"),
     admin.from("subscriptions").select("id,user_id,status,amount,created_at,plan"),
@@ -182,6 +205,8 @@ async function OwnerOverviewServer() {
   const employments = Array.isArray(employmentRes.data) ? employmentRes.data : [];
   const profilesForActivity = profiles;
   const companiesForActivity = Array.isArray(companiesRes.data) ? companiesRes.data : [];
+  const profileById = new Map(profiles.map((row: any) => [String(row.id || ""), row]));
+  const companyById = new Map(companiesForActivity.map((row: any) => [String(row.id || ""), row]));
 
   const candidateProfiles = profiles.filter((p: any) => String(p.role || "").toLowerCase() === "candidate");
   const companyProfiles = profiles.filter((p: any) => String(p.role || "").toLowerCase() === "company");
@@ -223,10 +248,18 @@ async function OwnerOverviewServer() {
     const ts = Date.parse(String(p.last_activity_at || ""));
     return Number.isFinite(ts) && ts >= monthAgo;
   }).length;
+  const activeProfilesPrev30d = profilesForActivity.filter((p: any) => {
+    const ts = Date.parse(String(p.last_activity_at || ""));
+    return Number.isFinite(ts) && ts >= twoMonthsAgo && ts < monthAgo;
+  }).length;
 
   const activeCompanies = companiesForActivity.filter((c: any) => {
     const ts = Date.parse(String(c.updated_at || c.created_at || ""));
     return Number.isFinite(ts) && ts >= monthAgo;
+  }).length;
+  const activeCompaniesPrev30d = companiesForActivity.filter((c: any) => {
+    const ts = Date.parse(String(c.updated_at || c.created_at || ""));
+    return Number.isFinite(ts) && ts >= twoMonthsAgo && ts < monthAgo;
   }).length;
   const inactiveCompanies = Math.max(companiesTotal - activeCompanies, 0);
 
@@ -253,6 +286,10 @@ async function OwnerOverviewServer() {
   const requestsThisWeek = requests.filter((r: any) => {
     const ref = Date.parse(String(r.requested_at || r.created_at || ""));
     return Number.isFinite(ref) && ref >= weekAgo;
+  }).length;
+  const requestsPrevWeek = requests.filter((r: any) => {
+    const ref = Date.parse(String(r.requested_at || r.created_at || ""));
+    return Number.isFinite(ref) && ref >= twoWeeksAgo && ref < weekAgo;
   }).length;
 
   const verificationSuccessRate = pct(verifiedVerifications, completedVerifications);
@@ -291,6 +328,12 @@ async function OwnerOverviewServer() {
   }).length;
 
   const totalMrr = subscriptionsActive.reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
+  const mrr30dAdded = subscriptionsActive
+    .filter((row: any) => {
+      const created = Date.parse(String(row.created_at || ""));
+      return Number.isFinite(created) && created >= monthAgo;
+    })
+    .reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
 
   const roleByUser = new Map<string, string>();
   for (const p of profiles as any[]) roleByUser.set(String(p.id || ""), String(p.role || "").toLowerCase());
@@ -325,6 +368,13 @@ async function OwnerOverviewServer() {
 
   const failedJobs = jobs.filter((j: any) => String(j.status || "").toLowerCase() === "failed").length;
   const pendingJobs = jobs.filter((j: any) => String(j.status || "").toLowerCase().includes("pending")).length;
+  const pendingOldVerifications = requests.filter((r: any) => {
+    const status = String(r.status || "").toLowerCase();
+    const isPending = status === "draft" || status === "pending_company" || status === "reviewing";
+    if (!isPending) return false;
+    const ref = Date.parse(String(r.requested_at || r.created_at || ""));
+    return Number.isFinite(ref) && ref < weekAgo;
+  }).length;
 
   const openIssues = issues.filter((i: any) => {
     const st = String(i.status || "").toLowerCase();
@@ -410,6 +460,16 @@ async function OwnerOverviewServer() {
       actionLabel: "Abrir cola pendiente",
     });
   }
+  if (pendingOldVerifications > 0) {
+    alerts.push({
+      id: "pending-verifications-aged",
+      severity: "medium",
+      title: "Verificaciones pendientes con antigüedad",
+      detail: `${pendingOldVerifications} verificaciones llevan más de 7 días sin cierre.`,
+      actionHref: "/owner/verifications?status=reviewing",
+      actionLabel: "Priorizar revisión",
+    });
+  }
 
   if (onboardingRate < 60 && funnelStepRegistros >= 20) {
     alerts.push({
@@ -466,24 +526,27 @@ async function OwnerOverviewServer() {
       <Section title="Métricas clave" subtitle="Estado del negocio en una lectura de 3 segundos.">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard
-            title={<span className="inline-flex items-center gap-2">Usuarios totales <OwnerTooltip text="Usuarios reales en Supabase Auth (auth.users)." /></span>}
-            value={String(usersTotal)}
-            note={`Con perfil: ${profiles.length} · sin perfil: ${Math.max(usersTotal - profiles.length, 0)}`}
+            title={<span className="inline-flex items-center gap-2">Perfiles activos (30d) <OwnerTooltip text="Perfiles con señal de actividad en los últimos 30 días según last_activity_at." /></span>}
+            value={String(activeProfiles)}
+            trend={deltaLabel(activeProfiles, activeProfilesPrev30d)}
+            note={`Total auth.users: ${usersTotal}`}
           />
           <MetricCard
-            title={<span className="inline-flex items-center gap-2">Empresas totales <OwnerTooltip text="Filas reales de la tabla companies." /></span>}
-            value={String(companiesTotal)}
-            note={`Activas 30d: ${activeCompanies} · inactivas: ${inactiveCompanies}`}
+            title={<span className="inline-flex items-center gap-2">Empresas activas (30d) <OwnerTooltip text="Empresas con actividad reciente según updated_at/created_at en los últimos 30 días." /></span>}
+            value={String(activeCompanies)}
+            trend={deltaLabel(activeCompanies, activeCompaniesPrev30d)}
+            note={`Empresas totales: ${companiesTotal} · inactivas: ${inactiveCompanies}`}
           />
           <MetricCard
-            title={<span className="inline-flex items-center gap-2">Verificaciones totales <OwnerTooltip text="Solicitudes de verificación registradas en el sistema, incluyendo pendientes y resueltas." /></span>}
-            value={String(verificationsTotal)}
-            note={`${requestsThisWeek} esta semana · ${pendingVerifications} pendientes`}
+            title={<span className="inline-flex items-center gap-2">Verificaciones (7 días) <OwnerTooltip text="Solicitudes de verificación creadas/solicitadas durante la última semana." /></span>}
+            value={String(requestsThisWeek)}
+            trend={deltaLabel(requestsThisWeek, requestsPrevWeek)}
+            note={`${pendingVerifications} en cola · ${verificationsTotal} acumuladas`}
           />
           <MetricCard
-            title={<span className="inline-flex items-center gap-2">MRR <OwnerTooltip text="Derivado fiable: suma de amount en suscripciones active/trialing." /></span>}
+            title={<span className="inline-flex items-center gap-2">MRR activo <OwnerTooltip text="Derivado fiable: suma de amount en suscripciones active/trialing." /></span>}
             value={money(totalMrr)}
-            note={`${subscriptionsActive.length} suscripciones activas`}
+            note={`${subscriptionsActive.length} suscripciones activas · ${money(mrr30dAdded)} añadidos en 30d`}
           />
         </div>
       </Section>
@@ -524,14 +587,14 @@ async function OwnerOverviewServer() {
           subtitle="Cola operativa para decisiones del día y revisión manual."
         >
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            <MetricCard title="Estado draft" value={String(statusCounts.draft)} />
-            <MetricCard title="Estado pending_company" value={String(statusCounts.pending_company)} />
-            <MetricCard title="Estado reviewing" value={String(statusCounts.reviewing)} />
-            <MetricCard title="Estado verified" value={String(statusCounts.verified)} />
-            <MetricCard title="Estado rejected" value={String(statusCounts.rejected)} />
-            <MetricCard title="Estado revoked" value={String(statusCounts.revoked)} />
+            <MetricCard title="Borrador pendiente de envío" value={String(statusCounts.draft)} />
+            <MetricCard title="Esperando respuesta de empresa" value={String(statusCounts.pending_company)} />
+            <MetricCard title="En revisión manual" value={String(statusCounts.reviewing)} />
+            <MetricCard title="Verificaciones aprobadas" value={String(statusCounts.verified)} />
+            <MetricCard title="Verificaciones rechazadas" value={String(statusCounts.rejected)} />
+            <MetricCard title="Verificaciones revocadas" value={String(statusCounts.revoked)} />
             <MetricCard title="Evidencias totales" value={String(evidencesTotal)} />
-            <MetricCard title="Evidencias sin estado" value={String(evidencesWithoutStatus)} />
+            <MetricCard title="Evidencias pendientes de clasificación" value={String(evidencesWithoutStatus)} />
             <MetricCard title="Evidencias sin vinculación" value={String(evidencesUnlinked)} note={`Vinculadas: ${evidencesLinked}`} />
             <MetricCard title="Incidencias abiertas" value={String(openIssues)} />
             <MetricCard title="Perfiles activos (30d)" value={String(activeProfiles)} />
@@ -544,7 +607,7 @@ async function OwnerOverviewServer() {
           subtitle="Salud de verificación: volumen, éxito, tiempos y carga de revisión."
         >
           <div className="grid gap-4 sm:grid-cols-2">
-            <MetricCard title="Ratio éxito" value={`${verificationSuccessRate}%`} note="Verified / resueltas" />
+            <MetricCard title="Ratio de éxito" value={`${verificationSuccessRate}%`} note="Aprobadas / verificaciones resueltas" />
             <MetricCard
               title="Tiempo medio verificación"
               value={avgVerificationHours !== null ? `${avgVerificationHours}h` : "—"}
@@ -618,24 +681,24 @@ async function OwnerOverviewServer() {
 
       <Section
         title="Acciones rápidas"
-        subtitle="Accesos rápidos para ejecutar soporte, operación y crecimiento."
+        subtitle="Prioridades operativas del día con acceso directo."
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <Link href="/owner/users" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
-            Ver usuarios
-            <span className="mt-1 block text-xs font-normal text-slate-500">{usersTotal} usuarios totales</span>
+            Usuarios en seguimiento
+            <span className="mt-1 block text-xs font-normal text-slate-500">{usersTotal} usuarios · {onboardingPending} onboarding pendiente</span>
           </Link>
           <Link href="/owner/companies" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
-            Ver empresas
-            <span className="mt-1 block text-xs font-normal text-slate-500">{companiesTotal} empresas registradas</span>
+            Empresas a revisar
+            <span className="mt-1 block text-xs font-normal text-slate-500">{inactiveCompanies} sin actividad reciente</span>
           </Link>
-          <Link href="/owner/verifications?status=pendiente" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+          <Link href="/owner/verifications?status=reviewing" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
             Cola de verificaciones
-            <span className="mt-1 block text-xs font-normal text-slate-500">{pendingVerifications} pendientes</span>
+            <span className="mt-1 block text-xs font-normal text-slate-500">{pendingVerifications} pendientes · {pendingOldVerifications} &gt;7d</span>
           </Link>
           <Link href="/owner/monetization" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
             Monetización
-            <span className="mt-1 block text-xs font-normal text-slate-500">MRR {money(totalMrr)}</span>
+            <span className="mt-1 block text-xs font-normal text-slate-500">MRR {money(totalMrr)} · altas 30d {subscriptionsNew30d}</span>
           </Link>
           <Link href="/owner/growth" className="rounded-lg bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800">
             Centro de crecimiento
@@ -653,23 +716,23 @@ async function OwnerOverviewServer() {
             {[
               ...verifiedRows.slice(0, 3).map((r: any) => ({
                 ts: String(r.resolved_at || r.requested_at || r.created_at || ""),
-                text: "Se completó una verificación.",
+                text: `Verificación completada · ${String((profileById.get(String(r.requested_by || "")) as any)?.full_name || "Candidato")}`,
               })),
               ...evidenceRows.slice(0, 3).map((e: any) => ({
                 ts: String(e.created_at || ""),
-                text: "Se subió una evidencia documental.",
+                text: `Evidencia subida · ${String((profileById.get(String(e.uploaded_by || "")) as any)?.full_name || "Usuario")}`,
               })),
-              ...companyProfiles.slice(0, 2).map((c: any) => ({
-                ts: String(c.created_at || ""),
-                text: "Se registró una empresa.",
+              ...companiesForActivity.slice(0, 2).map((c: any) => ({
+                ts: String(c.created_at || c.updated_at || ""),
+                text: `Actividad de empresa · ${String((companyById.get(String(c.id || "")) as any)?.name || "Empresa")}`,
               })),
               ...issues.slice(0, 2).map((i: any) => ({
                 ts: String(i.created_at || ""),
-                text: "Se abrió una incidencia.",
+                text: "Incidencia operativa registrada.",
               })),
               ...campaigns.slice(0, 2).map((c: any) => ({
                 ts: String(c.created_at || ""),
-                text: "Se lanzó una campaña de crecimiento.",
+                text: "Campaña de crecimiento lanzada.",
               })),
             ]
               .filter((x) => x.ts)

@@ -121,7 +121,7 @@ export default function MarketingControlCenterClient() {
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Centro de marketing</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Modo simplificado para crear promociones y controlar activación comercial sin fricción.
+          Gestión de promociones activas y control de activación comercial en tiempo real.
         </p>
       </section>
 
@@ -164,7 +164,7 @@ export default function MarketingControlCenterClient() {
           <p className="mt-4 text-sm text-slate-600">Cargando promociones...</p>
         ) : promoCodes.length === 0 ? (
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-            Aún no hay promociones activas.
+            Sin promociones activas por ahora. Crea una promoción para activar captación o reactivación.
           </div>
         ) : (
           <div className="mt-4 overflow-x-auto">

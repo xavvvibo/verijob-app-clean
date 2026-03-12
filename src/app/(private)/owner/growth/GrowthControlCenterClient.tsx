@@ -150,7 +150,7 @@ export default function GrowthControlCenterClient() {
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Centro de crecimiento</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Modo MVP: creación rápida de campañas, métricas esenciales e histórico operativo.
+          Gestión de campañas, métricas esenciales e histórico operativo desde un único panel.
         </p>
       </section>
 
@@ -199,7 +199,7 @@ export default function GrowthControlCenterClient() {
           <p className="mt-4 text-sm text-slate-600">Cargando histórico...</p>
         ) : campaigns.length === 0 ? (
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-            No hay campañas históricas todavía.
+            Sin campañas ejecutadas todavía. Crea una campaña para activar el embudo comercial.
           </div>
         ) : (
           <div className="mt-4 overflow-x-auto">

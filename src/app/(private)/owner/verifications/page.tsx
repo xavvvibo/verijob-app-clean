@@ -25,13 +25,13 @@ function canonicalStatus(raw: unknown, revokedAt: unknown) {
 
 function statusLabel(raw: string) {
   const v = String(raw || "").toLowerCase();
-  if (v === "draft") return "Draft";
+  if (v === "draft") return "Borrador";
   if (v === "pending_company") return "Pendiente empresa";
   if (v === "reviewing") return "En revisión";
-  if (v === "verified") return "Verificada";
+  if (v === "verified") return "Aprobada";
   if (v === "rejected") return "Rechazada";
   if (v === "revoked") return "Revocada";
-  return v || "Sin estado";
+  return v || "Pendiente de clasificación";
 }
 
 function statusClass(raw: string) {
@@ -204,27 +204,27 @@ export default async function OwnerVerificationsPage({
             <div className="text-xl font-semibold text-slate-900">{summary.total}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Draft</div>
+            <div className="text-xs text-slate-500">Borrador</div>
             <div className="text-xl font-semibold text-slate-900">{summary.draft}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Pending company</div>
+            <div className="text-xs text-slate-500">Pendiente empresa</div>
             <div className="text-xl font-semibold text-slate-900">{summary.pending_company}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Reviewing</div>
+            <div className="text-xs text-slate-500">En revisión</div>
             <div className="text-xl font-semibold text-slate-900">{summary.reviewing}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Verified</div>
+            <div className="text-xs text-slate-500">Aprobada</div>
             <div className="text-xl font-semibold text-slate-900">{summary.verified}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Rejected</div>
+            <div className="text-xs text-slate-500">Rechazada</div>
             <div className="text-xl font-semibold text-slate-900">{summary.rejected}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Revoked</div>
+            <div className="text-xs text-slate-500">Revocada</div>
             <div className="text-xl font-semibold text-slate-900">{summary.revoked}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -274,12 +274,12 @@ export default async function OwnerVerificationsPage({
           />
           <select name="status" defaultValue={statusFilter} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
             <option value="all">Estado: todos</option>
-            <option value="draft">Draft</option>
-            <option value="pending_company">Pending company</option>
-            <option value="reviewing">Reviewing</option>
-            <option value="verified">Verified</option>
-            <option value="rejected">Rejected</option>
-            <option value="revoked">Revoked</option>
+            <option value="draft">Borrador</option>
+            <option value="pending_company">Pendiente empresa</option>
+            <option value="reviewing">En revisión</option>
+            <option value="verified">Aprobada</option>
+            <option value="rejected">Rechazada</option>
+            <option value="revoked">Revocada</option>
           </select>
           <select name="method" defaultValue={methodFilter} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
             <option value="all">Método: todos</option>

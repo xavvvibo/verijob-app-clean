@@ -2,6 +2,17 @@ import { createClient } from "@/utils/supabase/server";
 
 export const dynamic = "force-dynamic";
 
+function jobStatusLabel(raw: unknown) {
+  const s = String(raw || "").toLowerCase();
+  if (!s) return "Pendiente de clasificación";
+  if (s === "failed" || s === "error") return "Fallido";
+  if (s === "done" || s === "completed" || s === "success") return "Completado";
+  if (s.includes("pending") || s === "queued") return "Pendiente";
+  if (s.includes("processing") || s === "running") return "En proceso";
+  if (s.includes("retry")) return "Reintento";
+  return s.replaceAll("_", " ");
+}
+
 export default async function OwnerAiOpsPage() {
   const supabase = await createClient();
 
@@ -13,7 +24,7 @@ export default async function OwnerAiOpsPage() {
 
   const rows = Array.isArray(jobs) ? jobs : [];
   const statusCount = rows.reduce<Record<string, number>>((acc, row: any) => {
-    const key = String(row.status || "unknown").toLowerCase();
+    const key = String(row.status || "pending_review").toLowerCase();
     acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});
@@ -92,7 +103,7 @@ export default async function OwnerAiOpsPage() {
                   return (
                     <tr key={row.id} className="border-b border-slate-100 text-slate-800">
                       <td className="px-3 py-3 font-mono text-xs">{row.id}</td>
-                      <td className="px-3 py-3">{row.status || "unknown"}</td>
+                      <td className="px-3 py-3">{jobStatusLabel(row.status)}</td>
                       <td className="px-3 py-3">{row.started_at ? new Date(row.started_at).toLocaleString("es-ES") : "—"}</td>
                       <td className="px-3 py-3">{row.finished_at ? new Date(row.finished_at).toLocaleString("es-ES") : "—"}</td>
                       <td className="px-3 py-3">{duration != null ? `${duration}s` : "—"}</td>

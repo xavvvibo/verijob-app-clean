@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 function evidenceLabel(type: unknown) {
   const t = String(type || "").toLowerCase();
-  if (!t) return "Sin tipo";
+  if (!t) return "Pendiente de clasificación";
   if (t.includes("contr")) return "Contrato";
   if (t.includes("nomina")) return "Nómina";
   if (t.includes("vida")) return "Vida laboral";
@@ -15,11 +15,11 @@ function evidenceLabel(type: unknown) {
 
 function verificationState(status: unknown) {
   const s = String(status || "").toLowerCase();
-  if (!s) return "sin_estado";
+  if (!s) return "pendiente_validacion";
   if (s === "approved" || s === "verified") return "verificada";
   if (s === "rejected") return "rechazada";
   if (s.includes("pending") || s.includes("request")) return "pendiente";
-  return s;
+  return "pendiente_validacion";
 }
 
 export default async function OwnerEvidencesPage({
@@ -80,7 +80,7 @@ export default async function OwnerEvidencesPage({
     acc[entry.type] = (acc[entry.type] || 0) + 1;
     return acc;
   }, {});
-  const noState = normalized.filter((x) => x.state === "sin_estado").length;
+  const noState = normalized.filter((x) => x.state === "pendiente_validacion").length;
   const unlinked = normalized.filter((x) => !x.linked).length;
 
   const types = Array.from(new Set(normalized.map((x) => x.type.toLowerCase()))).filter(Boolean);
@@ -95,7 +95,7 @@ export default async function OwnerEvidencesPage({
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Sin estado</div>
+            <div className="text-xs text-slate-500">Pendientes de validación</div>
             <div className="text-xl font-semibold text-slate-900">{noState}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -131,7 +131,7 @@ export default async function OwnerEvidencesPage({
             <option value="pendiente">Pendiente</option>
             <option value="verificada">Verificada</option>
             <option value="rechazada">Rechazada</option>
-            <option value="sin_estado">Sin estado</option>
+            <option value="pendiente_validacion">Pendiente de validación</option>
           </select>
           <select name="linked" defaultValue={linkedFilter} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
             <option value="all">Vinculación: todas</option>
@@ -178,7 +178,7 @@ export default async function OwnerEvidencesPage({
                       </td>
                       <td className="px-3 py-3">{entry.type}</td>
                       <td className="px-3 py-3">
-                        <span className={entry.state === "sin_estado" ? "font-semibold text-amber-700" : "text-slate-800"}>
+                        <span className={entry.state === "pendiente_validacion" ? "font-semibold text-amber-700" : "text-slate-800"}>
                           {entry.state.replaceAll("_", " ")}
                         </span>
                       </td>
