@@ -102,24 +102,7 @@ export default function Topbar({ role }: { role?: Role }) {
         ) : null}
         <div className="flex items-center gap-4">
           <div className="flex min-w-0 items-center gap-4 lg:gap-6">
-            <Link href="/dashboard" className="flex items-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/branding/verijob-logo-horizontal.png"
-                alt="Verijob"
-                className="h-10 w-auto object-contain lg:h-12"
-                loading="eager"
-              />
-            </Link>
-
-            <div className="hidden md:inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/branding/verijob-mark.png"
-                alt="Verijob"
-                className="h-4 w-4 object-contain"
-                loading="lazy"
-              />
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700">
               <span>{userPlanLabel}</span>
               {membershipRole && (pathname === "/company" || pathname.startsWith("/company/")) ? (
                 <span className="text-[10px] font-medium uppercase tracking-wide text-slate-500">· {membershipRole}</span>

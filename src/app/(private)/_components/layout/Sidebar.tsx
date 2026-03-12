@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -163,46 +162,18 @@ export default function Sidebar({ role }: { role?: Role }) {
   const normalizedRole = String(role || "candidate").toLowerCase();
   const candidateOnboardingLocked = normalizedRole === "candidate" && pathname.startsWith("/onboarding");
   const sections = getSections(role, candidateOnboardingLocked);
-  const [companyName, setCompanyName] = useState<string | null>(null);
-  const [companyPlanLabel, setCompanyPlanLabel] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (normalizedRole !== "company") return;
-    let alive = true;
-    (async () => {
-      try {
-        const res = await fetch("/api/company/dashboard", { cache: "no-store" });
-        const data = await res.json().catch(() => null);
-        if (!alive || !res.ok || !data) return;
-        setCompanyName(typeof data.company_name === "string" ? data.company_name : null);
-        setCompanyPlanLabel(typeof data.plan_label === "string" ? data.plan_label : null);
-      } catch {}
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [normalizedRole]);
 
   return (
     <aside className="sticky top-0 h-screen border-r border-slate-200 bg-white">
       <div className="flex h-full flex-col">
         <div className="px-4 py-4 border-b border-slate-200">
-          <Link href="/dashboard" className="flex items-center gap-3">
+          <Link href="/dashboard" className="flex items-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/branding/verijob-logo-compact.png" alt="Verijob" className="h-8 w-auto" />
-            <div className="leading-tight">
-              <div className="text-sm font-extrabold text-slate-900">Verijob</div>
-              <div className="text-[11px] font-semibold text-slate-500">
-                {normalizedRole === "company"
-                  ? companyName || "Tu empresa"
-                  : String(role || "candidate").toUpperCase()}
-              </div>
-              {normalizedRole === "company" ? (
-                <div className="text-[10px] text-slate-400 uppercase tracking-wide">
-                  Plan {companyPlanLabel || "Free"}
-                </div>
-              ) : null}
-            </div>
+            <img
+              src="/brand/logo.png"
+              alt="Verijob"
+              className="h-10 w-auto object-contain lg:h-12"
+            />
           </Link>
         </div>
 
