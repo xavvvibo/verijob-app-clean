@@ -39,7 +39,7 @@ export default function PublicAuthShell({
         <aside className="flex items-center px-8 py-10 sm:px-10 lg:px-20 lg:py-16">
           <div className="w-full max-w-xl">
             <img
-              src="/brand/verijob-logo-slogan.svg"
+              src="/brand/verijob-logo-no-tagline.png"
               alt="Verijob"
               className="mb-10 h-16 w-auto object-contain lg:h-20"
               loading="eager"
