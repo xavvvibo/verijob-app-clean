@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
+import { createServerSupabaseClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +15,16 @@ function scoreLabel(score: number) {
   return "Incompleto";
 }
 
+function normalizeCompanyStatus(companyStatus: unknown, profileStatus: unknown) {
+  const c = String(companyStatus || "").toLowerCase();
+  const p = String(profileStatus || "").toLowerCase();
+  if (c === "verified" || c === "active") return "verified";
+  if (p.includes("verified")) return "verified";
+  if (c === "unverified" || c === "pending" || c === "draft") return "unverified";
+  if (p.includes("unverified") || p.includes("pending")) return "unverified";
+  return c || p || "unknown";
+}
+
 export default async function OwnerCompaniesPage({
   searchParams,
 }: {
@@ -24,7 +36,18 @@ export default async function OwnerCompaniesPage({
   const profileFilter = String(sp.profile || "all").toLowerCase();
   const q = String(sp.q || "").trim().toLowerCase();
 
-  const supabase = await createClient();
+  const sessionClient = await createServerSupabaseClient();
+  const { data: auth } = await sessionClient.auth.getUser();
+  if (!auth?.user) redirect("/login?next=/owner/companies");
+  const { data: ownerProfile } = await sessionClient
+    .from("profiles")
+    .select("role")
+    .eq("id", auth.user.id)
+    .maybeSingle();
+  const ownerRole = String(ownerProfile?.role || "").toLowerCase();
+  if (ownerRole !== "owner" && ownerRole !== "admin") redirect("/dashboard?forbidden=1&from=owner");
+
+  const supabase = createServiceRoleClient();
 
   let companies: any[] = [];
   const companiesWithStatus = await supabase
@@ -99,11 +122,11 @@ export default async function OwnerCompaniesPage({
   const normalized = rows.map((row: any) => {
     const id = String(row.id || "");
     const profile = profileByCompany.get(id);
-    const status = String(profile?.company_verification_status || "unverified").toLowerCase();
+    const status = normalizeCompanyStatus(row.status, profile?.company_verification_status);
     const completion = Number(profile?.profile_completeness_score || 0);
     const reqCount = requestsByCompany.get(id) || 0;
     const pending = pendingByCompany.get(id) || 0;
-    const lastActivity = lastActivityByCompany.get(id) || null;
+    const lastActivity = lastActivityByCompany.get(id) || row.updated_at || row.created_at || null;
     const activityState = reqCount > 0 ? "active" : "inactive";
     return {
       row,
@@ -178,8 +201,7 @@ export default async function OwnerCompaniesPage({
           <select name="status" defaultValue={statusFilter} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
             <option value="all">Estado: todos</option>
             <option value="unverified">No verificada</option>
-            <option value="verified_document">Verificada documental</option>
-            <option value="verified_paid">Verificada por plan</option>
+            <option value="verified">Verificada</option>
           </select>
           <select name="activity" defaultValue={activityFilter} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
             <option value="all">Actividad: todas</option>

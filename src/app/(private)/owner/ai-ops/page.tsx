@@ -29,13 +29,16 @@ export default async function OwnerAiOpsPage() {
     }
   }
   const avgSeconds = measured ? Math.round(totalDurationMs / measured / 1000) : 0;
+  const pendingCount = (statusCount.queued || 0) + (statusCount.pending || 0) + (statusCount.processing || 0) + (statusCount.running || 0);
+  const failedCount = (statusCount.failed || 0) + (statusCount.error || 0);
+  const retryCount = statusCount.retrying || 0;
 
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Procesamiento automático</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Estado operativo de procesamiento automático (parsing CV y jobs internos), con foco en fiabilidad y tiempos.
+          Módulo técnico owner para monitorizar jobs internos de parsing y salud operativa de automatizaciones.
         </p>
       </section>
 
@@ -46,15 +49,15 @@ export default async function OwnerAiOpsPage() {
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm text-slate-500">Pendientes</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{statusCount.queued || 0}</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{pendingCount}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm text-slate-500">Fallidos</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{statusCount.failed || 0}</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{failedCount}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-sm text-slate-500">Retries aproximados</p>
-          <p className="mt-2 text-2xl font-semibold text-slate-900">{statusCount.retrying || 0}</p>
+          <p className="text-sm text-slate-500">Retries</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">{retryCount}</p>
         </article>
         <article className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm text-slate-500">Tiempo medio</p>

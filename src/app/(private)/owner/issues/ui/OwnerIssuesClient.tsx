@@ -301,18 +301,23 @@ export default function OwnerIssuesClient() {
                     <td className="px-3 py-3">
                       <div className="flex gap-2">
                         <button
+                          disabled={!isUuid(String(it.id || ""))}
                           onClick={() => setStatus(it.id, "in_progress")}
-                          className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold hover:bg-slate-50"
+                          className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           En curso
                         </button>
                         <button
+                          disabled={!isUuid(String(it.id || ""))}
                           onClick={() => setStatus(it.id, "resolved")}
-                          className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
+                          className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           Marcar como resuelto
                         </button>
                       </div>
+                      {!isUuid(String(it.id || "")) ? (
+                        <div className="mt-1 text-[11px] text-amber-700">ID inválido: acción deshabilitada</div>
+                      ) : null}
                     </td>
                   </tr>
                 ))

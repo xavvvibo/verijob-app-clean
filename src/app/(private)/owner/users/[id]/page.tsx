@@ -25,7 +25,8 @@ function fmtDate(value: string | null | undefined) {
 }
 
 export default async function OwnerUserDetailPage({ params }: any) {
-  const targetUserId = String(params?.id || "").trim();
+  const resolvedParams = await params;
+  const targetUserId = String(resolvedParams?.id || "").trim();
   if (!isUuid(targetUserId)) notFound();
 
   const supabase = await createServerSupabaseClient();
@@ -44,6 +45,7 @@ export default async function OwnerUserDetailPage({ params }: any) {
   const admin = createServiceRoleClient();
 
   const [
+    authUserRes,
     userRes,
     candidateProfileRes,
     experiencesRes,
@@ -52,6 +54,7 @@ export default async function OwnerUserDetailPage({ params }: any) {
     subscriptionsRes,
     actionsRes,
   ] = await Promise.all([
+    admin.auth.admin.getUserById(targetUserId),
     admin
       .from("profiles")
       .select("id,email,full_name,role,onboarding_completed,active_company_id,created_at")
@@ -94,9 +97,20 @@ export default async function OwnerUserDetailPage({ params }: any) {
       .limit(10),
   ]);
 
-  if (!userRes.data) notFound();
+  const authUser = (authUserRes as any)?.data?.user || null;
+  if (!authUser) notFound();
 
-  const user = userRes.data as any;
+  const profileUser = userRes.data as any;
+  const user = {
+    id: String(authUser.id || targetUserId),
+    email: profileUser?.email || authUser.email || null,
+    full_name: profileUser?.full_name || null,
+    role: profileUser?.role || null,
+    onboarding_completed: profileUser?.onboarding_completed ?? null,
+    active_company_id: profileUser?.active_company_id || null,
+    created_at: profileUser?.created_at || authUser.created_at || null,
+    last_sign_in_at: authUser.last_sign_in_at ? String(authUser.last_sign_in_at) : null,
+  };
   const latestSub = Array.isArray(subscriptionsRes.data) && subscriptionsRes.data.length > 0 ? subscriptionsRes.data[0] : null;
 
   let activeCompanyName: string | null = null;
@@ -113,6 +127,21 @@ export default async function OwnerUserDetailPage({ params }: any) {
   const evidences = Array.isArray(evidencesRes.data) ? evidencesRes.data : [];
   const experiences = Array.isArray(experiencesRes.data) ? experiencesRes.data : [];
   const actions = Array.isArray(actionsRes.data) ? actionsRes.data : [];
+  const trustScore = candidateProfileRes.data?.trust_score ?? null;
+
+  const activityDates = [
+    user.created_at,
+    user.last_sign_in_at,
+    ...experiences.map((row: any) => row?.start_date || row?.created_at || null),
+    ...verifications.map((row: any) => row?.resolved_at || row?.created_at || null),
+    ...evidences.map((row: any) => row?.created_at || null),
+  ]
+    .map((v) => String(v || ""))
+    .filter(Boolean)
+    .map((v) => ({ raw: v, ts: Date.parse(v) }))
+    .filter((v) => Number.isFinite(v.ts))
+    .sort((a, b) => b.ts - a.ts);
+  const lastActivityAt = activityDates.length > 0 ? activityDates[0].raw : null;
 
   return (
     <div className="space-y-5">
@@ -138,11 +167,11 @@ export default async function OwnerUserDetailPage({ params }: any) {
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Rol</div>
-            <div className="text-sm font-semibold text-slate-900">{user.role || "—"}</div>
+            <div className="text-sm font-semibold text-slate-900">{user.role || "Sin perfil"}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Onboarding</div>
-            <div className="text-sm font-semibold text-slate-900">{user.onboarding_completed ? "Completado" : "Pendiente"}</div>
+            <div className="text-xs text-slate-500">User ID</div>
+            <div className="text-xs font-semibold text-slate-900 font-mono break-all">{user.id}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 md:col-span-2 xl:col-span-2">
             <div className="text-xs text-slate-500">Empresa activa</div>
@@ -150,12 +179,23 @@ export default async function OwnerUserDetailPage({ params }: any) {
             <div className="text-xs text-slate-500">{activeCompanyName || "Sin empresa activa"}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Trust score candidato</div>
-            <div className="text-sm font-semibold text-slate-900">{candidateProfileRes.data?.trust_score ?? "—"}</div>
+            <div className="text-xs text-slate-500">Plan</div>
+            <div className="text-sm font-semibold text-slate-900">{latestSub?.plan || "free"}</div>
+            <div className="text-xs text-slate-500">{latestSub?.status || "sin suscripción activa"}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Creado</div>
+            <div className="text-xs text-slate-500">Onboarding / perfil</div>
+            <div className="text-sm font-semibold text-slate-900">
+              {user.onboarding_completed == null ? "Sin perfil" : user.onboarding_completed ? "Completado" : "Pendiente"}
+            </div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Fecha de alta</div>
             <div className="text-sm font-semibold text-slate-900">{fmtDate(user.created_at)}</div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Última actividad</div>
+            <div className="text-sm font-semibold text-slate-900">{fmtDate(lastActivityAt)}</div>
           </div>
         </div>
       </section>
@@ -175,9 +215,17 @@ export default async function OwnerUserDetailPage({ params }: any) {
             <div className="text-xs text-slate-500">Evidencias</div>
             <div className="text-xl font-semibold text-slate-900">{evidencesRes.count || 0}</div>
           </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Trust score</div>
+            <div className="text-xl font-semibold text-slate-900">{trustScore ?? "—"}</div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Suscripción</div>
+            <div className="text-xl font-semibold text-slate-900">{latestSub?.status || "free"}</div>
+          </div>
         </div>
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <div className="mt-4 grid gap-4 xl:grid-cols-3">
           <div className="rounded-lg border border-slate-200 p-3">
             <div className="text-sm font-semibold text-slate-900">Últimas experiencias</div>
             {experiences.length === 0 ? (
@@ -202,6 +250,21 @@ export default async function OwnerUserDetailPage({ params }: any) {
                 {verifications.map((row: any) => (
                   <li key={row.id} className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
                     {row.company_name_target || "Empresa"} · {row.status || "—"} · {row.verification_channel || "email"}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-slate-200 p-3">
+            <div className="text-sm font-semibold text-slate-900">Últimas evidencias</div>
+            {evidences.length === 0 ? (
+              <div className="mt-2 text-sm text-slate-500">Sin evidencias registradas.</div>
+            ) : (
+              <ul className="mt-2 space-y-2 text-sm text-slate-700">
+                {evidences.map((row: any) => (
+                  <li key={row.id} className="rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
+                    {row.document_type || row.evidence_type || "Documento"} · {row.validation_status || "sin estado"}
                   </li>
                 ))}
               </ul>

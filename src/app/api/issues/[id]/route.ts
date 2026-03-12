@@ -13,7 +13,8 @@ function isUuid(value: string) {
 }
 
 export async function PATCH(req: Request, ctx: any) {
-  const id = String(ctx?.params?.id || "").trim();
+  const params = await ctx?.params;
+  const id = String(params?.id || "").trim();
   if (!isUuid(id)) {
     return NextResponse.json({ error: "invalid_issue_id" }, { status: 400 });
   }

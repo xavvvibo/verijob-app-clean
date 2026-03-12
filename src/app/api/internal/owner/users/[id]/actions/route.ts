@@ -27,7 +27,8 @@ export async function POST(req: Request, ctx: any) {
   const owner = await requireOwner();
   if (!owner.ok) return json(owner.status, { error: owner.error });
 
-  const targetUserId = String(ctx?.params?.id || "").trim();
+  const params = await ctx?.params;
+  const targetUserId = String(params?.id || "").trim();
   if (!isUuid(targetUserId)) return json(400, { error: "invalid_target_user_id" });
 
   const body = await req.json().catch(() => ({}));
