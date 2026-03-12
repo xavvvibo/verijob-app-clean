@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,13 @@ type ProfileRow = {
   onboarding_completed: boolean | null;
   created_at: string | null;
   active_company_id: string | null;
+};
+
+type AuthUserRow = {
+  id: string;
+  email: string | null;
+  created_at: string | null;
+  last_sign_in_at: string | null;
 };
 
 function json(status: number, body: any) {
@@ -31,6 +39,57 @@ function normalizeRole(v: string | null) {
   return null;
 }
 
+async function listAllAuthUsers(admin: ReturnType<typeof createServiceRoleClient>) {
+  const out: AuthUserRow[] = [];
+  const perPage = 200;
+  let page = 1;
+  let guard = 0;
+
+  while (guard < 100) {
+    guard += 1;
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) {
+      return { rows: [] as AuthUserRow[], error };
+    }
+    const users = Array.isArray(data?.users) ? data.users : [];
+    for (const u of users as any[]) {
+      out.push({
+        id: String(u?.id || ""),
+        email: u?.email ? String(u.email) : null,
+        created_at: u?.created_at ? String(u.created_at) : null,
+        last_sign_in_at: u?.last_sign_in_at ? String(u.last_sign_in_at) : null,
+      });
+    }
+    if (users.length < perPage) break;
+    page += 1;
+  }
+
+  return { rows: out, error: null };
+}
+
+async function selectProfilesByIds(admin: ReturnType<typeof createServiceRoleClient>, ids: string[]) {
+  if (ids.length === 0) return { rows: [] as ProfileRow[], error: null as any };
+  const chunkSize = 500;
+  const all: ProfileRow[] = [];
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize);
+    const { data, error } = await admin
+      .from("profiles")
+      .select("id, email, full_name, role, onboarding_completed, created_at, active_company_id")
+      .in("id", chunk);
+    if (error) return { rows: [] as ProfileRow[], error };
+    if (Array.isArray(data)) all.push(...(data as ProfileRow[]));
+  }
+  return { rows: all, error: null as any };
+}
+
+function ts(raw: unknown) {
+  const value = String(raw || "");
+  if (!value) return 0;
+  const t = Date.parse(value);
+  return Number.isFinite(t) ? t : 0;
+}
+
 export async function GET(req: Request) {
   try {
     const url = new URL(req.url);
@@ -46,7 +105,7 @@ export async function GET(req: Request) {
 
     const { data: userRes, error: userErr } = await supabase.auth.getUser();
     if (userErr || !userRes?.user) {
-      return json(401, { route_version: "owner-users-v6", error: "unauthorized" });
+      return json(401, { route_version: "owner-users-v7", error: "unauthorized" });
     }
 
     const { data: profile, error: profErr } = await supabase
@@ -56,65 +115,84 @@ export async function GET(req: Request) {
       .maybeSingle();
 
     if (profErr || !profile) {
-      return json(403, { route_version: "owner-users-v6", error: "profile_not_found" });
+      return json(403, { route_version: "owner-users-v7", error: "profile_not_found" });
     }
     if (!(["owner", "admin"].includes(String(profile.role || "").toLowerCase()))) {
-      return json(403, { route_version: "owner-users-v6", error: "forbidden" });
+      return json(403, { route_version: "owner-users-v7", error: "forbidden" });
     }
 
-    let query = supabase
-      .from("profiles")
-      .select("id, email, full_name, role, onboarding_completed, created_at, active_company_id", { count: "exact" })
-      .order("created_at", { ascending: false })
-      .range(offset, offset + limit - 1);
+    const admin = createServiceRoleClient();
 
-    const role = normalizeRole(roleFilter);
-    if (role) {
-      query = query.eq("role", role);
+    const { rows: authUsers, error: authListError } = await listAllAuthUsers(admin);
+    if (authListError) {
+      return json(400, { route_version: "owner-users-v7", error: "auth_users_query_failed", details: authListError.message });
     }
 
-    if (quickFilter === "onboarding_incomplete") {
-      query = query.eq("onboarding_completed", false);
-    } else if (quickFilter === "with_company") {
-      query = query.not("active_company_id", "is", null);
-    } else if (quickFilter === "without_company") {
-      query = query.is("active_company_id", null);
+    const authUserIds = authUsers.map((u) => String(u.id || "")).filter((id) => isUuid(id));
+    const { rows: profileRows, error: profilesError } = await selectProfilesByIds(admin, authUserIds);
+    if (profilesError) {
+      return json(400, { route_version: "owner-users-v7", error: "profiles_query_failed", details: profilesError.message });
     }
 
+    const profileById = new Map(profileRows.map((row) => [String(row.id), row]));
+    const mergedRows: ProfileRow[] = authUsers.map((authRow) => {
+      const id = String(authRow.id || "");
+      const profileRow = profileById.get(id) || null;
+      return {
+        id,
+        email: profileRow?.email || authRow.email || null,
+        full_name: profileRow?.full_name || null,
+        role: profileRow?.role || null,
+        onboarding_completed: profileRow?.onboarding_completed ?? null,
+        created_at: profileRow?.created_at || authRow.created_at || null,
+        active_company_id: profileRow?.active_company_id || null,
+      };
+    });
+
+    let companyMatchIds = new Set<string>();
     if (q) {
-      const orParts = [
-        `email.ilike.%${q}%`,
-        `full_name.ilike.%${q}%`,
-        `id.ilike.%${q}%`,
-        `role.ilike.%${q}%`,
-        `active_company_id.ilike.%${q}%`,
-      ];
-
-      const { data: companyMatches } = await supabase
+      const { data: companyMatches } = await admin
         .from("companies")
         .select("id")
         .ilike("name", `%${q}%`)
-        .limit(50);
+        .limit(100);
 
-      const companyIds = (companyMatches || [])
-        .map((c: any) => String(c?.id || ""))
-        .filter((id: string) => isUuid(id));
-      if (companyIds.length > 0) {
-        orParts.push(`active_company_id.in.(${companyIds.join(",")})`);
-      }
-
-      query = query.or(orParts.join(","));
+      companyMatchIds = new Set(
+        (companyMatches || [])
+          .map((c: any) => String(c?.id || ""))
+          .filter((id: string) => isUuid(id))
+      );
     }
 
-    const { data, error, count } = await query;
+    const role = normalizeRole(roleFilter);
+    const qLower = q.toLowerCase();
+    const filteredRows = mergedRows.filter((row) => {
+      if (role && normalizeRole(row.role) !== role) return false;
 
-    if (error) {
-      return json(400, { route_version: "owner-users-v6", error: "profiles_query_failed", details: error.message });
-    }
+      if (quickFilter === "onboarding_incomplete" && row.onboarding_completed !== false) return false;
+      if (quickFilter === "with_company" && !row.active_company_id) return false;
+      if (quickFilter === "without_company" && !!row.active_company_id) return false;
 
-    const rows: ProfileRow[] = Array.isArray(data) ? (data as ProfileRow[]) : [];
-    const { data: profileRoles } = await supabase.from("profiles").select("role,onboarding_completed,active_company_id");
-    const profileRoleRows = Array.isArray(profileRoles) ? profileRoles : [];
+      if (!qLower) return true;
+      const haystack = [
+        row.email || "",
+        row.full_name || "",
+        row.id || "",
+        row.role || "",
+        row.active_company_id || "",
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (haystack.includes(qLower)) return true;
+      if (row.active_company_id && companyMatchIds.has(String(row.active_company_id))) return true;
+      return false;
+    });
+
+    filteredRows.sort((a, b) => ts(b.created_at) - ts(a.created_at));
+    const total = filteredRows.length;
+    const rows = filteredRows.slice(offset, offset + limit);
+
+    const profileRoleRows = profileRows;
     const summary = {
       candidates: profileRoleRows.filter((r: any) => String(r.role || "").toLowerCase() === "candidate").length,
       companies: profileRoleRows.filter((r: any) => String(r.role || "").toLowerCase() === "company").length,
@@ -124,6 +202,8 @@ export async function GET(req: Request) {
       }).length,
       onboarding_incomplete: profileRoleRows.filter((r: any) => Boolean(r.onboarding_completed) === false).length,
       with_active_company: profileRoleRows.filter((r: any) => Boolean(r.active_company_id)).length,
+      without_profile: authUsers.length - profileRows.length,
+      total_auth_users: authUsers.length,
     };
     const userIds = rows.map((r) => String(r.id)).filter(Boolean);
     const companyIds = Array.from(new Set(rows.map((r) => String(r.active_company_id || "")).filter((id) => isUuid(id))));
@@ -137,29 +217,29 @@ export async function GET(req: Request) {
       candidateProfilesRes,
     ] = await Promise.all([
       userIds.length
-        ? supabase.from("employment_records").select("candidate_id,created_at").in("candidate_id", userIds)
+        ? admin.from("employment_records").select("candidate_id,created_at").in("candidate_id", userIds)
         : Promise.resolve({ data: [] as any[] } as any),
       userIds.length
-        ? supabase
+        ? admin
             .from("verification_requests")
             .select("requested_by,status,created_at,requested_at,resolved_at")
             .in("requested_by", userIds)
         : Promise.resolve({ data: [] as any[] } as any),
       userIds.length
-        ? supabase.from("evidences").select("uploaded_by,created_at").in("uploaded_by", userIds)
+        ? admin.from("evidences").select("uploaded_by,created_at").in("uploaded_by", userIds)
         : Promise.resolve({ data: [] as any[] } as any),
       userIds.length
-        ? supabase
+        ? admin
             .from("subscriptions")
             .select("user_id,plan,status,current_period_end,created_at")
             .in("user_id", userIds)
             .order("created_at", { ascending: false })
         : Promise.resolve({ data: [] as any[] } as any),
       companyIds.length
-        ? supabase.from("companies").select("id,name").in("id", companyIds)
+        ? admin.from("companies").select("id,name").in("id", companyIds)
         : Promise.resolve({ data: [] as any[] } as any),
       userIds.length
-        ? supabase.from("candidate_profiles").select("user_id,trust_score").in("user_id", userIds)
+        ? admin.from("candidate_profiles").select("user_id,trust_score").in("user_id", userIds)
         : Promise.resolve({ data: [] as any[] } as any),
     ]);
 
@@ -267,25 +347,25 @@ export async function GET(req: Request) {
           limit,
           offset,
           returned: users.length,
-          total: count ?? null,
+          total: total ?? null,
         },
       });
     } catch {}
 
     return json(200, {
-      route_version: "owner-users-v6",
+      route_version: "owner-users-v7",
       q,
       role_filter: roleFilter,
       quick_filter: quickFilter,
       limit,
       offset,
-      total: count ?? null,
+      total: total ?? null,
       users,
       summary,
     });
   } catch (e: any) {
     return json(500, {
-      route_version: "owner-users-v6",
+      route_version: "owner-users-v7",
       error: "internal_error",
       details: e?.message || String(e),
     });
