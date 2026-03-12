@@ -170,7 +170,7 @@ export default function Sidebar({ role }: { role?: Role }) {
           <Link href="/dashboard" className="flex items-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/brand/logo.png"
+              src="/brand/verijob-logo.svg"
               alt="Verijob"
               className="h-10 w-auto object-contain lg:h-12"
             />

@@ -5,8 +5,8 @@ export const metadata: Metadata = {
   title: { default: "VERIJOB", template: "%s" },
   description: "Verificación de experiencia y credibilidad profesional.",
   icons: {
-    icon: "/branding/favicon.png",
-    shortcut: "/branding/favicon.png",
+    icon: "/brand/verijob-icon.svg",
+    shortcut: "/brand/verijob-icon.svg",
     apple: "/apple-touch-icon.png",
   },
 };
