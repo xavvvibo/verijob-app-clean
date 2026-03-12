@@ -18,6 +18,8 @@ type AlertItem = {
 
 export const dynamic = "force-dynamic";
 
+type GlobalSignalLevel = "ok" | "warning" | "critical";
+
 function MetricCard({
   title,
   value,
@@ -111,6 +113,116 @@ function AlertCard({ alert }: { alert: AlertItem }) {
         </Link>
       ) : null}
     </article>
+  );
+}
+
+function signalStyles(level: GlobalSignalLevel) {
+  if (level === "ok") return { dot: "bg-emerald-500", chip: "border-emerald-200 bg-emerald-50 text-emerald-700", label: "OK" };
+  if (level === "warning") return { dot: "bg-amber-500", chip: "border-amber-200 bg-amber-50 text-amber-700", label: "Atención" };
+  return { dot: "bg-rose-500", chip: "border-rose-200 bg-rose-50 text-rose-700", label: "Acción" };
+}
+
+function GlobalSignalCard({
+  title,
+  level,
+  detail,
+}: {
+  title: string;
+  level: GlobalSignalLevel;
+  detail: string;
+}) {
+  const styles = signalStyles(level);
+  return (
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className={`h-2.5 w-2.5 rounded-full ${styles.dot}`} />
+          <p className="text-sm font-semibold text-slate-900">{title}</p>
+        </div>
+        <span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${styles.chip}`}>{styles.label}</span>
+      </div>
+      <p className="mt-2 text-xs text-slate-600">{detail}</p>
+    </article>
+  );
+}
+
+function FunnelVisual({
+  steps,
+}: {
+  steps: Array<{ label: string; value: number }>;
+}) {
+  const max = Math.max(1, ...steps.map((s) => s.value));
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="space-y-3">
+        {steps.map((step) => {
+          const width = Math.max(6, Math.round((step.value / max) * 100));
+          return (
+            <div key={step.label} className="space-y-1">
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="font-medium text-slate-700">{step.label}</span>
+                <span className="font-semibold text-slate-900">{step.value}</span>
+              </div>
+              <div className="h-2.5 rounded-full bg-slate-100">
+                <div className="h-2.5 rounded-full bg-blue-600" style={{ width: `${width}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function WeeklyVerificationChart({
+  labels,
+  requested,
+  verified,
+}: {
+  labels: string[];
+  requested: number[];
+  verified: number[];
+}) {
+  const width = 420;
+  const height = 150;
+  const padX = 26;
+  const padY = 18;
+  const innerW = width - padX * 2;
+  const innerH = height - padY * 2;
+  const maxValue = Math.max(1, ...requested, ...verified);
+  const points = labels.map((_, idx) => {
+    const x = padX + (idx * innerW) / Math.max(1, labels.length - 1);
+    const yReq = padY + innerH - (requested[idx] / maxValue) * innerH;
+    const yVer = padY + innerH - (verified[idx] / maxValue) * innerH;
+    return { x, yReq, yVer };
+  });
+  const reqPath = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.yReq}`).join(" ");
+  const verPath = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.yVer}`).join(" ");
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <svg viewBox={`0 0 ${width} ${height}`} className="h-44 w-full">
+        <line x1={padX} y1={height - padY} x2={width - padX} y2={height - padY} stroke="#cbd5e1" strokeWidth="1" />
+        <line x1={padX} y1={padY} x2={padX} y2={height - padY} stroke="#cbd5e1" strokeWidth="1" />
+        <path d={reqPath} fill="none" stroke="#2563eb" strokeWidth="2.5" />
+        <path d={verPath} fill="none" stroke="#16a34a" strokeWidth="2.5" />
+        {points.map((p, i) => (
+          <g key={i}>
+            <circle cx={p.x} cy={p.yReq} r="2.5" fill="#2563eb" />
+            <circle cx={p.x} cy={p.yVer} r="2.5" fill="#16a34a" />
+          </g>
+        ))}
+      </svg>
+      <div className="mt-2 flex items-center gap-4 text-xs">
+        <span className="inline-flex items-center gap-1 text-slate-700"><span className="h-2 w-2 rounded-full bg-blue-600" />Solicitudes</span>
+        <span className="inline-flex items-center gap-1 text-slate-700"><span className="h-2 w-2 rounded-full bg-emerald-600" />Verificadas</span>
+      </div>
+      <div className="mt-2 grid grid-cols-4 gap-2 text-[11px] text-slate-500 sm:grid-cols-8">
+        {labels.map((label, idx) => (
+          <span key={`${label}-${idx}`} className="truncate">{label}</span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -381,6 +493,28 @@ async function OwnerOverviewServer() {
     return st !== "closed" && st !== "resolved" && st !== "done";
   }).length;
 
+  const weeklyLabels: string[] = [];
+  const weeklyRequested: number[] = [];
+  const weeklyVerified: number[] = [];
+  for (let i = 7; i >= 0; i -= 1) {
+    const bucketStart = now - (i + 1) * 7 * dayMs;
+    const bucketEnd = now - i * 7 * dayMs;
+    weeklyLabels.push(new Date(bucketEnd).toLocaleDateString("es-ES", { day: "2-digit", month: "2-digit" }));
+    weeklyRequested.push(
+      requests.filter((r: any) => {
+        const ts = Date.parse(String(r.requested_at || r.created_at || ""));
+        return Number.isFinite(ts) && ts >= bucketStart && ts < bucketEnd;
+      }).length
+    );
+    weeklyVerified.push(
+      requests.filter((r: any) => {
+        if (String(r.status || "").toLowerCase() !== "verified") return false;
+        const ts = Date.parse(String(r.resolved_at || r.requested_at || r.created_at || ""));
+        return Number.isFinite(ts) && ts >= bucketStart && ts < bucketEnd;
+      }).length
+    );
+  }
+
   const activePublicProfiles = publicProfiles.filter((p: any) => {
     if (!p.public_token) return false;
     if (!p.expires_at) return true;
@@ -424,6 +558,23 @@ async function OwnerOverviewServer() {
   const highRejectCompanies = Array.from(companyRejectStats.values()).filter((s) => s.total >= 5 && (s.rejected / s.total) >= 0.5).length;
   const suspiciousVerifications = highRejectCompanies + duplicateEvidenceLinks;
   const manualCasesOpen = openIssues + failedJobs;
+
+  const globalSystemLevel: GlobalSignalLevel =
+    failedJobs >= 3 || openIssues >= 8 || pendingOldVerifications >= 12
+      ? "critical"
+      : failedJobs > 0 || openIssues > 0 || pendingOldVerifications > 0
+        ? "warning"
+        : "ok";
+  const globalVerificationLevel: GlobalSignalLevel =
+    pendingVerifications >= 25 || verificationSuccessRate < 45
+      ? "critical"
+      : pendingVerifications > 8 || verificationSuccessRate < 65
+        ? "warning"
+        : "ok";
+  const globalJobsLevel: GlobalSignalLevel =
+    failedJobs >= 3 ? "critical" : failedJobs > 0 || pendingJobs > 0 ? "warning" : "ok";
+  const globalIssuesLevel: GlobalSignalLevel =
+    openIssues >= 8 ? "critical" : openIssues > 0 ? "warning" : "ok";
 
   const growthOpportunities: string[] = [];
   const verifiedWithoutCompany = Math.max(candidatesVerified.size - activeCompanies, 0);
@@ -523,6 +674,34 @@ async function OwnerOverviewServer() {
         </p>
       </section>
 
+      <Section
+        title="Estado global del sistema"
+        subtitle="Semáforo rápido para detectar qué requiere acción inmediata."
+      >
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <GlobalSignalCard
+            title="Sistema"
+            level={globalSystemLevel}
+            detail={`${pendingOldVerifications} verificaciones antiguas · ${failedJobs} jobs fallidos · ${openIssues} incidencias abiertas`}
+          />
+          <GlobalSignalCard
+            title="Cola verificaciones"
+            level={globalVerificationLevel}
+            detail={`${pendingVerifications} pendientes · ratio éxito ${verificationSuccessRate}%`}
+          />
+          <GlobalSignalCard
+            title="Jobs automáticos"
+            level={globalJobsLevel}
+            detail={`${pendingJobs} pendientes · ${failedJobs} fallidos`}
+          />
+          <GlobalSignalCard
+            title="Incidencias"
+            level={globalIssuesLevel}
+            detail={`${openIssues} abiertas · ${manualCasesOpen} casos manuales`}
+          />
+        </div>
+      </Section>
+
       <Section title="Métricas clave" subtitle="Estado del negocio en una lectura de 3 segundos.">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard
@@ -555,6 +734,15 @@ async function OwnerOverviewServer() {
         title="Embudo de activación"
         subtitle="Detección rápida de fricción desde registro candidato hasta perfil verificado."
       >
+        <FunnelVisual
+          steps={[
+            { label: "Registros", value: funnelStepRegistros },
+            { label: "Onboarding completado", value: funnelStepOnboarding },
+            { label: "Perfil con experiencia", value: funnelStepExperience },
+            { label: "Primera verificación", value: funnelStepFirstVerification },
+            { label: "Perfil verificado", value: funnelStepVerified },
+          ]}
+        />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <FunnelStep step="Registros" value={funnelStepRegistros} note="Candidatos en profiles" />
           <FunnelStep
@@ -579,6 +767,17 @@ async function OwnerOverviewServer() {
             note="Al menos una verificación en estado verified"
           />
         </div>
+      </Section>
+
+      <Section
+        title="Evolución de verificaciones por semana"
+        subtitle="Comparativa semanal de solicitudes y verificaciones cerradas en estado aprobada."
+      >
+        <WeeklyVerificationChart
+          labels={weeklyLabels}
+          requested={weeklyRequested}
+          verified={weeklyVerified}
+        />
       </Section>
 
       <div className="grid gap-6 xl:grid-cols-2">

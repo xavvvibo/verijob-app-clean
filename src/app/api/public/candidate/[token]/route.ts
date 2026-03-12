@@ -156,7 +156,9 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     .eq("id", candidateId)
     .maybeSingle();
   const lifecycleStatus = String((profile as any)?.lifecycle_status || "active").toLowerCase();
-  if (lifecycleStatus === "deleted") return json(410, { error: "profile_unavailable" });
+  if (lifecycleStatus === "deleted" || lifecycleStatus === "disabled") {
+    return json(410, { error: "profile_unavailable" });
+  }
 
   const { data: cp } = await admin
     .from("candidate_profiles")
