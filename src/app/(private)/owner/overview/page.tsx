@@ -291,7 +291,7 @@ async function OwnerOverviewServer() {
   const monthAgo = now - 30 * dayMs;
   const twoMonthsAgo = now - 60 * dayMs;
 
-  const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicProfilesRes, issuesRes, employmentRes, authUsersTotal] = await Promise.all([
+  const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicLinksRes, issuesRes, employmentRes, authUsersTotal] = await Promise.all([
     admin.from("profiles").select("id,role,onboarding_completed,created_at,last_activity_at"),
     admin.from("companies").select("id,name,created_at,updated_at,status", { count: "exact" }),
     admin.from("verification_requests").select("id,status,requested_at,created_at,resolved_at,company_id,requested_by,verification_channel,external_resolved"),
@@ -299,7 +299,7 @@ async function OwnerOverviewServer() {
     admin.from("subscriptions").select("id,user_id,status,amount,created_at,plan"),
     admin.from("growth_campaigns").select("*"),
     admin.from("cv_parse_jobs").select("id,status,created_at"),
-    admin.from("profiles").select("id,public_token,expires_at"),
+    admin.from("candidate_public_links").select("id,candidate_id,public_token,expires_at,is_active,created_at"),
     admin.from("issue_reports").select("id,status,created_at"),
     admin.from("employment_records").select("id,candidate_id,created_at,verification_status"),
     countAuthUsers(admin),
@@ -312,7 +312,7 @@ async function OwnerOverviewServer() {
   const subscriptions = Array.isArray(subscriptionsRes.data) ? subscriptionsRes.data : [];
   const campaigns = Array.isArray(campaignsRes.data) ? campaignsRes.data : [];
   const jobs = Array.isArray(jobsRes.data) ? jobsRes.data : [];
-  const publicProfiles = Array.isArray(publicProfilesRes.data) ? publicProfilesRes.data : [];
+  const publicLinks = Array.isArray(publicLinksRes.data) ? publicLinksRes.data : [];
   const issues = Array.isArray(issuesRes.data) ? issuesRes.data : [];
   const employments = Array.isArray(employmentRes.data) ? employmentRes.data : [];
   const profilesForActivity = profiles;
@@ -515,7 +515,8 @@ async function OwnerOverviewServer() {
     );
   }
 
-  const activePublicProfiles = publicProfiles.filter((p: any) => {
+  const activePublicProfiles = publicLinks.filter((p: any) => {
+    if (!p.is_active) return false;
     if (!p.public_token) return false;
     if (!p.expires_at) return true;
     const ts = Date.parse(String(p.expires_at));

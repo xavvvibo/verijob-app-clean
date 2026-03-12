@@ -16,6 +16,10 @@ function isExpired(expiresAt?: string | null) {
   return t <= Date.now();
 }
 
+function isHex48(token: unknown) {
+  return /^[a-f0-9]{48}$/i.test(String(token || ""));
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -42,12 +46,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const service = createServiceRoleClient();
 
-    const { data: existing, error: existingErr } = await service
+    const { data: activeRows, error: existingErr } = await service
       .from("candidate_public_links")
-      .select("id, public_token, expires_at")
+      .select("id, candidate_id, public_token, expires_at, is_active, created_at")
       .eq("candidate_id", user.id)
       .eq("is_active", true)
-      .maybeSingle();
+      .order("created_at", { ascending: false })
+      .limit(20);
 
     if (existingErr) {
       return json(res, 400, {
@@ -57,34 +62,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    if (existing?.public_token && !isExpired(existing.expires_at)) {
-      return json(res, 200, { token: existing.public_token, route: "/pages/api/candidate/public-link" });
+    const rows = Array.isArray(activeRows) ? activeRows : [];
+    const canonicalActive = rows.find((row: any) => isHex48(row?.public_token) && !isExpired(row?.expires_at));
+
+    if (canonicalActive?.id && canonicalActive?.public_token) {
+      // Normaliza posibles duplicados activos históricos sin romper el token canónico.
+      const toDeactivate = rows
+        .filter((row: any) => String(row?.id || "") && String(row?.id || "") !== String(canonicalActive.id))
+        .map((row: any) => String(row.id));
+      if (toDeactivate.length) {
+        await service.from("candidate_public_links").update({ is_active: false }).in("id", toDeactivate);
+      }
+      return json(res, 200, {
+        token: String(canonicalActive.public_token),
+        route: "/pages/api/candidate/public-link",
+      });
     }
 
     const token = randomBytes(24).toString("hex");
     const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-    if (existing?.id) {
-      const { error } = await service
-        .from("candidate_public_links")
-        .update({
-          public_token: token,
-          expires_at: expiresAt,
-          last_viewed_at: null,
-          is_active: true,
-          created_by: user.id,
-        })
-        .eq("id", existing.id);
-
-      if (error) {
-        return json(res, 400, {
-          error: "Update failed",
-          route: "/pages/api/candidate/public-link",
-          details: error.message,
-        });
-      }
-
-      return json(res, 200, { token, route: "/pages/api/candidate/public-link" });
+    const activeIds = rows.map((row: any) => String(row?.id || "")).filter(Boolean);
+    if (activeIds.length) {
+      await service.from("candidate_public_links").update({ is_active: false }).in("id", activeIds);
     }
 
     const { error } = await service.from("candidate_public_links").insert({
@@ -102,8 +102,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         details: error.message,
       });
     }
+    const { data: persistedRows, error: persistedErr } = await service
+      .from("candidate_public_links")
+      .select("id, public_token, expires_at, is_active, created_at")
+      .eq("candidate_id", user.id)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (persistedErr) {
+      return json(res, 400, {
+        error: "Read persisted link failed",
+        route: "/pages/api/candidate/public-link",
+        details: persistedErr.message,
+      });
+    }
+    const persisted = Array.isArray(persistedRows) ? persistedRows[0] : null;
+    if (!persisted?.public_token) {
+      return json(res, 500, {
+        error: "Persisted token not found",
+        route: "/pages/api/candidate/public-link",
+      });
+    }
 
-    return json(res, 200, { token, route: "/pages/api/candidate/public-link" });
+    return json(res, 200, { token: String(persisted.public_token), route: "/pages/api/candidate/public-link" });
   } catch (e: any) {
     return json(res, 500, {
       error: "server_error",

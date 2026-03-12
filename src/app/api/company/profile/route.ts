@@ -185,6 +185,15 @@ function isRelationMissingError(error: any, relationName: string) {
   return String(error?.code || "") === "42P01" || msg.includes(`relation`) && msg.includes(relationName.toLowerCase());
 }
 
+function isDocsSchemaDriftError(error: any) {
+  const msg = String(error?.message || "").toLowerCase();
+  const code = String(error?.code || "");
+  return (
+    code === "42703" || // undefined_column
+    msg.includes("column") && msg.includes("does not exist")
+  );
+}
+
 function computeCompleteness(profile: Partial<CompanyProfileRow>) {
   const checks: boolean[] = [
     !!asTrimmedText(profile.legal_name),
@@ -332,7 +341,7 @@ async function resolveContext(supabase: any, admin: any) {
   if (membershipErr) {
     return { error: NextResponse.json({ error: "company_members_read_failed", details: membershipErr.message }, { status: 400 }) };
   }
-  if (!membership && profileRole === "company" && !onboardingCompleted) {
+  if (!membership && profileRole === "company") {
     const { error: insertMembershipErr } = await admin.from("company_members").insert({
       company_id: companyId,
       user_id: user.id,
@@ -437,13 +446,16 @@ export async function GET() {
       .limit(50);
 
     if (docsRes.error) {
-      if (!isRelationMissingError(docsRes.error, "company_verification_documents")) {
+      if (
+        !isRelationMissingError(docsRes.error, "company_verification_documents") &&
+        !isDocsSchemaDriftError(docsRes.error)
+      ) {
         return NextResponse.json(
           { error: "company_verification_documents_read_failed", details: docsRes.error.message, route_version: ROUTE_VERSION },
           { status: 400 },
         );
       }
-      verificationDocumentsWarning = "company_verification_documents_missing_migration";
+      verificationDocumentsWarning = "company_verification_documents_schema_drift";
     } else {
       verificationDocuments = Array.isArray(docsRes.data) ? (docsRes.data as any) : [];
     }
