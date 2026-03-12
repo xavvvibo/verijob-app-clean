@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { normalizePublicLanguages } from "@/lib/public/profile-languages";
+import { resolveActiveCandidatePublicLink } from "@/lib/public/candidate-public-link";
 
 type Params = { token: string };
 
@@ -8,17 +9,6 @@ function json(status: number, body: any) {
   const res = NextResponse.json(body, { status });
   res.headers.set("Cache-Control", "no-store");
   return res;
-}
-
-function isHex48(token: string) {
-  return /^[a-f0-9]{48}$/i.test(token);
-}
-
-function isExpired(expiresAt?: string | null) {
-  if (!expiresAt) return false;
-  const t = Date.parse(expiresAt);
-  if (Number.isNaN(t)) return false;
-  return t <= Date.now();
 }
 
 function isVerifiedStatus(status: any) {
@@ -114,23 +104,17 @@ function getRoleSkills(experiences: any[]) {
 }
 
 export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
-  const { token } = await ctx.params;
-
-  if (!token || !isHex48(token)) return json(404, { error: "not_found" });
+  const { token: tokenParam } = await ctx.params;
 
   const admin = createServiceRoleClient();
 
-  const { data: link, error: linkErr } = await admin
-    .from("candidate_public_links")
-    .select("id,candidate_id,expires_at,is_active")
-    .eq("public_token", token)
-    .eq("is_active", true)
-    .maybeSingle();
+  const linkResolved = await resolveActiveCandidatePublicLink(admin, tokenParam);
+  if (linkResolved.ok === false) {
+    if (linkResolved.reason === "expired") return json(410, { error: "link_expired" });
+    return json(404, { error: "not_found" });
+  }
 
-  if (linkErr || !link) return json(404, { error: "not_found" });
-  if (isExpired(link.expires_at)) return json(410, { error: "link_expired" });
-
-  const candidateId = String(link.candidate_id || "");
+  const candidateId = String(linkResolved.link.candidate_id || "");
   if (!candidateId) return json(404, { error: "not_found" });
 
   const { data: profileColumnsRes } = await admin
@@ -382,7 +366,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
 
   return json(200, {
     route_version: "public-candidate-token-v1",
-    token,
+    token: linkResolved.token,
     candidate_id: candidateId,
     teaser: {
       full_name: profileFullName,
