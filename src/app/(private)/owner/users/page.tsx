@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import OwnerTooltip from "@/components/ui/OwnerTooltip";
 
 type Row = {
   id: string;
@@ -25,8 +26,8 @@ type Row = {
 
 const ROLE_FILTERS = [
   { value: "all", label: "Todos" },
-  { value: "candidate", label: "Candidate" },
-  { value: "company", label: "Company" },
+  { value: "candidate", label: "Candidato" },
+  { value: "company", label: "Empresa" },
   { value: "owner", label: "Owner" },
   { value: "admin", label: "Admin" },
 ] as const;
@@ -70,6 +71,13 @@ export default function OwnerUsersPage() {
   const [limit, setLimit] = useState(50);
   const [offset, setOffset] = useState(0);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [summary, setSummary] = useState({
+    candidates: 0,
+    companies: 0,
+    owners: 0,
+    onboarding_incomplete: 0,
+    with_active_company: 0,
+  });
 
   const canPrev = offset > 0;
   const canNext = total == null ? rows.length === limit : offset + limit < total;
@@ -98,6 +106,13 @@ export default function OwnerUsersPage() {
       if (!res.ok) throw new Error(j?.error || "request_failed");
       setRows(Array.isArray(j?.users) ? j.users : []);
       setTotal(typeof j?.total === "number" ? j.total : null);
+      setSummary({
+        candidates: Number(j?.summary?.candidates || 0),
+        companies: Number(j?.summary?.companies || 0),
+        owners: Number(j?.summary?.owners || 0),
+        onboarding_incomplete: Number(j?.summary?.onboarding_incomplete || 0),
+        with_active_company: Number(j?.summary?.with_active_company || 0),
+      });
     } catch (e: any) {
       setErr(e?.message || "load_failed");
       setRows([]);
@@ -113,28 +128,30 @@ export default function OwnerUsersPage() {
   }, [params]);
 
   const kpis = useMemo(() => {
-    const candidates = rows.filter((r) => String(r.role || "").toLowerCase() === "candidate").length;
-    const companies = rows.filter((r) => String(r.role || "").toLowerCase() === "company").length;
-    const incomplete = rows.filter((r) => r.onboarding_completed === false).length;
-    const withCompany = rows.filter((r) => Boolean(r.active_company_id)).length;
-    return { candidates, companies, incomplete, withCompany };
-  }, [rows]);
+    return {
+      candidates: summary.candidates,
+      companies: summary.companies,
+      owners: summary.owners,
+      incomplete: summary.onboarding_incomplete,
+      withCompany: summary.with_active_company,
+    };
+  }, [summary]);
 
   return (
     <div className="space-y-5">
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Users Control Center</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Centro de usuarios</h1>
         <p className="mt-1 text-sm text-slate-600">
           Consola operativa de usuarios para soporte, revisión y monetización. Incluye búsqueda real, métricas y acceso a ficha owner.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Candidates</div>
+            <div className="text-xs text-slate-500">Candidatos</div>
             <div className="text-xl font-semibold text-slate-900">{kpis.candidates}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-            <div className="text-xs text-slate-500">Companies</div>
+            <div className="text-xs text-slate-500">Empresas</div>
             <div className="text-xl font-semibold text-slate-900">{kpis.companies}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -258,49 +275,54 @@ export default function OwnerUsersPage() {
           </div>
         ) : null}
 
-        <div className="mt-4 overflow-auto">
-          <table className="min-w-[1600px] w-full border-collapse text-sm">
+        <div className="mt-4 overflow-x-hidden">
+          <table className="w-full table-fixed border-collapse text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
-                <th className="border-b border-slate-200 px-3 py-2">id</th>
                 <th className="border-b border-slate-200 px-3 py-2">Email</th>
-                <th className="border-b border-slate-200 px-3 py-2">Nombre</th>
                 <th className="border-b border-slate-200 px-3 py-2">Rol</th>
-                <th className="border-b border-slate-200 px-3 py-2">Onboarding</th>
-                <th className="border-b border-slate-200 px-3 py-2">Plan / Suscripción</th>
-                <th className="border-b border-slate-200 px-3 py-2">Empresa activa</th>
+                <th className="border-b border-slate-200 px-3 py-2">Plan</th>
+                <th className="border-b border-slate-200 px-3 py-2">Empresa</th>
                 <th className="border-b border-slate-200 px-3 py-2">Actividad</th>
-                <th className="border-b border-slate-200 px-3 py-2">Métricas</th>
-                <th className="border-b border-slate-200 px-3 py-2">Creación</th>
+                <th className="border-b border-slate-200 px-3 py-2">
+                  <span className="inline-flex items-center gap-2">
+                    Métricas
+                    <OwnerTooltip text="Incluye experiencias, verificaciones y evidencias. Trust Score representa el grado de verificación del perfil profesional." />
+                  </span>
+                </th>
                 <th className="border-b border-slate-200 px-3 py-2">Detalle</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((r) => (
                 <tr key={r.id} className="text-slate-900">
-                  <td className="border-b border-slate-100 px-3 py-2 font-mono text-xs">{r.id}</td>
-                  <td className="border-b border-slate-100 px-3 py-2">{r.email || "-"}</td>
-                  <td className="border-b border-slate-100 px-3 py-2">{r.full_name || "-"}</td>
+                  <td className="border-b border-slate-100 px-3 py-2">
+                    <div className="truncate text-sm font-medium text-slate-900" title={r.email || "-"}>
+                      {r.email || "-"}
+                    </div>
+                    <div className="truncate text-xs text-slate-500" title={r.full_name || "-"}>
+                      {r.full_name || "Sin nombre"}
+                    </div>
+                  </td>
                   <td className="border-b border-slate-100 px-3 py-2">
                     <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${roleBadge(r.role)}`}>
                       {r.role || "-"}
                     </span>
                   </td>
-                  <td className="border-b border-slate-100 px-3 py-2">{r.onboarding_completed ? "Completado" : "Pendiente"}</td>
                   <td className="border-b border-slate-100 px-3 py-2">
                     <div className="font-medium text-slate-900">{r.plan || "free"}</div>
                     <div className="text-xs text-slate-500">{r.subscription_status || "sin suscripción activa"}</div>
                   </td>
                   <td className="border-b border-slate-100 px-3 py-2">
-                    <div className="font-mono text-xs">{r.active_company_id || "—"}</div>
-                    <div className="text-xs text-slate-500">{r.active_company_name || "Sin empresa activa"}</div>
+                    <div className="truncate text-xs text-slate-700" title={r.active_company_name || "Sin empresa activa"}>
+                      {r.active_company_name || "Sin empresa activa"}
+                    </div>
                   </td>
                   <td className="border-b border-slate-100 px-3 py-2 text-xs text-slate-700">{fmtDate(r.last_activity_at)}</td>
                   <td className="border-b border-slate-100 px-3 py-2 text-xs text-slate-700">
                     Exp {r.experiences_count} · Verif {r.verifications_count} · Ev {r.evidences_count}
                     {typeof r.trust_score === "number" ? ` · Trust ${r.trust_score}` : ""}
                   </td>
-                  <td className="border-b border-slate-100 px-3 py-2 text-xs text-slate-700">{fmtDate(r.created_at)}</td>
                   <td className="border-b border-slate-100 px-3 py-2">
                     <Link
                       href={`/owner/users/${encodeURIComponent(r.id)}`}
@@ -313,7 +335,7 @@ export default function OwnerUsersPage() {
               ))}
               {rows.length === 0 && !loading ? (
                 <tr>
-                  <td colSpan={11} className="px-3 py-8 text-center text-sm text-slate-500">
+                  <td colSpan={7} className="px-3 py-8 text-center text-sm text-slate-500">
                     Sin resultados con los filtros actuales.
                   </td>
                 </tr>

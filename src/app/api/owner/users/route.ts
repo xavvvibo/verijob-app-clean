@@ -113,6 +113,18 @@ export async function GET(req: Request) {
     }
 
     const rows: ProfileRow[] = Array.isArray(data) ? (data as ProfileRow[]) : [];
+    const { data: profileRoles } = await supabase.from("profiles").select("role,onboarding_completed,active_company_id");
+    const profileRoleRows = Array.isArray(profileRoles) ? profileRoles : [];
+    const summary = {
+      candidates: profileRoleRows.filter((r: any) => String(r.role || "").toLowerCase() === "candidate").length,
+      companies: profileRoleRows.filter((r: any) => String(r.role || "").toLowerCase() === "company").length,
+      owners: profileRoleRows.filter((r: any) => {
+        const role = String(r.role || "").toLowerCase();
+        return role === "owner" || role === "admin";
+      }).length,
+      onboarding_incomplete: profileRoleRows.filter((r: any) => Boolean(r.onboarding_completed) === false).length,
+      with_active_company: profileRoleRows.filter((r: any) => Boolean(r.active_company_id)).length,
+    };
     const userIds = rows.map((r) => String(r.id)).filter(Boolean);
     const companyIds = Array.from(new Set(rows.map((r) => String(r.active_company_id || "")).filter((id) => isUuid(id))));
 
@@ -269,6 +281,7 @@ export async function GET(req: Request) {
       offset,
       total: count ?? null,
       users,
+      summary,
     });
   } catch (e: any) {
     return json(500, {

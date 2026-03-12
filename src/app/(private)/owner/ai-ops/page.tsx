@@ -33,7 +33,7 @@ export default async function OwnerAiOpsPage() {
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Automatic Processing</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Procesamiento automático</h1>
         <p className="mt-2 text-sm text-slate-600">
           Estado operativo de procesamiento automático (parsing CV y jobs internos), con foco en fiabilidad y tiempos.
         </p>

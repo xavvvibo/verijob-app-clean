@@ -26,11 +26,23 @@ export default async function OwnerCompaniesPage({
 
   const supabase = await createClient();
 
-  const { data: companies } = await supabase
+  let companies: any[] = [];
+  const companiesWithStatus = await supabase
     .from("companies")
-    .select("id,name,created_at")
+    .select("id,name,created_at,updated_at,status")
     .order("created_at", { ascending: false })
     .limit(250);
+
+  if (companiesWithStatus.error) {
+    const fallbackCompanies = await supabase
+      .from("companies")
+      .select("id,name,created_at,updated_at")
+      .order("created_at", { ascending: false })
+      .limit(250);
+    companies = Array.isArray(fallbackCompanies.data) ? fallbackCompanies.data : [];
+  } else {
+    companies = Array.isArray(companiesWithStatus.data) ? companiesWithStatus.data : [];
+  }
 
   const rows = Array.isArray(companies) ? companies : [];
   const companyIds = rows.map((r: any) => r.id).filter(Boolean);
@@ -121,6 +133,12 @@ export default async function OwnerCompaniesPage({
   const totalInactive = normalized.filter((x) => x.activityState === "inactive").length;
   const totalPending = normalized.reduce((acc, x) => acc + x.pending, 0);
   const incomplete = normalized.filter((x) => x.completion < 80).length;
+  const verifiedByStatus =
+    rows.filter((r: any) => String(r.status || "").toLowerCase() === "verified").length ||
+    normalized.filter((x) => x.status === "verified_document" || x.status === "verified_paid").length;
+  const unverifiedByStatus =
+    rows.filter((r: any) => String(r.status || "").toLowerCase() === "unverified").length ||
+    normalized.filter((x) => x.status === "unverified").length;
 
   return (
     <div className="space-y-5">
@@ -132,18 +150,21 @@ export default async function OwnerCompaniesPage({
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-            <div className="text-xs text-slate-500">Inactivas</div>
-            <div className="text-xl font-semibold text-slate-900">{totalInactive}</div>
+            <div className="text-xs text-slate-500">Total empresas</div>
+            <div className="text-xl font-semibold text-slate-900">{rows.length}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-            <div className="text-xs text-slate-500">Pendientes</div>
-            <div className="text-xl font-semibold text-slate-900">{totalPending}</div>
+            <div className="text-xs text-slate-500">Verificadas</div>
+            <div className="text-xl font-semibold text-slate-900">{verifiedByStatus}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-            <div className="text-xs text-slate-500">Perfil incompleto</div>
-            <div className="text-xl font-semibold text-slate-900">{incomplete}</div>
+            <div className="text-xs text-slate-500">No verificadas</div>
+            <div className="text-xl font-semibold text-slate-900">{unverifiedByStatus}</div>
           </div>
         </div>
+        <p className="mt-3 text-xs text-slate-500">
+          Actividad: {rows.length - totalInactive} activas · {totalInactive} inactivas · {totalPending} pendientes · {incomplete} con perfil incompleto.
+        </p>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

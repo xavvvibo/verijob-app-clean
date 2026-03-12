@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 import type { ReactNode } from "react";
+import OwnerTooltip from "@/components/ui/OwnerTooltip";
 
 type Severity = "high" | "medium" | "low";
 
@@ -15,7 +16,7 @@ type AlertItem = {
 
 export const dynamic = "force-dynamic";
 
-function MetricCard({ title, value, note }: { title: string; value: string; note?: string }) {
+function MetricCard({ title, value, note }: { title: ReactNode; value: string; note?: string }) {
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
@@ -147,6 +148,19 @@ async function OwnerOverviewServer() {
   const publicProfiles = Array.isArray(publicProfilesRes.data) ? publicProfilesRes.data : [];
   const issues = Array.isArray(issuesRes.data) ? issuesRes.data : [];
   const employments = Array.isArray(employmentRes.data) ? employmentRes.data : [];
+  const profilesWithLastActivityRes = await supabase
+    .from("profiles")
+    .select("id,role,onboarding_completed,created_at,last_activity_at");
+  const companiesWithUpdatedRes = await supabase
+    .from("companies")
+    .select("id,created_at,updated_at,status");
+
+  const profilesForActivity = Array.isArray(profilesWithLastActivityRes.data)
+    ? profilesWithLastActivityRes.data
+    : profiles;
+  const companiesForActivity = Array.isArray(companiesWithUpdatedRes.data)
+    ? companiesWithUpdatedRes.data
+    : [];
 
   const candidateProfiles = profiles.filter((p: any) => String(p.role || "").toLowerCase() === "candidate");
   const companyProfiles = profiles.filter((p: any) => String(p.role || "").toLowerCase() === "company");
@@ -217,8 +231,19 @@ async function OwnerOverviewServer() {
   const onboardingCompleted = candidateProfiles.filter((p: any) => Boolean(p.onboarding_completed)).length;
   const onboardingPending = candidatesTotal - onboardingCompleted;
 
-  const activeProfiles = recentActivityCandidateIds.size;
-  const activeCompanies = companyIdsFromRequestsLast30.size;
+  const activeProfiles = profilesWithLastActivityRes.error
+    ? recentActivityCandidateIds.size
+    : profilesForActivity.filter((p: any) => {
+        const ts = Date.parse(String(p.last_activity_at || ""));
+        return Number.isFinite(ts) && ts >= monthAgo;
+      }).length;
+
+  const activeCompanies = companiesWithUpdatedRes.error
+    ? companyIdsFromRequestsLast30.size
+    : companiesForActivity.filter((c: any) => {
+        const ts = Date.parse(String(c.updated_at || c.created_at || ""));
+        return Number.isFinite(ts) && ts >= monthAgo;
+      }).length;
   const inactiveCompanies = Math.max(companiesTotal - activeCompanies, 0);
 
   const verificationsTotal = requests.length;
@@ -386,43 +411,34 @@ async function OwnerOverviewServer() {
     });
   }
 
-  if (alerts.length === 0) {
-    alerts.push({
-      id: "healthy",
-      severity: "low",
-      title: "Sin alertas críticas",
-      detail: "No se detectan anomalías severas con los umbrales actuales.",
-    });
-  }
-
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Owner Control Center</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Centro de dirección owner</h1>
         <p className="mt-1 text-sm text-slate-600">
           Cockpit ejecutivo para seguir activación, operación, calidad de verificación y economía del negocio.
         </p>
       </section>
 
-      <Section title="North Star" subtitle="Estado del negocio en una lectura de 3 segundos.">
+      <Section title="Métricas clave" subtitle="Estado del negocio en una lectura de 3 segundos.">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard
-            title="Perfiles activos"
+            title={<span className="inline-flex items-center gap-2">Perfiles activos <OwnerTooltip text="Perfiles con actividad reciente en los últimos 30 días. Si no existe last_activity_at, se usa actividad operativa como proxy." /></span>}
             value={String(activeProfiles)}
             note={`Base candidatos: ${candidatesTotal} · onboarding: ${onboardingCompleted}`}
           />
           <MetricCard
-            title="Empresas activas"
+            title={<span className="inline-flex items-center gap-2">Empresas activas <OwnerTooltip text="Empresas actualizadas en los últimos 30 días. Si no existe updated_at, se usa actividad de verificaciones como aproximación." /></span>}
             value={String(activeCompanies)}
             note={`${inactiveCompanies} inactivas (proxy últimos 30 días)`}
           />
           <MetricCard
-            title="Verificaciones totales"
+            title={<span className="inline-flex items-center gap-2">Verificaciones totales <OwnerTooltip text="Solicitudes de verificación registradas en el sistema, incluyendo pendientes y resueltas." /></span>}
             value={String(verificationsTotal)}
             note={`${requestsThisWeek} esta semana · ${pendingVerifications} pendientes`}
           />
           <MetricCard
-            title="MRR"
+            title={<span className="inline-flex items-center gap-2">MRR <OwnerTooltip text="Ingreso mensual recurrente estimado de suscripciones activas." /></span>}
             value={money(totalMrr)}
             note={`${subscriptionsActive.length} suscripciones activas`}
           />
@@ -430,7 +446,7 @@ async function OwnerOverviewServer() {
       </Section>
 
       <Section
-        title="Funnel de activación"
+        title="Embudo de activación"
         subtitle="Detección rápida de fricción desde registro candidato hasta perfil verificado."
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -501,19 +517,21 @@ async function OwnerOverviewServer() {
         </div>
       </Section>
 
-      <Section
-        title="Alertas y anomalías"
-        subtitle="Señales clave calculadas con umbrales operativos para reacción rápida."
-      >
-        <div className="grid gap-3 lg:grid-cols-2">
-          {alerts.map((alert) => (
-            <AlertCard key={alert.id} alert={alert} />
-          ))}
-        </div>
-      </Section>
+      {alerts.length > 0 ? (
+        <Section
+          title="Alertas y anomalías"
+          subtitle="Señales clave calculadas con umbrales operativos para reacción rápida."
+        >
+          <div className="grid gap-3 lg:grid-cols-2">
+            {alerts.map((alert) => (
+              <AlertCard key={alert.id} alert={alert} />
+            ))}
+          </div>
+        </Section>
+      ) : null}
 
       <Section
-        title="Quick actions"
+        title="Acciones rápidas"
         subtitle="Accesos rápidos para ejecutar soporte, operación y crecimiento."
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -534,7 +552,7 @@ async function OwnerOverviewServer() {
             <span className="mt-1 block text-xs font-normal text-slate-500">MRR {money(totalMrr)}</span>
           </Link>
           <Link href="/owner/growth" className="rounded-lg bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800">
-            Growth
+            Centro de crecimiento
             <span className="mt-1 block text-xs font-normal text-blue-100">{activeCampaigns} campañas activas · {leadsThisWeek} leads/semana</span>
           </Link>
         </div>

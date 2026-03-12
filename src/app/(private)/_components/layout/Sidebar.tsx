@@ -77,27 +77,27 @@ function getSections(role: Role, candidateOnboardingLocked = false): Section[] {
       {
         title: "CORE",
         items: [
-          { href: "/owner/overview", label: "Overview" },
-          { href: "/owner/users", label: "Users" },
-          { href: "/owner/companies", label: "Companies" },
-          { href: "/owner/verifications", label: "Verifications" },
-          { href: "/owner/evidences", label: "Evidence" },
+          { href: "/owner/overview", label: "Métricas clave" },
+          { href: "/owner/users", label: "Usuarios" },
+          { href: "/owner/companies", label: "Empresas" },
+          { href: "/owner/verifications", label: "Verificaciones" },
+          { href: "/owner/evidences", label: "Evidencias" },
         ],
       },
       {
         title: "GROWTH",
         items: [
-          { href: "/owner/growth", label: "Growth" },
-          { href: "/owner/marketing", label: "Marketing" },
+          { href: "/owner/growth", label: "Centro de crecimiento" },
+          { href: "/owner/marketing", label: "Centro de marketing" },
           { href: "/owner/monetization", label: "Monetización" },
         ],
       },
       {
         title: "OPERATIONS",
         items: [
-          { href: "/owner/ai-ops", label: "Automatic Processing" },
-          { href: "/owner/issues", label: "Issue Desk", badge: "LIVE" },
-          { href: "/owner/settings", label: "Settings" },
+          { href: "/owner/ai-ops", label: "Procesamiento automático" },
+          { href: "/owner/issues", label: "Centro de incidencias", badge: "LIVE" },
+          { href: "/owner/settings", label: "Configuración" },
         ],
       },
     ];

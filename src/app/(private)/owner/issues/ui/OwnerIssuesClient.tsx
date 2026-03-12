@@ -11,6 +11,7 @@ type Item = {
   path: string;
   message: string;
   status: "open" | "in_progress" | "resolved";
+  metadata?: Record<string, any> | null;
 };
 
 function fmtDate(s: string) {
@@ -41,6 +42,7 @@ export default function OwnerIssuesClient() {
   const [filterSeverity, setFilterSeverity] = useState<"all" | "low" | "med" | "high">("all");
 
   const [form, setForm] = useState({
+    issue_type: "warning",
     severity: "med",
     http_status: 500,
     error_code: "",
@@ -97,12 +99,12 @@ export default function OwnerIssuesClient() {
           message: form.message || "Sin descripción",
           user_agent: navigator.userAgent,
           referrer: document.referrer || null,
-          metadata: { source: "manual_owner" },
+          metadata: { source: "manual_owner", issue_type: form.issue_type },
         }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error ?? "failed");
-      setForm({ severity: "med", http_status: 500, error_code: "", path: "", message: "" });
+      setForm({ issue_type: "warning", severity: "med", http_status: 500, error_code: "", path: "", message: "" });
       await load();
     } catch (e: any) {
       setErr(e?.message ?? "error");
@@ -128,7 +130,7 @@ export default function OwnerIssuesClient() {
   return (
     <div className="space-y-5">
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Issue Desk</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Centro de incidencias</h1>
         <p className="mt-1 text-sm text-slate-600">
           Centro operativo de incidencias para seguimiento, priorización y resolución.
         </p>
@@ -162,6 +164,16 @@ export default function OwnerIssuesClient() {
         <p className="mt-1 text-sm text-slate-600">Registra incidencias operativas detectadas fuera del flujo automático.</p>
 
         <div className="mt-4 grid gap-3 md:grid-cols-6">
+          <select
+            className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
+            value={form.issue_type}
+            onChange={(e) => setForm((s) => ({ ...s, issue_type: e.target.value }))}
+          >
+            <option value="warning">warning</option>
+            <option value="error">error</option>
+            <option value="system">system</option>
+          </select>
+
           <select
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm"
             value={form.severity}
@@ -248,9 +260,10 @@ export default function OwnerIssuesClient() {
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-sm">
             <thead className="text-left text-xs uppercase tracking-wide text-slate-500">
-              <tr className="border-b border-slate-200">
-                <th className="px-3 py-3">Fecha</th>
-                <th className="px-3 py-3">Severidad</th>
+                <tr className="border-b border-slate-200">
+                  <th className="px-3 py-3">Fecha</th>
+                  <th className="px-3 py-3">Tipo</th>
+                  <th className="px-3 py-3">Severidad</th>
                 <th className="px-3 py-3">HTTP</th>
                 <th className="px-3 py-3">Code</th>
                 <th className="px-3 py-3">Ruta</th>
@@ -262,13 +275,14 @@ export default function OwnerIssuesClient() {
 
             <tbody className="text-slate-800">
               {loading ? (
-                <tr><td className="px-3 py-6 text-slate-600" colSpan={8}>Cargando incidencias…</td></tr>
+                <tr><td className="px-3 py-6 text-slate-600" colSpan={9}>Cargando incidencias…</td></tr>
               ) : filtered.length === 0 ? (
-                <tr><td className="px-3 py-6 text-slate-600" colSpan={8}>No hay incidencias para los filtros aplicados.</td></tr>
+                <tr><td className="px-3 py-6 text-slate-600" colSpan={9}>No hay incidencias para los filtros aplicados.</td></tr>
               ) : (
                 filtered.map((it) => (
                   <tr key={it.id} className="border-b border-slate-100">
                     <td className="px-3 py-3 whitespace-nowrap">{fmtDate(it.created_at)}</td>
+                    <td className="px-3 py-3">{String((it.metadata as any)?.issue_type || "warning")}</td>
                     <td className="px-3 py-3 font-semibold text-slate-900">{severityLabel(it.severity)}</td>
                     <td className="px-3 py-3">{it.http_status || "—"}</td>
                     <td className="px-3 py-3">{it.error_code ?? "-"}</td>
@@ -287,7 +301,7 @@ export default function OwnerIssuesClient() {
                           onClick={() => setStatus(it.id, "resolved")}
                           className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white hover:opacity-90"
                         >
-                          Resolver
+                          Marcar como resuelto
                         </button>
                       </div>
                     </td>
