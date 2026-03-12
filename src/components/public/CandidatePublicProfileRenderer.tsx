@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { normalizePublicLanguages } from "@/lib/public/profile-languages";
 
 export type PublicProfilePreviewMode = "public" | "registered" | "requesting" | "full";
@@ -115,11 +115,13 @@ export function CandidatePublicProfileRenderer({
   payload,
   mode = "public",
   companyAccess = true,
+  internalPreview = false,
   contact,
 }: {
   payload: PublicCandidatePayload;
   mode?: PublicProfilePreviewMode;
   companyAccess?: boolean;
+  internalPreview?: boolean;
   contact?: PublicCandidateContact;
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
@@ -169,11 +171,50 @@ export function CandidatePublicProfileRenderer({
     };
   }, [teaser, experiences]);
 
+  const isExternalCleanView = !internalPreview;
+  const hasExperiences = experiences.length > 0;
+  const hasEducation = education.length > 0;
+  const hasRecommendations = recommendations.length > 0;
+  const hasLanguages = publicLanguages.length > 0;
+  const hasAchievements = achievements.length > 0;
+  const hasSkills = skills.length > 0;
+  const hasProfileCore =
+    Boolean(teaser?.summary || teaser?.title || teaser?.location || teaser?.sector || teaser?.work_mode || teaser?.availability) ||
+    verificationSummary.experiences > 0 ||
+    hasSkills;
+
+  const visibleTabs = useMemo(() => {
+    if (!isExternalCleanView) return tabs;
+    const out: Array<{ key: TabKey; label: string }> = [];
+    if (hasProfileCore) out.push({ key: "profile", label: "Perfil" });
+    if (hasExperiences) out.push({ key: "experience", label: "Experiencia" });
+    if (hasEducation) out.push({ key: "education", label: "Formación" });
+    if (hasRecommendations) out.push({ key: "recommendations", label: "Recomendaciones" });
+    if (hasLanguages || hasAchievements) out.push({ key: "languages", label: "Idiomas y logros" });
+    return out.length ? out : [{ key: "profile", label: "Perfil" }];
+  }, [isExternalCleanView, hasProfileCore, hasExperiences, hasEducation, hasRecommendations, hasLanguages, hasAchievements]);
+
+  useEffect(() => {
+    if (!visibleTabs.some((x) => x.key === activeTab)) {
+      setActiveTab((visibleTabs[0]?.key as TabKey) ?? "profile");
+    }
+  }, [activeTab, visibleTabs]);
+
+  const completionHints = useMemo(() => {
+    if (!internalPreview) return [];
+    const hints: string[] = [];
+    if (!teaser?.title) hints.push("Añade tu titular profesional para reforzar la primera impresión.");
+    if (!hasLanguages) hints.push("Añade idiomas para mejorar tu perfil compartible.");
+    if (!hasEducation) hints.push("Añade formación para que aparezca en tu CV verificable.");
+    if (!hasAchievements) hints.push("Añade logros o certificaciones para reforzar tu credibilidad.");
+    return hints;
+  }, [internalPreview, teaser?.title, hasLanguages, hasEducation, hasAchievements]);
+
   return (
-    <section className="rounded-[30px] border border-slate-200 bg-slate-50/60 p-3 shadow-sm sm:p-4">
+    <section className="rounded-[30px] border border-slate-200 bg-slate-50/60 p-3 shadow-sm print:rounded-none print:border-0 print:bg-white print:p-0 print:shadow-none sm:p-4">
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
-          <header className="sticky top-4 z-20 rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-lg backdrop-blur sm:p-7">
+          <header className="sticky top-4 z-20 rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-lg backdrop-blur print:static print:top-auto print:rounded-none print:border-0 print:p-0 print:shadow-none sm:p-7">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex min-w-0 items-start gap-4">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 text-xl font-bold text-white shadow-sm">
@@ -194,7 +235,9 @@ export function CandidatePublicProfileRenderer({
                   <h1 className="mt-1 truncate text-2xl font-semibold text-slate-900 sm:text-3xl">
                     {teaser?.full_name || "Candidato verificado"}
                   </h1>
-                  <p className="mt-1 text-sm font-medium text-blue-800">{teaser?.title || "Perfil profesional verificable"}</p>
+                  {teaser?.title || internalPreview ? (
+                    <p className="mt-1 text-sm font-medium text-blue-800">{teaser?.title || "Añade tu titular profesional"}</p>
+                  ) : null}
                   <p className="mt-1 text-xs text-slate-600">
                     Perfil profesional con experiencia y documentación laboral verificadas.
                   </p>
@@ -245,11 +288,11 @@ export function CandidatePublicProfileRenderer({
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              {tabs.map((tab) => (
+              {visibleTabs.map((tab) => (
                 <button
                   key={tab.key}
                   type="button"
-                  onClick={() => setActiveTab(tab.key)}
+                  onClick={() => setActiveTab(tab.key as TabKey)}
                   className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                     activeTab === tab.key
                       ? "border-blue-200 bg-blue-50 text-blue-800"
@@ -285,19 +328,37 @@ export function CandidatePublicProfileRenderer({
                         </span>
                       ))}
                     </div>
-                  ) : (
+                  ) : internalPreview ? (
                     <Empty text="Sin habilidades verificadas visibles por ahora." />
-                  )}
+                  ) : null}
                 </Card>
 
                 <Card title="Datos clave" subtitle="Solo datos públicos y relevantes para evaluación profesional.">
                   <dl className="grid gap-3 text-sm sm:grid-cols-2">
-                    <Item label="Ubicación" value={teaser?.location || "No especificada"} />
-                    <Item label="Título profesional" value={teaser?.title || "No especificado"} />
-                    <Item label="Idiomas" value={publicLanguages.length ? publicLanguages.join(", ") : "No indicados"} />
+                    {teaser?.location || internalPreview ? (
+                      <Item label="Ubicación" value={teaser?.location || "Añade ubicación"} />
+                    ) : null}
+                    {teaser?.title || internalPreview ? (
+                      <Item label="Título profesional" value={teaser?.title || "Añade titular"} />
+                    ) : null}
+                    {publicLanguages.length || internalPreview ? (
+                      <Item label="Idiomas" value={publicLanguages.length ? publicLanguages.join(", ") : "Añade idiomas"} />
+                    ) : null}
                     <Item label="Estado de perfil" value={profileStatus} />
                   </dl>
                 </Card>
+
+                {completionHints.length ? (
+                  <Card title="Sugerencias de completado" subtitle="Solo visible en tu preview interna.">
+                    <ul className="space-y-2">
+                      {completionHints.map((hint) => (
+                        <li key={hint} className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                          {hint}
+                        </li>
+                      ))}
+                    </ul>
+                  </Card>
+                ) : null}
               </>
             ) : null}
 
@@ -313,6 +374,7 @@ export function CandidatePublicProfileRenderer({
                         <article
                           key={String(exp?.experience_id || `exp-${index}`)}
                           className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+                          style={{ breakInside: "avoid" }}
                         >
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
@@ -348,9 +410,9 @@ export function CandidatePublicProfileRenderer({
                       );
                     })}
                   </div>
-                ) : (
+                ) : internalPreview ? (
                   <Empty text="No hay experiencias visibles en este perfil público." />
-                )}
+                ) : null}
               </Card>
             ) : null}
 
@@ -359,7 +421,7 @@ export function CandidatePublicProfileRenderer({
                 {education.length ? (
                   <div className="space-y-3">
                     {education.map((item, idx) => (
-                      <article key={String(item.id || `edu-${idx}`)} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <article key={String(item.id || `edu-${idx}`)} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" style={{ breakInside: "avoid" }}>
                         <h4 className="text-base font-semibold text-slate-900">{item.title || "Formación"}</h4>
                         <p className="text-sm text-slate-600">{item.institution || "Centro no indicado"}</p>
                         <p className="mt-1 text-xs text-slate-500">{formatPeriod(item.start_date, item.end_date)}</p>
@@ -370,9 +432,9 @@ export function CandidatePublicProfileRenderer({
                       </article>
                     ))}
                   </div>
-                ) : (
+                ) : internalPreview ? (
                   <Empty text="No hay formación pública visible todavía." />
-                )}
+                ) : null}
               </Card>
             ) : null}
 
@@ -381,7 +443,7 @@ export function CandidatePublicProfileRenderer({
                 {recommendations.length ? (
                   <div className="space-y-3">
                     {recommendations.map((recommendation, idx) => (
-                      <article key={String(recommendation.id || `rec-${idx}`)} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                      <article key={String(recommendation.id || `rec-${idx}`)} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" style={{ breakInside: "avoid" }}>
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
                             <h4 className="text-sm font-semibold text-slate-900">{recommendation.name || "Responsable"}</h4>
@@ -398,9 +460,9 @@ export function CandidatePublicProfileRenderer({
                       </article>
                     ))}
                   </div>
-                ) : (
+                ) : internalPreview ? (
                   <Empty text="No hay recomendaciones públicas disponibles por ahora." />
-                )}
+                ) : null}
               </Card>
             ) : null}
 
@@ -417,9 +479,9 @@ export function CandidatePublicProfileRenderer({
                           </span>
                         ))}
                       </div>
-                    ) : (
+                    ) : internalPreview ? (
                       <Empty text="No hay idiomas visibles." />
-                    )}
+                    ) : null}
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -432,9 +494,9 @@ export function CandidatePublicProfileRenderer({
                           </li>
                         ))}
                       </ul>
-                    ) : (
+                    ) : internalPreview ? (
                       <Empty text="No hay logros públicos visibles." />
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </Card>
@@ -442,7 +504,7 @@ export function CandidatePublicProfileRenderer({
           </main>
         </div>
 
-        <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+        <aside className="space-y-4 print:mt-4 lg:sticky lg:top-4 lg:self-start">
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Trust Score</h3>
             <div className="mt-3 flex items-center gap-4">
@@ -475,6 +537,7 @@ export function CandidatePublicProfileRenderer({
             </div>
           </section>
 
+          {(skills.length > 0 || internalPreview) ? (
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">Habilidades clave</h3>
             {skills.length ? (
@@ -489,7 +552,9 @@ export function CandidatePublicProfileRenderer({
               <Empty text="Se mostrarán cuando haya señales públicas suficientes." compact />
             )}
           </section>
+          ) : null}
 
+          {(education.length > 0 || internalPreview) ? (
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">Formación destacada</h3>
             {education.length ? (
@@ -505,7 +570,9 @@ export function CandidatePublicProfileRenderer({
               <Empty text="Sin formación destacada visible." compact />
             )}
           </section>
+          ) : null}
 
+          {(recommendations.length > 0 || internalPreview) ? (
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">Recomendaciones destacadas</h3>
             {recommendations.length ? (
@@ -521,7 +588,9 @@ export function CandidatePublicProfileRenderer({
               <Empty text="Sin recomendaciones destacadas visibles." compact />
             )}
           </section>
+          ) : null}
 
+          {(qrEnabled || internalPreview) ? (
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">QR de tu perfil verificado</h3>
             {qrEnabled && qrImageUrl ? (
@@ -540,6 +609,7 @@ export function CandidatePublicProfileRenderer({
               <Empty text="Disponible con planes de suscripción que habilitan QR público del perfil." compact />
             )}
           </section>
+          ) : null}
 
           {capabilities.showContact ? (
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -601,7 +671,7 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6" style={{ breakInside: "avoid" }}>
       <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
       {subtitle ? <p className="mt-1 text-sm text-slate-600">{subtitle}</p> : null}
       <div className="mt-4">{children}</div>

@@ -167,6 +167,7 @@ export default function CandidatePublicProfilePage() {
               payload={previewPayload}
               mode={mode}
               companyAccess={false}
+              internalPreview
               contact={contact}
             />
           ) : (
