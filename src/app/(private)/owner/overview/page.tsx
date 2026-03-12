@@ -1,7 +1,17 @@
 import Link from "next/link";
 import { createClient } from "@/utils/supabase/server";
 import type { ReactNode } from "react";
-import { OWNER_OVERVIEW_SECTION_TITLES } from "@/lib/owner-overview-config";
+
+type Severity = "high" | "medium" | "low";
+
+type AlertItem = {
+  id: string;
+  severity: Severity;
+  title: string;
+  detail: string;
+  actionHref?: string;
+  actionLabel?: string;
+};
 
 export const dynamic = "force-dynamic";
 
@@ -35,12 +45,72 @@ function Section({
   );
 }
 
+function FunnelStep({
+  step,
+  value,
+  rate,
+  note,
+}: {
+  step: string;
+  value: number;
+  rate?: number | null;
+  note?: string;
+}) {
+  return (
+    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{step}</p>
+      <p className="mt-1 text-2xl font-semibold text-slate-900">{value}</p>
+      {typeof rate === "number" ? <p className="mt-1 text-xs text-slate-500">{rate}% del paso anterior</p> : null}
+      {note ? <p className="mt-1 text-xs text-slate-500">{note}</p> : null}
+    </article>
+  );
+}
+
+function AlertCard({ alert }: { alert: AlertItem }) {
+  const tone =
+    alert.severity === "high"
+      ? "border-red-200 bg-red-50"
+      : alert.severity === "medium"
+        ? "border-amber-200 bg-amber-50"
+        : "border-blue-200 bg-blue-50";
+
+  const badgeTone =
+    alert.severity === "high"
+      ? "text-red-700"
+      : alert.severity === "medium"
+        ? "text-amber-700"
+        : "text-blue-700";
+
+  const badgeText =
+    alert.severity === "high" ? "Alta" : alert.severity === "medium" ? "Media" : "Baja";
+
+  return (
+    <article className={`rounded-xl border p-4 ${tone}`}>
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-sm font-semibold text-slate-900">{alert.title}</h3>
+        <span className={`text-xs font-semibold uppercase tracking-wide ${badgeTone}`}>{badgeText}</span>
+      </div>
+      <p className="mt-1 text-sm text-slate-700">{alert.detail}</p>
+      {alert.actionHref && alert.actionLabel ? (
+        <Link href={alert.actionHref} className="mt-3 inline-flex text-xs font-semibold text-slate-800 underline">
+          {alert.actionLabel}
+        </Link>
+      ) : null}
+    </article>
+  );
+}
+
 function money(v: number) {
   return new Intl.NumberFormat("es-ES", {
     style: "currency",
     currency: "EUR",
     maximumFractionDigits: 2,
   }).format(v);
+}
+
+function pct(numerator: number, denominator: number) {
+  if (!denominator || denominator <= 0) return 0;
+  return Math.round((numerator / denominator) * 100);
 }
 
 export default function OwnerOverviewPage() {
@@ -50,60 +120,129 @@ export default function OwnerOverviewPage() {
 async function OwnerOverviewServer() {
   const supabase = await createClient();
   const now = Date.now();
-  const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+  const dayMs = 24 * 60 * 60 * 1000;
+  const weekAgo = now - 7 * dayMs;
+  const monthAgo = now - 30 * dayMs;
 
-  const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicProfilesRes, issuesRes] = await Promise.all([
+  const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicProfilesRes, issuesRes, employmentRes] = await Promise.all([
     supabase.from("profiles").select("id,role,onboarding_completed,created_at"),
     supabase.from("companies").select("id", { count: "exact", head: true }),
-    supabase.from("verification_requests").select("id,status,requested_at,created_at,resolved_at,company_id,requested_by"),
-    supabase.from("evidences").select("id,evidence_type,verification_request_id", { count: "exact" }),
+    supabase.from("verification_requests").select("id,status,requested_at,created_at,resolved_at,company_id,requested_by,verification_channel,external_resolved"),
+    supabase.from("evidences").select("id,evidence_type,verification_request_id,uploaded_by,created_at"),
     supabase.from("subscriptions").select("id,status,amount,created_at,plan"),
     supabase.from("growth_campaigns").select("*"),
     supabase.from("cv_parse_jobs").select("id,status,created_at"),
     supabase.from("profiles").select("id,public_token,expires_at"),
     supabase.from("issues").select("id,status,created_at"),
+    supabase.from("employment_records").select("id,candidate_id,created_at,verification_status"),
   ]);
 
   const profiles = Array.isArray(profilesRes.data) ? profilesRes.data : [];
-  const usersTotal = profiles.length;
   const companiesTotal = Number(companiesRes.count || 0);
-  const candidatesTotal = profiles.filter((p: any) => String(p.role || "").toLowerCase() === "candidate").length;
-  const companiesUsersTotal = profiles.filter((p: any) => String(p.role || "").toLowerCase() === "company").length;
-  const ownersTotal = profiles.filter((p: any) => {
-    const r = String(p.role || "").toLowerCase();
-    return r === "owner" || r === "admin";
-  }).length;
-  const onboardingCompleted = profiles.filter((p: any) => Boolean(p.onboarding_completed)).length;
-  const onboardingPending = usersTotal - onboardingCompleted;
-
   const requests = Array.isArray(requestsRes.data) ? requestsRes.data : [];
+  const evidenceRows = Array.isArray(evidenceRes.data) ? evidenceRes.data : [];
+  const subscriptions = Array.isArray(subscriptionsRes.data) ? subscriptionsRes.data : [];
+  const campaigns = Array.isArray(campaignsRes.data) ? campaignsRes.data : [];
+  const jobs = Array.isArray(jobsRes.data) ? jobsRes.data : [];
+  const publicProfiles = Array.isArray(publicProfilesRes.data) ? publicProfilesRes.data : [];
+  const issues = Array.isArray(issuesRes.data) ? issuesRes.data : [];
+  const employments = Array.isArray(employmentRes.data) ? employmentRes.data : [];
+
+  const candidateProfiles = profiles.filter((p: any) => String(p.role || "").toLowerCase() === "candidate");
+  const companyProfiles = profiles.filter((p: any) => String(p.role || "").toLowerCase() === "company");
+  const ownerProfiles = profiles.filter((p: any) => {
+    const role = String(p.role || "").toLowerCase();
+    return role === "owner" || role === "admin";
+  });
+
+  const candidateIds = new Set(candidateProfiles.map((p: any) => String(p.id || "")).filter(Boolean));
+
+  const candidatesWithExperience = new Set(
+    employments
+      .map((row: any) => String(row.candidate_id || ""))
+      .filter((id: string) => Boolean(id) && candidateIds.has(id))
+  );
+
+  const candidatesWithVerification = new Set(
+    requests
+      .map((row: any) => String(row.requested_by || ""))
+      .filter((id: string) => Boolean(id) && candidateIds.has(id))
+  );
+
+  const verifiedRows = requests.filter((r: any) => String(r.status || "").toLowerCase() === "verified");
+  const candidatesVerified = new Set(
+    verifiedRows
+      .map((r: any) => String(r.requested_by || ""))
+      .filter((id: string) => Boolean(id) && candidateIds.has(id))
+  );
+
+  const recentActivityCandidateIds = new Set<string>();
+  for (const row of employments) {
+    const id = String((row as any).candidate_id || "");
+    const createdAt = Date.parse(String((row as any).created_at || ""));
+    if (id && Number.isFinite(createdAt) && createdAt >= monthAgo && candidateIds.has(id)) {
+      recentActivityCandidateIds.add(id);
+    }
+  }
+  for (const row of requests) {
+    const id = String((row as any).requested_by || "");
+    const ref = Date.parse(String((row as any).requested_at || (row as any).created_at || ""));
+    if (id && Number.isFinite(ref) && ref >= monthAgo && candidateIds.has(id)) {
+      recentActivityCandidateIds.add(id);
+    }
+  }
+  for (const row of evidenceRows) {
+    const id = String((row as any).uploaded_by || "");
+    const createdAt = Date.parse(String((row as any).created_at || ""));
+    if (id && Number.isFinite(createdAt) && createdAt >= monthAgo && candidateIds.has(id)) {
+      recentActivityCandidateIds.add(id);
+    }
+  }
+
+  const companyIdsFromRequestsLast30 = new Set(
+    requests
+      .filter((r: any) => {
+        const ref = Date.parse(String(r.requested_at || r.created_at || ""));
+        return Number.isFinite(ref) && ref >= monthAgo;
+      })
+      .map((r: any) => String(r.company_id || ""))
+      .filter(Boolean)
+  );
+
+  const usersTotal = profiles.length;
+  const candidatesTotal = candidateProfiles.length;
+  const companiesUsersTotal = companyProfiles.length;
+  const ownersTotal = ownerProfiles.length;
+
+  const onboardingCompleted = candidateProfiles.filter((p: any) => Boolean(p.onboarding_completed)).length;
+  const onboardingPending = candidatesTotal - onboardingCompleted;
+
+  const activeProfiles = recentActivityCandidateIds.size;
+  const activeCompanies = companyIdsFromRequestsLast30.size;
+  const inactiveCompanies = Math.max(companiesTotal - activeCompanies, 0);
+
   const verificationsTotal = requests.length;
+  const pendingVerifications = requests.filter((r: any) => {
+    const s = String(r.status || "").toLowerCase();
+    return s.includes("pending") || s === "draft";
+  }).length;
+
   const resolvedRows = requests.filter((r: any) => {
     const s = String(r.status || "").toLowerCase();
     return s === "verified" || s === "rejected" || s === "revoked";
   });
-  const verifiedRows = requests.filter((r: any) => String(r.status || "").toLowerCase() === "verified");
   const completedVerifications = resolvedRows.length;
   const verifiedVerifications = verifiedRows.length;
-  const verificationSuccessRate = completedVerifications > 0 ? Math.round((verifiedVerifications / completedVerifications) * 100) : 0;
-  const pendingVerifications = requests.filter((r: any) => {
-    const s = String(r.status || "").toLowerCase();
-    return s.includes("request") || s.includes("pending");
-  }).length;
-  const uniqueVerifiedCandidates = new Set(
-    verifiedRows.map((r: any) => String(r.requested_by || "")).filter(Boolean)
-  ).size;
+  const rejectedVerifications = requests.filter((r: any) => String(r.status || "").toLowerCase() === "rejected").length;
+  const revokedVerifications = requests.filter((r: any) => String(r.status || "").toLowerCase() === "revoked").length;
 
   const requestsThisWeek = requests.filter((r: any) => {
-    const ref = r.requested_at || r.created_at;
-    if (!ref) return false;
-    return new Date(ref).getTime() >= weekAgo;
+    const ref = Date.parse(String(r.requested_at || r.created_at || ""));
+    return Number.isFinite(ref) && ref >= weekAgo;
   }).length;
 
-  const activeCompanies = new Set(requests.map((r: any) => r.company_id).filter(Boolean)).size;
-  const inactiveCompanies = companiesTotal
-    ? companiesTotal - activeCompanies
-    : 0;
+  const verificationSuccessRate = pct(verifiedVerifications, completedVerifications);
+
   const resolutionHours = resolvedRows
     .map((row: any) => {
       const start = Date.parse(String(row.requested_at || row.created_at || ""));
@@ -112,169 +251,311 @@ async function OwnerOverviewServer() {
       return (end - start) / (1000 * 60 * 60);
     })
     .filter((v: number | null): v is number => typeof v === "number" && Number.isFinite(v));
-  const avgVerificationHours = resolutionHours.length
-    ? Math.round((resolutionHours.reduce((a, b) => a + b, 0) / resolutionHours.length) * 10) / 10
-    : null;
 
-  const evidenceRows = Array.isArray(evidenceRes.data) ? evidenceRes.data : [];
-  const evidencesTotal = Number(evidenceRes.count || evidenceRows.length || 0);
+  const avgVerificationHours =
+    resolutionHours.length > 0
+      ? Math.round((resolutionHours.reduce((a, b) => a + b, 0) / resolutionHours.length) * 10) / 10
+      : null;
+
+  const evidencesTotal = evidenceRows.length;
   const evidencesUnlinked = evidenceRows.filter((e: any) => !e.verification_request_id).length;
   const evidencesLinked = evidencesTotal - evidencesUnlinked;
+  const evidencesInReviewProxy = evidencesUnlinked;
 
-  const subscriptions = Array.isArray(subscriptionsRes.data) ? subscriptionsRes.data : [];
-  const activeSubs = subscriptions.filter((s: any) => {
+  const subscriptionsActive = subscriptions.filter((s: any) => {
     const st = String(s.status || "").toLowerCase();
     return st === "active" || st === "trialing";
   });
-  const mrr = activeSubs.reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
 
-  const campaigns = Array.isArray(campaignsRes.data) ? campaignsRes.data : [];
+  const totalMrr = subscriptionsActive.reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
+
+  const candidateMrr =
+    subscriptionsActive
+      .filter((row: any) => String(row.plan || "").toLowerCase().includes("candidate"))
+      .reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
+
+  const companyMrr =
+    subscriptionsActive
+      .filter((row: any) => {
+        const plan = String(row.plan || "").toLowerCase();
+        return plan.includes("company") || plan.includes("enterprise");
+      })
+      .reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
+
+  const oneOffRevenueProxy =
+    subscriptions
+      .filter((row: any) => {
+        const plan = String(row.plan || "").toLowerCase();
+        return plan.includes("payg") || plan.includes("one") || plan.includes("usage");
+      })
+      .reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
+
   const activeCampaigns = campaigns.filter((row: any) => String(row.status || "").toLowerCase() === "running").length;
-  const weekCampaigns = campaigns.filter((row: any) => row.created_at && new Date(row.created_at).getTime() >= weekAgo);
+  const weekCampaigns = campaigns.filter((row: any) => {
+    const created = Date.parse(String(row.created_at || ""));
+    return Number.isFinite(created) && created >= weekAgo;
+  });
   const leadsThisWeek = weekCampaigns.reduce((acc: number, row: any) => acc + Number(row.leads_discovered || 0), 0);
   const demosThisWeek = weekCampaigns.reduce((acc: number, row: any) => acc + Number(row.demos_count || 0), 0);
-  const totalCampaignCost = campaigns.reduce((acc: number, row: any) => {
-    return acc + Number(row.cost_scraping || 0) + Number(row.cost_enrichment || 0) + Number(row.cost_sending || 0) + Number(row.cost_infra || 0);
-  }, 0);
 
-  const queuedCampaigns = campaigns.filter((row: any) => String(row.execution_status || "").toLowerCase() === "queued").length;
-  const runningCampaigns = campaigns.filter((row: any) => String(row.execution_status || "").toLowerCase() === "running").length;
-  const failedCampaigns = campaigns.filter((row: any) => String(row.execution_status || "").toLowerCase() === "failed").length;
-  const completedCampaigns = campaigns.filter((row: any) => String(row.execution_status || "").toLowerCase() === "completed").length;
-
-  const outOfSyncCampaigns = campaigns.filter((row: any) => {
-    const status = String(row.execution_status || "idle").toLowerCase();
-    if (!["queued", "running", "paused"].includes(status)) return false;
-    if (!row.last_sync_at) return true;
-    return new Date(row.last_sync_at).getTime() < Date.now() - 24 * 60 * 60 * 1000;
-  }).length;
-  const failedSyncs = campaigns.filter((row: any) => Boolean(row.last_provider_error)).length;
-  const syncedToday = campaigns.filter((row: any) => {
-    if (!row.last_sync_at) return false;
-    return new Date(row.last_sync_at).getTime() >= Date.now() - 24 * 60 * 60 * 1000;
-  }).length;
-
-  const configuredOutscraper = campaigns.filter((row: any) => {
-    const config = row.provider_scraping_config;
-    return config && typeof config === "object" && Object.keys(config).length > 0;
-  }).length;
-  const importedOutscraper = campaigns.filter((row: any) => String(row.provider_scraping_last_status || "").toLowerCase() === "imported").length;
-  const scrapingFailures = campaigns.filter((row: any) => String(row.provider_scraping_last_status || "").toLowerCase() === "failed" || Boolean(row.last_provider_error)).length;
-  const totalScrapingCost = campaigns.reduce((acc: number, row: any) => acc + Number(row.provider_scraping_last_cost || 0), 0);
-
-  const jobs = Array.isArray(jobsRes.data) ? jobsRes.data : [];
   const failedJobs = jobs.filter((j: any) => String(j.status || "").toLowerCase() === "failed").length;
   const pendingJobs = jobs.filter((j: any) => String(j.status || "").toLowerCase().includes("pending")).length;
-  const errorRate = jobs.length ? Math.round((failedJobs / jobs.length) * 100) : 0;
-  const openIssues = (Array.isArray(issuesRes.data) ? issuesRes.data : []).filter((i: any) => {
+
+  const openIssues = issues.filter((i: any) => {
     const st = String(i.status || "").toLowerCase();
     return st !== "closed" && st !== "resolved" && st !== "done";
   }).length;
-  const publicProfiles = (Array.isArray(publicProfilesRes.data) ? publicProfilesRes.data : []).filter((p: any) => {
+
+  const activePublicProfiles = publicProfiles.filter((p: any) => {
     if (!p.public_token) return false;
     if (!p.expires_at) return true;
     const ts = Date.parse(String(p.expires_at));
-    return Number.isFinite(ts) ? ts > Date.now() : true;
+    return Number.isFinite(ts) ? ts > now : true;
   }).length;
+
+  const companyProfilesCreatedWeek = companyProfiles.filter((p: any) => {
+    const created = Date.parse(String(p.created_at || ""));
+    return Number.isFinite(created) && created >= weekAgo;
+  }).length;
+
+  const funnelStepRegistros = candidatesTotal;
+  const funnelStepOnboarding = onboardingCompleted;
+  const funnelStepExperience = candidatesWithExperience.size;
+  const funnelStepFirstVerification = candidatesWithVerification.size;
+  const funnelStepVerified = candidatesVerified.size;
+
+  const onboardingRate = pct(funnelStepOnboarding, funnelStepRegistros);
+  const profileReadyRate = pct(funnelStepExperience, funnelStepOnboarding);
+  const firstVerificationRate = pct(funnelStepFirstVerification, funnelStepExperience);
+  const verifiedRate = pct(funnelStepVerified, funnelStepFirstVerification);
+
+  const alerts: AlertItem[] = [];
+
+  if (verificationSuccessRate < 55 && completedVerifications >= 10) {
+    alerts.push({
+      id: "verification-success-low",
+      severity: "high",
+      title: "Ratio de verificación bajo",
+      detail: `El ratio de éxito está en ${verificationSuccessRate}% con ${completedVerifications} casos resueltos.`,
+      actionHref: "/owner/verifications",
+      actionLabel: "Revisar verificaciones",
+    });
+  }
+
+  if (pendingVerifications > 15) {
+    alerts.push({
+      id: "pending-verifications-high",
+      severity: "high",
+      title: "Cola de verificaciones alta",
+      detail: `${pendingVerifications} verificaciones están pendientes y pueden frenar conversión.`,
+      actionHref: "/owner/verifications?status=pendiente",
+      actionLabel: "Abrir cola pendiente",
+    });
+  }
+
+  if (onboardingRate < 60 && funnelStepRegistros >= 20) {
+    alerts.push({
+      id: "onboarding-drop",
+      severity: "medium",
+      title: "Activación candidata por debajo de objetivo",
+      detail: `Solo ${onboardingRate}% de registros completa onboarding candidato.`,
+      actionHref: "/owner/users",
+      actionLabel: "Analizar usuarios",
+    });
+  }
+
+  if (requestsThisWeek === 0) {
+    alerts.push({
+      id: "no-verifications-week",
+      severity: "medium",
+      title: "Sin verificaciones nuevas esta semana",
+      detail: "No se detectan solicitudes recientes; revisar adquisición y activación.",
+      actionHref: "/owner/growth",
+      actionLabel: "Revisar growth",
+    });
+  }
+
+  if (evidencesTotal > 0 && evidencesUnlinked / evidencesTotal >= 0.5) {
+    alerts.push({
+      id: "evidence-unlinked-high",
+      severity: "low",
+      title: "Evidencias no vinculadas elevadas",
+      detail: `${evidencesUnlinked} de ${evidencesTotal} evidencias siguen sin vínculo directo.`,
+      actionHref: "/owner/evidences",
+      actionLabel: "Auditar evidencias",
+    });
+  }
+
+  if (alerts.length === 0) {
+    alerts.push({
+      id: "healthy",
+      severity: "low",
+      title: "Sin alertas críticas",
+      detail: "No se detectan anomalías severas con los umbrales actuales.",
+    });
+  }
 
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Owner Control Center</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Panel ejecutivo para decisión rápida en operaciones, crecimiento, verificaciones y monetización.
+          Cockpit ejecutivo para seguir activación, operación, calidad de verificación y economía del negocio.
         </p>
       </section>
 
-      <Section title={OWNER_OVERVIEW_SECTION_TITLES[0]} subtitle="Lectura ejecutiva de adopción, activación y monetización.">
+      <Section title="North Star" subtitle="Estado del negocio en una lectura de 3 segundos.">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Users total" value={String(usersTotal)} note={`Candidatos ${candidatesTotal} · Empresa ${companiesUsersTotal} · Owner ${ownersTotal}`} />
-          <MetricCard title="Companies" value={String(companiesTotal)} note={`${activeCompanies} activas · ${inactiveCompanies} inactivas`} />
-          <MetricCard title="Verifications" value={String(verificationsTotal)} note={`${requestsThisWeek} solicitadas esta semana`} />
-          <MetricCard title="MRR" value={money(mrr)} note={`${activeSubs.length} suscripciones activas`} />
+          <MetricCard
+            title="Perfiles activos"
+            value={String(activeProfiles)}
+            note={`Base candidatos: ${candidatesTotal} · onboarding: ${onboardingCompleted}`}
+          />
+          <MetricCard
+            title="Empresas activas"
+            value={String(activeCompanies)}
+            note={`${inactiveCompanies} inactivas (proxy últimos 30 días)`}
+          />
+          <MetricCard
+            title="Verificaciones totales"
+            value={String(verificationsTotal)}
+            note={`${requestsThisWeek} esta semana · ${pendingVerifications} pendientes`}
+          />
+          <MetricCard
+            title="MRR"
+            value={money(totalMrr)}
+            note={`${subscriptionsActive.length} suscripciones activas`}
+          />
         </div>
       </Section>
 
-      <Section title={OWNER_OVERVIEW_SECTION_TITLES[1]} subtitle="Capacidad de convertir registro en perfil operativo.">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Onboarding completado" value={String(onboardingCompleted)} note={`${onboardingPending} pendientes`} />
-          <MetricCard title="Perfiles públicos activos" value={String(publicProfiles)} note="Token público no expirado" />
-          <MetricCard title="Empresas activas" value={String(activeCompanies)} note="Con solicitudes de verificación" />
-          <MetricCard title="Candidatos con verificación OK" value={String(uniqueVerifiedCandidates)} note="Al menos una verificación en estado verified" />
-        </div>
-      </Section>
-
-      <Section title={OWNER_OVERVIEW_SECTION_TITLES[2]} subtitle="Calidad del motor de verificación y señal resultante.">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Pending verifications" value={String(pendingVerifications)} />
-          <MetricCard title="Completadas" value={String(completedVerifications)} note={`${verifiedVerifications} verificadas`} />
-          <MetricCard title="Ratio de éxito" value={`${verificationSuccessRate}%`} note="Verified / completadas" />
-          <MetricCard title="Tiempo medio verificación" value={avgVerificationHours !== null ? `${avgVerificationHours}h` : "—"} note="De solicitud a resolución" />
-          <MetricCard title="Evidencias" value={String(evidencesTotal)} note={`${evidencesLinked} vinculadas · ${evidencesUnlinked} sin vincular`} />
-        </div>
-      </Section>
-
-      <Section title={OWNER_OVERVIEW_SECTION_TITLES[3]} subtitle="Salud técnica y estado del trabajo operativo.">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Error rate parsing" value={`${errorRate}%`} note={`${failedJobs} jobs fallidos`} />
-          <MetricCard title="CV parsing jobs" value={String(jobs.length)} note={`${pendingJobs} pendientes`} />
-          <MetricCard title="Incidencias abiertas" value={String(openIssues)} />
-          <MetricCard title="Campaigns running" value={String(activeCampaigns)} note={`Leads semana ${leadsThisWeek} · demos ${demosThisWeek} · coste ${money(totalCampaignCost)}`} />
+      <Section
+        title="Funnel de activación"
+        subtitle="Detección rápida de fricción desde registro candidato hasta perfil verificado."
+      >
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <FunnelStep step="Registros" value={funnelStepRegistros} note="Candidatos en profiles" />
+          <FunnelStep
+            step="Onboarding completado"
+            value={funnelStepOnboarding}
+            rate={pct(funnelStepOnboarding, funnelStepRegistros)}
+          />
+          <FunnelStep
+            step="Perfil con experiencia"
+            value={funnelStepExperience}
+            rate={profileReadyRate}
+          />
+          <FunnelStep
+            step="Primera verificación"
+            value={funnelStepFirstVerification}
+            rate={firstVerificationRate}
+          />
+          <FunnelStep
+            step="Perfil verificado"
+            value={funnelStepVerified}
+            rate={verifiedRate}
+            note="Al menos una verificación en estado verified"
+          />
         </div>
       </Section>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Section title="Execution Health" subtitle="Estado de ejecución de campañas.">
+        <Section
+          title="Operaciones diarias"
+          subtitle="Cola operativa para decisiones del día y revisión manual."
+        >
           <div className="grid gap-4 sm:grid-cols-2">
-            <MetricCard title="Queued" value={String(queuedCampaigns)} />
-            <MetricCard title="Running" value={String(runningCampaigns)} />
-            <MetricCard title="Failed" value={String(failedCampaigns)} />
-            <MetricCard title="Completed" value={String(completedCampaigns)} />
+            <MetricCard title="Verificaciones pendientes" value={String(pendingVerifications)} note="Estados draft/pending" />
+            <MetricCard title="Evidencias en revisión" value={String(evidencesInReviewProxy)} note="Proxy: evidencias sin vínculo directo" />
+            <MetricCard title="Empresas nuevas (7 días)" value={String(companyProfilesCreatedWeek)} note="Alta reciente de perfiles empresa" />
+            <MetricCard title="Casos manuales abiertos" value={String(openIssues + failedJobs)} note={`Incidencias ${openIssues} · jobs fallidos ${failedJobs}`} />
           </div>
         </Section>
 
-        <Section title="Provider Health" subtitle="Sincronización y salud de proveedores.">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <MetricCard title="Out of sync" value={String(outOfSyncCampaigns)} />
-            <MetricCard title="Failed syncs" value={String(failedSyncs)} />
-            <MetricCard title="Synced today" value={String(syncedToday)} />
+        <Section
+          title="Calidad del sistema"
+          subtitle="Salud de verificación: volumen, éxito, tiempos y carga de revisión."
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <MetricCard title="Ratio éxito" value={`${verificationSuccessRate}%`} note="Verified / resueltas" />
+            <MetricCard
+              title="Tiempo medio verificación"
+              value={avgVerificationHours !== null ? `${avgVerificationHours}h` : "—"}
+              note="Desde solicitud hasta resolución"
+            />
+            <MetricCard title="Verificaciones rechazadas" value={String(rejectedVerifications)} note={`Revocadas ${revokedVerifications}`} />
+            <MetricCard title="Automática vs manual" value={`${completedVerifications - pendingVerifications} / ${pendingVerifications}`} note="Proxy operativo del flujo actual" />
           </div>
         </Section>
       </div>
 
-      <Section title="Scraping Health" subtitle="Rendimiento actual del conector de scraping.">
+      <Section
+        title="Economía del negocio"
+        subtitle="Composición de ingresos y ritmo de monetización actual."
+      >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Outscraper configured" value={String(configuredOutscraper)} />
-          <MetricCard title="Imported campaigns" value={String(importedOutscraper)} />
-          <MetricCard title="Scraping failures" value={String(scrapingFailures)} />
-          <MetricCard title="Scraping cost" value={money(totalScrapingCost)} />
+          <MetricCard title="MRR total" value={money(totalMrr)} note="Suscripciones activas/trialing" />
+          <MetricCard title="MRR candidatos" value={money(candidateMrr)} note="Planes candidate_*" />
+          <MetricCard title="MRR empresas" value={money(companyMrr)} note="Planes company/enterprise" />
+          <MetricCard title="Ingresos one-off (proxy)" value={money(oneOffRevenueProxy)} note="Planes usage/payg detectados" />
         </div>
       </Section>
 
-      <Section title="Quick Actions" subtitle="Accesos directos para la operación diaria del founder/admin.">
+      <Section
+        title="Alertas y anomalías"
+        subtitle="Señales clave calculadas con umbrales operativos para reacción rápida."
+      >
+        <div className="grid gap-3 lg:grid-cols-2">
+          {alerts.map((alert) => (
+            <AlertCard key={alert.id} alert={alert} />
+          ))}
+        </div>
+      </Section>
+
+      <Section
+        title="Quick actions"
+        subtitle="Accesos rápidos para ejecutar soporte, operación y crecimiento."
+      >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <Link href="/owner/issues" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
-            Incidencias abiertas
-            <span className="mt-1 block text-xs font-normal text-slate-500">{failedJobs} jobs fallidos</span>
+          <Link href="/owner/users" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+            Ver usuarios
+            <span className="mt-1 block text-xs font-normal text-slate-500">{usersTotal} usuarios totales</span>
           </Link>
-          <Link href="/owner/companies?activity=inactive" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
-            Empresas sin actividad
-            <span className="mt-1 block text-xs font-normal text-slate-500">{inactiveCompanies} detectadas</span>
+          <Link href="/owner/companies" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+            Ver empresas
+            <span className="mt-1 block text-xs font-normal text-slate-500">{companiesTotal} empresas registradas</span>
           </Link>
           <Link href="/owner/verifications?status=pendiente" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
-            Verificaciones pendientes
-            <span className="mt-1 block text-xs font-normal text-slate-500">{pendingVerifications} por revisar</span>
+            Cola de verificaciones
+            <span className="mt-1 block text-xs font-normal text-slate-500">{pendingVerifications} pendientes</span>
           </Link>
           <Link href="/owner/monetization" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
-            Revisar monetización
-            <span className="mt-1 block text-xs font-normal text-slate-500">MRR {money(mrr)}</span>
+            Monetización
+            <span className="mt-1 block text-xs font-normal text-slate-500">MRR {money(totalMrr)}</span>
           </Link>
           <Link href="/owner/growth" className="rounded-lg bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800">
-            Lanzar campaign
-            <span className="mt-1 block text-xs font-normal text-blue-100">{activeCampaigns} activas</span>
+            Growth
+            <span className="mt-1 block text-xs font-normal text-blue-100">{activeCampaigns} campañas activas · {leadsThisWeek} leads/semana</span>
           </Link>
         </div>
       </Section>
+
+      <Section
+        title="Contexto operativo"
+        subtitle="Contexto transversal para soporte y producto sin salir del cockpit."
+      >
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard title="Perfiles públicos activos" value={String(activePublicProfiles)} note="Tokens públicos no expirados" />
+          <MetricCard title="Jobs parsing pendientes" value={String(pendingJobs)} note={`${failedJobs} fallidos`} />
+          <MetricCard title="Issues abiertos" value={String(openIssues)} note="Backlog operativo actual" />
+          <MetricCard title="Demos semana" value={String(demosThisWeek)} note={`Campañas activas ${activeCampaigns}`} />
+        </div>
+      </Section>
+
+      <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+        Definiciones de esta versión: “Perfiles activos” y “Empresas activas” usan actividad reciente (30 días) como proxy.
+        “Evidencias en revisión” y “ingresos one-off” son aproximaciones operativas hasta disponer de señal dedicada.
+      </section>
     </div>
   );
 }
