@@ -4,9 +4,17 @@ export function getActiveDocumentaryVerificationId(rows) {
   return firstId ? String(firstId) : null;
 }
 
-export function buildDocumentaryVerificationInsert({ employmentRecordId, userId, companyName, position, nowIso }) {
+export function buildDocumentaryVerificationInsert({
+  employmentRecordId,
+  userId,
+  companyName,
+  position,
+  nowIso,
+  documentaryScope = "experience",
+  evidenceType = "otro_documento",
+}) {
   return {
-    employment_record_id: employmentRecordId,
+    employment_record_id: employmentRecordId || null,
     requested_by: userId,
     verification_type: "employment",
     verification_channel: "documentary",
@@ -16,6 +24,8 @@ export function buildDocumentaryVerificationInsert({ employmentRecordId, userId,
     request_context: {
       source: "candidate_evidence_upload",
       auto_associated: true,
+      documentary_scope: documentaryScope,
+      evidence_type: evidenceType,
       position: String(position || "").trim() || null,
     },
   };

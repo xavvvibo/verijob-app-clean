@@ -11,6 +11,12 @@ import {
   extractDocumentarySignals,
 } from "@/lib/candidate/documentary-processing";
 import { extractCvTextFromBuffer } from "@/utils/cv/extractText";
+import {
+  getEvidenceTypeConfig,
+  EVIDENCE_VALIDATION_INTERNAL,
+  normalizeEvidenceType,
+  normalizeValidationStatus,
+} from "@/lib/candidate/evidence-types";
 
 function json(res: NextApiResponse, status: number, body: any) {
   res.setHeader("Cache-Control", "no-store");
@@ -20,6 +26,15 @@ function json(res: NextApiResponse, status: number, body: any) {
 function isHexSha256(s?: string) {
   if (!s) return true;
   return /^[a-f0-9]{64}$/i.test(s);
+}
+
+function normalizeDateOnly(value: unknown): string | null {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const d = new Date(raw);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toISOString().slice(0, 10);
 }
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -44,7 +59,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const verification_request_id = String(body?.verification_request_id ?? "").trim();
     const storage_path = String(body?.storage_path ?? "").trim();
-    const evidence_type = body?.evidence_type ? String(body.evidence_type).slice(0, 50) : null;
+    const evidence_type = normalizeEvidenceType(body?.evidence_type);
+    const evidenceConfig = getEvidenceTypeConfig(evidence_type);
     const file_sha256 = body?.file_sha256 ? String(body.file_sha256).toLowerCase() : null;
 
     if (!verification_request_id) {
@@ -84,6 +100,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       verification_request_id,
       storage_path,
       evidence_type,
+      document_type: evidence_type,
+      document_scope: evidenceConfig.scope,
+      trust_weight: evidenceConfig.trustWeight,
+      validation_status: EVIDENCE_VALIDATION_INTERNAL.UPLOADED,
+      inconsistency_reason: null,
+      document_issue_date: null,
       uploaded_by: auth.user.id,
       file_sha256,
     };
@@ -91,7 +113,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const { data, error } = await supabase
       .from("evidences")
       .insert(row)
-      .select("id, verification_request_id, storage_path, evidence_type, uploaded_by, created_at, file_sha256")
+      .select("id, verification_request_id, storage_path, evidence_type, document_type, document_scope, trust_weight, validation_status, inconsistency_reason, document_issue_date, uploaded_by, created_at, file_sha256")
       .single();
 
     if (error) {
@@ -116,6 +138,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     }).catch(() => {});
 
+    await supabase
+      .from("evidences")
+      .update({ validation_status: EVIDENCE_VALIDATION_INTERNAL.AUTO_PROCESSING })
+      .eq("id", data.id)
+      .eq("uploaded_by", auth.user.id);
+
     const evidenceMime =
       storage_path.toLowerCase().endsWith(".pdf")
         ? "application/pdf"
@@ -139,6 +167,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       error: null,
       fallback_text_mode: false,
     };
+    let finalValidationStatus = EVIDENCE_VALIDATION_INTERNAL.NEEDS_REVIEW;
+    let finalInconsistencyReason: string | null = null;
+    let finalDocumentIssueDate: string | null = null;
 
     try {
       const { data: fileBlob, error: downloadErr } = await supabase.storage
@@ -188,11 +219,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         link_state: matching.link_state,
         needs_manual_review: matching.needs_manual_review,
         matching_reason: matching.matching_reason,
+        inconsistency_reason: matching.inconsistency_reason || null,
         fallback_text_mode: Boolean(extractionResult.fallbackTextUsed),
         warning: extractionResult.warning || null,
         provider: extractionResult.provider,
         model: extractionResult.model,
+        evidence_type: evidence_type,
+        trust_weight: evidenceConfig.trustWeight,
+        evidence_scope: evidenceConfig.scope,
       };
+      finalValidationStatus = matching.auto_link
+        ? EVIDENCE_VALIDATION_INTERNAL.APPROVED
+        : matching.inconsistency_reason
+          ? EVIDENCE_VALIDATION_INTERNAL.REJECTED
+          : EVIDENCE_VALIDATION_INTERNAL.NEEDS_REVIEW;
+      finalInconsistencyReason = matching.inconsistency_reason || null;
+      finalDocumentIssueDate = normalizeDateOnly(extractionResult?.extraction?.issue_date);
 
       const bestMatchId = String(matching?.best_match?.employment_record_id || "").trim() || null;
       const currentEmploymentRecordId = String((vr as any)?.employment_record_id || "").trim() || null;
@@ -235,7 +277,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         link_state: "suggested_review",
         needs_manual_review: true,
         error: String(processingError?.message || processingError),
+        evidence_type: evidence_type,
+        trust_weight: evidenceConfig.trustWeight,
+        evidence_scope: evidenceConfig.scope,
       };
+      finalValidationStatus = EVIDENCE_VALIDATION_INTERNAL.NEEDS_REVIEW;
+      finalInconsistencyReason = null;
       console.error("documentary evidence processing failed", {
         verification_request_id,
         storage_path,
@@ -259,6 +306,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from("verification_requests")
       .update({ request_context: nextContext })
       .eq("id", verification_request_id);
+
+    await supabase
+      .from("evidences")
+      .update({
+        document_type: evidence_type,
+        document_scope: evidenceConfig.scope,
+        trust_weight: evidenceConfig.trustWeight,
+        validation_status: normalizeValidationStatus(finalValidationStatus),
+        inconsistency_reason: finalInconsistencyReason,
+        document_issue_date: finalDocumentIssueDate,
+      })
+      .eq("id", data.id)
+      .eq("uploaded_by", auth.user.id);
 
     await recalculateAndPersistCandidateTrustScore(auth.user.id).catch(() => {});
 

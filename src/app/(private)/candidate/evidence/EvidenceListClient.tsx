@@ -2,12 +2,19 @@
 
 import { useMemo, useState } from "react";
 import { resolveEvidenceEmploymentRecordId } from "@/lib/candidate/evidence-linkage";
+import {
+  getEvidenceTypeOptions,
+  normalizeEvidenceType,
+  requiresExperienceAssociation,
+} from "@/lib/candidate/evidence-types";
 
 type EvidenceItem = {
   id: string;
   document_name: string;
+  document_type: string;
   experience: string;
   status: string;
+  reason: string | null;
   created_at: string | null;
 };
 
@@ -17,6 +24,7 @@ type ExperienceOption = {
 };
 
 const STORAGE_KEY = "candidate_hidden_evidence_ids_v1";
+const EVIDENCE_OPTIONS = getEvidenceTypeOptions();
 
 function formatEsDate(value: string | null) {
   if (!value) return "—";
@@ -74,7 +82,13 @@ export default function EvidenceListClient({
       ? preselectedExperienceId
       : experienceOptions[0]?.id || ""
   );
+  const [selectedEvidenceType, setSelectedEvidenceType] = useState<string>("vida_laboral");
   const [file, setFile] = useState<File | null>(null);
+  const selectedTypeConfig = useMemo(
+    () => EVIDENCE_OPTIONS.find((opt) => opt.key === selectedEvidenceType) || EVIDENCE_OPTIONS[0],
+    [selectedEvidenceType]
+  );
+  const requiresExperience = Boolean(selectedTypeConfig?.requiresExperience);
 
   const visibleItems = useMemo(
     () => initialItems.filter((item) => !hiddenIds.has(item.id) && !removedIds.has(item.id)),
@@ -86,7 +100,7 @@ export default function EvidenceListClient({
       setUploadMessage("Selecciona un documento para subir.");
       return;
     }
-    if (!selectedExperienceId) {
+    if (requiresExperience && !selectedExperienceId) {
       setUploadMessage("Selecciona una experiencia para asociar la evidencia.");
       return;
     }
@@ -97,7 +111,7 @@ export default function EvidenceListClient({
       const { guessedId: guessedExperienceId, employmentRecordId } = resolveEvidenceEmploymentRecordId({
         filename: file.name,
         options: experienceOptions,
-        selectedExperienceId,
+        selectedExperienceId: requiresExperience ? selectedExperienceId : "",
       });
       const fileHash = await sha256Hex(file);
 
@@ -106,11 +120,11 @@ export default function EvidenceListClient({
         headers: { "content-type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          employment_record_id: employmentRecordId,
+          employment_record_id: requiresExperience ? employmentRecordId : null,
           mime: file.type || "application/octet-stream",
           size_bytes: file.size,
           filename: file.name,
-          evidence_type: "documentary",
+          evidence_type: normalizeEvidenceType(selectedEvidenceType),
           file_sha256: fileHash,
         }),
       });
@@ -135,7 +149,7 @@ export default function EvidenceListClient({
         body: JSON.stringify({
           verification_request_id: uploadUrlJson.verification_request_id,
           storage_path: uploadUrlJson.storage_path,
-          evidence_type: "documentary",
+          evidence_type: normalizeEvidenceType(selectedEvidenceType),
           file_sha256: fileHash,
         }),
       });
@@ -145,15 +159,13 @@ export default function EvidenceListClient({
       }
       const linkState = String(confirmJson?.documentary_processing?.link_state || "");
 
-      setUploadMessage(
-        linkState === "auto_linked"
-          ? guessedExperienceId
-            ? "Evidencia subida y vinculada automáticamente a la experiencia detectada."
-            : "Evidencia subida y vinculada automáticamente a la experiencia seleccionada."
-          : linkState === "suggested_review"
-            ? "Evidencia subida. Coincidencia parcial detectada: queda pendiente de revisión manual."
-            : "Evidencia subida. No se ha podido vincular automáticamente; revisa la experiencia objetivo."
-      );
+      setUploadMessage(linkState === "auto_linked"
+        ? "Evidencia subida y aprobada."
+        : linkState === "suggested_review"
+          ? "Evidencia subida. En proceso de validación."
+          : requiresExperience
+            ? "Evidencia subida. En proceso de validación para la experiencia seleccionada."
+            : "Evidencia global subida. En proceso de validación.");
       setFile(null);
       window.location.reload();
     } catch (error: any) {
@@ -199,19 +211,31 @@ export default function EvidenceListClient({
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-gray-200 bg-white p-5">
-        <h2 className="text-base font-semibold text-gray-900">Documentos de verificación</h2>
+        <h2 className="text-base font-semibold text-gray-900">Subir evidencia documental</h2>
         <p className="mt-2 text-sm text-gray-600">
-          Aquí solo se muestran evidencias documentales de verificación. El CV no aparece en este listado.
+          Selecciona primero el tipo de documento. Según el tipo, Verijob te pedirá asociarlo a una experiencia concreta o lo tratará como evidencia global.
         </p>
-        <p className="mt-1 text-xs text-blue-700">Sube una evidencia para reforzar esta experiencia y acelerar su validación.</p>
-      </div>
-
-      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-5">
-        <h3 className="text-sm font-semibold text-blue-900">Subir evidencia documental</h3>
-        <p className="mt-1 text-xs text-blue-800">
-          Verijob intentará asociar automáticamente el documento a la experiencia más probable. Si no detecta coincidencia, se utilizará la experiencia seleccionada.
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
+          {selectedTypeConfig?.helper}
+        </div>
+        <p className="mt-2 text-xs font-medium text-indigo-700">
+          Esta evidencia puede reforzar tu Trust Score.
         </p>
         <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700">Tipo de documento</label>
+            <select
+              value={selectedEvidenceType}
+              onChange={(e) => setSelectedEvidenceType(normalizeEvidenceType(e.target.value))}
+              className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+            >
+              {EVIDENCE_OPTIONS.map((opt) => (
+                <option key={opt.key} value={opt.key}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="md:col-span-2">
             <label className="block text-xs font-semibold text-slate-700">Documento</label>
             <input
@@ -221,7 +245,7 @@ export default function EvidenceListClient({
               className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
             />
           </div>
-          <div>
+          <div className={requiresExperience ? "" : "hidden"}>
             <label className="block text-xs font-semibold text-slate-700">Experiencia objetivo</label>
             <select
               value={selectedExperienceId}
@@ -243,13 +267,27 @@ export default function EvidenceListClient({
             disabled={uploading}
             className="inline-flex rounded-lg bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
           >
-            {uploading ? "Subiendo evidencia..." : "Subir y asociar evidencia"}
+            {uploading ? "Subiendo evidencia..." : "Subir evidencia"}
           </button>
-          <span className="text-xs text-slate-600">Si la asociación automática falla, quedará vinculada con la experiencia seleccionada.</span>
+          <span className="text-xs text-slate-600">
+            {requiresExperience
+              ? "Se asociará a la experiencia seleccionada y quedará en validación."
+              : "La fe de vida laboral se registra como evidencia global y puede reforzar varias experiencias."}
+          </span>
         </div>
         {uploadMessage ? (
           <div className="mt-3 rounded-lg border border-blue-200 bg-white p-2 text-xs text-blue-900">{uploadMessage}</div>
         ) : null}
+      </div>
+
+      <div className="rounded-2xl border border-gray-200 bg-white p-5">
+        <h3 className="text-base font-semibold text-gray-900">Evidencias subidas</h3>
+        <p className="mt-2 text-sm text-gray-600">
+          Estado visible para candidato: Aprobada, Rechazada o En proceso de validación.
+        </p>
+        <p className="mt-1 text-xs text-slate-500">
+          El impacto en Trust Score depende del tipo documental, la consistencia y la validación final.
+        </p>
       </div>
 
       {visibleItems.length === 0 ? (
@@ -263,9 +301,11 @@ export default function EvidenceListClient({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900">{it.document_name}</h3>
-                  <p className="mt-1 text-xs text-gray-600">Vinculada a: {it.experience}</p>
+                  <p className="mt-1 text-xs text-gray-600">Tipo documental: {it.document_type}</p>
+                  <p className="mt-1 text-xs text-gray-600">Asociación: {it.experience}</p>
                   <p className="mt-1 text-xs text-gray-600">Estado: {it.status}</p>
                   <p className="mt-1 text-xs text-gray-600">Subida: {formatEsDate(it.created_at)}</p>
+                  {it.reason ? <p className="mt-1 text-xs text-gray-600">Detalle: {it.reason}</p> : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button

@@ -190,15 +190,20 @@ export function computeDocumentaryMatching({ extraction, employmentRecords, cand
 
   const extractionConfidence = extraction?.confidence_score == null ? 0.5 : clamp01(extraction.confidence_score);
   const finalScore = best ? clamp01(best.score * 0.75 + extractionConfidence * 0.25) : 0;
+  const candidateNameScore = extraction?.candidate_name
+    ? tokenSimilarity(extraction?.candidate_name, candidateName)
+    : 0.5;
+  const hasNameInconsistency = Boolean(extraction?.candidate_name && candidateNameScore < 0.55);
 
   const autoLink = Boolean(
     best &&
-      finalScore >= 0.82 &&
-      best.companySimilarity >= 0.6 &&
-      (best.dateScore >= 0.4 || best.titleSimilarity >= 0.5)
+    finalScore >= 0.82 &&
+    best.companySimilarity >= 0.6 &&
+    (best.dateScore >= 0.4 || best.titleSimilarity >= 0.5) &&
+    !hasNameInconsistency
   );
 
-  const suggestedReview = Boolean(!autoLink && best && finalScore >= 0.6);
+  const suggestedReview = Boolean(hasNameInconsistency || (!autoLink && best && finalScore >= 0.6));
 
   const linkState = autoLink ? "auto_linked" : suggestedReview ? "suggested_review" : "unlinked";
 
@@ -212,8 +217,13 @@ export function computeDocumentaryMatching({ extraction, employmentRecords, cand
     matching_reason: autoLink
       ? "Coincidencia alta entre empresa, periodo y puesto"
       : suggestedReview
-        ? "Coincidencia parcial; requiere revisión manual"
+        ? hasNameInconsistency
+          ? "Inconsistencia detectada en titular del documento"
+          : "Coincidencia parcial; requiere revisión manual"
         : "Coincidencia insuficiente para autovincular",
+    inconsistency_reason: hasNameInconsistency
+      ? "Inconsistencia detectada en titular del documento"
+      : null,
   };
 }
 

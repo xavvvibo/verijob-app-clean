@@ -6,6 +6,11 @@ import {
   buildEmploymentRecordDocumentaryRequestedUpdate,
   getActiveDocumentaryVerificationId,
 } from "@/lib/candidate/documentary-flow";
+import {
+  getEvidenceTypeConfig,
+  normalizeEvidenceType,
+  requiresExperienceAssociation,
+} from "@/lib/candidate/evidence-types";
 
 const BUCKET = "evidence";
 const MAX_MB = 20;
@@ -72,12 +77,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const mime = String(body?.mime ?? "").trim();
     const size_bytes = Number(body?.size_bytes ?? 0);
     const original_name = safeFilename(String(body?.filename ?? "file"));
-    const evidence_type = body?.evidence_type ? String(body.evidence_type).slice(0, 50) : null;
+    const evidence_type = normalizeEvidenceType(body?.evidence_type);
+    const evidenceConfig = getEvidenceTypeConfig(evidence_type);
     const file_sha256 = body?.file_sha256 ? String(body.file_sha256).toLowerCase() : null;
 
-    if (!verification_request_id && !employment_record_id) {
+    if (!verification_request_id && !employment_record_id && requiresExperienceAssociation(evidence_type)) {
       return json(res, 400, {
-        error: "Falta verification_request_id o employment_record_id",
+        error: "Selecciona una experiencia para este tipo de documento",
         route: "/pages/api/candidate/evidence/upload-url",
       });
     }
@@ -158,6 +164,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             companyName: (er as any)?.company_name_freeform,
             position: (er as any)?.position,
             nowIso,
+            documentaryScope: "experience",
+            evidenceType: evidence_type,
           });
           const { data: createdVr, error: createVrErr } = await supabase
             .from("verification_requests")
@@ -184,6 +192,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .from("employment_records")
         .update(employmentUpdate)
         .eq("id", resolvedEmploymentRecordId);
+    }
+
+    if (!resolvedVerificationRequestId && !resolvedEmploymentRecordId && !requiresExperienceAssociation(evidence_type)) {
+      const nowIso = new Date().toISOString();
+      const payload = buildDocumentaryVerificationInsert({
+        employmentRecordId: null,
+        userId: auth.user.id,
+        companyName: "Historial laboral",
+        position: "Evidencia global",
+        nowIso,
+        documentaryScope: "global",
+        evidenceType: evidence_type,
+      });
+      const { data: createdVr, error: createVrErr } = await supabase
+        .from("verification_requests")
+        .insert(payload)
+        .select("id")
+        .single();
+      if (createVrErr || !createdVr?.id) {
+        return json(res, 400, {
+          error: "No se pudo crear verification_request documental global",
+          route: "/pages/api/candidate/evidence/upload-url",
+          details: createVrErr?.message || null,
+        });
+      }
+      resolvedVerificationRequestId = String(createdVr.id);
     }
 
     if (!resolvedVerificationRequestId) {
@@ -240,6 +274,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       mime,
       size_bytes,
       evidence_type,
+      evidence_type_label: evidenceConfig.label,
+      evidence_scope: evidenceConfig.scope,
+      trust_weight: evidenceConfig.trustWeight,
       file_sha256,
       evidence_client_ref,
       note: "Sube el archivo usando signed_url y luego llama a POST /api/candidate/evidence/confirm para registrar evidencia y ejecutar extracción documental.",

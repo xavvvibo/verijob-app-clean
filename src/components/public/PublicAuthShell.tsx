@@ -24,7 +24,7 @@ export default function PublicAuthShell({
             <img
               src="/verijob-logo.png"
               alt="Verijob"
-              className="mb-14 h-12 w-auto object-contain"
+              className="mb-10 h-20 w-auto object-contain lg:h-28"
               loading="eager"
             />
 

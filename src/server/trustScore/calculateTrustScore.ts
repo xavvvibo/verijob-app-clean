@@ -1,4 +1,10 @@
 import { createAdminSupabaseClient } from "@/utils/supabase/admin";
+import {
+  getEvidenceTypeWeight,
+  normalizeEvidenceType,
+  normalizeValidationStatus,
+  EVIDENCE_VALIDATION_INTERNAL,
+} from "@/lib/candidate/evidence-types";
 
 type TrustBreakdown = {
   verification: number;
@@ -41,21 +47,6 @@ function normalizeText(value: unknown) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function isNomina(type: unknown) {
-  const t = normalizeText(type);
-  return t.includes("nomina") || t.includes("payroll");
-}
-
-function isContrato(type: unknown) {
-  const t = normalizeText(type);
-  return t.includes("contrato") || t.includes("contract");
-}
-
-function isVidaLaboral(type: unknown) {
-  const t = normalizeText(type);
-  return t.includes("vida laboral") || t.includes("informe vida") || t.includes("work history");
 }
 
 function consistencyBlockFromEmployment(rows: any[]): number {
@@ -107,7 +98,7 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
       .eq("requested_by", candidateId),
     admin
       .from("evidences")
-      .select("id,evidence_type,uploaded_by,verification_request_id")
+      .select("id,evidence_type,document_type,document_scope,trust_weight,validation_status,inconsistency_reason,uploaded_by,verification_request_id")
       .eq("uploaded_by", candidateId),
   ]);
 
@@ -123,18 +114,30 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
   const verificationBlock =
     verifiedEmploymentCount >= 3 ? 40 : verifiedEmploymentCount === 2 ? 30 : verifiedEmploymentCount === 1 ? 20 : 0;
 
-  const hasNomina = evidences.some((row: any) => isNomina(row?.evidence_type));
-  const hasContrato = evidences.some((row: any) => isContrato(row?.evidence_type));
-  const hasVida = evidences.some((row: any) => isVidaLaboral(row?.evidence_type));
-
-  let evidenceBlock = 0;
-  if (hasVida && hasContrato) evidenceBlock = 26;
-  else if (hasVida) evidenceBlock = 22;
-  else {
-    if (hasContrato) evidenceBlock += 10;
-    if (hasNomina) evidenceBlock += 6;
-  }
-  evidenceBlock = Math.min(30, evidenceBlock);
+  const usableEvidences = evidences.filter((row: any) => {
+    const status = normalizeValidationStatus(row?.validation_status);
+    return status !== EVIDENCE_VALIDATION_INTERNAL.REJECTED;
+  });
+  const uniqueEvidenceTypes = new Set(
+    usableEvidences
+      .map((row: any) => normalizeEvidenceType(row?.document_type || row?.evidence_type))
+      .filter(Boolean)
+  );
+  const evidenceWeightSum = Array.from(uniqueEvidenceTypes).reduce(
+    (acc, type) => {
+      const row = usableEvidences.find(
+        (e: any) => normalizeEvidenceType(e?.document_type || e?.evidence_type) === type
+      );
+      const persistedWeight = Number((row as any)?.trust_weight ?? 0);
+      const baseWeight = Number(getEvidenceTypeWeight(type) || 0);
+      const finalWeight = persistedWeight > 0 ? persistedWeight : baseWeight;
+      return acc + finalWeight;
+    },
+    0
+  );
+  const maxWeightSum = 1 + 0.85 + 0.8 + 0.65 + 0.35; // vida laboral + certificado + contrato + nómina + otro
+  const weightedEvidenceRatio = maxWeightSum > 0 ? evidenceWeightSum / maxWeightSum : 0;
+  const evidenceBlock = Math.min(30, Math.round(weightedEvidenceRatio * 30));
 
   const consistencyBlock = consistencyBlockFromEmployment(employment);
 
@@ -164,10 +167,10 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
       reuse: reuseBlock,
       approved: verifiedEmploymentCount,
       confirmed: verifications.filter((row: any) => normalizeText(row?.status) === "verified").length,
-      evidences: evidences.length,
+      evidences: usableEvidences.length,
       reuseEvents,
       reuseCompanies,
-      model: "trust_mvp_f28_v1",
+      model: "trust_mvp_f28_v2_weighted_evidence",
     },
   };
 }

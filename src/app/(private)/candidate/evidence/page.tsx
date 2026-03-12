@@ -2,6 +2,10 @@ import { redirect } from "next/navigation";
 import DashboardShell from "@/app/_components/DashboardShell";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import EvidenceListClient from "./EvidenceListClient";
+import {
+  getEvidenceTypeLabel,
+  toEvidenceUiStatusWithReason,
+} from "@/lib/candidate/evidence-types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -9,8 +13,10 @@ export const revalidate = 0;
 type EvidenceItem = {
   id: string;
   document_name: string;
+  document_type: string;
   experience: string;
   status: string;
+  reason: string | null;
   created_at: string | null;
 };
 
@@ -18,22 +24,6 @@ type ExperienceOption = {
   id: string;
   label: string;
 };
-
-function statusEs(status: string) {
-  const v = String(status || "").toLowerCase();
-  if (v.includes("verified") || v.includes("approved")) return "Aceptada";
-  if (v.includes("rejected")) return "Rechazada";
-  if (v.includes("clarif") || v.includes("modified")) return "Pendiente de aclaración";
-  return "Procesando";
-}
-
-function documentaryStatusEs(row: any) {
-  const linkState = String(row?.verification_requests?.request_context?.documentary_processing?.link_state || "");
-  if (linkState === "auto_linked") return "Vinculada automáticamente";
-  if (linkState === "suggested_review") return "Pendiente de revisión manual";
-  if (linkState === "unlinked") return "No vinculada automáticamente";
-  return statusEs(row?.verification_requests?.status || "processing");
-}
 
 export default async function CandidateEvidencePage(props: any) {
   const supabase = await createServerSupabaseClient();
@@ -51,7 +41,7 @@ export default async function CandidateEvidencePage(props: any) {
 
   const { data: evidences } = await supabase
     .from("evidences")
-    .select("id, verification_request_id, storage_path, created_at, verification_requests(status, request_context, employment_records(position, company_name_freeform))")
+    .select("id, verification_request_id, storage_path, created_at, evidence_type, document_type, document_scope, validation_status, inconsistency_reason, trust_weight, verification_requests(status, request_context, employment_record_id, employment_records(position, company_name_freeform))")
     .eq("uploaded_by", au.user.id)
     .order("created_at", { ascending: false });
 
@@ -75,11 +65,24 @@ export default async function CandidateEvidencePage(props: any) {
     const vr = Array.isArray(r.verification_requests) ? r.verification_requests[0] : r.verification_requests;
     const er = Array.isArray(vr?.employment_records) ? vr.employment_records[0] : vr?.employment_records;
     const docName = String(r.storage_path || "documento").split("/").pop() || "documento";
+    const processing = vr?.request_context?.documentary_processing || {};
+    const ui = toEvidenceUiStatusWithReason({
+      validationStatus: r?.validation_status || vr?.status,
+      inconsistencyReason: r?.inconsistency_reason || processing?.inconsistency_reason,
+      matchingReason: processing?.matching_reason,
+      error: processing?.error,
+    });
+    const scope = String(r?.document_scope || vr?.request_context?.documentary_scope || "").toLowerCase();
     return {
       id: r.id,
       document_name: docName,
-      experience: [er?.position, er?.company_name_freeform].filter(Boolean).join(" · ") || "Experiencia no vinculada",
-      status: documentaryStatusEs(r),
+      document_type: getEvidenceTypeLabel(r?.document_type || r?.evidence_type),
+      experience:
+        scope === "global"
+          ? "Varias experiencias"
+          : [er?.position, er?.company_name_freeform].filter(Boolean).join(" — ") || "Experiencia no vinculada",
+      status: ui.status,
+      reason: ui.reason || null,
       created_at: r.created_at || null,
     };
   });
