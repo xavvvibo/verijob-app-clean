@@ -32,7 +32,16 @@ function mapOtpErrorMessage(raw: string | null | undefined) {
 
 export default function LoginCard() {
   const sp = useSearchParams();
-  const next = useMemo(() => safeNext(sp.get("next")), [sp]);
+  const mode = sp.get("mode");
+  const rawNext = sp.get("next");
+  const next = useMemo(() => safeNext(rawNext), [rawNext]);
+  const signupHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (mode) params.set("mode", mode);
+    if (rawNext) params.set("next", next);
+    const qs = params.toString();
+    return qs ? `/signup?${qs}` : "/signup";
+  }, [mode, rawNext, next]);
 
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
@@ -175,7 +184,7 @@ export default function LoginCard() {
       <div className="mt-6 space-y-2 text-sm text-slate-600">
         <p>
           ¿No tienes cuenta?{" "}
-          <Link href="/signup" className="font-medium text-blue-700 hover:text-blue-800">
+          <Link href={signupHref} className="font-medium text-blue-700 hover:text-blue-800">
             Crear cuenta
           </Link>
         </p>
