@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
+import { createServerSupabaseClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 import type { ReactNode } from "react";
 import OwnerTooltip from "@/components/ui/OwnerTooltip";
 
@@ -114,28 +116,58 @@ function pct(numerator: number, denominator: number) {
   return Math.round((numerator / denominator) * 100);
 }
 
+async function countAuthUsers(admin: ReturnType<typeof createServiceRoleClient>) {
+  const perPage = 200;
+  let page = 1;
+  let total = 0;
+  let guard = 0;
+  while (guard < 100) {
+    guard += 1;
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) break;
+    const users = Array.isArray(data?.users) ? data.users : [];
+    total += users.length;
+    if (users.length < perPage) break;
+    page += 1;
+  }
+  return total;
+}
+
 export default function OwnerOverviewPage() {
   return <OwnerOverviewServer />;
 }
 
 async function OwnerOverviewServer() {
-  const supabase = await createClient();
+  const sessionClient = await createServerSupabaseClient();
+  const { data: auth } = await sessionClient.auth.getUser();
+  if (!auth?.user) redirect("/login?next=/owner/overview");
+
+  const { data: ownerProfile } = await sessionClient
+    .from("profiles")
+    .select("role")
+    .eq("id", auth.user.id)
+    .maybeSingle();
+  const ownerRole = String(ownerProfile?.role || "").toLowerCase();
+  if (ownerRole !== "owner" && ownerRole !== "admin") redirect("/dashboard?forbidden=1&from=owner");
+
+  const admin = createServiceRoleClient();
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
   const weekAgo = now - 7 * dayMs;
   const monthAgo = now - 30 * dayMs;
 
-  const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicProfilesRes, issuesRes, employmentRes] = await Promise.all([
-    supabase.from("profiles").select("id,role,onboarding_completed,created_at"),
-    supabase.from("companies").select("id", { count: "exact", head: true }),
-    supabase.from("verification_requests").select("id,status,requested_at,created_at,resolved_at,company_id,requested_by,verification_channel,external_resolved"),
-    supabase.from("evidences").select("id,evidence_type,verification_request_id,uploaded_by,created_at"),
-    supabase.from("subscriptions").select("id,status,amount,created_at,plan"),
-    supabase.from("growth_campaigns").select("*"),
-    supabase.from("cv_parse_jobs").select("id,status,created_at"),
-    supabase.from("profiles").select("id,public_token,expires_at"),
-    supabase.from("issues").select("id,status,created_at"),
-    supabase.from("employment_records").select("id,candidate_id,created_at,verification_status"),
+  const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicProfilesRes, issuesRes, employmentRes, authUsersTotal] = await Promise.all([
+    admin.from("profiles").select("id,role,onboarding_completed,created_at,last_activity_at"),
+    admin.from("companies").select("id,created_at,updated_at,status", { count: "exact" }),
+    admin.from("verification_requests").select("id,status,requested_at,created_at,resolved_at,company_id,requested_by,verification_channel,external_resolved"),
+    admin.from("evidences").select("id,evidence_type,document_type,validation_status,verification_request_id,uploaded_by,created_at"),
+    admin.from("subscriptions").select("id,user_id,status,amount,created_at,plan"),
+    admin.from("growth_campaigns").select("*"),
+    admin.from("cv_parse_jobs").select("id,status,created_at"),
+    admin.from("profiles").select("id,public_token,expires_at"),
+    admin.from("issue_reports").select("id,status,created_at"),
+    admin.from("employment_records").select("id,candidate_id,created_at,verification_status"),
+    countAuthUsers(admin),
   ]);
 
   const profiles = Array.isArray(profilesRes.data) ? profilesRes.data : [];
@@ -148,19 +180,8 @@ async function OwnerOverviewServer() {
   const publicProfiles = Array.isArray(publicProfilesRes.data) ? publicProfilesRes.data : [];
   const issues = Array.isArray(issuesRes.data) ? issuesRes.data : [];
   const employments = Array.isArray(employmentRes.data) ? employmentRes.data : [];
-  const profilesWithLastActivityRes = await supabase
-    .from("profiles")
-    .select("id,role,onboarding_completed,created_at,last_activity_at");
-  const companiesWithUpdatedRes = await supabase
-    .from("companies")
-    .select("id,created_at,updated_at,status");
-
-  const profilesForActivity = Array.isArray(profilesWithLastActivityRes.data)
-    ? profilesWithLastActivityRes.data
-    : profiles;
-  const companiesForActivity = Array.isArray(companiesWithUpdatedRes.data)
-    ? companiesWithUpdatedRes.data
-    : [];
+  const profilesForActivity = profiles;
+  const companiesForActivity = Array.isArray(companiesRes.data) ? companiesRes.data : [];
 
   const candidateProfiles = profiles.filter((p: any) => String(p.role || "").toLowerCase() === "candidate");
   const companyProfiles = profiles.filter((p: any) => String(p.role || "").toLowerCase() === "company");
@@ -190,40 +211,7 @@ async function OwnerOverviewServer() {
       .filter((id: string) => Boolean(id) && candidateIds.has(id))
   );
 
-  const recentActivityCandidateIds = new Set<string>();
-  for (const row of employments) {
-    const id = String((row as any).candidate_id || "");
-    const createdAt = Date.parse(String((row as any).created_at || ""));
-    if (id && Number.isFinite(createdAt) && createdAt >= monthAgo && candidateIds.has(id)) {
-      recentActivityCandidateIds.add(id);
-    }
-  }
-  for (const row of requests) {
-    const id = String((row as any).requested_by || "");
-    const ref = Date.parse(String((row as any).requested_at || (row as any).created_at || ""));
-    if (id && Number.isFinite(ref) && ref >= monthAgo && candidateIds.has(id)) {
-      recentActivityCandidateIds.add(id);
-    }
-  }
-  for (const row of evidenceRows) {
-    const id = String((row as any).uploaded_by || "");
-    const createdAt = Date.parse(String((row as any).created_at || ""));
-    if (id && Number.isFinite(createdAt) && createdAt >= monthAgo && candidateIds.has(id)) {
-      recentActivityCandidateIds.add(id);
-    }
-  }
-
-  const companyIdsFromRequestsLast30 = new Set(
-    requests
-      .filter((r: any) => {
-        const ref = Date.parse(String(r.requested_at || r.created_at || ""));
-        return Number.isFinite(ref) && ref >= monthAgo;
-      })
-      .map((r: any) => String(r.company_id || ""))
-      .filter(Boolean)
-  );
-
-  const usersTotal = profiles.length;
+  const usersTotal = authUsersTotal;
   const candidatesTotal = candidateProfiles.length;
   const companiesUsersTotal = companyProfiles.length;
   const ownersTotal = ownerProfiles.length;
@@ -231,35 +219,36 @@ async function OwnerOverviewServer() {
   const onboardingCompleted = candidateProfiles.filter((p: any) => Boolean(p.onboarding_completed)).length;
   const onboardingPending = candidatesTotal - onboardingCompleted;
 
-  const activeProfiles = profilesWithLastActivityRes.error
-    ? recentActivityCandidateIds.size
-    : profilesForActivity.filter((p: any) => {
-        const ts = Date.parse(String(p.last_activity_at || ""));
-        return Number.isFinite(ts) && ts >= monthAgo;
-      }).length;
+  const activeProfiles = profilesForActivity.filter((p: any) => {
+    const ts = Date.parse(String(p.last_activity_at || ""));
+    return Number.isFinite(ts) && ts >= monthAgo;
+  }).length;
 
-  const activeCompanies = companiesWithUpdatedRes.error
-    ? companyIdsFromRequestsLast30.size
-    : companiesForActivity.filter((c: any) => {
-        const ts = Date.parse(String(c.updated_at || c.created_at || ""));
-        return Number.isFinite(ts) && ts >= monthAgo;
-      }).length;
+  const activeCompanies = companiesForActivity.filter((c: any) => {
+    const ts = Date.parse(String(c.updated_at || c.created_at || ""));
+    return Number.isFinite(ts) && ts >= monthAgo;
+  }).length;
   const inactiveCompanies = Math.max(companiesTotal - activeCompanies, 0);
 
   const verificationsTotal = requests.length;
-  const pendingVerifications = requests.filter((r: any) => {
-    const s = String(r.status || "").toLowerCase();
-    return s.includes("pending") || s === "draft";
-  }).length;
+  const statusCounts = {
+    draft: requests.filter((r: any) => String(r.status || "").toLowerCase() === "draft").length,
+    pending_company: requests.filter((r: any) => String(r.status || "").toLowerCase() === "pending_company").length,
+    reviewing: requests.filter((r: any) => String(r.status || "").toLowerCase() === "reviewing").length,
+    verified: requests.filter((r: any) => String(r.status || "").toLowerCase() === "verified").length,
+    rejected: requests.filter((r: any) => String(r.status || "").toLowerCase() === "rejected").length,
+    revoked: requests.filter((r: any) => String(r.status || "").toLowerCase() === "revoked").length,
+  };
+  const pendingVerifications = statusCounts.draft + statusCounts.pending_company + statusCounts.reviewing;
 
   const resolvedRows = requests.filter((r: any) => {
     const s = String(r.status || "").toLowerCase();
     return s === "verified" || s === "rejected" || s === "revoked";
   });
   const completedVerifications = resolvedRows.length;
-  const verifiedVerifications = verifiedRows.length;
-  const rejectedVerifications = requests.filter((r: any) => String(r.status || "").toLowerCase() === "rejected").length;
-  const revokedVerifications = requests.filter((r: any) => String(r.status || "").toLowerCase() === "revoked").length;
+  const verifiedVerifications = statusCounts.verified;
+  const rejectedVerifications = statusCounts.rejected;
+  const revokedVerifications = statusCounts.revoked;
 
   const requestsThisWeek = requests.filter((r: any) => {
     const ref = Date.parse(String(r.requested_at || r.created_at || ""));
@@ -285,34 +274,35 @@ async function OwnerOverviewServer() {
   const evidencesTotal = evidenceRows.length;
   const evidencesUnlinked = evidenceRows.filter((e: any) => !e.verification_request_id).length;
   const evidencesLinked = evidencesTotal - evidencesUnlinked;
-  const evidencesInReviewProxy = evidencesUnlinked;
+  const evidencesWithoutStatus = evidenceRows.filter((e: any) => {
+    const st = String(e.validation_status || "").trim();
+    return !st;
+  }).length;
 
   const subscriptionsActive = subscriptions.filter((s: any) => {
     const st = String(s.status || "").toLowerCase();
     return st === "active" || st === "trialing";
   });
 
+  const subscriptionsCanceled = subscriptions.filter((s: any) => String(s.status || "").toLowerCase() === "canceled");
+  const subscriptionsNew30d = subscriptions.filter((s: any) => {
+    const created = Date.parse(String(s.created_at || ""));
+    return Number.isFinite(created) && created >= monthAgo;
+  }).length;
+
   const totalMrr = subscriptionsActive.reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
+
+  const roleByUser = new Map<string, string>();
+  for (const p of profiles as any[]) roleByUser.set(String(p.id || ""), String(p.role || "").toLowerCase());
 
   const candidateMrr =
     subscriptionsActive
-      .filter((row: any) => String(row.plan || "").toLowerCase().includes("candidate"))
+      .filter((row: any) => roleByUser.get(String(row.user_id || "")) === "candidate")
       .reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
 
   const companyMrr =
     subscriptionsActive
-      .filter((row: any) => {
-        const plan = String(row.plan || "").toLowerCase();
-        return plan.includes("company") || plan.includes("enterprise");
-      })
-      .reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
-
-  const oneOffRevenueProxy =
-    subscriptions
-      .filter((row: any) => {
-        const plan = String(row.plan || "").toLowerCase();
-        return plan.includes("payg") || plan.includes("one") || plan.includes("usage");
-      })
+      .filter((row: any) => roleByUser.get(String(row.user_id || "")) === "company")
       .reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
 
   const freeUsers = profiles.filter((p: any) => {
@@ -321,10 +311,7 @@ async function OwnerOverviewServer() {
   }).length;
   const paidUsers = subscriptionsActive.length;
   const freeToPaidRate = pct(paidUsers, freeUsers + paidUsers);
-  const churnApprox = pct(
-    subscriptions.filter((s: any) => String(s.status || "").toLowerCase() === "canceled").length,
-    subscriptions.length
-  );
+  const churnApprox = pct(subscriptionsCanceled.length, subscriptionsCanceled.length + subscriptionsActive.length);
   const arpuCandidate = candidatesTotal > 0 ? Math.round((candidateMrr / candidatesTotal) * 100) / 100 : 0;
   const arpuCompany = companiesUsersTotal > 0 ? Math.round((companyMrr / companiesUsersTotal) * 100) / 100 : 0;
 
@@ -479,14 +466,14 @@ async function OwnerOverviewServer() {
       <Section title="Métricas clave" subtitle="Estado del negocio en una lectura de 3 segundos.">
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard
-            title={<span className="inline-flex items-center gap-2">Perfiles activos <OwnerTooltip text="Perfiles con actividad reciente en los últimos 30 días. Si no existe last_activity_at, se usa actividad operativa como proxy." /></span>}
-            value={String(activeProfiles)}
-            note={`Base candidatos: ${candidatesTotal} · onboarding completo: ${onboardingCompleted} · pendientes: ${onboardingPending} · owners: ${ownersTotal}`}
+            title={<span className="inline-flex items-center gap-2">Usuarios totales <OwnerTooltip text="Usuarios reales en Supabase Auth (auth.users)." /></span>}
+            value={String(usersTotal)}
+            note={`Con perfil: ${profiles.length} · sin perfil: ${Math.max(usersTotal - profiles.length, 0)}`}
           />
           <MetricCard
-            title={<span className="inline-flex items-center gap-2">Empresas activas <OwnerTooltip text="Empresas actualizadas en los últimos 30 días. Si no existe updated_at, se usa actividad de verificaciones como aproximación." /></span>}
-            value={String(activeCompanies)}
-            note={`${inactiveCompanies} inactivas (proxy últimos 30 días)`}
+            title={<span className="inline-flex items-center gap-2">Empresas totales <OwnerTooltip text="Filas reales de la tabla companies." /></span>}
+            value={String(companiesTotal)}
+            note={`Activas 30d: ${activeCompanies} · inactivas: ${inactiveCompanies}`}
           />
           <MetricCard
             title={<span className="inline-flex items-center gap-2">Verificaciones totales <OwnerTooltip text="Solicitudes de verificación registradas en el sistema, incluyendo pendientes y resueltas." /></span>}
@@ -494,7 +481,7 @@ async function OwnerOverviewServer() {
             note={`${requestsThisWeek} esta semana · ${pendingVerifications} pendientes`}
           />
           <MetricCard
-            title={<span className="inline-flex items-center gap-2">MRR <OwnerTooltip text="Ingreso mensual recurrente estimado de suscripciones activas." /></span>}
+            title={<span className="inline-flex items-center gap-2">MRR <OwnerTooltip text="Derivado fiable: suma de amount en suscripciones active/trialing." /></span>}
             value={money(totalMrr)}
             note={`${subscriptionsActive.length} suscripciones activas`}
           />
@@ -536,11 +523,19 @@ async function OwnerOverviewServer() {
           title="Operaciones diarias"
           subtitle="Cola operativa para decisiones del día y revisión manual."
         >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <MetricCard title="Verificaciones pendientes" value={String(pendingVerifications)} note="Estados draft/pending" />
-            <MetricCard title="Evidencias en revisión" value={String(evidencesInReviewProxy)} note={`Proxy sin vínculo directo · vinculadas: ${evidencesLinked}`} />
-            <MetricCard title="Empresas nuevas (7 días)" value={String(companyProfilesCreatedWeek)} note="Alta reciente de perfiles empresa" />
-            <MetricCard title="Casos manuales abiertos" value={String(openIssues + failedJobs)} note={`Incidencias ${openIssues} · jobs fallidos ${failedJobs}`} />
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <MetricCard title="Estado draft" value={String(statusCounts.draft)} />
+            <MetricCard title="Estado pending_company" value={String(statusCounts.pending_company)} />
+            <MetricCard title="Estado reviewing" value={String(statusCounts.reviewing)} />
+            <MetricCard title="Estado verified" value={String(statusCounts.verified)} />
+            <MetricCard title="Estado rejected" value={String(statusCounts.rejected)} />
+            <MetricCard title="Estado revoked" value={String(statusCounts.revoked)} />
+            <MetricCard title="Evidencias totales" value={String(evidencesTotal)} />
+            <MetricCard title="Evidencias sin estado" value={String(evidencesWithoutStatus)} />
+            <MetricCard title="Evidencias sin vinculación" value={String(evidencesUnlinked)} note={`Vinculadas: ${evidencesLinked}`} />
+            <MetricCard title="Incidencias abiertas" value={String(openIssues)} />
+            <MetricCard title="Perfiles activos (30d)" value={String(activeProfiles)} />
+            <MetricCard title="Empresas nuevas (7 días)" value={String(companyProfilesCreatedWeek)} />
           </div>
         </Section>
 
@@ -556,7 +551,7 @@ async function OwnerOverviewServer() {
               note="Desde solicitud hasta resolución"
             />
             <MetricCard title="Verificaciones rechazadas" value={String(rejectedVerifications)} note={`Revocadas ${revokedVerifications}`} />
-            <MetricCard title="Automática vs manual" value={`${completedVerifications - pendingVerifications} / ${pendingVerifications}`} note="Proxy operativo del flujo actual" />
+            <MetricCard title="Jobs pendientes" value={String(pendingJobs)} note={`Jobs fallidos ${failedJobs}`} />
           </div>
         </Section>
       </div>
@@ -598,11 +593,13 @@ async function OwnerOverviewServer() {
           <MetricCard title="MRR total" value={money(totalMrr)} note="Suscripciones activas/trialing" />
           <MetricCard title="MRR candidatos" value={money(candidateMrr)} note="Planes candidate_*" />
           <MetricCard title="MRR empresas" value={money(companyMrr)} note="Planes company/enterprise" />
-          <MetricCard title="Ingresos one-off (proxy)" value={money(oneOffRevenueProxy)} note="Planes usage/payg detectados" />
-          <MetricCard title="ARPU candidato (proxy)" value={money(arpuCandidate)} note="MRR candidato / total candidatos" />
-          <MetricCard title="ARPU empresa (proxy)" value={money(arpuCompany)} note="MRR empresa / perfiles empresa" />
+          <MetricCard title="Suscripciones activas" value={String(subscriptionsActive.length)} />
+          <MetricCard title="Altas últimos 30 días" value={String(subscriptionsNew30d)} />
+          <MetricCard title="Canceladas" value={String(subscriptionsCanceled.length)} />
+          <MetricCard title="ARPU candidato (derivado)" value={money(arpuCandidate)} note="MRR candidato / total candidatos" />
+          <MetricCard title="ARPU empresa (derivado)" value={money(arpuCompany)} note="MRR empresa / perfiles empresa" />
           <MetricCard title="Conversión free → paid" value={`${freeToPaidRate}%`} note="Usuarios con suscripción activa sobre base total" />
-          <MetricCard title="Churn aproximado" value={`${churnApprox}%`} note="Canceladas sobre total de subscripciones registradas" />
+          <MetricCard title="Churn" value={`${churnApprox}%`} note="Canceladas sobre canceladas+activas" />
         </div>
       </Section>
 
@@ -692,7 +689,7 @@ async function OwnerOverviewServer() {
       </Section>
 
       <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
-        Definiciones de esta versión: “Perfiles activos”, “empresas activas”, “integridad” y parte de la economía usan proxies operativos cuando no existe señal dedicada.
+        Definiciones: usuarios totales salen de auth.users; operación y estados salen de verification_requests/evidences/issue_reports; MRR y churn se derivan de subscriptions activas/canceladas.
       </section>
     </div>
   );
