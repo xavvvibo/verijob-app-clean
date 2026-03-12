@@ -19,6 +19,24 @@ type Credibility = {
   trust_score?: number | null;
   profile_status?: "reviewing" | "partially_verified" | "verified" | string | null;
 };
+type TrustComponents = {
+  verification?: number | null;
+  evidence?: number | null;
+  consistency?: number | null;
+  reuse?: number | null;
+};
+type TimelineRow = {
+  verification_id?: string | null;
+  position?: string | null;
+  company_name?: string | null;
+  status?: string | null;
+  evidence_count?: number | null;
+  reuse_count?: number | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  created_at?: string | null;
+  resolved_at?: string | null;
+};
 
 async function fetchCompanyProfile(token: string) {
   const h = await headers();
@@ -101,6 +119,8 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
   const contact = body?.contact ?? {};
   const availability: Availability = body?.availability ?? {};
   const credibility: Credibility = body?.credibility ?? {};
+  const trustComponents: TrustComponents = body?.trust_components ?? {};
+  const timeline: TimelineRow[] = Array.isArray(body?.verification_timeline) ? body.verification_timeline : [];
   const hasEmail = typeof contact?.email === "string" && contact.email.length > 0;
   const hasPhone = typeof contact?.phone === "string" && contact.phone.length > 0;
   const hasContact = hasEmail || hasPhone;
@@ -125,12 +145,12 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
   const evidencesCount = Number(credibility?.evidences_count ?? 0);
 
   return (
-    <main className="p-6 max-w-3xl">
+    <main className="max-w-5xl p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">CV completo (Empresa)</h1>
+          <h1 className="text-xl font-semibold text-gray-900">Perfil verificado para empresa</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Has desbloqueado el perfil completo verificado del candidato para evaluación de contratación.
+            Vista profesional del candidato con señales verificables para acelerar decisiones de contratación.
           </p>
         </div>
 
@@ -145,9 +165,9 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
         )}
       </div>
 
-      <section className="mt-6 rounded-lg border p-4">
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold text-gray-900">Señales de credibilidad del perfil</h2>
+          <h2 className="text-base font-semibold text-gray-900">Señales de credibilidad</h2>
           <span className="rounded-full border px-3 py-1 text-xs">
             {mapProfileStatus(String(credibility?.profile_status || "reviewing"))}
           </span>
@@ -160,11 +180,49 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
           <Field label="Evidencias registradas" value={String(evidencesCount)} />
         </div>
         <p className="mt-3 text-sm text-gray-600">
-          Cuantas más verificaciones reúne el candidato, mayor es la solidez de su perfil para la toma de decisión.
+          Este bloque resume la solidez verificable del perfil para reducir riesgo de contratación.
         </p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          <BreakdownBar label="Verificaciones" value={Number(trustComponents?.verification ?? 0)} />
+          <BreakdownBar label="Evidencias" value={Number(trustComponents?.evidence ?? 0)} />
+          <BreakdownBar label="Consistencia" value={Number(trustComponents?.consistency ?? 0)} />
+          <BreakdownBar label="Reutilización" value={Number(trustComponents?.reuse ?? 0)} />
+        </div>
       </section>
 
-      <section className="mt-6 rounded-lg border p-4">
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-base font-semibold text-gray-900">Historial verificable</h2>
+        {timeline.length ? (
+          <ol className="relative mt-3 ml-2 border-l border-slate-200 pl-4">
+            {timeline.map((item, idx) => (
+              <li key={item.verification_id || `timeline-${idx}`} className="mb-4 last:mb-0">
+                <span className="absolute -left-[6px] mt-1.5 h-2.5 w-2.5 rounded-full bg-blue-600" />
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{item.position || "Experiencia verificada"}</p>
+                      <p className="text-xs text-slate-600">{item.company_name || "Empresa no especificada"}</p>
+                      <p className="mt-1 text-[11px] text-slate-500">{formatPeriod(item.start_date, item.end_date)}</p>
+                    </div>
+                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusClass(item.status)}`}>
+                      {statusLabel(item.status)}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[11px] text-slate-600">
+                    Evidencias: <span className="font-semibold text-slate-900">{Number(item.evidence_count ?? 0)}</span>
+                    {" · "}
+                    Reutilizaciones: <span className="font-semibold text-slate-900">{Number(item.reuse_count ?? 0)}</span>
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="mt-3 text-sm text-gray-600">Aún no hay historial verificable disponible.</p>
+        )}
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-base font-semibold text-gray-900">Contacto del candidato</h2>
         {hasContact ? (
           <div className="mt-3 space-y-3">
@@ -205,7 +263,7 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
         )}
       </section>
 
-      <section className="mt-6 rounded-lg border p-4">
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-base font-semibold text-gray-900">Disponibilidad profesional</h2>
 
         {hasAvailabilityData ? (
@@ -237,7 +295,7 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
         )}
       </section>
 
-      <section className="mt-6 rounded-lg border p-4">
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-base font-semibold text-gray-900">Resumen profesional</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
           <Field label="Nombre" value={String(profile?.full_name || profile?.name || "No disponible")} />
@@ -261,11 +319,59 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border border-gray-200 p-3">
+    <div className="rounded-xl border border-gray-200 bg-slate-50 p-3">
       <div className="text-xs text-gray-500">{label}</div>
       <div className="mt-1 text-sm font-medium text-gray-900">{value}</div>
     </div>
   );
+}
+
+function BreakdownBar({ label, value }: { label: string; value: number }) {
+  const safe = Math.max(0, Math.min(100, Math.round(Number.isFinite(value) ? value : 0)));
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+      <div className="mb-1 flex items-center justify-between text-xs text-slate-600">
+        <span>{label}</span>
+        <span className="font-semibold text-slate-900">{safe}%</span>
+      </div>
+      <div className="h-1.5 rounded-full bg-slate-200">
+        <div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-indigo-600" style={{ width: `${safe}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function statusLabel(status?: string | null) {
+  const s = String(status || "").toLowerCase();
+  if (s === "verified" || s === "approved") return "Verificada";
+  if (s === "reviewing") return "En revisión";
+  if (s === "pending_company") return "Pendiente empresa";
+  if (s === "rejected") return "Rechazada";
+  if (s === "revoked") return "Revocada";
+  return "Sin estado";
+}
+
+function statusClass(status?: string | null) {
+  const s = String(status || "").toLowerCase();
+  if (s === "verified" || s === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (s === "reviewing") return "border-amber-200 bg-amber-50 text-amber-700";
+  if (s === "pending_company") return "border-slate-300 bg-slate-100 text-slate-700";
+  if (s === "rejected" || s === "revoked") return "border-rose-200 bg-rose-50 text-rose-700";
+  return "border-slate-300 bg-slate-100 text-slate-700";
+}
+
+function formatPeriod(start?: string | null, end?: string | null) {
+  const startText = formatMonthYear(start);
+  const endText = end ? formatMonthYear(end) : "Actualidad";
+  if (!startText && !end) return "Periodo no especificado";
+  return `${startText || "Inicio no definido"} · ${endText}`;
+}
+
+function formatMonthYear(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("es-ES", { month: "short", year: "numeric" });
 }
 
 function mapJobSearchStatus(v?: string | null) {

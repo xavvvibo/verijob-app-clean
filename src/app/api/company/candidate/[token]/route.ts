@@ -53,6 +53,10 @@ function resolveProfileStatus(args: { totalVerifications: number; evidencesCount
   return "partially_verified";
 }
 
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
 export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const { token } = await ctx.params;
 
@@ -187,6 +191,45 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     trust_score: trustScore,
     profile_status: profileStatus,
   };
+  const breakdownRaw = (candidateProfile as any)?.trust_score_breakdown || {};
+  const experiencesBase = Math.max(1, verificationRows.length || 0);
+  const trustComponents = {
+    verification: Number.isFinite(Number(breakdownRaw?.verification))
+      ? clampPercent(Number(breakdownRaw.verification))
+      : clampPercent((verifiedRows.length / experiencesBase) * 100),
+    evidence: Number.isFinite(Number(breakdownRaw?.evidence))
+      ? clampPercent(Number(breakdownRaw.evidence))
+      : clampPercent((evidencesCount / Math.max(1, experiencesBase * 2)) * 100),
+    consistency: Number.isFinite(Number(breakdownRaw?.consistency))
+      ? clampPercent(Number(breakdownRaw.consistency))
+      : clampPercent(
+          ((Number(Boolean((safe as any)?.title)) + Number(Boolean((safe as any)?.location)) + Number(!!(candidateProfile as any)?.job_search_status)) / 3) * 100
+        ),
+    reuse: Number.isFinite(Number(breakdownRaw?.reuse))
+      ? clampPercent(Number(breakdownRaw.reuse))
+      : clampPercent(
+          (verificationRows.reduce((acc: number, r: any) => acc + Number(r?.reuse_count ?? 0), 0) / experiencesBase) * 100
+        ),
+  };
+  const verificationTimeline = verificationRows
+    .map((row: any) => ({
+      verification_id: String(row?.verification_id || ""),
+      position: row?.position || null,
+      company_name: row?.company_name || row?.company_name_target || null,
+      status: String(row?.status_effective || row?.status || "unknown"),
+      evidence_count: Number(row?.evidence_count ?? row?.evidences_count ?? 0),
+      reuse_count: Number(row?.reuse_count ?? 0),
+      start_date: row?.start_date || null,
+      end_date: row?.end_date || null,
+      created_at: row?.created_at || null,
+      resolved_at: row?.resolved_at || null,
+    }))
+    .sort((a, b) => {
+      const ta = Date.parse(String(a.resolved_at || a.created_at || 0));
+      const tb = Date.parse(String(b.resolved_at || b.created_at || 0));
+      return (Number.isNaN(tb) ? 0 : tb) - (Number.isNaN(ta) ? 0 : ta);
+    })
+    .slice(0, 12);
 
   return json(200, {
     candidate_id: link.candidate_id,
@@ -194,6 +237,8 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     contact,
     availability,
     credibility,
+    trust_components: trustComponents,
+    verification_timeline: verificationTimeline,
     gate: {
       allowed: true,
       consumed: !!gate?.consumed,
