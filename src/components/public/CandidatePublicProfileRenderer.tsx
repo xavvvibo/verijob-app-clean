@@ -224,7 +224,7 @@ export function CandidatePublicProfileRenderer({
                   <div className="flex items-center gap-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src="/brand/verijob-logo.svg"
+                      src="/brand/verijob-logo-white-bg.png"
                       alt="Verijob"
                       className="h-6 w-auto object-contain"
                     />
