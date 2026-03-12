@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import OwnerTooltip from "@/components/ui/OwnerTooltip";
 
 type PromoCode = {
   id: string;
@@ -132,11 +133,15 @@ export default function MarketingControlCenterClient() {
           value={analytics.nextExpiry ? new Date(String(analytics.nextExpiry)).toLocaleDateString("es-ES") : "Sin caducidad"}
         />
       </section>
+      <p className="text-xs text-slate-500 inline-flex items-center gap-2">
+        Indicadores de marketing
+        <OwnerTooltip text="Estos indicadores muestran activación de promociones y uso real por parte de usuarios objetivo." />
+      </p>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-2xl font-semibold text-slate-900">Crear promoción</h2>
         <form className="mt-4 grid gap-6 md:grid-cols-2" onSubmit={createPromo}>
-          <SelectField label="Target" value={promoForm.target_type} onChange={(v) => setPromoForm((s) => ({ ...s, target_type: v }))} options={targetOptions} />
+          <SelectField label="Objetivo" value={promoForm.target_type} onChange={(v) => setPromoForm((s) => ({ ...s, target_type: v }))} options={targetOptions} />
           <SelectField label="Beneficio" value={promoForm.benefit_type} onChange={(v) => setPromoForm((s) => ({ ...s, benefit_type: v }))} options={benefitOptions} />
           <SelectField label="Duración" value={promoForm.duration_option} onChange={(v) => setPromoForm((s) => ({ ...s, duration_option: v }))} options={durationOptions} />
           <SelectField label="Límite de uso" value={promoForm.max_redemptions} onChange={(v) => setPromoForm((s) => ({ ...s, max_redemptions: v }))} options={["1", "5", "10", "25", "ilimitado"]} />
@@ -167,7 +172,7 @@ export default function MarketingControlCenterClient() {
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Fecha</th>
-                  <th className="px-3 py-2">Target</th>
+                  <th className="px-3 py-2">Objetivo</th>
                   <th className="px-3 py-2">Beneficio</th>
                   <th className="px-3 py-2">Duración</th>
                   <th className="px-3 py-2">Límite</th>

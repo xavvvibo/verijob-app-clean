@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import OwnerTooltip from "@/components/ui/OwnerTooltip";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,10 @@ export default async function OwnerMonetizationPage() {
         <h1 className="text-2xl font-semibold text-slate-900">Monetización</h1>
         <p className="mt-1 text-sm text-slate-600">
           Vista ejecutiva de ingresos y suscripciones. Stripe LIVE está operativo y este panel refleja datos locales de subscripciones.
+        </p>
+        <p className="mt-2 text-xs text-slate-500 inline-flex items-center gap-2">
+          Definiciones de monetización
+          <OwnerTooltip text="MRR = ingreso mensual recurrente de suscripciones activas/trialing. Churn y altas son aproximaciones según estado de subscripciones en base de datos." />
         </p>
       </section>
 

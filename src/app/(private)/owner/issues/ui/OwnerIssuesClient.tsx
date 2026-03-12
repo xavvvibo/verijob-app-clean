@@ -34,6 +34,10 @@ function statusLabel(v: string) {
   return "Abierta";
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export default function OwnerIssuesClient() {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,9 +116,14 @@ export default function OwnerIssuesClient() {
   }
 
   async function setStatus(id: string, status: "open" | "in_progress" | "resolved") {
+    const safeId = String(id || "").trim();
+    if (!isUuid(safeId)) {
+      setErr("No se pudo actualizar la incidencia: identificador inválido.");
+      return;
+    }
     setErr(null);
     try {
-      const res = await fetch(`/api/issues/${id}`, {
+      const res = await fetch(`/api/issues/${safeId}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ status }),

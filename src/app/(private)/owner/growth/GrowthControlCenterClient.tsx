@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import OwnerTooltip from "@/components/ui/OwnerTooltip";
 
 type Campaign = {
   id: string;
@@ -187,6 +188,10 @@ export default function GrowthControlCenterClient() {
         <MetricCard label="Respuestas" value={totals.replies} />
         <MetricCard label="Demos reservadas" value={totals.demos} />
       </section>
+      <p className="text-xs text-slate-500 inline-flex items-center gap-2">
+        Métricas de campaña
+        <OwnerTooltip text="Leads/contactos/mensajes/respuestas/demos reflejan salida operativa del flujo de growth en su estado actual." />
+      </p>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h3 className="text-2xl font-semibold text-slate-900">Historial de campañas</h3>

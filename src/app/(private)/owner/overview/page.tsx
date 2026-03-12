@@ -315,6 +315,19 @@ async function OwnerOverviewServer() {
       })
       .reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
 
+  const freeUsers = profiles.filter((p: any) => {
+    const hasSub = subscriptionsActive.some((s: any) => String(s.user_id || "") === String(p.id || ""));
+    return !hasSub;
+  }).length;
+  const paidUsers = subscriptionsActive.length;
+  const freeToPaidRate = pct(paidUsers, freeUsers + paidUsers);
+  const churnApprox = pct(
+    subscriptions.filter((s: any) => String(s.status || "").toLowerCase() === "canceled").length,
+    subscriptions.length
+  );
+  const arpuCandidate = candidatesTotal > 0 ? Math.round((candidateMrr / candidatesTotal) * 100) / 100 : 0;
+  const arpuCompany = companiesUsersTotal > 0 ? Math.round((companyMrr / companiesUsersTotal) * 100) / 100 : 0;
+
   const activeCampaigns = campaigns.filter((row: any) => String(row.status || "").toLowerCase() === "running").length;
   const weekCampaigns = campaigns.filter((row: any) => {
     const created = Date.parse(String(row.created_at || ""));
@@ -353,6 +366,39 @@ async function OwnerOverviewServer() {
   const profileReadyRate = pct(funnelStepExperience, funnelStepOnboarding);
   const firstVerificationRate = pct(funnelStepFirstVerification, funnelStepExperience);
   const verifiedRate = pct(funnelStepVerified, funnelStepFirstVerification);
+
+  const evidenceByRequest = new Map<string, number>();
+  for (const ev of evidenceRows as any[]) {
+    const key = String(ev.verification_request_id || "");
+    if (!key) continue;
+    evidenceByRequest.set(key, (evidenceByRequest.get(key) || 0) + 1);
+  }
+  const duplicateEvidenceLinks = Array.from(evidenceByRequest.values()).filter((c) => c > 1).length;
+
+  const companyRejectStats = new Map<string, { total: number; rejected: number }>();
+  for (const req of requests as any[]) {
+    const company = String(req.company_id || "");
+    if (!company) continue;
+    const current = companyRejectStats.get(company) || { total: 0, rejected: 0 };
+    current.total += 1;
+    if (String(req.status || "").toLowerCase() === "rejected") current.rejected += 1;
+    companyRejectStats.set(company, current);
+  }
+  const highRejectCompanies = Array.from(companyRejectStats.values()).filter((s) => s.total >= 5 && (s.rejected / s.total) >= 0.5).length;
+  const suspiciousVerifications = highRejectCompanies + duplicateEvidenceLinks;
+  const manualCasesOpen = openIssues + failedJobs;
+
+  const growthOpportunities: string[] = [];
+  const verifiedWithoutCompany = Math.max(candidatesVerified.size - activeCompanies, 0);
+  if (verifiedWithoutCompany > 0) {
+    growthOpportunities.push(`${verifiedWithoutCompany} candidatos verificados sin cobertura equivalente de empresas activas.`);
+  }
+  if (activeProfiles > activeCompanies * 3) {
+    growthOpportunities.push("Desbalance candidatos/empresas: conviene reforzar captación de empresas en zonas con mayor volumen de perfiles.");
+  }
+  if (leadsThisWeek === 0 && activeProfiles > 0) {
+    growthOpportunities.push("Sin leads de growth esta semana pese a actividad de perfiles: revisar campañas y canal.");
+  }
 
   const alerts: AlertItem[] = [];
 
@@ -410,6 +456,16 @@ async function OwnerOverviewServer() {
       actionLabel: "Auditar evidencias",
     });
   }
+  if (highRejectCompanies > 0) {
+    alerts.push({
+      id: "high-reject-companies",
+      severity: "medium",
+      title: "Empresas con rechazo anómalo",
+      detail: `${highRejectCompanies} empresas superan ratio alto de rechazo (>=50% con al menos 5 casos).`,
+      actionHref: "/owner/verifications",
+      actionLabel: "Investigar rechazos",
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -425,7 +481,7 @@ async function OwnerOverviewServer() {
           <MetricCard
             title={<span className="inline-flex items-center gap-2">Perfiles activos <OwnerTooltip text="Perfiles con actividad reciente en los últimos 30 días. Si no existe last_activity_at, se usa actividad operativa como proxy." /></span>}
             value={String(activeProfiles)}
-            note={`Base candidatos: ${candidatesTotal} · onboarding: ${onboardingCompleted}`}
+            note={`Base candidatos: ${candidatesTotal} · onboarding completo: ${onboardingCompleted} · pendientes: ${onboardingPending} · owners: ${ownersTotal}`}
           />
           <MetricCard
             title={<span className="inline-flex items-center gap-2">Empresas activas <OwnerTooltip text="Empresas actualizadas en los últimos 30 días. Si no existe updated_at, se usa actividad de verificaciones como aproximación." /></span>}
@@ -482,7 +538,7 @@ async function OwnerOverviewServer() {
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <MetricCard title="Verificaciones pendientes" value={String(pendingVerifications)} note="Estados draft/pending" />
-            <MetricCard title="Evidencias en revisión" value={String(evidencesInReviewProxy)} note="Proxy: evidencias sin vínculo directo" />
+            <MetricCard title="Evidencias en revisión" value={String(evidencesInReviewProxy)} note={`Proxy sin vínculo directo · vinculadas: ${evidencesLinked}`} />
             <MetricCard title="Empresas nuevas (7 días)" value={String(companyProfilesCreatedWeek)} note="Alta reciente de perfiles empresa" />
             <MetricCard title="Casos manuales abiertos" value={String(openIssues + failedJobs)} note={`Incidencias ${openIssues} · jobs fallidos ${failedJobs}`} />
           </div>
@@ -506,6 +562,35 @@ async function OwnerOverviewServer() {
       </div>
 
       <Section
+        title="Integridad del sistema"
+        subtitle="Señales de fraude, inconsistencias y degradación de confianza."
+      >
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard title="Verificaciones sospechosas" value={String(suspiciousVerifications)} note="Proxy por ratio de rechazo y duplicidad de evidencias" />
+          <MetricCard title="Evidencias duplicadas" value={String(duplicateEvidenceLinks)} note="Múltiples evidencias sobre la misma solicitud" />
+          <MetricCard title="Empresas con rechazo alto" value={String(highRejectCompanies)} note=">=50% de rechazo con volumen mínimo" />
+          <MetricCard title="Casos manuales abiertos" value={String(manualCasesOpen)} note="Incidencias + jobs fallidos en seguimiento" />
+        </div>
+      </Section>
+
+      <Section
+        title="Oportunidades de crecimiento"
+        subtitle="Brechas detectadas entre oferta verificada y demanda empresarial."
+      >
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          {growthOpportunities.length === 0 ? (
+            <p className="text-sm text-slate-600">No se detectan oportunidades críticas con los umbrales actuales.</p>
+          ) : (
+            <ul className="space-y-2 text-sm text-slate-700">
+              {growthOpportunities.map((op, idx) => (
+                <li key={idx} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">{op}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </Section>
+
+      <Section
         title="Economía del negocio"
         subtitle="Composición de ingresos y ritmo de monetización actual."
       >
@@ -514,6 +599,10 @@ async function OwnerOverviewServer() {
           <MetricCard title="MRR candidatos" value={money(candidateMrr)} note="Planes candidate_*" />
           <MetricCard title="MRR empresas" value={money(companyMrr)} note="Planes company/enterprise" />
           <MetricCard title="Ingresos one-off (proxy)" value={money(oneOffRevenueProxy)} note="Planes usage/payg detectados" />
+          <MetricCard title="ARPU candidato (proxy)" value={money(arpuCandidate)} note="MRR candidato / total candidatos" />
+          <MetricCard title="ARPU empresa (proxy)" value={money(arpuCompany)} note="MRR empresa / perfiles empresa" />
+          <MetricCard title="Conversión free → paid" value={`${freeToPaidRate}%`} note="Usuarios con suscripción activa sobre base total" />
+          <MetricCard title="Churn aproximado" value={`${churnApprox}%`} note="Canceladas sobre total de subscripciones registradas" />
         </div>
       </Section>
 
@@ -559,20 +648,51 @@ async function OwnerOverviewServer() {
       </Section>
 
       <Section
-        title="Contexto operativo"
-        subtitle="Contexto transversal para soporte y producto sin salir del cockpit."
+        title="Timeline global del sistema"
+        subtitle="Actividad reciente para seguimiento operativo transversal."
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Perfiles públicos activos" value={String(activePublicProfiles)} note="Tokens públicos no expirados" />
-          <MetricCard title="Jobs parsing pendientes" value={String(pendingJobs)} note={`${failedJobs} fallidos`} />
-          <MetricCard title="Issues abiertos" value={String(openIssues)} note="Backlog operativo actual" />
-          <MetricCard title="Demos semana" value={String(demosThisWeek)} note={`Campañas activas ${activeCampaigns}`} />
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+          <ul className="space-y-2 text-sm text-slate-700">
+            {[
+              ...verifiedRows.slice(0, 3).map((r: any) => ({
+                ts: String(r.resolved_at || r.requested_at || r.created_at || ""),
+                text: "Se completó una verificación.",
+              })),
+              ...evidenceRows.slice(0, 3).map((e: any) => ({
+                ts: String(e.created_at || ""),
+                text: "Se subió una evidencia documental.",
+              })),
+              ...companyProfiles.slice(0, 2).map((c: any) => ({
+                ts: String(c.created_at || ""),
+                text: "Se registró una empresa.",
+              })),
+              ...issues.slice(0, 2).map((i: any) => ({
+                ts: String(i.created_at || ""),
+                text: "Se abrió una incidencia.",
+              })),
+              ...campaigns.slice(0, 2).map((c: any) => ({
+                ts: String(c.created_at || ""),
+                text: "Se lanzó una campaña de crecimiento.",
+              })),
+            ]
+              .filter((x) => x.ts)
+              .sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts))
+              .slice(0, 10)
+              .map((item, idx) => (
+                <li key={`${item.ts}-${idx}`} className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                  <span>{item.text}</span>
+                  <span className="text-xs text-slate-500">{new Date(item.ts).toLocaleString("es-ES")}</span>
+                </li>
+              ))}
+          </ul>
+          <p className="mt-3 text-xs text-slate-500">
+            Perfiles públicos activos: {activePublicProfiles} · Jobs de parsing pendientes: {pendingJobs} · Demos de campañas esta semana: {demosThisWeek}.
+          </p>
         </div>
       </Section>
 
       <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
-        Definiciones de esta versión: “Perfiles activos” y “Empresas activas” usan actividad reciente (30 días) como proxy.
-        “Evidencias en revisión” y “ingresos one-off” son aproximaciones operativas hasta disponer de señal dedicada.
+        Definiciones de esta versión: “Perfiles activos”, “empresas activas”, “integridad” y parte de la economía usan proxies operativos cuando no existe señal dedicada.
       </section>
     </div>
   );

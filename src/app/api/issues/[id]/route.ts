@@ -8,8 +8,15 @@ function isOwner(role: any) {
   return role === "owner";
 }
 
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export async function PATCH(req: Request, ctx: any) {
-  const id = ctx?.params?.id as string;
+  const id = String(ctx?.params?.id || "").trim();
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: "invalid_issue_id" }, { status: 400 });
+  }
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 

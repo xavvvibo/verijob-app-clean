@@ -60,7 +60,7 @@ function money(value: number) {
   }).format(value || 0);
 }
 
-function calcEconomics(campaign: Campaign) {
+function calcEconomía(campaign: Campaign) {
   if (
     typeof campaign.total_cost === "number" &&
     typeof campaign.cost_per_lead === "number" &&
@@ -115,7 +115,7 @@ function MetricCard({ label, value }: { label: string; value: string | number })
   );
 }
 
-function campaignSuccess(campaign: Campaign) {
+function campaignResultado(campaign: Campaign) {
   const demos = Number(campaign.demos_count || 0);
   const customers = Number(campaign.customers_converted || 0);
   const replies = Number(campaign.replies_count || 0);
@@ -349,7 +349,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
 
   const economics = useMemo(() => {
     if (!campaign) return null;
-    return calcEconomics(campaign);
+    return calcEconomía(campaign);
   }, [campaign]);
 
   if (loading) {
@@ -361,7 +361,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       <div className="space-y-4">
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error || "No se encontró la campaña"}</div>
         <Link href="/owner/growth" className="inline-flex rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50">
-          Volver a Growth
+          Volver a Centro de crecimiento
         </Link>
       </div>
     );
@@ -372,7 +372,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Campaign Info</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">Información de campaña</h1>
             <p className="mt-2 text-sm text-slate-600">
               {campaign.objective} · {campaign.sector} · {campaign.location_value || campaign.location_scope}
             </p>
@@ -383,32 +383,32 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
           </span>
           <span
             className={`rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide ${
-              campaignSuccess(campaign) === "Positive"
+              campaignResultado(campaign) === "Positive"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : campaignSuccess(campaign) === "Neutral"
+                : campaignResultado(campaign) === "Neutral"
                   ? "border-amber-200 bg-amber-50 text-amber-700"
                   : "border-rose-200 bg-rose-50 text-rose-700"
             }`}
           >
-            {campaignSuccess(campaign)}
+            {campaignResultado(campaign)}
           </span>
         </div>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-semibold text-slate-900">Performance</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">Rendimiento</h2>
         <div className="mt-4 grid gap-6 md:grid-cols-2 xl:grid-cols-6">
-          <MetricCard label="Leads discovered" value={campaign.leads_discovered || 0} />
-          <MetricCard label="Contacts found" value={campaign.contacts_found || 0} />
-          <MetricCard label="Messages sent" value={campaign.messages_queued || 0} />
-          <MetricCard label="Replies" value={campaign.replies_count || 0} />
-          <MetricCard label="Demos booked" value={campaign.demos_count || 0} />
+          <MetricCard label="Leads descubiertos" value={campaign.leads_discovered || 0} />
+          <MetricCard label="Contactos encontrados" value={campaign.contacts_found || 0} />
+          <MetricCard label="Mensajes enviados" value={campaign.messages_queued || 0} />
+          <MetricCard label="Respuestas" value={campaign.replies_count || 0} />
+          <MetricCard label="Demos reservadas" value={campaign.demos_count || 0} />
           <MetricCard label="Customers converted" value={campaign.customers_converted || 0} />
         </div>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-semibold text-slate-900">Cost Breakdown</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">Desglose de costes</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
           <MetricCard label="Scraping" value={money(economics.costScraping)} />
           <MetricCard label="Enrichment" value={money(economics.costEnrichment)} />
@@ -460,21 +460,21 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
               disabled={savingCosts}
               className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-60"
             >
-              {savingCosts ? "Guardando..." : "Save Economics"}
+              {savingCosts ? "Guardando..." : "Guardar economía"}
             </button>
             <button
               type="submit"
               disabled={savingCosts}
               className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50 disabled:opacity-60"
             >
-              {savingCosts ? "Guardando..." : "Save Outcome"}
+              {savingCosts ? "Guardando..." : "Guardar resultado"}
             </button>
           </div>
         </form>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-semibold text-slate-900">Provider Sync</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">Sincronización de proveedor</h2>
         <dl className="mt-4 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
           <Row label="execution_status" value={campaign.execution_status || "idle"} />
           <Row label="external_job_id" value={campaign.external_job_id || "—"} />
@@ -539,7 +539,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
               disabled={savingExecution}
               className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-60"
             >
-              {savingExecution ? "Guardando..." : "Save Execution Setup"}
+              {savingExecution ? "Guardando..." : "Guardar configuración de ejecución"}
             </button>
           </div>
         </form>
@@ -608,7 +608,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
               disabled={savingOutscraper}
               className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-60"
             >
-              {savingOutscraper ? "Guardando..." : "Save Outscraper Config"}
+              {savingOutscraper ? "Guardando..." : "Guardar configuración de Outscraper"}
             </button>
             <button
               type="button"
@@ -639,7 +639,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-semibold text-slate-900">Economics</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">Economía</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <MetricCard label="Cost per Lead" value={kpiLabel(economics.costPerLead)} />
           <MetricCard label="Cost per Demo" value={kpiLabel(economics.costPerDemo)} />
@@ -649,15 +649,15 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-semibold text-slate-900">Campaign identity</h2>
+        <h2 className="text-2xl font-semibold text-slate-900">Identidad de campaña</h2>
         <dl className="mt-4 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
-          <Row label="Campaign name" value={`${campaign.objective} · ${campaign.location_value || campaign.location_scope}`} />
+          <Row label="Nombre de campaña" value={`${campaign.objective} · ${campaign.location_value || campaign.location_scope}`} />
           <Row label="Objetivo" value={campaign.objective} />
           <Row label="Sector" value={campaign.sector} />
           <Row label="Ubicación" value={campaign.location_value || campaign.location_scope} />
-          <Row label="Launch date" value={new Date(campaign.launched_at || campaign.created_at).toLocaleString("es-ES")} />
-          <Row label="Status" value={campaign.status} />
-          <Row label="Success" value={campaignSuccess(campaign)} />
+          <Row label="Fecha de lanzamiento" value={new Date(campaign.launched_at || campaign.created_at).toLocaleString("es-ES")} />
+          <Row label="Estado" value={campaign.status} />
+          <Row label="Resultado" value={campaignResultado(campaign)} />
           <Row label="Outcome note" value={campaign.outcome_note || "Sin nota"} />
           <Row label="Tamaño empresa" value={campaign.company_size} />
           <Row label="Canal" value={campaign.channel} />
@@ -668,7 +668,7 @@ export default function CampaignDetailClient({ campaignId }: { campaignId: strin
       </section>
 
       <Link href="/owner/growth" className="inline-flex rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-900 hover:bg-slate-50">
-        Volver a Growth
+        Volver a Centro de crecimiento
       </Link>
     </div>
   );
