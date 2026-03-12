@@ -80,6 +80,10 @@ function asText(v: unknown, max = 300) {
   return String(v || "").trim().slice(0, max);
 }
 
+function clampPercent(value: number) {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
 function toEvidenceVerificationBadge(rawType: unknown) {
   const v = String(rawType || "").toLowerCase();
   if (!v) return null;
@@ -354,6 +358,25 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const availability = asText((cp as any)?.job_search_status, 80) || null;
   const workMode = asText((cp as any)?.preferred_workday, 80) || null;
   const sector = asText(asArray((cp as any)?.preferred_roles)?.[0], 120) || null;
+  const breakdownRaw = (cp as any)?.trust_score_breakdown || {};
+  const experiencesBase = Math.max(1, Number(rows.length || 0));
+  const verificationPercent = Number.isFinite(Number(breakdownRaw?.verification))
+    ? clampPercent(Number(breakdownRaw.verification))
+    : clampPercent((verifiedRows.length / experiencesBase) * 100);
+  const evidencePercent = Number.isFinite(Number(breakdownRaw?.evidence))
+    ? clampPercent(Number(breakdownRaw.evidence))
+    : clampPercent((evidences / Math.max(1, experiencesBase * 2)) * 100);
+  const consistencySignals =
+    Number(Boolean(profileTitle)) +
+    Number(Boolean(profileSummary)) +
+    Number(Boolean(profileLocation)) +
+    Number(normalizePublicLanguages((profile as any)?.languages).length > 0);
+  const consistencyPercent = Number.isFinite(Number(breakdownRaw?.consistency))
+    ? clampPercent(Number(breakdownRaw.consistency))
+    : clampPercent((consistencySignals / 4) * 100);
+  const reusePercent = Number.isFinite(Number(breakdownRaw?.reuse))
+    ? clampPercent(Number(breakdownRaw.reuse))
+    : clampPercent((reuseEvents / Math.max(1, experiencesBase)) * 100);
 
   return json(200, {
     route_version: "public-candidate-token-v1",
@@ -367,6 +390,12 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       summary: profileSummary,
       trust_score: trustScore,
       trust_score_breakdown: cp?.trust_score_breakdown || null,
+      trust_score_components: {
+        verification: verificationPercent,
+        evidence: evidencePercent,
+        consistency: consistencyPercent,
+        reuse: reusePercent,
+      },
       experiences_total: rows.length,
       verified_experiences: verifiedRows.length,
       confirmed_experiences: confirmed,

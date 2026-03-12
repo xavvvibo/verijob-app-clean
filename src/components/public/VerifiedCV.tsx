@@ -18,6 +18,7 @@ export default function VerifiedCV({ data }: Props) {
   const recommendations = Array.isArray(data?.recommendations) ? data.recommendations : [];
   const languages = Array.isArray(teaser?.languages) ? teaser.languages : [];
   const achievements = Array.isArray(data?.achievements) ? data.achievements : [];
+  const trustComponents = teaser?.trust_score_components || teaser?.trust_score_breakdown || null;
 
   return (
     <div className="mx-auto max-w-4xl bg-white px-6 py-10 text-slate-900">
@@ -36,6 +37,18 @@ export default function VerifiedCV({ data }: Props) {
         <section className="mt-6 break-inside-avoid rounded-xl border border-slate-200 p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Resumen</h2>
           <p className="mt-2 text-sm leading-6 text-slate-700">{teaser.summary}</p>
+        </section>
+      ) : null}
+
+      {trustComponents ? (
+        <section className="mt-6 break-inside-avoid rounded-xl border border-slate-200 p-4">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Desglose de confianza</h2>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <TrustItem label="Verificaciones" value={Number((trustComponents as any)?.verification ?? 0)} />
+            <TrustItem label="Evidencias" value={Number((trustComponents as any)?.evidence ?? 0)} />
+            <TrustItem label="Consistencia" value={Number((trustComponents as any)?.consistency ?? 0)} />
+            <TrustItem label="Reutilización" value={Number((trustComponents as any)?.reuse ?? 0)} />
+          </div>
         </section>
       ) : null}
 
@@ -108,6 +121,21 @@ export default function VerifiedCV({ data }: Props) {
           </div>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function TrustItem({ label, value }: { label: string; value: number }) {
+  const safe = Math.max(0, Math.min(100, Math.round(Number.isFinite(value) ? value : 0)));
+  return (
+    <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+      <div className="flex items-center justify-between text-xs text-slate-600">
+        <span>{label}</span>
+        <span className="font-semibold text-slate-900">{safe}%</span>
+      </div>
+      <div className="mt-1 h-1.5 rounded-full bg-slate-200">
+        <div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-indigo-600" style={{ width: `${safe}%` }} />
+      </div>
     </div>
   );
 }

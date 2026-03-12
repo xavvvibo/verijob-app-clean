@@ -34,6 +34,12 @@ export type PublicCandidateTeaser = {
     consistency?: number;
     reuse?: number;
   } | null;
+  trust_score_components?: {
+    verification?: number;
+    evidence?: number;
+    consistency?: number;
+    reuse?: number;
+  } | null;
 };
 
 export type PublicCandidateExperience = {
@@ -173,6 +179,28 @@ export function CandidatePublicProfileRenderer({
     };
   }, [teaser, experiences]);
 
+  const trustComponents = useMemo(() => {
+    const raw = teaser?.trust_score_components || teaser?.trust_score_breakdown || {};
+    const normalized = {
+      verification: clampPercent(Number((raw as any)?.verification ?? 0)),
+      evidence: clampPercent(Number((raw as any)?.evidence ?? 0)),
+      consistency: clampPercent(Number((raw as any)?.consistency ?? 0)),
+      reuse: clampPercent(Number((raw as any)?.reuse ?? 0)),
+    };
+    if (normalized.verification + normalized.evidence + normalized.consistency + normalized.reuse > 0) {
+      return normalized;
+    }
+    const base = Math.max(1, Number(teaser?.experiences_total ?? experiences.length));
+    return {
+      verification: clampPercent((Number(teaser?.verified_experiences ?? 0) / base) * 100),
+      evidence: clampPercent((Number(teaser?.evidences_total ?? 0) / Math.max(1, base * 2)) * 100),
+      consistency: clampPercent(
+        ((Number(Boolean(teaser?.title)) + Number(Boolean(teaser?.summary)) + Number(publicLanguages.length > 0)) / 3) * 100
+      ),
+      reuse: clampPercent((Number(teaser?.reuse_total ?? 0) / base) * 100),
+    };
+  }, [teaser, experiences.length, publicLanguages.length]);
+
   const isExternalCleanView = !internalPreview;
   const isPrintMode = renderMode === "print";
   const hasExperiences = experiences.length > 0;
@@ -310,6 +338,29 @@ export function CandidatePublicProfileRenderer({
                 "Perfil profesional verificable con historial laboral estructurado, señales de confianza y validación por empresa/documentación sin exponer archivos privados."}
             </p>
 
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              <SignalCard
+                label="Verificaciones"
+                value={verificationSummary.verified}
+                hint="Experiencias confirmadas"
+              />
+              <SignalCard
+                label="Evidencias"
+                value={verificationSummary.evidences}
+                hint="Documentación validada"
+              />
+              <SignalCard
+                label="Reutilización"
+                value={verificationSummary.reuse}
+                hint="Consultas de reutilización"
+              />
+              <SignalCard
+                label="Trust Score"
+                value={trust}
+                hint={trustLabel}
+              />
+            </div>
+
             {!isPrintMode ? (
             <div className="mt-5 flex flex-wrap gap-2 print:hidden">
               {visibleTabs.map((tab) => (
@@ -354,6 +405,55 @@ export function CandidatePublicProfileRenderer({
                     <Stat label="Logros" value={Number(teaser?.achievements_total ?? achievements.length)} />
                   </div>
                 </Card>
+
+                {(experiences.length > 0 || internalPreview) ? (
+                  <Card
+                    title="Historial verificable"
+                    subtitle="Línea temporal profesional con estado de verificación y señales de credibilidad."
+                  >
+                    {experiences.length ? (
+                      <ol className="relative ml-2 border-l border-slate-200 pl-4">
+                        {experiences.slice(0, 10).map((exp, index) => {
+                          const statusBadge = getStatusBadge(exp?.status_text);
+                          const badges = Array.isArray(exp?.verification_badges) ? exp.verification_badges : [];
+                          return (
+                            <li key={`timeline-${exp?.experience_id || index}`} className="mb-5 last:mb-0" style={{ breakInside: "avoid" }}>
+                              <span className="absolute -left-[6px] mt-1.5 h-2.5 w-2.5 rounded-full bg-blue-600" />
+                              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                  <div>
+                                    <p className="text-sm font-semibold text-slate-900">{exp?.position || "Experiencia"}</p>
+                                    <p className="text-xs text-slate-600">{exp?.company_name || "Empresa no especificada"}</p>
+                                    <p className="mt-1 text-[11px] text-slate-500">{formatPeriod(exp?.start_date, exp?.end_date)}</p>
+                                  </div>
+                                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadge.className}`}>
+                                    {statusBadge.label}
+                                  </span>
+                                </div>
+                                {badges.length ? (
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {badges.slice(0, 3).map((badge) => (
+                                      <span key={`${exp?.experience_id}-${badge}`} className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                                        {badge}
+                                      </span>
+                                    ))}
+                                  </div>
+                                ) : null}
+                                <div className="mt-2 text-[11px] text-slate-600">
+                                  Evidencias: <span className="font-semibold text-slate-900">{Number(exp?.evidence_count ?? 0)}</span>
+                                  {" · "}
+                                  Reutilizaciones: <span className="font-semibold text-slate-900">{Number(exp?.reuse_count ?? 0)}</span>
+                                </div>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ol>
+                    ) : (
+                      <Empty text="Sin historial verificable visible por ahora." />
+                    )}
+                  </Card>
+                ) : null}
 
                 <Card title="Habilidades verificadas" subtitle="Derivadas de experiencia y señales de verificación.">
                   {skills.length ? (
@@ -572,6 +672,13 @@ export function CandidatePublicProfileRenderer({
               <MetricChip label="Docs validados" value={verificationSummary.evidences} />
               <MetricChip label="Recomendaciones" value={recommendations.length} />
             </div>
+            <div className="mt-4 space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+              <div className="text-xs font-semibold text-slate-900">Desglose de confianza</div>
+              <TrustBreakdownBar label="Verificaciones" value={trustComponents.verification} />
+              <TrustBreakdownBar label="Evidencias" value={trustComponents.evidence} />
+              <TrustBreakdownBar label="Consistencia" value={trustComponents.consistency} />
+              <TrustBreakdownBar label="Reutilización" value={trustComponents.reuse} />
+            </div>
           </section>
 
           {(skills.length > 0 || internalPreview) ? (
@@ -750,6 +857,31 @@ function MetricChip({ label, value }: { label: string; value: string | number })
   );
 }
 
+function SignalCard({ label, value, hint }: { label: string; value: string | number; hint: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+      <div className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{label}</div>
+      <div className="mt-1 text-lg font-semibold text-slate-900">{value}</div>
+      <div className="text-[11px] text-slate-600">{hint}</div>
+    </div>
+  );
+}
+
+function TrustBreakdownBar({ label, value }: { label: string; value: number }) {
+  const safe = clampPercent(value);
+  return (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-[11px] text-slate-600">
+        <span>{label}</span>
+        <span className="font-semibold text-slate-900">{safe}%</span>
+      </div>
+      <div className="h-2 rounded-full bg-slate-200">
+        <div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-indigo-600" style={{ width: `${safe}%` }} />
+      </div>
+    </div>
+  );
+}
+
 function Empty({ text, compact = false }: { text: string; compact?: boolean }) {
   return (
     <p className={`${compact ? "mt-2" : ""} rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-600`}>
@@ -843,4 +975,9 @@ function formatPeriod(start?: string | null, end?: string | null) {
   const endText = end ? formatMonthYear(end) : "Actualidad";
   if (!startText && !end) return "Periodo no especificado";
   return `${startText || "Inicio no definido"} · ${endText}`;
+}
+
+function clampPercent(value: number) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(100, Math.round(value)));
 }
