@@ -14,6 +14,8 @@ type ProfileRow = {
   onboarding_completed: boolean | null;
   created_at: string | null;
   active_company_id: string | null;
+  lifecycle_status?: string | null;
+  deleted_at?: string | null;
 };
 
 type AuthUserRow = {
@@ -69,16 +71,35 @@ async function listAllAuthUsers(admin: ReturnType<typeof createServiceRoleClient
 
 async function selectProfilesByIds(admin: ReturnType<typeof createServiceRoleClient>, ids: string[]) {
   if (ids.length === 0) return { rows: [] as ProfileRow[], error: null as any };
+  const { data: columnRows } = await admin
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", "profiles");
+  const columnSet = new Set((columnRows || []).map((r: any) => String(r?.column_name || "")));
+  const selected = [
+    "id",
+    "email",
+    "full_name",
+    "role",
+    "onboarding_completed",
+    "created_at",
+    "active_company_id",
+    columnSet.has("lifecycle_status") ? "lifecycle_status" : null,
+    columnSet.has("deleted_at") ? "deleted_at" : null,
+  ]
+    .filter(Boolean)
+    .join(",");
   const chunkSize = 500;
   const all: ProfileRow[] = [];
   for (let i = 0; i < ids.length; i += chunkSize) {
     const chunk = ids.slice(i, i + chunkSize);
     const { data, error } = await admin
       .from("profiles")
-      .select("id, email, full_name, role, onboarding_completed, created_at, active_company_id")
+      .select(selected)
       .in("id", chunk);
     if (error) return { rows: [] as ProfileRow[], error };
-    if (Array.isArray(data)) all.push(...(data as ProfileRow[]));
+    if (Array.isArray(data)) all.push(...(data as unknown as ProfileRow[]));
   }
   return { rows: all, error: null as any };
 }
@@ -146,6 +167,8 @@ export async function GET(req: Request) {
         onboarding_completed: profileRow?.onboarding_completed ?? null,
         created_at: profileRow?.created_at || authRow.created_at || null,
         active_company_id: profileRow?.active_company_id || null,
+        lifecycle_status: profileRow?.lifecycle_status ? String(profileRow.lifecycle_status) : "active",
+        deleted_at: profileRow?.deleted_at ? String(profileRow.deleted_at) : null,
       };
     });
 
@@ -172,6 +195,8 @@ export async function GET(req: Request) {
       if (quickFilter === "onboarding_incomplete" && row.onboarding_completed !== false) return false;
       if (quickFilter === "with_company" && !row.active_company_id) return false;
       if (quickFilter === "without_company" && !!row.active_company_id) return false;
+      if (quickFilter === "deleted" && String(row.lifecycle_status || "active").toLowerCase() !== "deleted") return false;
+      if (quickFilter === "active_only" && String(row.lifecycle_status || "active").toLowerCase() === "deleted") return false;
 
       if (!qLower) return true;
       const haystack = [
@@ -180,6 +205,7 @@ export async function GET(req: Request) {
         row.id || "",
         row.role || "",
         row.active_company_id || "",
+        row.lifecycle_status || "",
       ]
         .join(" ")
         .toLowerCase();
@@ -202,6 +228,7 @@ export async function GET(req: Request) {
       }).length,
       onboarding_incomplete: profileRoleRows.filter((r: any) => Boolean(r.onboarding_completed) === false).length,
       with_active_company: profileRoleRows.filter((r: any) => Boolean(r.active_company_id)).length,
+      archived: profileRoleRows.filter((r: any) => String((r as any).lifecycle_status || "").toLowerCase() === "deleted").length,
       without_profile: authUsers.length - profileRows.length,
       total_auth_users: authUsers.length,
     };
@@ -322,6 +349,8 @@ export async function GET(req: Request) {
         created_at: row.created_at || null,
         active_company_id: companyId,
         active_company_name: companyId ? companyNameById.get(companyId) || null : null,
+        lifecycle_status: String((row as any).lifecycle_status || "active"),
+        deleted_at: (row as any).deleted_at ? String((row as any).deleted_at) : null,
         experiences_count: experiencesByUser.get(id) || 0,
         verifications_count: verificationsByUser.get(id) || 0,
         verifications_verified_count: verifiedByUser.get(id) || 0,

@@ -18,6 +18,8 @@ type Props = {
   targetUserId: string;
   role: string;
   currentPlan: string;
+  currentLifecycleStatus?: string;
+  isArchived?: boolean;
   experiences: ExperienceItem[];
   evidences: EvidenceItem[];
 };
@@ -66,6 +68,8 @@ export default function OwnerUserActionsClient({
   targetUserId,
   role,
   currentPlan,
+  currentLifecycleStatus = "active",
+  isArchived = false,
   experiences,
   evidences,
 }: Props) {
@@ -86,6 +90,14 @@ export default function OwnerUserActionsClient({
 
   const [selectedEvidenceId, setSelectedEvidenceId] = useState<string>(evidences[0]?.id || "");
   const [evidenceReason, setEvidenceReason] = useState("");
+
+  const [repairCompanyId, setRepairCompanyId] = useState("");
+  const [repairCompanyName, setRepairCompanyName] = useState("");
+  const [repairKeepOnboarding, setRepairKeepOnboarding] = useState(false);
+  const [repairReason, setRepairReason] = useState("");
+
+  const [archiveReason, setArchiveReason] = useState("");
+  const [archiveConfirmPhrase, setArchiveConfirmPhrase] = useState("");
 
   const planOptions = useMemo(() => planOptionsForRole(role), [role]);
 
@@ -248,6 +260,60 @@ export default function OwnerUserActionsClient({
     if (result) setEvidenceReason("");
   }
 
+  async function submitRepairCompanyContext() {
+    const reason = repairReason.trim();
+    if (!reason) {
+      setActionState("repair_company_context", { isError: true, message: "El motivo es obligatorio." });
+      return;
+    }
+    if (repairCompanyId.trim() && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(repairCompanyId.trim())) {
+      setActionState("repair_company_context", { isError: true, message: "El Company ID debe ser UUID válido o vacío." });
+      return;
+    }
+    const result = await runAction(
+      "repair_company_context",
+      reason,
+      {
+        company_id: repairCompanyId.trim() || null,
+        company_name: repairCompanyName.trim() || null,
+        keep_onboarding_completed: repairKeepOnboarding,
+      },
+      "Se convertirá/reparará el contexto empresa (rol, membership, active_company_id y company_profile). ¿Confirmas?"
+    );
+    if (result) {
+      setRepairReason("");
+      window.location.reload();
+    }
+  }
+
+  async function submitArchiveUser() {
+    const reason = archiveReason.trim();
+    if (!reason) {
+      setActionState("archive_user", { isError: true, message: "El motivo es obligatorio." });
+      return;
+    }
+    if (archiveConfirmPhrase.trim().toUpperCase() !== "ELIMINAR") {
+      setActionState("archive_user", { isError: true, message: 'Escribe "ELIMINAR" para confirmar.' });
+      return;
+    }
+    const result = await runAction(
+      "archive_user",
+      reason,
+      {
+        confirm_phrase: "ELIMINAR",
+        disable_signin: true,
+        clear_full_name: true,
+        keep_role: true,
+      },
+      "Se archivará el usuario y se bloqueará su acceso. Se preserva el histórico de verificaciones. ¿Confirmas?"
+    );
+    if (result) {
+      setArchiveReason("");
+      setArchiveConfirmPhrase("");
+      window.location.reload();
+    }
+  }
+
   function ActionFeedback({ actionKey }: { actionKey: string }) {
     const state = stateByAction[actionKey];
     if (!state?.message) return null;
@@ -268,6 +334,14 @@ export default function OwnerUserActionsClient({
       <p className="mt-1 text-sm text-slate-600">
         Acciones con validación y ejecución real. Cada operación deja trazabilidad en owner_actions.
       </p>
+      <div className="mt-2 text-xs text-slate-600">
+        Estado lifecycle actual: <span className="font-semibold text-slate-900">{currentLifecycleStatus}</span>
+      </div>
+      {isArchived ? (
+        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          El usuario está archivado. Las acciones de plan/trial/revisión se desactivan hasta reactivar el contexto.
+        </div>
+      ) : null}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <article className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -291,7 +365,7 @@ export default function OwnerUserActionsClient({
           <button
             type="button"
             onClick={() => void submitPlanChange()}
-            disabled={stateByAction.change_plan?.busy}
+            disabled={stateByAction.change_plan?.busy || isArchived}
             className="mt-3 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
           >
             {stateByAction.change_plan?.busy ? "Aplicando..." : "Aplicar cambio de plan"}
@@ -338,7 +412,7 @@ export default function OwnerUserActionsClient({
           <button
             type="button"
             onClick={() => void submitTrialExtension()}
-            disabled={stateByAction.extend_trial?.busy}
+            disabled={stateByAction.extend_trial?.busy || isArchived}
             className="mt-3 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
           >
             {stateByAction.extend_trial?.busy ? "Aplicando..." : "Extender trial"}
@@ -392,7 +466,7 @@ export default function OwnerUserActionsClient({
           <button
             type="button"
             onClick={() => void submitExperienceReview()}
-            disabled={stateByAction.mark_experience_manual_review?.busy || experiences.length === 0}
+            disabled={stateByAction.mark_experience_manual_review?.busy || experiences.length === 0 || isArchived}
             className="mt-3 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
           >
             {stateByAction.mark_experience_manual_review?.busy ? "Aplicando..." : "Marcar experiencia"}
@@ -421,12 +495,82 @@ export default function OwnerUserActionsClient({
           <button
             type="button"
             onClick={() => void submitEvidenceReview()}
-            disabled={stateByAction.mark_evidence_manual_review?.busy || evidences.length === 0}
+            disabled={stateByAction.mark_evidence_manual_review?.busy || evidences.length === 0 || isArchived}
             className="mt-3 rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-60"
           >
             {stateByAction.mark_evidence_manual_review?.busy ? "Aplicando..." : "Marcar evidencia"}
           </button>
           <ActionFeedback actionKey="mark_evidence_manual_review" />
+        </article>
+
+        <article className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+          <h3 className="text-sm font-semibold text-emerald-900">Convertir a empresa / reparar contexto</h3>
+          <p className="mt-1 text-xs text-emerald-800">
+            Corrige usuarios legacy: rol company, active_company_id, membership admin y company_profile.
+          </p>
+          <input
+            value={repairCompanyId}
+            onChange={(e) => setRepairCompanyId(e.target.value)}
+            placeholder="Company ID existente (UUID) opcional"
+            className="mt-2 w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm"
+          />
+          <input
+            value={repairCompanyName}
+            onChange={(e) => setRepairCompanyName(e.target.value)}
+            placeholder="Nombre empresa (si necesita crearla)"
+            className="mt-2 w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm"
+          />
+          <label className="mt-2 inline-flex items-center gap-2 text-xs text-emerald-900">
+            <input
+              type="checkbox"
+              checked={repairKeepOnboarding}
+              onChange={(e) => setRepairKeepOnboarding(e.target.checked)}
+            />
+            Mantener onboarding_completed actual (si ya está en true).
+          </label>
+          <textarea
+            value={repairReason}
+            onChange={(e) => setRepairReason(e.target.value)}
+            placeholder="Motivo obligatorio"
+            className="mt-2 min-h-[72px] w-full rounded-lg border border-emerald-300 bg-white px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            onClick={() => void submitRepairCompanyContext()}
+            disabled={stateByAction.repair_company_context?.busy}
+            className="mt-3 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
+          >
+            {stateByAction.repair_company_context?.busy ? "Aplicando..." : "Reparar contexto empresa"}
+          </button>
+          <ActionFeedback actionKey="repair_company_context" />
+        </article>
+
+        <article className="rounded-lg border border-red-200 bg-red-50 p-3 lg:col-span-2">
+          <h3 className="text-sm font-semibold text-red-900">Eliminar usuario (archivar)</h3>
+          <p className="mt-1 text-xs text-red-800">
+            Soft delete con trazabilidad: bloquea acceso y conserva histórico de verificaciones/evidencias.
+          </p>
+          <textarea
+            value={archiveReason}
+            onChange={(e) => setArchiveReason(e.target.value)}
+            placeholder="Motivo obligatorio"
+            className="mt-2 min-h-[72px] w-full rounded-lg border border-red-300 bg-white px-3 py-2 text-sm"
+          />
+          <input
+            value={archiveConfirmPhrase}
+            onChange={(e) => setArchiveConfirmPhrase(e.target.value)}
+            placeholder='Escribe "ELIMINAR" para confirmar'
+            className="mt-2 w-full rounded-lg border border-red-300 bg-white px-3 py-2 text-sm"
+          />
+          <button
+            type="button"
+            onClick={() => void submitArchiveUser()}
+            disabled={stateByAction.archive_user?.busy || isArchived}
+            className="mt-3 rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-60"
+          >
+            {stateByAction.archive_user?.busy ? "Archivando..." : isArchived ? "Usuario ya archivado" : "Archivar usuario"}
+          </button>
+          <ActionFeedback actionKey="archive_user" />
         </article>
       </div>
 

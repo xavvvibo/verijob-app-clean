@@ -22,6 +22,8 @@ type Row = {
   subscription_current_period_end: string | null;
   trust_score: number | null;
   last_activity_at: string | null;
+  lifecycle_status?: string | null;
+  deleted_at?: string | null;
 };
 
 const ROLE_FILTERS = [
@@ -34,6 +36,8 @@ const ROLE_FILTERS = [
 
 const QUICK_FILTERS = [
   { value: "all", label: "Todos" },
+  { value: "active_only", label: "Solo activos" },
+  { value: "deleted", label: "Archivados" },
   { value: "onboarding_incomplete", label: "Onboarding incompleto" },
   { value: "with_company", label: "Con empresa activa" },
   { value: "without_company", label: "Sin empresa activa" },
@@ -77,6 +81,7 @@ export default function OwnerUsersPage() {
     owners: 0,
     onboarding_incomplete: 0,
     with_active_company: 0,
+    archived: 0,
   });
 
   const canPrev = offset > 0;
@@ -112,6 +117,7 @@ export default function OwnerUsersPage() {
         owners: Number(j?.summary?.owners || 0),
         onboarding_incomplete: Number(j?.summary?.onboarding_incomplete || 0),
         with_active_company: Number(j?.summary?.with_active_company || 0),
+        archived: Number(j?.summary?.archived || 0),
       });
     } catch (e: any) {
       setErr(e?.message || "load_failed");
@@ -134,6 +140,7 @@ export default function OwnerUsersPage() {
       owners: summary.owners,
       incomplete: summary.onboarding_incomplete,
       withCompany: summary.with_active_company,
+      archived: summary.archived,
     };
   }, [summary]);
 
@@ -145,7 +152,7 @@ export default function OwnerUsersPage() {
           Consola operativa de usuarios para soporte, revisión y monetización. Incluye búsqueda real, métricas y acceso a ficha owner.
         </p>
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Candidatos</div>
             <div className="text-xl font-semibold text-slate-900">{kpis.candidates}</div>
@@ -161,6 +168,10 @@ export default function OwnerUsersPage() {
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Con empresa activa</div>
             <div className="text-xl font-semibold text-slate-900">{kpis.withCompany}</div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Archivados</div>
+            <div className="text-xl font-semibold text-slate-900">{kpis.archived}</div>
           </div>
         </div>
       </section>
@@ -303,6 +314,11 @@ export default function OwnerUsersPage() {
                     <div className="truncate text-xs text-slate-500" title={r.full_name || "-"}>
                       {r.full_name || "Sin nombre"}
                     </div>
+                    {String(r.lifecycle_status || "active").toLowerCase() === "deleted" ? (
+                      <div className="mt-1 inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                        ELIMINADO
+                      </div>
+                    ) : null}
                   </td>
                   <td className="border-b border-slate-100 px-3 py-2">
                     <span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${roleBadge(r.role)}`}>

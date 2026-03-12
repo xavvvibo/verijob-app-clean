@@ -24,6 +24,16 @@ function fmtDate(value: string | null | undefined) {
   }).format(d);
 }
 
+async function getTableColumns(admin: any, tableName: string) {
+  const { data, error } = await admin
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", tableName);
+  if (error || !Array.isArray(data)) return new Set<string>();
+  return new Set(data.map((r: any) => String(r.column_name || "")));
+}
+
 export default async function OwnerUserDetailPage({ params }: any) {
   const resolvedParams = await params;
   const targetUserId = String(resolvedParams?.id || "").trim();
@@ -43,6 +53,21 @@ export default async function OwnerUserDetailPage({ params }: any) {
   if (!["owner", "admin"].includes(ownerRole)) redirect("/dashboard?forbidden=1&from=owner");
 
   const admin = createServiceRoleClient();
+  const profileColumns = await getTableColumns(admin, "profiles");
+  const profileSelect = [
+    "id",
+    "email",
+    "full_name",
+    "role",
+    "onboarding_completed",
+    "active_company_id",
+    "created_at",
+    profileColumns.has("lifecycle_status") ? "lifecycle_status" : null,
+    profileColumns.has("deleted_at") ? "deleted_at" : null,
+    profileColumns.has("deletion_reason") ? "deletion_reason" : null,
+  ]
+    .filter(Boolean)
+    .join(",");
 
   const [
     authUserRes,
@@ -57,7 +82,7 @@ export default async function OwnerUserDetailPage({ params }: any) {
     admin.auth.admin.getUserById(targetUserId),
     admin
       .from("profiles")
-      .select("id,email,full_name,role,onboarding_completed,active_company_id,created_at")
+      .select(profileSelect)
       .eq("id", targetUserId)
       .maybeSingle(),
     admin
@@ -110,6 +135,9 @@ export default async function OwnerUserDetailPage({ params }: any) {
     active_company_id: profileUser?.active_company_id || null,
     created_at: profileUser?.created_at || authUser.created_at || null,
     last_sign_in_at: authUser.last_sign_in_at ? String(authUser.last_sign_in_at) : null,
+    lifecycle_status: String(profileUser?.lifecycle_status || "active").toLowerCase(),
+    deleted_at: profileUser?.deleted_at ? String(profileUser.deleted_at) : null,
+    deletion_reason: profileUser?.deletion_reason ? String(profileUser.deletion_reason) : null,
   };
   const latestSub = Array.isArray(subscriptionsRes.data) && subscriptionsRes.data.length > 0 ? subscriptionsRes.data[0] : null;
 
@@ -189,6 +217,14 @@ export default async function OwnerUserDetailPage({ params }: any) {
             <div className="text-sm font-semibold text-slate-900">
               {user.onboarding_completed == null ? "Sin perfil" : user.onboarding_completed ? "Completado" : "Pendiente"}
             </div>
+          </div>
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="text-xs text-slate-500">Estado lifecycle</div>
+            <div className="text-sm font-semibold text-slate-900">
+              {user.lifecycle_status === "deleted" ? "Eliminado" : user.lifecycle_status === "disabled" ? "Deshabilitado" : "Activo"}
+            </div>
+            <div className="text-xs text-slate-500">{fmtDate(user.deleted_at)}</div>
+            {user.deletion_reason ? <div className="text-xs text-slate-500 truncate" title={user.deletion_reason}>{user.deletion_reason}</div> : null}
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Fecha de alta</div>
@@ -306,6 +342,8 @@ export default async function OwnerUserDetailPage({ params }: any) {
         targetUserId={targetUserId}
         role={String(user.role || "")}
         currentPlan={currentPlan}
+        currentLifecycleStatus={String(user.lifecycle_status || "active")}
+        isArchived={String(user.lifecycle_status || "active") === "deleted"}
         experiences={experiences.map((row: any) => ({
           id: String(row.id),
           label: `${row.position || "Experiencia"} — ${row.company_name_freeform || "Empresa"}`,

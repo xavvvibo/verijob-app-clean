@@ -9,6 +9,8 @@ const ACTION_EXTEND_TRIAL = "extend_trial";
 const ACTION_ADD_NOTE = "add_internal_note";
 const ACTION_MARK_EXPERIENCE = "mark_experience_manual_review";
 const ACTION_MARK_EVIDENCE = "mark_evidence_manual_review";
+const ACTION_REPAIR_COMPANY_CONTEXT = "repair_company_context";
+const ACTION_ARCHIVE_USER = "archive_user";
 
 const ALLOWED_ACTIONS = new Set([
   ACTION_CHANGE_PLAN,
@@ -16,6 +18,8 @@ const ALLOWED_ACTIONS = new Set([
   ACTION_ADD_NOTE,
   ACTION_MARK_EXPERIENCE,
   ACTION_MARK_EVIDENCE,
+  ACTION_REPAIR_COMPANY_CONTEXT,
+  ACTION_ARCHIVE_USER,
 ]);
 
 const ALLOWED_PLAN_KEYS = new Set([
@@ -43,6 +47,10 @@ function asObject(v: unknown): Record<string, any> {
   return v && typeof v === "object" ? (v as Record<string, any>) : {};
 }
 
+function asText(v: unknown, max = 500) {
+  return String(v || "").trim().slice(0, max);
+}
+
 function toIsoDate(v: unknown) {
   const raw = String(v || "").trim();
   if (!raw) return null;
@@ -59,6 +67,31 @@ async function getTableColumns(admin: any, tableName: string) {
     .eq("table_name", tableName);
   if (error || !Array.isArray(data)) return new Set<string>();
   return new Set(data.map((r: any) => String(r.column_name || "")));
+}
+
+function makeFallbackCompanyName(emailRaw: unknown) {
+  const email = String(emailRaw || "").trim().toLowerCase();
+  const local = email.split("@")[0] || "empresa";
+  return `Empresa ${local.slice(0, 40)}`;
+}
+
+async function readProfileById(admin: any, userId: string, columns: Set<string>) {
+  const selected = [
+    "id",
+    "email",
+    "full_name",
+    "role",
+    "onboarding_completed",
+    "active_company_id",
+    columns.has("lifecycle_status") ? "lifecycle_status" : null,
+    columns.has("deleted_at") ? "deleted_at" : null,
+    columns.has("deleted_by") ? "deleted_by" : null,
+    columns.has("deletion_reason") ? "deletion_reason" : null,
+  ]
+    .filter(Boolean)
+    .join(",");
+
+  return admin.from("profiles").select(selected).eq("id", userId).maybeSingle();
 }
 
 async function logOwnerAction(owner: { ownerId: string; admin: any }, targetUserId: string, actionType: string, reason: string, payload: Record<string, any>) {
@@ -375,6 +408,258 @@ export async function POST(req: Request, ctx: any) {
       message: "Evidencia marcada para revisión manual.",
       action: logged.action,
       result: updated,
+    });
+  }
+
+  if (actionType === ACTION_REPAIR_COMPANY_CONTEXT) {
+    const profileColumns = await getTableColumns(owner.admin, "profiles");
+    const { data: profileBefore, error: profileBeforeErr } = await readProfileById(owner.admin, targetUserId, profileColumns);
+    if (profileBeforeErr) return json(400, { error: "profiles_read_failed", details: profileBeforeErr.message });
+
+    const targetEmail = asText(targetAuthUser.user.email, 320) || asText(profileBefore?.email, 320) || null;
+    const requestedCompanyId = asText(payload?.company_id, 120);
+    const customCompanyName = asText(payload?.company_name, 180);
+    const keepOnboardingCompleted = Boolean(payload?.keep_onboarding_completed);
+
+    let resolvedCompanyId: string | null = null;
+    let companyResolution: "requested" | "profile_active_company" | "latest_membership" | "created" = "created";
+    let resolvedCompanyName: string | null = null;
+
+    if (requestedCompanyId) {
+      if (!isUuid(requestedCompanyId)) return json(400, { error: "invalid_company_id" });
+      const { data: requestedCompany, error: requestedCompanyErr } = await owner.admin
+        .from("companies")
+        .select("id,name")
+        .eq("id", requestedCompanyId)
+        .maybeSingle();
+      if (requestedCompanyErr || !requestedCompany?.id) return json(404, { error: "company_not_found" });
+      resolvedCompanyId = String(requestedCompany.id);
+      resolvedCompanyName = asText(requestedCompany.name, 180) || null;
+      companyResolution = "requested";
+    }
+
+    if (!resolvedCompanyId && isUuid(String(profileBefore?.active_company_id || ""))) {
+      const activeCompanyId = String(profileBefore?.active_company_id || "");
+      const { data: activeCompany } = await owner.admin
+        .from("companies")
+        .select("id,name")
+        .eq("id", activeCompanyId)
+        .maybeSingle();
+      if (activeCompany?.id) {
+        resolvedCompanyId = String(activeCompany.id);
+        resolvedCompanyName = asText(activeCompany.name, 180) || null;
+        companyResolution = "profile_active_company";
+      }
+    }
+
+    if (!resolvedCompanyId) {
+      const { data: latestMembership } = await owner.admin
+        .from("company_members")
+        .select("company_id,created_at")
+        .eq("user_id", targetUserId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      const membershipCompanyId = asText(latestMembership?.company_id, 120);
+      if (membershipCompanyId && isUuid(membershipCompanyId)) {
+        const { data: membershipCompany } = await owner.admin
+          .from("companies")
+          .select("id,name")
+          .eq("id", membershipCompanyId)
+          .maybeSingle();
+        if (membershipCompany?.id) {
+          resolvedCompanyId = String(membershipCompany.id);
+          resolvedCompanyName = asText(membershipCompany.name, 180) || null;
+          companyResolution = "latest_membership";
+        }
+      }
+    }
+
+    if (!resolvedCompanyId) {
+      const fallbackName = customCompanyName || makeFallbackCompanyName(targetEmail);
+      const { data: createdCompany, error: createCompanyErr } = await owner.admin
+        .from("companies")
+        .insert({
+          name: fallbackName,
+        })
+        .select("id,name")
+        .single();
+      if (createCompanyErr || !createdCompany?.id) {
+        return json(400, { error: "companies_create_failed", details: createCompanyErr?.message || null });
+      }
+      resolvedCompanyId = String(createdCompany.id);
+      resolvedCompanyName = asText(createdCompany.name, 180) || fallbackName;
+      companyResolution = "created";
+    }
+
+    const { data: existingMembership } = await owner.admin
+      .from("company_members")
+      .select("company_id,user_id,role")
+      .eq("company_id", resolvedCompanyId)
+      .eq("user_id", targetUserId)
+      .maybeSingle();
+
+    if (!existingMembership) {
+      const { error: insertMembershipErr } = await owner.admin.from("company_members").insert({
+        company_id: resolvedCompanyId,
+        user_id: targetUserId,
+        role: "admin",
+      });
+      if (insertMembershipErr) {
+        return json(400, { error: "company_members_insert_failed", details: insertMembershipErr.message });
+      }
+    } else if (String(existingMembership.role || "").toLowerCase() !== "admin") {
+      const { error: updateMembershipErr } = await owner.admin
+        .from("company_members")
+        .update({ role: "admin" })
+        .eq("company_id", resolvedCompanyId)
+        .eq("user_id", targetUserId);
+      if (updateMembershipErr) {
+        return json(400, { error: "company_members_update_failed", details: updateMembershipErr.message });
+      }
+    }
+
+    await owner.admin
+      .from("company_profiles")
+      .upsert(
+        {
+          company_id: resolvedCompanyId,
+          contact_email: targetEmail,
+        },
+        { onConflict: "company_id" }
+      );
+
+    const profilePatch: Record<string, any> = {
+      id: targetUserId,
+      role: "company",
+      active_company_id: resolvedCompanyId,
+      onboarding_completed: keepOnboardingCompleted ? Boolean(profileBefore?.onboarding_completed) : false,
+    };
+    if (targetEmail) profilePatch.email = targetEmail;
+    if (profileColumns.has("lifecycle_status")) profilePatch.lifecycle_status = "active";
+    if (profileColumns.has("deleted_at")) profilePatch.deleted_at = null;
+    if (profileColumns.has("deleted_by")) profilePatch.deleted_by = null;
+    if (profileColumns.has("deletion_reason")) profilePatch.deletion_reason = null;
+
+    const { data: profileAfter, error: profileUpsertErr } = await owner.admin
+      .from("profiles")
+      .upsert(profilePatch, { onConflict: "id" })
+      .select("*")
+      .single();
+    if (profileUpsertErr) {
+      return json(400, { error: "profiles_upsert_failed", details: profileUpsertErr.message });
+    }
+
+    await owner.admin.auth.admin.updateUserById(targetUserId, { ban_duration: "none" });
+
+    const logged = await logOwnerAction(owner, targetUserId, ACTION_REPAIR_COMPANY_CONTEXT, reason, {
+      company_resolution: companyResolution,
+      company_id: resolvedCompanyId,
+      company_name: resolvedCompanyName,
+      before: profileBefore || null,
+      after: profileAfter || null,
+      keep_onboarding_completed: keepOnboardingCompleted,
+    });
+    if (!logged.ok) return json(500, { error: "owner_action_log_failed", details: logged.error.message });
+
+    return json(200, {
+      ok: true,
+      executed: true,
+      message: "Cuenta reparada como empresa correctamente.",
+      action: logged.action,
+      result: {
+        profile: profileAfter,
+        company_id: resolvedCompanyId,
+        company_name: resolvedCompanyName,
+        company_resolution: companyResolution,
+      },
+    });
+  }
+
+  if (actionType === ACTION_ARCHIVE_USER) {
+    const profileColumns = await getTableColumns(owner.admin, "profiles");
+    if (!profileColumns.has("lifecycle_status") || !profileColumns.has("deleted_at")) {
+      return json(400, {
+        error: "user_lifecycle_missing_migration",
+        details: "Ejecuta scripts/sql/f33_user_lifecycle_and_legacy_bootstrap.sql",
+      });
+    }
+
+    const confirmPhrase = asText(payload?.confirm_phrase, 64).toUpperCase();
+    if (confirmPhrase !== "ELIMINAR") return json(400, { error: "invalid_confirmation_phrase" });
+
+    const clearFullName = Boolean(payload?.clear_full_name ?? true);
+    const keepRole = Boolean(payload?.keep_role ?? true);
+    const disableSignIn = Boolean(payload?.disable_signin ?? true);
+
+    const { data: profileBefore, error: profileBeforeErr } = await readProfileById(owner.admin, targetUserId, profileColumns);
+    if (profileBeforeErr) return json(400, { error: "profiles_read_failed", details: profileBeforeErr.message });
+    if (String(profileBefore?.lifecycle_status || "").toLowerCase() === "deleted") {
+      return json(409, { error: "already_archived" });
+    }
+
+    const nowIso = new Date().toISOString();
+    const profilePatch: Record<string, any> = {
+      id: targetUserId,
+      lifecycle_status: "deleted",
+      deleted_at: nowIso,
+      deletion_reason: reason,
+      onboarding_completed: false,
+      active_company_id: profileBefore?.active_company_id || null,
+      role: String(profileBefore?.role || "candidate"),
+      email: asText(targetAuthUser.user.email, 320) || asText(profileBefore?.email, 320) || null,
+    };
+    if (profileColumns.has("deleted_by")) profilePatch.deleted_by = owner.ownerId;
+    if (!keepRole) profilePatch.role = "candidate";
+    if (clearFullName) profilePatch.full_name = null;
+
+    const { data: profileAfter, error: profileUpdateErr } = await owner.admin
+      .from("profiles")
+      .upsert(profilePatch, { onConflict: "id" })
+      .select("*")
+      .single();
+    if (profileUpdateErr) return json(400, { error: "profiles_archive_failed", details: profileUpdateErr.message });
+
+    let authUpdateError: string | null = null;
+    if (disableSignIn) {
+      const { error: authErr } = await owner.admin.auth.admin.updateUserById(targetUserId, {
+        ban_duration: "876000h",
+      });
+      if (authErr) authUpdateError = authErr.message;
+    }
+
+    const logged = await logOwnerAction(owner, targetUserId, ACTION_ARCHIVE_USER, reason, {
+      before: profileBefore || null,
+      after: profileAfter || null,
+      disable_signin: disableSignIn,
+      auth_update_error: authUpdateError,
+      data_preservation: {
+        verification_requests: "preserved",
+        evidences: "preserved",
+        owner_actions: "preserved",
+        company_memberships: "preserved",
+      },
+    });
+    if (!logged.ok) return json(500, { error: "owner_action_log_failed", details: logged.error.message });
+
+    if (authUpdateError) {
+      return json(200, {
+        ok: true,
+        executed: true,
+        warning: "auth_disable_signin_failed",
+        warning_details: authUpdateError,
+        message: "Usuario archivado, pero no se pudo bloquear acceso en Auth.",
+        action: logged.action,
+        result: profileAfter,
+      });
+    }
+
+    return json(200, {
+      ok: true,
+      executed: true,
+      message: "Usuario archivado y acceso bloqueado correctamente.",
+      action: logged.action,
+      result: profileAfter,
     });
   }
 
