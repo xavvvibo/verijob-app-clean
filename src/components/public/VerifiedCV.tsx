@@ -25,6 +25,7 @@ export default function VerifiedCV({ data }: Props) {
       <header className="border-b border-slate-200 pb-6">
         <h1 className="text-3xl font-semibold">{teaser?.full_name || "Candidato verificado"}</h1>
         {teaser?.title ? <p className="mt-1 text-base text-slate-700">{teaser.title}</p> : null}
+        <p className="mt-1 text-sm text-slate-600">Perfil profesional con señales verificables para evaluación empresarial.</p>
         <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
           {teaser?.location ? <span className="rounded-full border border-slate-200 px-2.5 py-1">{teaser.location}</span> : null}
           <span className="rounded-full border border-slate-200 px-2.5 py-1">Trust Score: {Number(teaser?.trust_score ?? 0)}</span>

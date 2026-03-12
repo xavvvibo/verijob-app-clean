@@ -278,7 +278,7 @@ export function CandidatePublicProfileRenderer({
                     <p className="mt-1 text-sm font-medium text-blue-800">{teaser?.title || "Añade tu titular profesional"}</p>
                   ) : null}
                   <p className="mt-1 text-xs text-slate-600">
-                    Perfil profesional con experiencia y documentación laboral verificadas.
+                    Perfil profesional con señales verificables para evaluación empresarial.
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
                     {teaser?.location ? <Pill>{teaser.location}</Pill> : null}
@@ -342,17 +342,17 @@ export function CandidatePublicProfileRenderer({
               <SignalCard
                 label="Verificaciones"
                 value={verificationSummary.verified}
-                hint="Experiencias confirmadas"
+                hint="Experiencias contrastadas"
               />
               <SignalCard
                 label="Evidencias"
                 value={verificationSummary.evidences}
-                hint="Documentación validada"
+                hint="Soporte documental validado"
               />
               <SignalCard
                 label="Reutilización"
                 value={verificationSummary.reuse}
-                hint="Consultas de reutilización"
+                hint="Reutilización en procesos reales"
               />
               <SignalCard
                 label="Trust Score"
@@ -759,8 +759,8 @@ export function CandidatePublicProfileRenderer({
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-900">Contacto visible</h3>
               <div className="mt-3 space-y-2 text-sm text-slate-700">
-                <p>Email: <span className="font-medium text-slate-900">{contact?.email || "No disponible"}</span></p>
-                <p>Teléfono: <span className="font-medium text-slate-900">{contact?.phone || "No disponible"}</span></p>
+                <p>Email: <span className="font-medium text-slate-900">{contact?.email || "No compartido"}</span></p>
+                <p>Teléfono: <span className="font-medium text-slate-900">{contact?.phone || "No compartido"}</span></p>
               </div>
             </section>
           ) : null}
@@ -936,7 +936,7 @@ function getStatusBadge(statusText?: string | null) {
     return { label: "Revocada", className: "border-rose-200 bg-rose-50 text-rose-700" };
   }
 
-  return { label: "Sin estado", className: "border-slate-300 bg-slate-100 text-slate-700" };
+  return { label: "En validación", className: "border-slate-300 bg-slate-100 text-slate-700" };
 }
 
 function getCompanyStatusBadge(statusText?: string | null) {

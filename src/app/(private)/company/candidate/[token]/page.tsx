@@ -273,19 +273,19 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
             <Field label="Tipo de jornada" value={mapWorkday(availability?.preferred_workday)} />
             <Field
               label="Áreas o funciones de interés"
-              value={roles.length ? roles.join(", ") : "No especificado"}
+              value={roles.length ? roles.join(", ") : "Pendiente de completar"}
             />
             <Field
               label="Zona o zonas preferidas"
               value={
                 typeof availability?.work_zones === "string" && availability.work_zones.trim()
                   ? availability.work_zones
-                  : "No especificado"
+                  : "Pendiente de completar"
               }
             />
             <Field
               label="Disponibilidad horaria"
-              value={schedules.length ? schedules.join(", ") : "No especificado"}
+              value={schedules.length ? schedules.join(", ") : "Pendiente de completar"}
             />
           </div>
         ) : (
@@ -298,10 +298,10 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-base font-semibold text-gray-900">Resumen profesional</h2>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Field label="Nombre" value={String(profile?.full_name || profile?.name || "No disponible")} />
-          <Field label="Titular profesional" value={String(profile?.title || profile?.headline || "No especificado")} />
-          <Field label="Ubicación" value={String(profile?.location || "No especificada")} />
-          <Field label="Experiencias totales" value={String(profile?.experiences_total ?? "No disponible")} />
+          <Field label="Nombre" value={String(profile?.full_name || profile?.name || "Pendiente de completar")} />
+          <Field label="Titular profesional" value={String(profile?.title || profile?.headline || "Pendiente de completar")} />
+          <Field label="Ubicación" value={String(profile?.location || "Pendiente de completar")} />
+          <Field label="Experiencias totales" value={String(profile?.experiences_total ?? "Pendiente de completar")} />
         </div>
       </section>
 
@@ -348,7 +348,7 @@ function statusLabel(status?: string | null) {
   if (s === "pending_company") return "Pendiente empresa";
   if (s === "rejected") return "Rechazada";
   if (s === "revoked") return "Revocada";
-  return "Sin estado";
+  return "En validación";
 }
 
 function statusClass(status?: string | null) {
@@ -378,7 +378,7 @@ function mapJobSearchStatus(v?: string | null) {
   if (v === "buscando_activamente") return "Buscando empleo activamente";
   if (v === "abierto_oportunidades") return "Abierto a oportunidades";
   if (v === "no_disponible") return "No disponible actualmente";
-  return "No especificado";
+  return "Pendiente de completar";
 }
 
 function mapAvailabilityStart(v?: string | null) {
@@ -387,7 +387,7 @@ function mapAvailabilityStart(v?: string | null) {
   if (v === "15_dias") return "En 15 días";
   if (v === "30_dias") return "En 30 días";
   if (v === "mas_adelante") return "Más adelante";
-  return "No especificado";
+  return "Pendiente de completar";
 }
 
 function mapWorkday(v?: string | null) {
@@ -395,7 +395,7 @@ function mapWorkday(v?: string | null) {
   if (v === "media_jornada") return "Media jornada";
   if (v === "temporal_proyectos" || v === "extras_eventos" || v === "fines_semana") return "Temporal / por proyectos";
   if (v === "flexible") return "Flexible";
-  return "No especificado";
+  return "Pendiente de completar";
 }
 
 function mapRole(v: string) {
