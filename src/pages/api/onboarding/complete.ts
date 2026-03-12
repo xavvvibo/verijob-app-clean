@@ -14,6 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   try {
+    const body = typeof req.body === "object" && req.body ? req.body : {};
     const supa = createPagesRouteClient(req, res);
     const { data: au, error: authErr } = await supa.auth.getUser();
 
@@ -26,16 +27,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const srv = createServiceRoleClient();
+    const { data: profileBefore, error: profileReadErr } = await srv
+      .from("profiles")
+      .select("id,role")
+      .eq("id", au.user.id)
+      .maybeSingle();
+
+    if (profileReadErr) {
+      return json(res, 400, {
+        error: "profiles_read_failed",
+        route: "/pages/api/onboarding/complete",
+        details: profileReadErr.message,
+      });
+    }
+
+    if (String(profileBefore?.role || "").toLowerCase() === "company") {
+      return json(res, 403, {
+        error: "forbidden_role",
+        route: "/pages/api/onboarding/complete",
+      });
+    }
+
+    const patch: Record<string, any> = {
+      id: au.user.id,
+      onboarding_completed: true,
+      onboarding_step: "achievements",
+    };
+
+    const allowedVisibility = new Set(["private", "public", "public_anonymous"]);
+    const incomingVisibility = String(body?.profile_visibility || "").trim();
+    if (allowedVisibility.has(incomingVisibility)) {
+      patch.profile_visibility = incomingVisibility;
+    }
+
+    const boolFields = ["show_personal", "show_experience", "show_education", "show_achievements"] as const;
+    for (const field of boolFields) {
+      if (field in body) patch[field] = Boolean((body as any)[field]);
+    }
 
     const { error } = await srv
       .from("profiles")
-      .upsert(
-        {
-          id: au.user.id,
-          onboarding_completed: true,
-        },
-        { onConflict: "id" }
-      );
+      .upsert(patch, { onConflict: "id" });
 
     if (error) {
       return json(res, 400, {

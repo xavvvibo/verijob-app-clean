@@ -241,15 +241,22 @@ export default function OnboardingPage() {
       const ok = await savePreferences("achievements");
       if (!ok) return;
 
-      const { error } = await supabase
-        .from("profiles")
-        .upsert({
-          id: user.id,
-          onboarding_completed: true,
+      const completeRes = await fetch("/api/onboarding/complete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
           onboarding_step: "achievements",
-        }, { onConflict: "id" });
-
-      if (error) throw error;
+          profile_visibility: profileVisibility,
+          show_personal: showPersonal,
+          show_experience: showExperience,
+          show_education: showEducation,
+          show_achievements: showAchievements,
+        }),
+      });
+      const completeData = await completeRes.json().catch(() => ({}));
+      if (!completeRes.ok) {
+        throw new Error(completeData?.details || completeData?.error || "No se pudo completar el onboarding.");
+      }
 
       vjEvents.onboarding_step_completed("achievements");
       vjEvents.profile_section_completed("achievements");
