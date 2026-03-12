@@ -3,14 +3,38 @@
 import { useEffect, useMemo, useState } from "react";
 
 type Profile = Record<string, any>;
+type CompanyVerificationDocument = {
+  id: string;
+  document_type?: string | null;
+  storage_bucket?: string | null;
+  storage_path?: string | null;
+  original_filename?: string | null;
+  review_status?: string | null;
+  rejected_reason?: string | null;
+  review_notes?: string | null;
+  reviewed_at?: string | null;
+  created_at?: string | null;
+};
 
 const EMPLOYEE_RANGES = ["1-10", "11-50", "51-200", "201-500", "500+"];
 const HIRING_RANGES = ["1-5/mes", "6-20/mes", "21-50/mes", "50+/mes"];
 const CONTRACT_TYPES = ["Indefinido", "Temporal", "Fijo-discontinuo", "Prácticas", "Autónomo"];
 const WORKDAY_TYPES = ["Jornada completa", "Media jornada", "Turnos", "Noches", "Fines de semana"];
+const COMPANY_DOCUMENT_TYPES = [
+  { value: "modelo_036", label: "Modelo 036" },
+  { value: "modelo_037", label: "Modelo 037" },
+  { value: "cif_nif", label: "CIF / NIF empresa" },
+  { value: "certificado_censal", label: "Certificado censal / AEAT" },
+  { value: "escritura", label: "Escritura o documento equivalente" },
+  { value: "otro", label: "Otro documento" },
+];
 
 function statusLabel(statusRaw: unknown) {
   const status = String(statusRaw || "").toLowerCase();
+  if (status === "verified") return "Verificada";
+  if (status === "pending_review") return "Pendiente de revisión";
+  if (status === "rejected") return "Rechazada";
+  if (status === "unverified") return "No verificada";
   if (status === "verified_paid") return "Empresa verificada por suscripción";
   if (status === "verified_document") return "Empresa verificada por documentación";
   return "Empresa no verificada";
@@ -18,9 +42,32 @@ function statusLabel(statusRaw: unknown) {
 
 function statusClass(statusRaw: unknown) {
   const status = String(statusRaw || "").toLowerCase();
+  if (status === "verified") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "pending_review") return "border-indigo-200 bg-indigo-50 text-indigo-800";
+  if (status === "rejected") return "border-rose-200 bg-rose-50 text-rose-800";
+  if (status === "unverified") return "border-amber-200 bg-amber-50 text-amber-800";
   if (status === "verified_paid") return "border-emerald-200 bg-emerald-50 text-emerald-800";
   if (status === "verified_document") return "border-blue-200 bg-blue-50 text-blue-800";
   return "border-amber-200 bg-amber-50 text-amber-800";
+}
+
+function docTypeLabel(raw: unknown) {
+  const v = String(raw || "").toLowerCase();
+  return COMPANY_DOCUMENT_TYPES.find((d) => d.value === v)?.label || String(raw || "Documento");
+}
+
+function docStatusLabel(raw: unknown) {
+  const v = String(raw || "").toLowerCase();
+  if (v === "approved") return "Aprobada";
+  if (v === "rejected") return "Rechazada";
+  return "En proceso de validación";
+}
+
+function docStatusClass(raw: unknown) {
+  const v = String(raw || "").toLowerCase();
+  if (v === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (v === "rejected") return "border-rose-200 bg-rose-50 text-rose-800";
+  return "border-indigo-200 bg-indigo-50 text-indigo-800";
 }
 
 function Section({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
@@ -62,6 +109,12 @@ export const dynamic = "force-dynamic";
 export default function CompanyProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [membershipRole, setMembershipRole] = useState<string>("reviewer");
+  const [documents, setDocuments] = useState<CompanyVerificationDocument[]>([]);
+  const [reviewStatus, setReviewStatus] = useState<string>("unverified");
+  const [documentsWarning, setDocumentsWarning] = useState<string | null>(null);
+  const [docType, setDocType] = useState<string>(COMPANY_DOCUMENT_TYPES[0].value);
+  const [docFile, setDocFile] = useState<File | null>(null);
+  const [uploadingDoc, setUploadingDoc] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -80,6 +133,9 @@ export default function CompanyProfilePage() {
       }
       setProfile(data.profile || {});
       setMembershipRole(String(data.membership_role || "reviewer"));
+      setDocuments(Array.isArray(data.verification_documents) ? data.verification_documents : []);
+      setReviewStatus(String(data?.profile?.company_verification_review_status || "unverified"));
+      setDocumentsWarning(data?.verification_documents_warning ? String(data.verification_documents_warning) : null);
       setLoading(false);
     })();
 
@@ -133,7 +189,44 @@ export default function CompanyProfilePage() {
     }
 
     setProfile(data.profile || profile);
+    setReviewStatus(String(data?.profile?.company_verification_review_status || reviewStatus));
+    if (Array.isArray(data?.verification_documents)) {
+      setDocuments(data.verification_documents);
+    }
     setMessage("Perfil de empresa actualizado correctamente.");
+  }
+
+  async function uploadVerificationDocument() {
+    if (!docFile) {
+      setError("Selecciona un archivo para subir.");
+      return;
+    }
+
+    setUploadingDoc(true);
+    setError(null);
+    setMessage(null);
+    const fd = new FormData();
+    fd.set("document_type", docType);
+    fd.set("file", docFile);
+
+    const res = await fetch("/api/company/profile/documents", {
+      method: "POST",
+      body: fd,
+    });
+    const data = await res.json().catch(() => ({}));
+    setUploadingDoc(false);
+
+    if (!res.ok) {
+      setError(data?.details || data?.error || "No se pudo subir el documento.");
+      return;
+    }
+
+    if (data?.document) {
+      setDocuments((prev) => [data.document, ...prev]);
+    }
+    setReviewStatus("pending_review");
+    setDocFile(null);
+    setMessage("Documento subido. Estado actualizado a pendiente de revisión.");
   }
 
   if (loading) return <p className="text-sm text-slate-600">Cargando perfil de empresa…</p>;
@@ -150,7 +243,7 @@ export default function CompanyProfilePage() {
               Completa tu estructura operativa para mejorar confianza, trazabilidad y calidad de verificación en VERIJOB.
             </p>
             <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(profile.company_verification_status)}`}>
-              {statusLabel(profile.company_verification_status)}
+              {statusLabel(reviewStatus)}
             </div>
           </div>
           <div className="min-w-[220px] rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -182,6 +275,7 @@ export default function CompanyProfilePage() {
           <Field label="Email de contacto"><TextInput value={profile.contact_email || ""} onChange={(e) => updateField("contact_email", e.target.value)} disabled={!canEdit} /></Field>
           <Field label="Teléfono de contacto"><TextInput value={profile.contact_phone || ""} onChange={(e) => updateField("contact_phone", e.target.value)} disabled={!canEdit} /></Field>
           <Field label="Persona de contacto"><TextInput value={profile.contact_person_name || ""} onChange={(e) => updateField("contact_person_name", e.target.value)} disabled={!canEdit} /></Field>
+          <Field label="Cargo persona de contacto"><TextInput value={profile.contact_person_role || ""} onChange={(e) => updateField("contact_person_role", e.target.value)} disabled={!canEdit} /></Field>
         </div>
       </Section>
 
@@ -252,22 +346,118 @@ export default function CompanyProfilePage() {
         </div>
       </Section>
 
-      <Section title="Verificación documental" subtitle="Sube y registra documentación fiscal para reforzar la credibilidad de tus verificaciones.">
-        <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Tipo de documento"><TextInput value={profile.verification_document_type || ""} onChange={(e) => updateField("verification_document_type", e.target.value)} placeholder="Modelo 036, CIF, equivalente" disabled={!canEdit} /></Field>
-          <Field label="Referencia de documento (ruta o URL interna)"><TextInput value={profile.verification_document_storage_path || ""} onChange={(e) => updateField("verification_document_storage_path", e.target.value)} placeholder="company-docs/..." disabled={!canEdit} /></Field>
-          <Field label="Notas de revisión"><TextArea rows={3} value={profile.verification_notes || ""} onChange={(e) => updateField("verification_notes", e.target.value)} disabled={!canEdit} /></Field>
-          <Field label="Estado de verificación">
-            <select className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" value={profile.company_verification_status || "unverified"} onChange={(e) => updateField("company_verification_status", e.target.value)} disabled={!canEdit}>
-              <option value="unverified">Empresa no verificada</option>
-              <option value="verified_document">Empresa verificada por documentación</option>
-              <option value="verified_paid">Empresa verificada por suscripción</option>
-            </select>
-          </Field>
+      <Section title="Verificación documental de empresa" subtitle="Sube documentación oficial para iniciar o reforzar la verificación de empresa.">
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <p className="text-sm text-slate-700">
+            Estado actual:{" "}
+            <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(reviewStatus)}`}>
+              {statusLabel(reviewStatus)}
+            </span>
+          </p>
+          <p className="mt-2 text-xs text-slate-600">
+            La revisión es manual. Subir documentación no aprueba automáticamente la empresa.
+          </p>
+          {profile?.verification_rejection_reason ? (
+            <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              Motivo de rechazo: {profile.verification_rejection_reason}
+            </p>
+          ) : null}
+          {profile?.verification_last_reviewed_at ? (
+            <p className="mt-2 text-xs text-slate-500">
+              Última revisión: {new Date(String(profile.verification_last_reviewed_at)).toLocaleDateString("es-ES")}
+            </p>
+          ) : null}
         </div>
-        <p className="mt-3 text-xs text-slate-500">
-          El sistema puede usar estos datos como base para extracción automática y revisión asistida en fases siguientes.
-        </p>
+
+        {documentsWarning ? (
+          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Falta migración para documentos múltiples: {documentsWarning}.
+          </p>
+        ) : null}
+
+        {canEdit ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <Field label="Tipo de documento">
+              <select
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                value={docType}
+                onChange={(e) => setDocType(e.target.value)}
+              >
+                {COMPANY_DOCUMENT_TYPES.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Archivo (PDF o imagen)">
+              <input
+                type="file"
+                accept=".pdf,image/*"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
+                onChange={(e) => setDocFile(e.target.files?.[0] || null)}
+              />
+            </Field>
+            <div className="md:col-span-2">
+              <button
+                type="button"
+                onClick={uploadVerificationDocument}
+                disabled={!docFile || uploadingDoc}
+                className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
+              >
+                {uploadingDoc ? "Subiendo…" : "Subir documento de verificación"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 text-xs text-slate-600">Solo admins de empresa pueden subir documentación de verificación.</p>
+        )}
+
+        <div className="mt-5">
+          <h3 className="text-sm font-semibold text-slate-900">Documentos subidos</h3>
+          {documents.length === 0 ? (
+            <p className="mt-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-sm text-slate-600">
+              No hay documentos de verificación subidos todavía.
+            </p>
+          ) : (
+            <div className="mt-2 overflow-auto">
+              <table className="min-w-[860px] w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                    <th className="px-3 py-2">Tipo</th>
+                    <th className="px-3 py-2">Estado</th>
+                    <th className="px-3 py-2">Archivo</th>
+                    <th className="px-3 py-2">Fecha</th>
+                    <th className="px-3 py-2">Revisión</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {documents.map((doc) => (
+                    <tr key={doc.id} className="border-b border-slate-100 text-slate-800">
+                      <td className="px-3 py-2">{docTypeLabel(doc.document_type)}</td>
+                      <td className="px-3 py-2">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${docStatusClass(doc.review_status)}`}>
+                          {docStatusLabel(doc.review_status)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-600">{doc.original_filename || doc.storage_path || "documento"}</td>
+                      <td className="px-3 py-2">{doc.created_at ? new Date(String(doc.created_at)).toLocaleDateString("es-ES") : "—"}</td>
+                      <td className="px-3 py-2">
+                        {doc.rejected_reason || doc.review_notes ? (
+                          <span className="text-xs text-rose-700">{doc.rejected_reason || doc.review_notes}</span>
+                        ) : doc.reviewed_at ? (
+                          <span className="text-xs text-slate-600">Revisado {new Date(String(doc.reviewed_at)).toLocaleDateString("es-ES")}</span>
+                        ) : (
+                          <span className="text-xs text-slate-500">Pendiente de revisión manual</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </Section>
 
       <div className="flex flex-wrap gap-3">

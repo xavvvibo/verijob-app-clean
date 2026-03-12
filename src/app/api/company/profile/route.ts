@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 
 const ROUTE_VERSION = "company-profile-v1";
@@ -16,6 +16,7 @@ type CompanyProfileRow = {
   contact_email?: string | null;
   contact_phone?: string | null;
   contact_person_name?: string | null;
+  contact_person_role?: string | null;
   country?: string | null;
   region?: string | null;
   province?: string | null;
@@ -52,6 +53,20 @@ type CompanyProfileRow = {
   updated_at?: string | null;
 };
 
+type CompanyVerificationDocumentRow = {
+  id: string;
+  company_id: string;
+  document_type: string | null;
+  storage_bucket: string | null;
+  storage_path: string | null;
+  original_filename: string | null;
+  review_status: string | null;
+  rejected_reason: string | null;
+  review_notes: string | null;
+  reviewed_at: string | null;
+  created_at: string | null;
+};
+
 const ARRAY_FIELDS = new Set([
   "common_roles_hired",
   "common_contract_types",
@@ -75,6 +90,7 @@ const ALLOWED_PATCH_FIELDS = [
   "contact_email",
   "contact_phone",
   "contact_person_name",
+  "contact_person_role",
   "country",
   "region",
   "province",
@@ -130,6 +146,35 @@ function normalizeVerificationStatus(value: unknown) {
   return "unverified";
 }
 
+function normalizeDocumentReviewStatus(value: unknown) {
+  const v = String(value || "").toLowerCase();
+  if (v === "approved") return "approved";
+  if (v === "rejected") return "rejected";
+  return "pending_review";
+}
+
+function deriveCompanyVerificationReviewStatus(profileStatus: unknown, docs: CompanyVerificationDocumentRow[]) {
+  const baseStatus = normalizeVerificationStatus(profileStatus);
+  if (baseStatus === "verified_paid" || baseStatus === "verified_document") return "verified";
+  if (!Array.isArray(docs) || docs.length === 0) return "unverified";
+
+  const hasPending = docs.some((d) => normalizeDocumentReviewStatus(d.review_status) === "pending_review");
+  if (hasPending) return "pending_review";
+
+  const hasApproved = docs.some((d) => normalizeDocumentReviewStatus(d.review_status) === "approved");
+  if (hasApproved) return "verified";
+
+  const hasRejected = docs.some((d) => normalizeDocumentReviewStatus(d.review_status) === "rejected");
+  if (hasRejected) return "rejected";
+
+  return "unverified";
+}
+
+function isRelationMissingError(error: any, relationName: string) {
+  const msg = String(error?.message || "").toLowerCase();
+  return String(error?.code || "") === "42P01" || msg.includes(`relation`) && msg.includes(relationName.toLowerCase());
+}
+
 function computeCompleteness(profile: Partial<CompanyProfileRow>) {
   const checks: boolean[] = [
     !!asTrimmedText(profile.legal_name),
@@ -138,6 +183,8 @@ function computeCompleteness(profile: Partial<CompanyProfileRow>) {
     !!asTrimmedText(profile.website_url),
     !!asTrimmedText(profile.contact_email),
     !!asTrimmedText(profile.contact_phone),
+    !!asTrimmedText(profile.contact_person_name),
+    !!asTrimmedText(profile.contact_person_role),
     !!asTrimmedText(profile.country),
     !!asTrimmedText(profile.province),
     !!asTrimmedText(profile.city),
@@ -163,7 +210,7 @@ function computeCompleteness(profile: Partial<CompanyProfileRow>) {
   return Math.round((completed / total) * 100);
 }
 
-async function resolveContext(supabase: any) {
+async function resolveContext(supabase: any, admin: any) {
   const {
     data: { user },
     error: userErr,
@@ -176,7 +223,7 @@ async function resolveContext(supabase: any) {
     return { error: NextResponse.json({ error: "unauthorized" }, { status: 401 }) };
   }
 
-  const { data: profile, error: profileErr } = await supabase
+  const { data: profile, error: profileErr } = await admin
     .from("profiles")
     .select("active_company_id")
     .eq("id", user.id)
@@ -197,7 +244,7 @@ async function resolveContext(supabase: any) {
 
     companyId = inferredMembership?.[0]?.company_id ? String(inferredMembership[0].company_id) : null;
     if (companyId) {
-      await supabase.from("profiles").update({ active_company_id: companyId }).eq("id", user.id);
+      await admin.from("profiles").update({ active_company_id: companyId }).eq("id", user.id);
     }
   }
 
@@ -205,12 +252,18 @@ async function resolveContext(supabase: any) {
     return { error: NextResponse.json({ error: "no_active_company" }, { status: 400 }) };
   }
 
-  const { data: membership } = await supabase
+  const { data: membership, error: membershipErr } = await admin
     .from("company_members")
     .select("role")
     .eq("company_id", companyId)
     .eq("user_id", user.id)
     .maybeSingle();
+  if (membershipErr) {
+    return { error: NextResponse.json({ error: "company_members_read_failed", details: membershipErr.message }, { status: 400 }) };
+  }
+  if (!membership) {
+    return { error: NextResponse.json({ error: "company_membership_required" }, { status: 403 }) };
+  }
 
   return {
     user,
@@ -235,9 +288,9 @@ async function getEffectiveVerificationStatus(supabase: any, userId: string, pro
 
 export async function GET() {
   try {
-    const supabase = await createClient();
+    const supabase = await createRouteHandlerClient();
     const admin = createServiceRoleClient();
-    const ctx = await resolveContext(supabase);
+    const ctx = await resolveContext(supabase, admin);
     if ((ctx as any).error) return (ctx as any).error;
 
     const { user, companyId } = ctx as any;
@@ -267,19 +320,48 @@ export async function GET() {
           has_internal_hr: false,
         } as any);
 
+    let verificationDocuments: CompanyVerificationDocumentRow[] = [];
+    let verificationDocumentsWarning: string | null = null;
+    const docsRes = await admin
+      .from("company_verification_documents")
+      .select("id,company_id,document_type,storage_bucket,storage_path,original_filename,review_status,rejected_reason,review_notes,reviewed_at,created_at")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (docsRes.error) {
+      if (!isRelationMissingError(docsRes.error, "company_verification_documents")) {
+        return NextResponse.json(
+          { error: "company_verification_documents_read_failed", details: docsRes.error.message, route_version: ROUTE_VERSION },
+          { status: 400 },
+        );
+      }
+      verificationDocumentsWarning = "company_verification_documents_missing_migration";
+    } else {
+      verificationDocuments = Array.isArray(docsRes.data) ? (docsRes.data as any) : [];
+    }
+
     const profileCompletenessScore = computeCompleteness(baseProfile);
     const effectiveVerificationStatus = await getEffectiveVerificationStatus(
       admin,
       user.id,
       baseProfile.company_verification_status
     );
+    const reviewStatus = deriveCompanyVerificationReviewStatus(effectiveVerificationStatus, verificationDocuments);
+    const latestRejected = verificationDocuments.find((d) => normalizeDocumentReviewStatus(d.review_status) === "rejected") || null;
+    const latestReviewed = verificationDocuments.find((d) => d.reviewed_at) || null;
 
     return NextResponse.json({
       profile: {
         ...baseProfile,
         company_verification_status: effectiveVerificationStatus,
         profile_completeness_score: profileCompletenessScore,
+        company_verification_review_status: reviewStatus,
+        verification_last_reviewed_at: latestReviewed?.reviewed_at || null,
+        verification_rejection_reason: latestRejected?.rejected_reason || latestRejected?.review_notes || null,
       },
+      verification_documents: verificationDocuments,
+      verification_documents_warning: verificationDocumentsWarning,
       membership_role: (ctx as any).membershipRole,
       route_version: ROUTE_VERSION,
     });
@@ -290,9 +372,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = await createRouteHandlerClient();
     const admin = createServiceRoleClient();
-    const ctx = await resolveContext(supabase);
+    const ctx = await resolveContext(supabase, admin);
     if ((ctx as any).error) return (ctx as any).error;
 
     const { user, companyId, membershipRole } = ctx as any;
