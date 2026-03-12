@@ -57,6 +57,21 @@ function resolveProfileStatus(args: {
   return "partially_verified";
 }
 
+function normalizeSubscriptionStatus(value: unknown) {
+  const status = String(value || "").toLowerCase();
+  if (!status) return "none";
+  return status;
+}
+
+function canShowPublicQr(planRaw: unknown, statusRaw: unknown) {
+  const plan = String(planRaw || "").toLowerCase();
+  const status = normalizeSubscriptionStatus(statusRaw);
+  const active = status === "active" || status === "trialing";
+  if (!active) return false;
+  if (!plan || plan === "free") return false;
+  return plan.startsWith("candidate_");
+}
+
 function asArray(v: any) {
   return Array.isArray(v) ? v : [];
 }
@@ -141,8 +156,16 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
 
   const { data: cp } = await admin
     .from("candidate_profiles")
-    .select("summary,education,achievements,other_achievements,trust_score,trust_score_breakdown")
+    .select("summary,education,achievements,other_achievements,trust_score,trust_score_breakdown,job_search_status,preferred_workday,preferred_roles,work_zones")
     .eq("user_id", candidateId)
+    .maybeSingle();
+
+  const { data: latestSub } = await admin
+    .from("subscriptions")
+    .select("plan,status,created_at")
+    .eq("user_id", candidateId)
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   const { data: verifications } = await admin
@@ -351,6 +374,12 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       profile_status: profileStatus,
       profile_visibility: "public_link",
       lifecycle_status: lifecycleStatus,
+      subscription_plan: latestSub?.plan || "free",
+      subscription_status: normalizeSubscriptionStatus(latestSub?.status),
+      qr_enabled: canShowPublicQr(latestSub?.plan, latestSub?.status),
+      availability: asText((cp as any)?.job_search_status, 80) || null,
+      work_mode: asText((cp as any)?.preferred_workday, 80) || null,
+      sector: asText(asArray((cp as any)?.preferred_roles)?.[0], 120) || null,
     },
     experiences: experiencesEnriched,
     education: educationItems,

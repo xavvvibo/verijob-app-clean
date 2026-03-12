@@ -22,6 +22,12 @@ export type PublicCandidateTeaser = {
   achievements_total?: number | null;
   profile_visibility?: string | null;
   lifecycle_status?: string | null;
+  availability?: string | null;
+  work_mode?: string | null;
+  sector?: string | null;
+  subscription_plan?: string | null;
+  subscription_status?: string | null;
+  qr_enabled?: boolean | null;
   trust_score_breakdown?: {
     verification?: number;
     evidence?: number;
@@ -117,6 +123,7 @@ export function CandidatePublicProfileRenderer({
   contact?: PublicCandidateContact;
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
+  const [shareMessage, setShareMessage] = useState<string | null>(null);
 
   const teaser: PublicCandidateTeaser = payload?.teaser || {};
   const allExperiences: PublicCandidateExperience[] = Array.isArray(payload?.experiences)
@@ -142,7 +149,11 @@ export function CandidatePublicProfileRenderer({
   const nextPath = token ? `/company/candidate/${token}` : "/company/candidates";
   const loginUrl = `/login?mode=company&next=${encodeURIComponent(nextPath)}`;
   const signupUrl = `/signup?mode=company&next=${encodeURIComponent(nextPath)}`;
-  const applyCtaUrl = `/signup?next=${encodeURIComponent("/candidate/overview")}`;
+  const profileUrl = token
+    ? `${typeof window !== "undefined" ? window.location.origin : "https://app.verijob.es"}/p/${token}`
+    : null;
+  const qrEnabled = Boolean(teaser?.qr_enabled);
+  const qrImageUrl = token && qrEnabled ? `/api/public/candidate/${token}/qr.svg` : null;
 
   const trustProgress = Math.min(100, Math.max(0, trust));
   const trustRingStyle = {
@@ -174,8 +185,14 @@ export function CandidatePublicProfileRenderer({
                     {teaser?.full_name || "Candidato verificado"}
                   </h1>
                   <p className="mt-1 text-sm font-medium text-blue-800">{teaser?.title || "Perfil profesional verificable"}</p>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Perfil profesional con experiencia y documentación laboral verificadas.
+                  </p>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
                     {teaser?.location ? <Pill>{teaser.location}</Pill> : null}
+                    {teaser?.sector ? <Pill>{teaser.sector}</Pill> : null}
+                    {teaser?.work_mode ? <Pill>{teaser.work_mode}</Pill> : null}
+                    {teaser?.availability ? <Pill>{teaser.availability}</Pill> : null}
                     <Pill>{profileVisibility}</Pill>
                     <Pill>{profileStatus}</Pill>
                   </div>
@@ -183,20 +200,34 @@ export function CandidatePublicProfileRenderer({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                <a
-                  href={applyCtaUrl}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!profileUrl) return;
+                    try {
+                      await navigator.clipboard.writeText(profileUrl);
+                      setShareMessage("Enlace copiado al portapapeles.");
+                    } catch {
+                      setShareMessage("No se pudo copiar automáticamente. Copia la URL desde el navegador.");
+                    }
+                  }}
                   className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
                 >
-                  Postúlate con este perfil verificado
-                </a>
+                  Compartir perfil verificado
+                </button>
                 <a
                   href={loginUrl}
                   className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                 >
-                  Iniciar sesión empresa
+                  Ver evaluación empresa
                 </a>
               </div>
             </div>
+            {shareMessage ? (
+              <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-medium text-blue-800">
+                {shareMessage}
+              </div>
+            ) : null}
 
             <p className="mt-4 max-w-4xl text-sm leading-6 text-slate-700">
               {teaser?.summary ||
@@ -401,7 +432,7 @@ export function CandidatePublicProfileRenderer({
           </main>
         </div>
 
-        <aside className="space-y-4">
+        <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Trust Score</h3>
             <div className="mt-3 flex items-center gap-4">
@@ -481,6 +512,25 @@ export function CandidatePublicProfileRenderer({
             )}
           </section>
 
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900">QR de tu perfil verificado</h3>
+            {qrEnabled && qrImageUrl ? (
+              <>
+                <p className="mt-2 text-xs leading-5 text-slate-600">Escanea para ver este perfil verificado.</p>
+                <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={qrImageUrl}
+                    alt="QR del perfil verificado"
+                    className="mx-auto h-auto w-full max-w-[200px] rounded-lg object-contain"
+                  />
+                </div>
+              </>
+            ) : (
+              <Empty text="Disponible con planes de suscripción que habilitan QR público del perfil." compact />
+            )}
+          </section>
+
           {capabilities.showContact ? (
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="text-sm font-semibold text-slate-900">Contacto visible</h3>
@@ -511,12 +561,21 @@ export function CandidatePublicProfileRenderer({
       </div>
 
       <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-5 text-center shadow-sm">
-        <a
-          href={applyCtaUrl}
+        <button
+          type="button"
+          onClick={async () => {
+            if (!profileUrl) return;
+            try {
+              await navigator.clipboard.writeText(profileUrl);
+              setShareMessage("Enlace copiado al portapapeles.");
+            } catch {
+              setShareMessage("No se pudo copiar automáticamente. Copia la URL desde el navegador.");
+            }
+          }}
           className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
         >
-          Postúlate con este perfil verificado
-        </a>
+          Compartir perfil verificado
+        </button>
       </div>
     </section>
   );
