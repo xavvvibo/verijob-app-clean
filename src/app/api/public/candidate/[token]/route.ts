@@ -57,6 +57,43 @@ function resolveProfileStatus(args: {
   return "partially_verified";
 }
 
+function asArray(v: any) {
+  return Array.isArray(v) ? v : [];
+}
+
+function asText(v: unknown, max = 300) {
+  return String(v || "").trim().slice(0, max);
+}
+
+function toEvidenceVerificationBadge(rawType: unknown) {
+  const v = String(rawType || "").toLowerCase();
+  if (!v) return null;
+  if (v.includes("contract")) return "Contrato validado";
+  if (v.includes("payroll") || v.includes("nomina")) return "Nómina validada";
+  if (v.includes("social") || v.includes("vida_laboral")) return "Informe de vida laboral validado";
+  if (v.includes("reference")) return "Referencia empresarial verificada";
+  if (v.includes("documentary")) return "Verificación documental";
+  if (v.includes("certificate")) return "Certificado validado";
+  return "Verificación documental";
+}
+
+function getRoleSkills(experiences: any[]) {
+  const stopWords = new Set(["de", "la", "el", "en", "y", "con", "para", "del"]);
+  const counts = new Map<string, number>();
+  for (const row of experiences) {
+    const source = String(row?.position || "");
+    for (const token of source.toLowerCase().split(/[^a-zA-Záéíóúüñ0-9]+/g)) {
+      const t = token.trim();
+      if (!t || t.length < 3 || stopWords.has(t)) continue;
+      counts.set(t, (counts.get(t) || 0) + 1);
+    }
+  }
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([word]) => word.charAt(0).toUpperCase() + word.slice(1));
+}
+
 export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const { token } = await ctx.params;
 
@@ -77,11 +114,30 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const candidateId = String(link.candidate_id || "");
   if (!candidateId) return json(404, { error: "not_found" });
 
+  const { data: profileColumnsRes } = await admin
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", "profiles");
+  const profileColumns = new Set((profileColumnsRes || []).map((row: any) => String(row?.column_name || "")));
+  const profileSelect = [
+    "full_name",
+    "title",
+    "location",
+    "languages",
+    profileColumns.has("lifecycle_status") ? "lifecycle_status" : null,
+    profileColumns.has("deleted_at") ? "deleted_at" : null,
+  ]
+    .filter(Boolean)
+    .join(",");
+
   const { data: profile } = await admin
     .from("profiles")
-    .select("full_name,title,location,languages")
+    .select(profileSelect)
     .eq("id", candidateId)
     .maybeSingle();
+  const lifecycleStatus = String((profile as any)?.lifecycle_status || "active").toLowerCase();
+  if (lifecycleStatus === "deleted") return json(410, { error: "profile_unavailable" });
 
   const { data: cp } = await admin
     .from("candidate_profiles")
@@ -111,7 +167,22 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       .in("verification_id", verificationIds);
     const rr = Array.isArray(reuseRows) ? reuseRows : [];
     reuseEvents = rr.length;
-    reuseCompanies = new Set(rr.map((x: any) => x.company_id).filter(Boolean)).size;
+      reuseCompanies = new Set(rr.map((x: any) => x.company_id).filter(Boolean)).size;
+  }
+
+  const { data: evidenceRows } = verificationIds.length
+    ? await admin
+        .from("evidences")
+        .select("verification_request_id,document_type,evidence_type,validation_status,document_scope")
+        .in("verification_request_id", verificationIds)
+    : ({ data: [] } as any);
+  const evidenceByVerification = new Map<string, any[]>();
+  for (const evidence of asArray(evidenceRows)) {
+    const key = String((evidence as any)?.verification_request_id || "");
+    if (!key) continue;
+    const current = evidenceByVerification.get(key) || [];
+    current.push(evidence);
+    evidenceByVerification.set(key, current);
   }
 
   const verifiedRows = rows.filter((r: any) => isVerifiedStatus(r?.status));
@@ -191,14 +262,76 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
 
   const experiences = experiencesFromEmployment.length ? experiencesFromEmployment : experiencesFallback;
 
+  const verificationsById = new Map<string, any>((rows || []).map((x: any) => [String(x?.verification_id || ""), x]));
+  const experiencesEnriched = experiences.map((item: any) => {
+    const verificationId = String(item?.experience_id || "");
+    const linkedVerification = verificationsById.get(verificationId) || null;
+    const linkedEvidences = evidenceByVerification.get(verificationId) || [];
+    const badges = new Set<string>();
+    const method = String(linkedVerification?.verification_channel || "").toLowerCase();
+    const status = String(item?.status_text || "").toLowerCase();
+    if (status === "verified" || status === "approved") badges.add("Verificado por empresa");
+    if (method === "documentary") badges.add("Verificación documental");
+    for (const ev of linkedEvidences) {
+      const b = toEvidenceVerificationBadge((ev as any)?.document_type || (ev as any)?.evidence_type);
+      if (b) badges.add(b);
+    }
+    if (!badges.size && Number(item?.evidence_count || 0) > 0) badges.add("Verificación documental");
+    return {
+      ...item,
+      verification_method: method || null,
+      verification_badges: Array.from(badges),
+      is_verified: status === "verified" || status === "approved",
+    };
+  });
+
+  const educationItems = asArray((cp as any)?.education).map((item: any, idx: number) => ({
+    id: String(item?.id || `edu-${idx}`),
+    title: asText(item?.title || item?.degree || item?.program, 180) || "Formación",
+    institution: asText(item?.institution || item?.school || item?.center, 180) || null,
+    start_date: asText(item?.start_date || item?.start || item?.from, 30) || null,
+    end_date: asText(item?.end_date || item?.end || item?.to, 30) || null,
+    description: asText(item?.description || item?.notes, 500) || null,
+  }));
+
+  const rawAchievements = asArray((cp as any)?.achievements).length
+    ? asArray((cp as any)?.achievements)
+    : asArray((cp as any)?.other_achievements);
+  const achievementItems = rawAchievements
+    .map((item: any) => asText(item, 140))
+    .filter(Boolean);
+
+  const derivedRecommendations = rows
+    .filter((r: any) => isVerifiedStatus(r?.status))
+    .map((r: any, idx: number) => {
+      const note = asText((r as any)?.resolution_notes || (r as any)?.company_comment || (r as any)?.comment, 420);
+      return {
+        id: String((r as any)?.verification_id || `rec-${idx}`),
+        name: asText((r as any)?.reviewer_name || "Responsable de empresa", 120),
+        role: asText((r as any)?.reviewer_role || "Verificación empresarial", 120),
+        company: asText((r as any)?.company_name || (r as any)?.company_name_target, 160) || "Empresa verificada",
+        text: note || "Experiencia validada por empresa dentro del proceso de verificación.",
+        date: (r as any)?.resolved_at || (r as any)?.created_at || null,
+        verified: true,
+      };
+    })
+    .slice(0, 10);
+
+  const verifiedSkills = Array.from(
+    new Set([
+      ...getRoleSkills(experiencesEnriched),
+      ...achievementItems.slice(0, 8),
+    ])
+  ).slice(0, 14);
+
   return json(200, {
     route_version: "public-candidate-token-v1",
     token,
     candidate_id: candidateId,
     teaser: {
-      full_name: profile?.full_name || "Candidato verificado",
-      title: profile?.title || null,
-      location: profile?.location || null,
+      full_name: (profile as any)?.full_name || "Candidato verificado",
+      title: (profile as any)?.title || null,
+      location: (profile as any)?.location || null,
       languages: normalizePublicLanguages((profile as any)?.languages),
       summary: cp?.summary || null,
       trust_score: trustScore,
@@ -217,7 +350,12 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       total_verifications: totalVerifications,
       profile_status: profileStatus,
       profile_visibility: "public_link",
+      lifecycle_status: lifecycleStatus,
     },
-    experiences,
+    experiences: experiencesEnriched,
+    education: educationItems,
+    recommendations: derivedRecommendations,
+    achievements: achievementItems,
+    verified_skills: verifiedSkills,
   });
 }
