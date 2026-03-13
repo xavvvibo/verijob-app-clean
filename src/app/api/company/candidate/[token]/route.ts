@@ -47,6 +47,16 @@ function clampPercent(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+function toPublicName(fullNameRaw: unknown) {
+  const fullName = String(fullNameRaw || "").trim();
+  if (!fullName) return "Candidato verificado";
+  const parts = fullName.split(/\s+/).filter(Boolean);
+  if (!parts.length) return "Candidato verificado";
+  const first = parts[0];
+  const secondInitial = parts[1]?.charAt(0)?.toUpperCase();
+  return secondInitial ? `${first} ${secondInitial}.` : first;
+}
+
 export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const { token: tokenParam } = await ctx.params;
 
@@ -121,6 +131,9 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     .eq("id", link.id);
 
   const safe = sanitizePublic(profile);
+  const maskedName = toPublicName((safe as any)?.full_name || (safe as any)?.name);
+  (safe as any).full_name = maskedName;
+  (safe as any).name = maskedName;
   const rawEmail =
     typeof (profile as any)?.email === "string" && (profile as any).email.trim()
       ? String((profile as any).email).trim()

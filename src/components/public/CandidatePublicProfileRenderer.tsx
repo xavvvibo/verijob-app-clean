@@ -7,6 +7,7 @@ export type PublicProfilePreviewMode = "public" | "registered" | "requesting" | 
 
 export type PublicCandidateTeaser = {
   full_name?: string | null;
+  public_name?: string | null;
   title?: string | null;
   location?: string | null;
   languages?: string[] | null;
@@ -204,6 +205,9 @@ export function CandidatePublicProfileRenderer({
   const isExternalCleanView = !internalPreview;
   const isPrintMode = renderMode === "print";
   const isOpenPublicView = mode === "public" && !internalPreview;
+  const displayName = isOpenPublicView ? (teaser?.public_name || teaser?.full_name) : teaser?.full_name;
+  const showPublicTrustScoreNumber = !isOpenPublicView || trust > 80;
+  const publicTrustLabel = trust > 80 ? "Alta confianza verificada" : "Perfil con señales verificadas";
   const hasExperiences = experiences.length > 0;
   const hasEducation = education.length > 0;
   const hasRecommendations = recommendations.length > 0;
@@ -216,6 +220,7 @@ export function CandidatePublicProfileRenderer({
     hasSkills;
 
   const visibleTabs = useMemo(() => {
+    if (isOpenPublicView) return [{ key: "profile" as TabKey, label: "Perfil" }];
     if (!isExternalCleanView) return tabs;
     const out: Array<{ key: TabKey; label: string }> = [];
     if (hasProfileCore) out.push({ key: "profile", label: "Perfil" });
@@ -224,7 +229,7 @@ export function CandidatePublicProfileRenderer({
     if (hasRecommendations) out.push({ key: "recommendations", label: "Recomendaciones" });
     if (hasLanguages || hasAchievements) out.push({ key: "languages", label: "Idiomas y logros" });
     return out.length ? out : [{ key: "profile", label: "Perfil" }];
-  }, [isExternalCleanView, hasProfileCore, hasExperiences, hasEducation, hasRecommendations, hasLanguages, hasAchievements]);
+  }, [isOpenPublicView, isExternalCleanView, hasProfileCore, hasExperiences, hasEducation, hasRecommendations, hasLanguages, hasAchievements]);
 
   useEffect(() => {
     if (!visibleTabs.some((x) => x.key === activeTab)) {
@@ -243,10 +248,10 @@ export function CandidatePublicProfileRenderer({
   }, [internalPreview, teaser?.title, hasLanguages, hasEducation, hasAchievements]);
 
   const showProfileTab = isPrintMode || activeTab === "profile";
-  const showExperienceTab = isPrintMode || activeTab === "experience";
-  const showEducationTab = isPrintMode || activeTab === "education";
-  const showRecommendationsTab = isPrintMode || activeTab === "recommendations";
-  const showLanguagesTab = isPrintMode || activeTab === "languages";
+  const showExperienceTab = (!isOpenPublicView && isPrintMode) || activeTab === "experience";
+  const showEducationTab = (!isOpenPublicView && isPrintMode) || activeTab === "education";
+  const showRecommendationsTab = (!isOpenPublicView && isPrintMode) || activeTab === "recommendations";
+  const showLanguagesTab = (!isOpenPublicView && isPrintMode) || activeTab === "languages";
 
   return (
     <section className="rounded-[30px] border border-slate-200 bg-slate-50/60 p-3 shadow-sm print:rounded-none print:border-0 print:bg-white print:p-0 print:shadow-none sm:p-4">
@@ -273,7 +278,7 @@ export function CandidatePublicProfileRenderer({
                     ) : null}
                   </div>
                   <h1 className="mt-1 truncate text-2xl font-semibold text-slate-900 sm:text-3xl">
-                    {teaser?.full_name || "Candidato verificado"}
+                    {displayName || "Candidato verificado"}
                   </h1>
                   {teaser?.title || internalPreview ? (
                     <p className="mt-1 text-sm font-medium text-blue-800">{teaser?.title || "Añade tu titular profesional"}</p>
@@ -283,8 +288,8 @@ export function CandidatePublicProfileRenderer({
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
                     {teaser?.location ? <Pill>{teaser.location}</Pill> : null}
-                    {teaser?.sector ? <Pill>{teaser.sector}</Pill> : null}
-                    {teaser?.work_mode ? <Pill>{teaser.work_mode}</Pill> : null}
+                    {!isOpenPublicView && teaser?.sector ? <Pill>{teaser.sector}</Pill> : null}
+                    {!isOpenPublicView && teaser?.work_mode ? <Pill>{teaser.work_mode}</Pill> : null}
                     {teaser?.availability ? <Pill>{teaser.availability}</Pill> : null}
                     <Pill>{profileVisibility}</Pill>
                     <Pill>{profileStatus}</Pill>
@@ -293,38 +298,54 @@ export function CandidatePublicProfileRenderer({
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {!isPrintMode ? (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    if (!profileUrl) return;
-                    try {
-                      await navigator.clipboard.writeText(profileUrl);
-                      setShareMessage("Enlace copiado al portapapeles.");
-                    } catch {
-                      setShareMessage("No se pudo copiar automáticamente. Copia la URL desde el navegador.");
-                    }
-                  }}
-                  className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
-                >
-                  Compartir perfil verificado
-                </button>
+                {isOpenPublicView && !isPrintMode ? (
+                  <>
+                    <a
+                      href={signupUrl}
+                      className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+                    >
+                      Registro
+                    </a>
+                    <a
+                      href="/para-empresas"
+                      className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                    >
+                      Ventajas
+                    </a>
+                  </>
                 ) : null}
-                {!isPrintMode && token ? (
-                  <a
-                    href={`/p/${encodeURIComponent(token)}?print=1`}
-                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                  >
-                    Descargar CV (PDF)
-                  </a>
-                ) : null}
-                {!isPrintMode ? (
-                <a
-                  href={loginUrl}
-                  className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                >
-                  Ver evaluación empresa
-                </a>
+                {!isOpenPublicView && !isPrintMode ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (!profileUrl) return;
+                        try {
+                          await navigator.clipboard.writeText(profileUrl);
+                          setShareMessage("Enlace copiado al portapapeles.");
+                        } catch {
+                          setShareMessage("No se pudo copiar automáticamente. Copia la URL desde el navegador.");
+                        }
+                      }}
+                      className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+                    >
+                      Compartir perfil verificado
+                    </button>
+                    {token ? (
+                      <a
+                        href={`/p/${encodeURIComponent(token)}?print=1`}
+                        className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                      >
+                        Descargar CV (PDF)
+                      </a>
+                    ) : null}
+                    <a
+                      href={loginUrl}
+                      className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                    >
+                      Ver evaluación empresa
+                    </a>
+                  </>
                 ) : null}
               </div>
             </div>
@@ -334,10 +355,16 @@ export function CandidatePublicProfileRenderer({
               </div>
             ) : null}
 
-            <p className="mt-4 max-w-4xl text-sm leading-6 text-slate-700">
-              {teaser?.summary ||
-                "Perfil profesional verificable con historial laboral estructurado, señales de confianza y validación por empresa/documentación sin exponer archivos privados."}
-            </p>
+            {!isOpenPublicView ? (
+              <p className="mt-4 max-w-4xl text-sm leading-6 text-slate-700">
+                {teaser?.summary ||
+                  "Perfil profesional verificable con historial laboral estructurado, señales de confianza y validación por empresa/documentación sin exponer archivos privados."}
+              </p>
+            ) : (
+              <p className="mt-4 max-w-4xl text-sm leading-6 text-slate-700">
+                Perfil profesional verificable con visibilidad pública protegida y señales de credibilidad para evaluación empresarial.
+              </p>
+            )}
 
             <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               <SignalCard
@@ -359,8 +386,8 @@ export function CandidatePublicProfileRenderer({
               ) : null}
               <SignalCard
                 label="Trust Score"
-                value={trust}
-                hint={trustLabel}
+                value={showPublicTrustScoreNumber ? trust : "—"}
+                hint={isOpenPublicView ? publicTrustLabel : trustLabel}
               />
             </div>
 
@@ -398,18 +425,25 @@ export function CandidatePublicProfileRenderer({
 
             {showProfileTab ? (
               <>
-                <Card title="Resumen profesional" subtitle="Información principal del perfil verificable.">
+                <Card
+                  title={isOpenPublicView ? "Señales públicas de verificación" : "Resumen profesional"}
+                  subtitle={
+                    isOpenPublicView
+                      ? "Vista abierta con información protegida y orientada a empresa."
+                      : "Información principal del perfil verificable."
+                  }
+                >
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    <Stat label="Experiencias" value={verificationSummary.experiences} />
-                    <Stat label="Verificadas" value={verificationSummary.verified} />
+                    <Stat label="Verificaciones" value={verificationSummary.verified} />
                     <Stat label="Evidencias" value={verificationSummary.evidences} />
+                    {!isOpenPublicView ? <Stat label="Experiencias" value={verificationSummary.experiences} /> : null}
                     {!isOpenPublicView ? <Stat label="Reutilizaciones" value={verificationSummary.reuse} /> : null}
-                    <Stat label="Formación" value={Number(teaser?.education_total ?? education.length)} />
-                    <Stat label="Logros" value={Number(teaser?.achievements_total ?? achievements.length)} />
+                    {!isOpenPublicView ? <Stat label="Formación" value={Number(teaser?.education_total ?? education.length)} /> : null}
+                    {!isOpenPublicView ? <Stat label="Logros" value={Number(teaser?.achievements_total ?? achievements.length)} /> : null}
                   </div>
                 </Card>
 
-                {(experiences.length > 0 || internalPreview) ? (
+                {(!isOpenPublicView && (experiences.length > 0 || internalPreview)) ? (
                   <Card
                     title="Historial verificable"
                     subtitle="Línea temporal profesional con estado de verificación y señales de credibilidad."
@@ -462,19 +496,21 @@ export function CandidatePublicProfileRenderer({
                   </Card>
                 ) : null}
 
-                <Card title="Habilidades verificadas" subtitle="Derivadas de experiencia y señales de verificación.">
-                  {skills.length ? (
-                    <div className="flex flex-wrap gap-2">
-                      {skills.map((skill) => (
-                        <span key={skill} className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">
-                          {skill}
-                        </span>
-                      ))}
-                    </div>
-                  ) : internalPreview ? (
-                    <Empty text="Sin habilidades verificadas visibles por ahora." />
-                  ) : null}
-                </Card>
+                {(skills.length > 0 || internalPreview) ? (
+                  <Card title="Habilidades clave" subtitle="Competencias destacadas del perfil verificable.">
+                    {skills.length ? (
+                      <div className="flex flex-wrap gap-2">
+                        {skills.map((skill) => (
+                          <span key={skill} className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <Empty text="Sin habilidades verificadas visibles por ahora." />
+                    )}
+                  </Card>
+                ) : null}
 
                 <Card title="Datos clave" subtitle="Solo datos públicos y relevantes para evaluación profesional.">
                   <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -484,9 +520,10 @@ export function CandidatePublicProfileRenderer({
                     {teaser?.title || internalPreview ? (
                       <Item label="Título profesional" value={teaser?.title || "Añade titular"} />
                     ) : null}
-                    {publicLanguages.length || internalPreview ? (
+                    {!isOpenPublicView && (publicLanguages.length || internalPreview) ? (
                       <Item label="Idiomas" value={publicLanguages.length ? publicLanguages.join(", ") : "Añade idiomas"} />
                     ) : null}
+                    {teaser?.availability ? <Item label="Disponibilidad" value={String(teaser.availability)} /> : null}
                     <Item label="Estado de perfil" value={profileStatus} />
                   </dl>
                 </Card>
@@ -656,11 +693,13 @@ export function CandidatePublicProfileRenderer({
             <div className="mt-3 flex items-center gap-4">
               <div className="relative h-20 w-20 rounded-full p-1" style={trustRingStyle}>
                 <div className="flex h-full w-full items-center justify-center rounded-full bg-white text-2xl font-bold text-slate-900">
-                  {trust}
+                  {showPublicTrustScoreNumber ? trust : "—"}
                 </div>
               </div>
               <div>
-                <div className="text-base font-semibold text-slate-900">{trustLabel}</div>
+                <div className="text-base font-semibold text-slate-900">
+                  {isOpenPublicView ? publicTrustLabel : trustLabel}
+                </div>
                 <p className="mt-1 text-xs leading-5 text-slate-600">
                   Basado en verificaciones laborales, trazabilidad documental y consistencia del historial.
                 </p>
@@ -745,7 +784,7 @@ export function CandidatePublicProfileRenderer({
           </section>
           ) : null}
 
-          {(!isOpenPublicView && (qrEnabled || internalPreview)) ? (
+          {(qrEnabled || internalPreview) ? (
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">QR de tu perfil verificado</h3>
             {qrEnabled && qrImageUrl ? (
@@ -778,16 +817,21 @@ export function CandidatePublicProfileRenderer({
 
           {companyAccess ? (
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">Acceso empresa</h3>
+              <h3 className="text-sm font-semibold text-slate-900">{isOpenPublicView ? "Acceso para empresas" : "Acceso empresa"}</h3>
               <p className="mt-2 text-xs leading-5 text-slate-600">
-                Para acceder a más contexto operativo, utiliza la vista de empresa.
+                {isOpenPublicView
+                  ? "Regístrate para desbloquear evaluación empresarial y más contexto verificable."
+                  : "Para acceder a más contexto operativo, utiliza la vista de empresa."}
               </p>
               <div className="mt-4 space-y-2">
                 <a className="inline-flex w-full justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800" href={signupUrl}>
-                  Crear cuenta empresa
+                  {isOpenPublicView ? "Registro" : "Crear cuenta empresa"}
                 </a>
-                <a className="inline-flex w-full justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100" href={loginUrl}>
-                  Iniciar sesión empresa
+                <a
+                  className="inline-flex w-full justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  href={isOpenPublicView ? "/para-empresas" : loginUrl}
+                >
+                  {isOpenPublicView ? "Ventajas" : "Iniciar sesión empresa"}
                 </a>
               </div>
             </section>

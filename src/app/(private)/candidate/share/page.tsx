@@ -47,7 +47,7 @@ export default function CandidatePublicProfilePage() {
   }, [token]);
 
   const fetchPreview = useCallback(async (publicToken: string) => {
-    const res = await fetch(`/api/public/candidate/${publicToken}`, { cache: "no-store" });
+    const res = await fetch(`/api/public/candidate/${publicToken}?scope=internal`, { cache: "no-store" });
     const body = await res.json().catch(() => ({}));
 
     if (!res.ok) {

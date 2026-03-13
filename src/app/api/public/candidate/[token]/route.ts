@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { normalizePublicLanguages } from "@/lib/public/profile-languages";
 import { resolveActiveCandidatePublicLink } from "@/lib/public/candidate-public-link";
 
@@ -53,21 +54,22 @@ function normalizeSubscriptionStatus(value: unknown) {
   return status;
 }
 
-function canShowPublicQr(planRaw: unknown, statusRaw: unknown) {
-  const plan = String(planRaw || "").toLowerCase();
-  const status = normalizeSubscriptionStatus(statusRaw);
-  const active = status === "active" || status === "trialing";
-  if (!active) return false;
-  if (!plan || plan === "free") return false;
-  return plan.startsWith("candidate_");
-}
-
 function asArray(v: any) {
   return Array.isArray(v) ? v : [];
 }
 
 function asText(v: unknown, max = 300) {
   return String(v || "").trim().slice(0, max);
+}
+
+function toPublicName(fullNameRaw: unknown) {
+  const fullName = String(fullNameRaw || "").trim();
+  if (!fullName) return "Candidato verificado";
+  const parts = fullName.split(/\s+/).filter(Boolean);
+  if (!parts.length) return "Candidato verificado";
+  const first = parts[0];
+  const secondInitial = parts[1]?.charAt(0)?.toUpperCase();
+  return secondInitial ? `${first} ${secondInitial}.` : first;
 }
 
 function toEvidenceVerificationBadge(rawType: unknown) {
@@ -101,6 +103,8 @@ function getRoleSkills(experiences: any[]) {
 
 export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const { token: tokenParam } = await ctx.params;
+  const reqUrl = new URL(_req.url);
+  const requestedScope = String(reqUrl.searchParams.get("scope") || "").toLowerCase();
 
   const admin = createServiceRoleClient();
 
@@ -112,6 +116,15 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
 
   const candidateId = String(linkResolved.link.candidate_id || "");
   if (!candidateId) return json(404, { error: "not_found" });
+
+  let internalPreviewAllowed = false;
+  if (requestedScope === "internal") {
+    const supabase = await createRouteHandlerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    internalPreviewAllowed = Boolean(user?.id && String(user.id) === candidateId);
+  }
 
   const { data: profileColumnsRes } = await admin
     .from("information_schema.columns")
@@ -322,69 +335,73 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   ).slice(0, 14);
 
   const profileFullName = asText((profile as any)?.full_name, 140) || "Candidato verificado";
+  const publicName = toPublicName(profileFullName);
   const profileTitle = asText((profile as any)?.title, 140) || null;
   const profileLocation = asText((profile as any)?.location, 140) || null;
   const profileSummary = asText((cp as any)?.summary, 1200) || null;
   const availability = asText((cp as any)?.job_search_status, 80) || null;
   const workMode = asText((cp as any)?.preferred_workday, 80) || null;
   const sector = asText(asArray((cp as any)?.preferred_roles)?.[0], 120) || null;
+  const teaser = {
+    full_name: internalPreviewAllowed ? profileFullName : publicName,
+    public_name: publicName,
+    title: profileTitle,
+    location: profileLocation,
+    languages: internalPreviewAllowed ? normalizePublicLanguages((profile as any)?.languages) : [],
+    summary: internalPreviewAllowed ? profileSummary : null,
+    trust_score: trustScore,
+    experiences_total: rows.length,
+    verified_experiences: verifiedRows.length,
+    confirmed_experiences: confirmed,
+    evidences_total: evidences,
+    evidences_count: evidences,
+    education_total: internalPreviewAllowed ? educationTotal : 0,
+    achievements_total: internalPreviewAllowed ? achievementsRaw.length : 0,
+    verified_work_count: verifiedWork,
+    verified_education_count: internalPreviewAllowed ? verifiedEducation : 0,
+    total_verifications: totalVerifications,
+    profile_status: profileStatus,
+    profile_visibility: "public_link",
+    lifecycle_status: lifecycleStatus,
+    subscription_plan: latestSub?.plan || "free",
+    subscription_status: normalizeSubscriptionStatus(latestSub?.status),
+    qr_enabled: true,
+    availability,
+    work_mode: internalPreviewAllowed ? workMode : null,
+    sector: internalPreviewAllowed ? sector : null,
+  };
+
   return json(200, {
     route_version: "public-candidate-token-v1",
     token: linkResolved.token,
     candidate_id: candidateId,
-    teaser: {
-      full_name: profileFullName,
-      title: profileTitle,
-      location: profileLocation,
-      languages: normalizePublicLanguages((profile as any)?.languages),
-      summary: profileSummary,
-      trust_score: trustScore,
-      experiences_total: rows.length,
-      verified_experiences: verifiedRows.length,
-      confirmed_experiences: confirmed,
-      evidences_total: evidences,
-      evidences_count: evidences,
-      education_total: educationTotal,
-      achievements_total: achievementsRaw.length,
-      verified_work_count: verifiedWork,
-      verified_education_count: verifiedEducation,
-      total_verifications: totalVerifications,
-      profile_status: profileStatus,
-      profile_visibility: "public_link",
-      lifecycle_status: lifecycleStatus,
-      subscription_plan: latestSub?.plan || "free",
-      subscription_status: normalizeSubscriptionStatus(latestSub?.status),
-      qr_enabled: canShowPublicQr(latestSub?.plan, latestSub?.status),
-      availability,
-      work_mode: workMode,
-      sector,
-    },
-    experiences: experiencesEnriched,
-    education: educationItems,
-    recommendations: derivedRecommendations,
-    achievements: achievementItems,
+    teaser,
+    experiences: internalPreviewAllowed ? experiencesEnriched : [],
+    education: internalPreviewAllowed ? educationItems : [],
+    recommendations: internalPreviewAllowed ? derivedRecommendations : [],
+    achievements: internalPreviewAllowed ? achievementItems : [],
     verified_skills: verifiedSkills,
     candidate_public_profile: {
       identity: {
         candidate_id: candidateId,
-        full_name: profileFullName,
+        full_name: internalPreviewAllowed ? profileFullName : publicName,
       },
       headline: profileTitle,
       location: profileLocation,
-      languages: normalizePublicLanguages((profile as any)?.languages),
-      education: educationItems,
-      experiences: experiencesEnriched,
+      languages: internalPreviewAllowed ? normalizePublicLanguages((profile as any)?.languages) : [],
+      education: internalPreviewAllowed ? educationItems : [],
+      experiences: internalPreviewAllowed ? experiencesEnriched : [],
       verifications: {
         total: totalVerifications,
         verified_work_count: verifiedWork,
-        verified_education_count: verifiedEducation,
+        verified_education_count: internalPreviewAllowed ? verifiedEducation : 0,
         confirmed_experiences: confirmed,
         evidences_total: evidences,
       },
       trust_score: {
         value: trustScore,
       },
-      recommendations: derivedRecommendations,
+      recommendations: internalPreviewAllowed ? derivedRecommendations : [],
       skills: verifiedSkills,
     },
   });
