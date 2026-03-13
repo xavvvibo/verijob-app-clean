@@ -1,0 +1,53 @@
+{
+  "invite": {
+    "invite_id": "invite-existing-001",
+    "company_id": "company-001",
+    "company_name": "Brasería Rambla Alta",
+    "candidate_email": "marta.gil@verijob.test"
+  },
+  "existing_candidate": {
+    "id": "candidate-123",
+    "full_name": "Marta Gil Ortega",
+    "email": "marta.gil@verijob.test",
+    "title": "Encargada | Responsable de turno | Jefa de sala",
+    "public_token": null
+  },
+  "existing_experiences": [
+    {
+      "id": "exp-201",
+      "company_name": "Brasería Rambla Alta",
+      "role_title": "Encargada",
+      "start_date": "2022-03-01",
+      "end_date": null,
+      "description": "Gestión de equipo, cierres de caja, coordinación sala-cocina y turnos."
+    }
+  ],
+  "extracted": {
+    "full_name": "Marta Gil Ortega",
+    "email": "marta.gil@verijob.test",
+    "phone": "+34 600 333 444",
+    "headline": "Encargada de restaurante",
+    "languages": ["Español", "Catalán", "Inglés"],
+    "experiences": [
+      {
+        "company_name": "Brasería Rambla Alta",
+        "role_title": "Encargada",
+        "start_date": "2022-03",
+        "end_date": "Actualidad",
+        "location": "Barcelona",
+        "description": "Coordinación de turnos, caja, incidencias y formación de personal.",
+        "skills": ["Liderazgo", "Caja"]
+      },
+      {
+        "company_name": "Grupo Bocana Tapas",
+        "role_title": "Responsable de turno",
+        "start_date": "2019-01",
+        "end_date": "2022-02",
+        "location": "Barcelona",
+        "description": "Aperturas, cierres, control de servicio y gestión del equipo de sala.",
+        "skills": ["Turnos", "Operativa"]
+      }
+    ],
+    "education": []
+  }
+}

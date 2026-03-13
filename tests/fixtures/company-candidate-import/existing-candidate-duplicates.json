@@ -1,0 +1,70 @@
+{
+  "invite": {
+    "invite_id": "invite-existing-dup-001",
+    "company_id": "company-001",
+    "company_name": "Brasería Rambla Alta",
+    "candidate_email": "marta.gil@verijob.test"
+  },
+  "existing_candidate": {
+    "id": "candidate-123",
+    "full_name": "Marta Gil Ortega",
+    "email": "marta.gil@verijob.test",
+    "title": "Encargada | Responsable de turno | Jefa de sala",
+    "public_token": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  "existing_experiences": [
+    {
+      "id": "exp-201",
+      "company_name": "Brasería Rambla Alta",
+      "role_title": "Encargada",
+      "start_date": "2022-03-01",
+      "end_date": null,
+      "description": "Coordinación de turnos, caja, incidencias y formación de personal."
+    },
+    {
+      "id": "exp-202",
+      "company_name": "Grupo Bocana Tapas",
+      "role_title": "Responsable de turno",
+      "start_date": "2019-01-01",
+      "end_date": "2021-12-01",
+      "description": "Aperturas, cierres, control de servicio y gestión del equipo de sala."
+    }
+  ],
+  "extracted": {
+    "full_name": "Marta Gil Ortega",
+    "email": "marta.gil@verijob.test",
+    "phone": "+34 600 333 444",
+    "headline": "Encargada de restaurante",
+    "languages": ["Español", "Catalán", "Inglés"],
+    "experiences": [
+      {
+        "company_name": "Brasería Rambla Alta",
+        "role_title": "Encargada",
+        "start_date": "2022-03",
+        "end_date": "Actualidad",
+        "location": "Barcelona",
+        "description": "Coordinación de turnos, caja, incidencias y formación de personal.",
+        "skills": ["Liderazgo", "Caja"]
+      },
+      {
+        "company_name": "Grupo Bocana Tapas",
+        "role_title": "Responsable de turno",
+        "start_date": "2019-01",
+        "end_date": "2022-02",
+        "location": "Barcelona",
+        "description": "Aperturas, cierres, control de servicio y gestión del equipo de sala con incidencias complejas y seguimiento diario.",
+        "skills": ["Turnos", "Operativa"]
+      },
+      {
+        "company_name": "Hotel Mirador del Port",
+        "role_title": "Jefa de sala",
+        "start_date": "2015-04",
+        "end_date": "2018-12",
+        "location": "Barcelona",
+        "description": "Supervisión de sala, coordinación de eventos y control del servicio.",
+        "skills": ["Sala", "Eventos"]
+      }
+    ],
+    "education": []
+  }
+}

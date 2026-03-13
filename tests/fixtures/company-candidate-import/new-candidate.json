@@ -1,0 +1,45 @@
+{
+  "invite": {
+    "invite_id": "invite-new-001",
+    "company_id": "company-001",
+    "company_name": "Brasería Rambla Alta",
+    "candidate_email": "laura.nuevo.demo@verijob.test"
+  },
+  "extracted": {
+    "full_name": "Laura Peña Soler",
+    "email": "laura.nuevo.demo@verijob.test",
+    "phone": "+34 600 111 222",
+    "headline": "Camarera de sala",
+    "languages": ["Español", "Inglés"],
+    "experiences": [
+      {
+        "company_name": "Taberna del Born",
+        "role_title": "Camarera de sala",
+        "start_date": "2023-05",
+        "end_date": "2025-02",
+        "location": "Barcelona",
+        "description": "Atención en sala, servicio de menú y coordinación con cocina.",
+        "skills": ["Sala", "Atención al cliente"]
+      },
+      {
+        "company_name": "Hotel Costa Centro",
+        "role_title": "Runner",
+        "start_date": "2021-06",
+        "end_date": "2023-04",
+        "location": "Barcelona",
+        "description": "Apoyo de sala y montaje de mesas en servicios de alto volumen.",
+        "skills": ["Montaje", "Servicio"]
+      }
+    ],
+    "education": [
+      {
+        "institution": "Escola d'Hostaleria de Barcelona",
+        "title": "Certificado de operaciones básicas de restaurante y bar",
+        "study_field": "Hostelería",
+        "start_date": "2020-09",
+        "end_date": "2021-03",
+        "description": "Formación básica de servicio en sala."
+      }
+    ]
+  }
+}
