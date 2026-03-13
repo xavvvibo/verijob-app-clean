@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { createHash, randomBytes } from "crypto";
 import { extractCvTextFromBuffer } from "@/utils/cv/extractText";
 import {
   normalizeCvLanguages,
@@ -37,6 +37,30 @@ export type ExtractedCandidateCvPayload = {
   languages?: string[];
   experiences?: ExtractedExperience[];
   education?: ExtractedEducation[];
+};
+
+export type CompanyCvExperienceSuggestion = {
+  id: string;
+  kind: "duplicate" | "new" | "update";
+  reason: string;
+  status: "pending" | "accepted" | "dismissed";
+  extracted_experience: {
+    company_name: string | null;
+    role_title: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    location: string | null;
+    description: string | null;
+    skills: string[];
+  };
+  matched_existing: null | {
+    id: string | null;
+    company_name: string | null;
+    role_title: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    description: string | null;
+  };
 };
 
 function normalizeText(v: any) {
@@ -222,6 +246,105 @@ function buildWarnings(input: { cvText: string; experiences: any[]; education: a
   return warnings;
 }
 
+function tokenizeText(value: unknown) {
+  return normalizedBase(value)
+    .replace(/[^a-z0-9\s]+/g, " ")
+    .split(" ")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function jaccardSimilarity(a: unknown, b: unknown) {
+  const left = new Set(tokenizeText(a));
+  const right = new Set(tokenizeText(b));
+  if (left.size === 0 || right.size === 0) return 0;
+  let intersection = 0;
+  for (const token of left) {
+    if (right.has(token)) intersection += 1;
+  }
+  return intersection / (left.size + right.size - intersection);
+}
+
+function normalizeExperienceForSuggestion(item: any) {
+  return {
+    company_name: toNullable(item?.company_name),
+    role_title: toNullable(item?.role_title),
+    start_date: normalizeDateForDb(item?.start_date),
+    end_date: normalizeDateForDb(item?.end_date),
+    location: toNullable(item?.location),
+    description: toNullable(item?.description),
+    skills: Array.isArray(item?.skills) ? item.skills.map((x: any) => String(x || "").trim()).filter(Boolean) : [],
+  };
+}
+
+function buildExperienceSuggestion(params: {
+  extracted: any;
+  existingRows: any[];
+  inviteId: string;
+  index: number;
+}): CompanyCvExperienceSuggestion {
+  const extracted = normalizeExperienceForSuggestion(params.extracted);
+  const sameCompanyRole = params.existingRows.filter((row: any) => {
+    return (
+      normalizeCompanyOrInstitution(row?.company_name) === normalizeCompanyOrInstitution(extracted.company_name) &&
+      normalizeRoleOrTitle(row?.role_title) === normalizeRoleOrTitle(extracted.role_title)
+    );
+  });
+
+  const exactMatch = sameCompanyRole.find((row: any) => expExactSig(row) === expExactSig(extracted));
+  if (exactMatch) {
+    return {
+      id: `${params.inviteId}:exp:${params.index}`,
+      kind: "duplicate",
+      reason: "Ya existe una experiencia sustancialmente igual en tu perfil.",
+      status: "pending",
+      extracted_experience: extracted,
+      matched_existing: {
+        id: exactMatch?.id ? String(exactMatch.id) : null,
+        company_name: toNullable(exactMatch?.company_name),
+        role_title: toNullable(exactMatch?.role_title),
+        start_date: normalizeDateForDb(exactMatch?.start_date),
+        end_date: normalizeDateForDb(exactMatch?.end_date),
+        description: toNullable(exactMatch?.description),
+      },
+    };
+  }
+
+  const updateMatch = sameCompanyRole.find((row: any) => {
+    const startMonthMatches = normalizeMonth(row?.start_date) && normalizeMonth(row?.start_date) === normalizeMonth(extracted.start_date);
+    const endMonthMatches = normalizeMonth(row?.end_date) && normalizeMonth(row?.end_date) === normalizeMonth(extracted.end_date);
+    const descriptionSimilarity = jaccardSimilarity(row?.description, extracted.description);
+    return startMonthMatches || endMonthMatches || descriptionSimilarity >= 0.45;
+  });
+
+  if (updateMatch) {
+    return {
+      id: `${params.inviteId}:exp:${params.index}`,
+      kind: "update",
+      reason: "Parece una experiencia ya existente con posible información nueva o más completa.",
+      status: "pending",
+      extracted_experience: extracted,
+      matched_existing: {
+        id: updateMatch?.id ? String(updateMatch.id) : null,
+        company_name: toNullable(updateMatch?.company_name),
+        role_title: toNullable(updateMatch?.role_title),
+        start_date: normalizeDateForDb(updateMatch?.start_date),
+        end_date: normalizeDateForDb(updateMatch?.end_date),
+        description: toNullable(updateMatch?.description),
+      },
+    };
+  }
+
+  return {
+    id: `${params.inviteId}:exp:${params.index}`,
+    kind: "new",
+    reason: "No existe una experiencia equivalente en tu perfil actual.",
+    status: "pending",
+    extracted_experience: extracted,
+    matched_existing: null,
+  };
+}
+
 async function getTableColumns(supabase: any, table: string): Promise<Set<string>> {
   try {
     const { data, error } = await supabase
@@ -307,6 +430,42 @@ export function sha256Hex(input: Buffer) {
   return createHash("sha256").update(input).digest("hex");
 }
 
+export async function ensureCandidatePublicToken(admin: any, userId: string) {
+  const { data, error } = await admin
+    .from("candidate_public_links")
+    .select("id,public_token,expires_at,is_active,created_at")
+    .eq("candidate_id", userId)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (error) throw new Error(`candidate_public_links_read_failed:${error.message}`);
+
+  const rows = Array.isArray(data) ? data : [];
+  const canonical = rows.find((row: any) => /^[a-f0-9]{48}$/i.test(String(row?.public_token || "")) && row?.expires_at && Date.parse(String(row.expires_at)) > Date.now()) || rows.find((row: any) => /^[a-f0-9]{48}$/i.test(String(row?.public_token || "")));
+  if (canonical?.public_token) {
+    const toDeactivate = rows
+      .filter((row: any) => String(row?.id || "") && String(row?.id || "") !== String(canonical.id || ""))
+      .map((row: any) => String(row.id));
+    if (toDeactivate.length) await admin.from("candidate_public_links").update({ is_active: false }).in("id", toDeactivate);
+    return String(canonical.public_token);
+  }
+
+  const activeIds = rows.map((row: any) => String(row?.id || "")).filter(Boolean);
+  if (activeIds.length) await admin.from("candidate_public_links").update({ is_active: false }).in("id", activeIds);
+
+  const token = randomBytes(24).toString("hex");
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { error: insertErr } = await admin.from("candidate_public_links").insert({
+    candidate_id: userId,
+    public_token: token,
+    is_active: true,
+    created_by: userId,
+    expires_at: expiresAt,
+  });
+  if (insertErr) throw new Error(`candidate_public_links_insert_failed:${insertErr.message}`);
+  return token;
+}
+
 export async function extractStructuredCvFromBuffer(params: {
   fileBuffer: Buffer;
   filename: string;
@@ -380,15 +539,18 @@ export async function persistImportedCandidateProfile(params: {
   inviteId: string;
   extracted: ExtractedCandidateCvPayload;
   candidateEmail: string;
+  companyName?: string | null;
+  mode?: "new_candidate" | "existing_candidate";
 }) {
   const { supabase, userId, inviteId, extracted, candidateEmail } = params;
   const nowIso = new Date().toISOString();
+  const mode = params.mode === "existing_candidate" ? "existing_candidate" : "new_candidate";
 
   const [profileColumns, existingProfileRes, cpRes, existingExperienceRes, profileExpColumns] = await Promise.all([
     getTableColumns(supabase, "profiles"),
     supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
     supabase.from("candidate_profiles").select("*").eq("user_id", userId).maybeSingle(),
-    supabase.from("profile_experiences").select("role_title,company_name,start_date,end_date").eq("user_id", userId),
+    supabase.from("profile_experiences").select("id,role_title,company_name,start_date,end_date,description").eq("user_id", userId),
     getTableColumns(supabase, "profile_experiences"),
   ]);
 
@@ -403,17 +565,47 @@ export async function persistImportedCandidateProfile(params: {
   await supabase.from("profiles").upsert(profilePatch, { onConflict: "id" });
 
   const currentCp = (cpRes.data as any) || null;
+  const existingRawCvJson = currentCp?.raw_cv_json && typeof currentCp.raw_cv_json === "object" ? currentCp.raw_cv_json : {};
+  const experienceRows = Array.isArray(extracted.experiences) ? extracted.experiences : [];
+  const experienceSuggestions =
+    mode === "existing_candidate"
+      ? experienceRows.map((item, index) =>
+          buildExperienceSuggestion({
+            extracted: item,
+            existingRows: Array.isArray(existingExperienceRes.data) ? existingExperienceRes.data : [],
+            inviteId,
+            index,
+          })
+        )
+      : [];
+
   const cpPatch: Record<string, any> = {
     user_id: userId,
     updated_at: nowIso,
     source: currentCp?.source || "company_cv_import",
     raw_cv_json: {
-      ...(currentCp?.raw_cv_json || {}),
+      ...existingRawCvJson,
       company_cv_import: {
         invite_id: inviteId,
         extracted_payload: extracted,
         imported_at: nowIso,
+        mode,
       },
+      company_cv_import_updates:
+        mode === "existing_candidate"
+          ? [
+              {
+                invite_id: inviteId,
+                company_name: String(params.companyName || "").trim() || null,
+                imported_at: nowIso,
+                mode,
+                experience_suggestions: experienceSuggestions,
+              },
+              ...(((existingRawCvJson as any)?.company_cv_import_updates || []) as any[]).filter(
+                (item: any) => String(item?.invite_id || "") !== inviteId
+              ),
+            ].slice(0, 20)
+          : ((existingRawCvJson as any)?.company_cv_import_updates || []),
     },
   };
   if (!normalizeText(currentCp?.summary) && extracted.headline) cpPatch.summary = extracted.headline;
@@ -422,35 +614,36 @@ export async function persistImportedCandidateProfile(params: {
 
   const existingExact = new Set((existingExperienceRes.data || []).map((row: any) => expExactSig(row)));
   const existingPossible = new Set((existingExperienceRes.data || []).map((row: any) => expPossibleSig(row)));
-  const experienceRows = Array.isArray(extracted.experiences) ? extracted.experiences : [];
   const experienceInsert: any[] = [];
-  for (const item of experienceRows) {
-    const row: any = {
-      user_id: userId,
-      role_title: item.role_title || "Experiencia",
-      company_name: item.company_name || "Empresa",
-      start_date: normalizeDateForDb(item.start_date),
-      end_date: normalizeDateForDb(item.end_date),
-      description: item.description || null,
-      matched_verification_id: null,
-      confidence: null,
-    };
-    const exact = expExactSig(row);
-    const possible = expPossibleSig(row);
-    if (existingExact.has(exact) || existingPossible.has(possible)) continue;
-    existingExact.add(exact);
-    existingPossible.add(possible);
-    if (profileExpColumns.has("import_source")) row.import_source = "company_cv_import";
-    if (profileExpColumns.has("import_invite_id")) row.import_invite_id = inviteId;
-    if (profileExpColumns.has("imported_at")) row.imported_at = nowIso;
-    if (profileExpColumns.has("metadata")) {
-      row.metadata = {
-        import_source: "company_cv_import",
-        import_invite_id: inviteId,
-        imported_at: nowIso,
+  if (mode === "new_candidate") {
+    for (const item of experienceRows) {
+      const row: any = {
+        user_id: userId,
+        role_title: item.role_title || "Experiencia",
+        company_name: item.company_name || "Empresa",
+        start_date: normalizeDateForDb(item.start_date),
+        end_date: normalizeDateForDb(item.end_date),
+        description: item.description || null,
+        matched_verification_id: null,
+        confidence: null,
       };
+      const exact = expExactSig(row);
+      const possible = expPossibleSig(row);
+      if (existingExact.has(exact) || existingPossible.has(possible)) continue;
+      existingExact.add(exact);
+      existingPossible.add(possible);
+      if (profileExpColumns.has("import_source")) row.import_source = "company_cv_import";
+      if (profileExpColumns.has("import_invite_id")) row.import_invite_id = inviteId;
+      if (profileExpColumns.has("imported_at")) row.imported_at = nowIso;
+      if (profileExpColumns.has("metadata")) {
+        row.metadata = {
+          import_source: "company_cv_import",
+          import_invite_id: inviteId,
+          imported_at: nowIso,
+        };
+      }
+      experienceInsert.push(row);
     }
-    experienceInsert.push(row);
   }
   if (experienceInsert.length > 0) await supabase.from("profile_experiences").insert(experienceInsert);
 
@@ -458,24 +651,26 @@ export async function persistImportedCandidateProfile(params: {
   const eduExact = new Set(currentEducation.map((row: any) => eduExactSig(row)));
   const eduPossible = new Set(currentEducation.map((row: any) => `${normalizeRoleOrTitle(row?.title)}|${normalizeCompanyOrInstitution(row?.institution)}`));
   const educationAppend: any[] = [];
-  for (const item of Array.isArray(extracted.education) ? extracted.education : []) {
-    const normalized = {
-      title: toNullable(item.title || item.study_field),
-      institution: toNullable(item.institution),
-      start_date: normalizeDateText(item.start_date),
-      end_date: normalizeDateText(item.end_date),
-      description: toNullable(item.description),
-      import_source: "company_cv_import",
-      import_invite_id: inviteId,
-      imported_at: nowIso,
-    };
-    if (!shouldImportEducationRow(normalized)) continue;
-    const exact = eduExactSig(normalized);
-    const possible = `${normalizeRoleOrTitle(normalized?.title)}|${normalizeCompanyOrInstitution(normalized?.institution)}`;
-    if (eduExact.has(exact) || eduPossible.has(possible)) continue;
-    eduExact.add(exact);
-    eduPossible.add(possible);
-    educationAppend.push(normalized);
+  if (mode === "new_candidate") {
+    for (const item of Array.isArray(extracted.education) ? extracted.education : []) {
+      const normalized = {
+        title: toNullable(item.title || item.study_field),
+        institution: toNullable(item.institution),
+        start_date: normalizeDateText(item.start_date),
+        end_date: normalizeDateText(item.end_date),
+        description: toNullable(item.description),
+        import_source: "company_cv_import",
+        import_invite_id: inviteId,
+        imported_at: nowIso,
+      };
+      if (!shouldImportEducationRow(normalized)) continue;
+      const exact = eduExactSig(normalized);
+      const possible = `${normalizeRoleOrTitle(normalized?.title)}|${normalizeCompanyOrInstitution(normalized?.institution)}`;
+      if (eduExact.has(exact) || eduPossible.has(possible)) continue;
+      eduExact.add(exact);
+      eduPossible.add(possible);
+      educationAppend.push(normalized);
+    }
   }
   if (educationAppend.length > 0) {
     await supabase
@@ -495,6 +690,11 @@ export async function persistImportedCandidateProfile(params: {
   });
 
   return {
+    mode,
+    suggestions_count: experienceSuggestions.length,
+    suggestions_new: experienceSuggestions.filter((item) => item.kind === "new").length,
+    suggestions_updates: experienceSuggestions.filter((item) => item.kind === "update").length,
+    suggestions_duplicates: experienceSuggestions.filter((item) => item.kind === "duplicate").length,
     experiences_imported: experienceInsert.length,
     education_imported: educationAppend.length,
     languages_detected: Array.isArray(extracted.languages) ? extracted.languages.length : 0,

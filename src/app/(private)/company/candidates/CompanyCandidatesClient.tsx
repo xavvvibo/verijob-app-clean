@@ -18,6 +18,7 @@ type ImportRow = {
   invite_token?: string | null;
   candidate_public_token?: string | null;
   linked_user_id?: string | null;
+  candidate_already_exists?: boolean | null;
 };
 
 type ImportsMeta = {
@@ -57,6 +58,7 @@ function statusMeta(status: string | null | undefined) {
   if (key === "verified") return { label: "Verificado", tone: "bg-emerald-50 text-emerald-700 border-emerald-200" };
   if (key === "verifying") return { label: "Verificando", tone: "bg-blue-50 text-blue-700 border-blue-200" };
   if (key === "profile_created") return { label: "Perfil creado", tone: "bg-indigo-50 text-indigo-700 border-indigo-200" };
+  if (key === "existing_candidate") return { label: "Candidato existente", tone: "bg-violet-50 text-violet-700 border-violet-200" };
   if (key === "acceptance_pending") return { label: "Pendiente de aceptación", tone: "bg-amber-50 text-amber-800 border-amber-200" };
   if (key === "parse_failed") return { label: "Importación parcial", tone: "bg-rose-50 text-rose-700 border-rose-200" };
   if (key === "processing") return { label: "Importando", tone: "bg-slate-100 text-slate-700 border-slate-200" };
@@ -352,6 +354,9 @@ export default function CompanyCandidatesClient() {
                       <td className="py-4 pr-4 align-top">
                         <div className="font-semibold text-slate-900">{row.linked_profile_name || row.candidate_name_raw || "Candidato importado"}</div>
                         {row.trust_score != null ? <div className="mt-1 text-xs text-slate-500">Trust score: {row.trust_score}</div> : null}
+                        {row.candidate_already_exists ? (
+                          <div className="mt-1 text-xs text-violet-700">Ya existía en VERIJOB antes de esta importación.</div>
+                        ) : null}
                       </td>
                       <td className="py-4 pr-4 align-top text-slate-700">{row.candidate_email}</td>
                       <td className="py-4 pr-4 align-top text-slate-700">{row.target_role || "No indicado"}</td>
@@ -374,6 +379,14 @@ export default function CompanyCandidatesClient() {
                               className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
                             >
                               Ver perfil
+                            </a>
+                          ) : null}
+                          {row.candidate_already_exists && row.invite_token ? (
+                            <a
+                              href={`/company-candidate-import/${encodeURIComponent(row.invite_token)}`}
+                              className="inline-flex rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
+                            >
+                              Solicitar actualización
                             </a>
                           ) : row.invite_token ? (
                             <a

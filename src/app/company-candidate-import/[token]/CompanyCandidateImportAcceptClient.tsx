@@ -18,6 +18,8 @@ type InvitePayload = {
     name: string;
   };
   extracted_payload_json?: Record<string, any> | null;
+  candidate_already_exists?: boolean | null;
+  existing_candidate_public_token?: string | null;
 };
 
 type InviteResponse = {
@@ -124,6 +126,7 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
   const auth = payload?.auth;
   const statements = Array.isArray(payload?.legal?.snapshot?.statements) ? payload?.legal?.snapshot?.statements : [];
   const companyName = invite?.company?.name || "la empresa";
+  const candidateAlreadyExists = Boolean(invite?.candidate_already_exists);
   const parsePreview = invite?.extracted_payload_json || null;
   const experienceCount = Array.isArray(parsePreview?.experiences) ? parsePreview.experiences.length : 0;
   const educationCount = Array.isArray(parsePreview?.education) ? parsePreview.education.length : 0;
@@ -138,7 +141,9 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
             Revisa y acepta la importación de tu CV
           </h1>
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            {companyName} ha incorporado tu CV a su proceso de selección dentro de VERIJOB. Antes de continuar, debes confirmar expresamente la gestión de tu candidatura y la importación inicial de tus datos.
+            {candidateAlreadyExists
+              ? `${companyName} ha incorporado una nueva versión de tu CV a su proceso de selección dentro de VERIJOB. Antes de continuar, debes confirmar expresamente la gestión de tu candidatura y revisar posibles cambios detectados.`
+              : `${companyName} ha incorporado tu CV a su proceso de selección dentro de VERIJOB. Antes de continuar, debes confirmar expresamente la gestión de tu candidatura y la importación inicial de tus datos.`}
           </p>
         </section>
 
@@ -182,7 +187,9 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
               <aside className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
                 <h2 className="text-base font-semibold text-slate-900">Prefill detectado</h2>
                 <p className="mt-2 text-sm text-slate-600">
-                  Tras aceptar podrás revisar este perfil preliminar antes de publicarlo o verificarlo.
+                  {candidateAlreadyExists
+                    ? "Tras aceptar podrás revisar posibles experiencias nuevas o cambios detectados antes de incorporarlos a tu perfil."
+                    : "Tras aceptar podrás revisar este perfil preliminar antes de publicarlo o verificarlo."}
                 </p>
                 <div className="mt-4 grid gap-3">
                   <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -227,8 +234,8 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
                   Esta invitación ya quedó registrada y tu perfil preliminar está disponible dentro de VERIJOB.
                 </p>
                 <div className="mt-4">
-                  <Link href="/candidate/overview?company_cv_import=1" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
-                    Ir a mi perfil importado
+                  <Link href={candidateAlreadyExists ? "/candidate/import-updates?company_cv_import=1" : "/candidate/overview?company_cv_import=1"} className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+                    {candidateAlreadyExists ? "Revisar cambios detectados" : "Ir a mi perfil importado"}
                   </Link>
                 </div>
               </section>

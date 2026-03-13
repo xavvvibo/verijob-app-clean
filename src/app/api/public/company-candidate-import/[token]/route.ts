@@ -1,10 +1,10 @@
-import { randomBytes } from "crypto";
 import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import {
   buildCompanyCvImportLegalSnapshot,
   COMPANY_CV_IMPORT_LEGAL_VERSION,
+  ensureCandidatePublicToken,
   persistImportedCandidateProfile,
 } from "@/lib/company-candidate-import";
 
@@ -35,53 +35,6 @@ function displayStatus(invite: any) {
   if (status === "emailed") return "pending_acceptance";
   if (parseStatus === "parse_failed") return "parse_failed";
   return "pending";
-}
-
-function isExpired(expiresAt?: string | null) {
-  if (!expiresAt) return false;
-  const t = Date.parse(expiresAt);
-  if (Number.isNaN(t)) return false;
-  return t <= Date.now();
-}
-
-function isHex48(token: unknown) {
-  return /^[a-f0-9]{48}$/i.test(String(token || ""));
-}
-
-async function ensureCandidatePublicToken(admin: any, userId: string) {
-  const { data, error } = await admin
-    .from("candidate_public_links")
-    .select("id,public_token,expires_at,is_active,created_at")
-    .eq("candidate_id", userId)
-    .eq("is_active", true)
-    .order("created_at", { ascending: false })
-    .limit(20);
-  if (error) throw new Error(`candidate_public_links_read_failed:${error.message}`);
-
-  const rows = Array.isArray(data) ? data : [];
-  const canonical = rows.find((row: any) => isHex48(row?.public_token) && !isExpired(row?.expires_at));
-  if (canonical?.public_token) {
-    const toDeactivate = rows
-      .filter((row: any) => String(row?.id || "") && String(row?.id || "") !== String(canonical.id || ""))
-      .map((row: any) => String(row.id));
-    if (toDeactivate.length) await admin.from("candidate_public_links").update({ is_active: false }).in("id", toDeactivate);
-    return String(canonical.public_token);
-  }
-
-  const activeIds = rows.map((row: any) => String(row?.id || "")).filter(Boolean);
-  if (activeIds.length) await admin.from("candidate_public_links").update({ is_active: false }).in("id", activeIds);
-
-  const token = randomBytes(24).toString("hex");
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  const { error: insertErr } = await admin.from("candidate_public_links").insert({
-    candidate_id: userId,
-    public_token: token,
-    is_active: true,
-    created_by: userId,
-    expires_at: expiresAt,
-  });
-  if (insertErr) throw new Error(`candidate_public_links_insert_failed:${insertErr.message}`);
-  return token;
 }
 
 async function readInviteByToken(admin: any, token: string) {
@@ -134,6 +87,7 @@ export async function GET(
     } = await supabase.auth.getUser();
 
     const companyName = normalizeText((invite as any)?.companies?.name) || "la empresa";
+    const importMeta = invite?.extracted_payload_json?._verijob_import_meta || {};
     const legalSnapshot = buildCompanyCvImportLegalSnapshot({
       companyName,
       candidateEmail: String(invite.candidate_email || ""),
@@ -151,6 +105,8 @@ export async function GET(
         created_at: invite.created_at || null,
         accepted_at: invite.accepted_at || null,
         display_status: displayStatus(invite),
+        candidate_already_exists: Boolean(importMeta?.candidate_already_exists),
+        existing_candidate_public_token: importMeta?.existing_candidate_public_token || null,
         company: {
           id: String(invite.company_id || ""),
           name: companyName,
@@ -213,6 +169,8 @@ export async function POST(
     const inviteRes = await readInviteByToken(admin, normalizedToken);
     if ((inviteRes as any).error) return (inviteRes as any).error;
     const invite = (inviteRes as any).invite;
+    const importMeta = invite?.extracted_payload_json?._verijob_import_meta || {};
+    const candidateAlreadyExists = Boolean(importMeta?.candidate_already_exists);
 
     const userEmail = String(user.email || "").trim().toLowerCase();
     const inviteEmail = String(invite.candidate_email || "").trim().toLowerCase();
@@ -227,8 +185,10 @@ export async function POST(
       return json(200, {
         ok: true,
         already_completed: true,
-        next_url: "/candidate/overview?company_cv_import=1",
-        user_message: "La invitación ya estaba aceptada y tu perfil ya está preparado.",
+        next_url: candidateAlreadyExists ? "/candidate/import-updates?company_cv_import=1" : "/candidate/overview?company_cv_import=1",
+        user_message: candidateAlreadyExists
+          ? "La invitación ya estaba aceptada y tus cambios pendientes de CV siguen disponibles para revisión."
+          : "La invitación ya estaba aceptada y tu perfil ya está preparado.",
       });
     }
 
@@ -269,6 +229,8 @@ export async function POST(
       inviteId: String(invite.id || ""),
       extracted: invite.extracted_payload_json || {},
       candidateEmail: inviteEmail,
+      companyName,
+      mode: candidateAlreadyExists ? "existing_candidate" : "new_candidate",
     });
 
     const candidatePublicToken = await ensureCandidatePublicToken(admin, user.id);
@@ -297,8 +259,10 @@ export async function POST(
       legal_text_version: COMPANY_CV_IMPORT_LEGAL_VERSION,
       persistence: persistRes,
       candidate_public_token: candidatePublicToken,
-      next_url: "/candidate/overview?company_cv_import=1",
-      user_message: "Invitación aceptada. Tu perfil preliminar ya está preparado para revisión.",
+      next_url: candidateAlreadyExists ? "/candidate/import-updates?company_cv_import=1" : "/candidate/overview?company_cv_import=1",
+      user_message: candidateAlreadyExists
+        ? "Invitación aceptada. Hemos guardado los posibles cambios de CV para que revises qué quieres incorporar a tu perfil."
+        : "Invitación aceptada. Tu perfil preliminar ya está preparado para revisión.",
     });
   } catch (error: any) {
     return json(500, { error: "unhandled_exception", details: String(error?.message || error) });

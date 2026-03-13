@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import {
+  ensureCandidatePublicToken,
   extractStructuredCvFromBuffer,
   sha256Hex,
 } from "@/lib/company-candidate-import";
@@ -47,11 +48,13 @@ function extFromFilename(filename: string) {
 }
 
 function formatImportStatus(row: any) {
+  const alreadyExists = Boolean(row?.candidate_already_exists);
   const status = String(row?.status || "").toLowerCase();
   const parseStatus = String(row?.parse_status || "").toLowerCase();
   const approved = Number(row?.approved_verifications || 0);
   const total = Number(row?.total_verifications || 0);
 
+  if (alreadyExists && status === "emailed") return "existing_candidate";
   if (status === "converted" && approved > 0) return "verified";
   if (status === "converted" && total > 0) return "verifying";
   if (status === "converted" || status === "accepted") return "profile_created";
@@ -185,8 +188,10 @@ async function readInvitesSnapshot(admin: any, companyId: string) {
     const linkedUserId = String(row?.linked_user_id || "");
     const linkedProfile = (linkedUserId ? profilesById.get(linkedUserId) : null) as any;
     const stats = linkedUserId ? verificationStats.get(linkedUserId) || { total: 0, approved: 0 } : { total: 0, approved: 0 };
+    const importMeta = row?.extracted_payload_json?._verijob_import_meta || {};
     const normalized = {
       ...row,
+      candidate_already_exists: Boolean(importMeta?.candidate_already_exists),
       linked_profile_name: normalizeText(linkedProfile?.full_name) || null,
       linked_profile_email: normalizeText(linkedProfile?.email) || null,
       candidate_public_token: linkedUserId ? publicTokenByUserId.get(linkedUserId) ?? null : null,
@@ -283,6 +288,18 @@ export async function POST(request: Request) {
     const ext = extFromFilename(file.name || "cv");
     const storagePath = `company-imports/${companyId}/${Date.now()}-${randomUUID()}.${ext}`;
     const nowIso = new Date().toISOString();
+    const { data: existingCandidateProfile } = await admin
+      .from("profiles")
+      .select("id,role,full_name,email")
+      .eq("email", candidateEmail)
+      .maybeSingle();
+    const existingCandidateUserId =
+      String(existingCandidateProfile?.role || "").toLowerCase() === "candidate" && existingCandidateProfile?.id
+        ? String(existingCandidateProfile.id)
+        : null;
+    const existingCandidatePublicToken = existingCandidateUserId
+      ? await ensureCandidatePublicToken(admin, existingCandidateUserId)
+      : null;
 
     const uploadRes = await admin.storage.from(BUCKET).upload(storagePath, bytes, {
       contentType: file.type,
@@ -302,6 +319,7 @@ export async function POST(request: Request) {
         id: inviteId,
         company_id: companyId,
         invited_by_user_id: user.id,
+        linked_user_id: existingCandidateUserId,
         candidate_email: candidateEmail,
         candidate_name_raw: candidateNameRaw || null,
         target_role: targetRole,
@@ -336,7 +354,13 @@ export async function POST(request: Request) {
     }
 
     let parseStatus = "parse_failed";
-    let extractedPayload: any = null;
+    let extractedPayload: any = {
+      _verijob_import_meta: {
+        candidate_already_exists: Boolean(existingCandidateUserId),
+        existing_candidate_user_id: existingCandidateUserId,
+        existing_candidate_public_token: existingCandidatePublicToken,
+      },
+    };
     let extractedWarnings: string[] = [];
     let parseError: string | null = null;
 
@@ -349,7 +373,14 @@ export async function POST(request: Request) {
         openaiApiKey,
       });
       parseStatus = "parsed_ready";
-      extractedPayload = parsed.extracted;
+      extractedPayload = {
+        ...parsed.extracted,
+        _verijob_import_meta: {
+          candidate_already_exists: Boolean(existingCandidateUserId),
+          existing_candidate_user_id: existingCandidateUserId,
+          existing_candidate_public_token: existingCandidatePublicToken,
+        },
+      };
       extractedWarnings = Array.isArray(parsed.warnings) ? parsed.warnings : [];
     } catch (error: any) {
       parseStatus = "parse_failed";
@@ -398,14 +429,26 @@ export async function POST(request: Request) {
 
     return json(200, {
       ok: true,
-      import_invite: {
-        ...updatedInvite,
-        display_status: formatImportStatus(updatedInvite),
-      },
+      import_invite: (() => {
+        const normalizedInvite = {
+          ...updatedInvite,
+          candidate_already_exists: Boolean(existingCandidateUserId),
+          candidate_public_token: existingCandidatePublicToken,
+        };
+        return {
+          ...normalizedInvite,
+          display_status: formatImportStatus(normalizedInvite),
+        };
+      })(),
       user_message: emailRes.ok
-        ? "CV importado y candidatura enviada al candidato."
+        ? existingCandidateUserId
+          ? "El CV se ha asociado a un candidato ya existente y se le ha solicitado revisar o actualizar su perfil."
+          : "CV importado y candidatura enviada al candidato."
         : "El CV se ha importado, pero el email no pudo enviarse automáticamente.",
       acceptance_link: acceptanceLink,
+      candidate_already_exists: Boolean(existingCandidateUserId),
+      existing_candidate_user_id: existingCandidateUserId,
+      existing_candidate_public_token: existingCandidatePublicToken,
       parsing: {
         status: parseStatus,
         warnings: extractedWarnings,

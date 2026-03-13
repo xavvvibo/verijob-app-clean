@@ -397,6 +397,15 @@ export default function CandidateOverview() {
   const educationCount = useMemo(() => listCount(candidateProfile?.education), [candidateProfile]);
   const achievementsCount = useMemo(() => listCount(candidateProfile?.certifications), [candidateProfile]);
   const importedFromCompanyCv = searchParams.get("company_cv_import") === "1";
+  const companyCvPendingUpdates = useMemo(() => {
+    const updates = Array.isArray(candidateProfile?.raw_cv_json?.company_cv_import_updates)
+      ? candidateProfile.raw_cv_json.company_cv_import_updates
+      : [];
+    return updates.reduce((acc: number, entry: any) => {
+      const suggestions = Array.isArray(entry?.experience_suggestions) ? entry.experience_suggestions : [];
+      return acc + suggestions.filter((item: any) => String(item?.status || "pending") === "pending" && String(item?.kind || "") !== "duplicate").length;
+    }, 0);
+  }, [candidateProfile]);
 
   const profileCompletion = useMemo(() => {
     const checks = [
@@ -432,6 +441,16 @@ export default function CandidateOverview() {
           <p className="mt-2 text-sm leading-6 text-amber-800">
             Hemos importado información preliminar desde el CV que una empresa incorporó a su proceso. Revísala, corrígela si hace falta y completa tu perfil antes de publicarlo o verificarlo.
           </p>
+          {companyCvPendingUpdates > 0 ? (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-900">
+                Cambios pendientes: {companyCvPendingUpdates}
+              </span>
+              <Link href="/candidate/import-updates" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">
+                Revisar y actualizar mi perfil
+              </Link>
+            </div>
+          ) : null}
         </section>
       ) : null}
 
