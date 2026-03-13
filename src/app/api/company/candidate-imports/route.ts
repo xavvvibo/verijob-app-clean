@@ -183,7 +183,7 @@ async function readInvitesSnapshot(admin: any, companyId: string) {
 
   const invites = baseInvites.map((row: any) => {
     const linkedUserId = String(row?.linked_user_id || "");
-    const linkedProfile = linkedUserId ? profilesById.get(linkedUserId) : null;
+    const linkedProfile = (linkedUserId ? profilesById.get(linkedUserId) : null) as any;
     const stats = linkedUserId ? verificationStats.get(linkedUserId) || { total: 0, approved: 0 } : { total: 0, approved: 0 };
     const normalized = {
       ...row,
