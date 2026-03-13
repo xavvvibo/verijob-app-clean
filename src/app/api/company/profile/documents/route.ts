@@ -13,7 +13,13 @@ const ALLOWED_DOCUMENT_TYPES = new Set(["modelo_036", "modelo_037", "cif_nif", "
 
 function isRelationMissingError(error: any, relationName: string) {
   const msg = String(error?.message || "").toLowerCase();
-  return String(error?.code || "") === "42P01" || (msg.includes("relation") && msg.includes(relationName.toLowerCase()));
+  const code = String(error?.code || "");
+  return (
+    code === "42P01" ||
+    code === "PGRST205" ||
+    (msg.includes("relation") && msg.includes(relationName.toLowerCase())) ||
+    (msg.includes("could not find the table") && msg.includes(relationName.toLowerCase()))
+  );
 }
 
 function json(status: number, body: any) {
@@ -203,4 +209,3 @@ export async function POST(request: Request) {
     return json(500, { error: "unhandled_exception", details: e?.message || String(e) });
   }
 }
-

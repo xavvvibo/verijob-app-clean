@@ -182,7 +182,13 @@ function deriveCompanyVerificationReviewStatus(profileStatus: unknown, docs: Com
 
 function isRelationMissingError(error: any, relationName: string) {
   const msg = String(error?.message || "").toLowerCase();
-  return String(error?.code || "") === "42P01" || msg.includes(`relation`) && msg.includes(relationName.toLowerCase());
+  const code = String(error?.code || "");
+  return (
+    code === "42P01" ||
+    code === "PGRST205" ||
+    (msg.includes(`relation`) && msg.includes(relationName.toLowerCase())) ||
+    (msg.includes("could not find the table") && msg.includes(relationName.toLowerCase()))
+  );
 }
 
 function isDocsSchemaDriftError(error: any) {

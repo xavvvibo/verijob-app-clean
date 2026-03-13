@@ -203,6 +203,7 @@ export function CandidatePublicProfileRenderer({
 
   const isExternalCleanView = !internalPreview;
   const isPrintMode = renderMode === "print";
+  const isOpenPublicView = mode === "public" && !internalPreview;
   const hasExperiences = experiences.length > 0;
   const hasEducation = education.length > 0;
   const hasRecommendations = recommendations.length > 0;
@@ -349,11 +350,13 @@ export function CandidatePublicProfileRenderer({
                 value={verificationSummary.evidences}
                 hint="Soporte documental validado"
               />
-              <SignalCard
-                label="Reutilización"
-                value={verificationSummary.reuse}
-                hint="Reutilización en procesos reales"
-              />
+              {!isOpenPublicView ? (
+                <SignalCard
+                  label="Reutilización"
+                  value={verificationSummary.reuse}
+                  hint="Reutilización en procesos reales"
+                />
+              ) : null}
               <SignalCard
                 label="Trust Score"
                 value={trust}
@@ -400,7 +403,7 @@ export function CandidatePublicProfileRenderer({
                     <Stat label="Experiencias" value={verificationSummary.experiences} />
                     <Stat label="Verificadas" value={verificationSummary.verified} />
                     <Stat label="Evidencias" value={verificationSummary.evidences} />
-                    <Stat label="Reutilizaciones" value={verificationSummary.reuse} />
+                    {!isOpenPublicView ? <Stat label="Reutilizaciones" value={verificationSummary.reuse} /> : null}
                     <Stat label="Formación" value={Number(teaser?.education_total ?? education.length)} />
                     <Stat label="Logros" value={Number(teaser?.achievements_total ?? achievements.length)} />
                   </div>
@@ -441,8 +444,12 @@ export function CandidatePublicProfileRenderer({
                                 ) : null}
                                 <div className="mt-2 text-[11px] text-slate-600">
                                   Evidencias: <span className="font-semibold text-slate-900">{Number(exp?.evidence_count ?? 0)}</span>
-                                  {" · "}
-                                  Reutilizaciones: <span className="font-semibold text-slate-900">{Number(exp?.reuse_count ?? 0)}</span>
+                                  {!isOpenPublicView ? (
+                                    <>
+                                      {" · "}
+                                      Reutilizaciones: <span className="font-semibold text-slate-900">{Number(exp?.reuse_count ?? 0)}</span>
+                                    </>
+                                  ) : null}
                                 </div>
                               </div>
                             </li>
@@ -540,7 +547,9 @@ export function CandidatePublicProfileRenderer({
                           <div className="mt-3 grid gap-2 text-xs text-slate-600 sm:grid-cols-3">
                             <div>Credibilidad: <span className="font-semibold text-slate-900">{Number(exp?.score ?? 0)}</span></div>
                             <div>Evidencias asociadas: <span className="font-semibold text-slate-900">{Number(exp?.evidence_count ?? 0)}</span></div>
-                            <div>Reutilizaciones: <span className="font-semibold text-slate-900">{Number(exp?.reuse_count ?? 0)}</span></div>
+                            {!isOpenPublicView ? (
+                              <div>Reutilizaciones: <span className="font-semibold text-slate-900">{Number(exp?.reuse_count ?? 0)}</span></div>
+                            ) : null}
                           </div>
                         </article>
                       );
@@ -672,13 +681,15 @@ export function CandidatePublicProfileRenderer({
               <MetricChip label="Docs validados" value={verificationSummary.evidences} />
               <MetricChip label="Recomendaciones" value={recommendations.length} />
             </div>
-            <div className="mt-4 space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-              <div className="text-xs font-semibold text-slate-900">Desglose de confianza</div>
-              <TrustBreakdownBar label="Verificaciones" value={trustComponents.verification} />
-              <TrustBreakdownBar label="Evidencias" value={trustComponents.evidence} />
-              <TrustBreakdownBar label="Consistencia" value={trustComponents.consistency} />
-              <TrustBreakdownBar label="Reutilización" value={trustComponents.reuse} />
-            </div>
+            {!isOpenPublicView ? (
+              <div className="mt-4 space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs font-semibold text-slate-900">Desglose de confianza</div>
+                <TrustBreakdownBar label="Verificaciones" value={trustComponents.verification} />
+                <TrustBreakdownBar label="Evidencias" value={trustComponents.evidence} />
+                <TrustBreakdownBar label="Consistencia" value={trustComponents.consistency} />
+                <TrustBreakdownBar label="Reutilización" value={trustComponents.reuse} />
+              </div>
+            ) : null}
           </section>
 
           {(skills.length > 0 || internalPreview) ? (
@@ -734,7 +745,7 @@ export function CandidatePublicProfileRenderer({
           </section>
           ) : null}
 
-          {(qrEnabled || internalPreview) ? (
+          {(!isOpenPublicView && (qrEnabled || internalPreview)) ? (
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900">QR de tu perfil verificado</h3>
             {qrEnabled && qrImageUrl ? (
