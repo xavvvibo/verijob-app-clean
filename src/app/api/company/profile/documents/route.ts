@@ -11,7 +11,7 @@ const MAX_SIZE_BYTES = 20 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["application/pdf", "image/png", "image/jpeg", "image/webp"]);
 const ALLOWED_DOCUMENT_TYPES = new Set(["modelo_036", "modelo_037", "cif_nif", "certificado_censal", "escritura", "otro"]);
 const DOC_SELECT =
-  "id,company_id,document_type,storage_bucket,storage_path,original_filename,mime_type,size_bytes,review_status,rejected_reason,review_notes,reviewed_at,lifecycle_status,deleted_at,deleted_by,replaced_by_document_id,extracted_json,extracted_at,import_status,imported_at,imported_by,import_notes,created_at";
+  "id,company_id,document_type,storage_bucket,storage_path,original_filename,mime_type,size_bytes,status,review_status,rejected_reason,review_notes,reviewed_at,lifecycle_status,deleted_at,deleted_by,replaced_by_document_id,extracted_json,extracted_at,import_status,imported_at,imported_by,import_notes,created_at,updated_at";
 
 function isRelationMissingError(error: any, relationName: string) {
   const msg = String(error?.message || "").toLowerCase();
@@ -37,7 +37,9 @@ function json(status: number, body: any) {
 function docsMigrationPayload(code: "company_verification_documents_missing_migration" | "company_verification_documents_schema_drift") {
   if (code === "company_verification_documents_missing_migration") {
     return {
+      status: "documents_table_missing",
       error: code,
+      message: "El módulo documental aún no está activo.",
       user_message:
         "La base actual aun no tiene activado el modulo documental de empresa. Aplica las migraciones SQL para habilitar subida, historico y revision.",
       migration_files: [
@@ -47,10 +49,12 @@ function docsMigrationPayload(code: "company_verification_documents_missing_migr
     };
   }
   return {
+    status: "documents_schema_drift",
     error: code,
+    message: "El módulo documental necesita sincronizar su esquema antes de operar correctamente.",
     user_message:
       "La base tiene una version parcial del modulo documental. Aplica las migraciones pendientes para activar lifecycle e importacion.",
-    migration_files: [
+      migration_files: [
       "scripts/sql/f31_company_verification_documents.sql",
       "scripts/sql/f34_company_verification_documents_lifecycle.sql",
     ],
@@ -209,7 +213,11 @@ export async function GET() {
 
     if (docsRes.error) {
       if (isRelationMissingError(docsRes.error, "company_verification_documents")) {
-        return json(200, { documents: [], warning: "company_verification_documents_missing_migration", ...docsMigrationPayload("company_verification_documents_missing_migration") });
+        return json(200, {
+          documents: [],
+          warning: "company_verification_documents_missing_migration",
+          ...docsMigrationPayload("company_verification_documents_missing_migration"),
+        });
       }
       if (isDocsSchemaDriftError(docsRes.error)) {
         docsRes = await admin
@@ -283,6 +291,7 @@ export async function POST(request: Request) {
       mime_type: file.type,
       size_bytes: file.size,
       review_status: "pending_review",
+      status: "pending_review",
       lifecycle_status: "active",
       extracted_json: extracted,
       extracted_at: nowIso,
@@ -299,7 +308,7 @@ export async function POST(request: Request) {
 
     if (docsInsert.error) {
       if (isRelationMissingError(docsInsert.error, "company_verification_documents")) {
-        return json(409, docsMigrationPayload("company_verification_documents_missing_migration"));
+        return json(200, { documents: [], ...docsMigrationPayload("company_verification_documents_missing_migration") });
       }
       if (isDocsSchemaDriftError(docsInsert.error)) {
         const legacyInsertPayload = {
@@ -311,6 +320,7 @@ export async function POST(request: Request) {
           original_filename: originalFilename,
           mime_type: file.type,
           size_bytes: file.size,
+          status: "pending_review",
           review_status: "pending_review",
           created_at: nowIso,
           updated_at: nowIso,
@@ -371,8 +381,11 @@ export async function PATCH(request: Request) {
       .eq("company_id", companyId)
       .maybeSingle();
     if (docErr) {
+      if (isRelationMissingError(docErr, "company_verification_documents")) {
+        return json(200, { documents: [], ...docsMigrationPayload("company_verification_documents_missing_migration") });
+      }
       if (isDocsSchemaDriftError(docErr)) {
-        return json(409, docsMigrationPayload("company_verification_documents_schema_drift"));
+        return json(200, { documents: [], ...docsMigrationPayload("company_verification_documents_schema_drift") });
       }
       return json(400, { error: "document_read_failed", details: docErr.message });
     }
@@ -386,6 +399,7 @@ export async function PATCH(request: Request) {
       const { data: updated, error: updErr } = await admin
         .from("company_verification_documents")
         .update({
+          status: "deleted",
           lifecycle_status: "deleted",
           deleted_at: nowIso,
           deleted_by: user.id,

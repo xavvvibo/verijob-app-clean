@@ -6,6 +6,7 @@ type Profile = Record<string, any>;
 type CompanyVerificationDocument = {
   id: string;
   document_type?: string | null;
+  status?: string | null;
   storage_bucket?: string | null;
   storage_path?: string | null;
   original_filename?: string | null;
@@ -312,6 +313,17 @@ export default function CompanyProfilePage() {
           data?.error ||
           "No se pudo subir el documento."
       );
+      return;
+    }
+
+    if (data?.status === "documents_table_missing" || data?.status === "documents_schema_drift") {
+      setDocumentsMeta({
+        code: data?.error || data?.status || null,
+        title: "Módulo documental no disponible",
+        message: data?.message || data?.user_message || "El módulo documental aún no está activo.",
+        migration_files: Array.isArray(data?.migration_files) ? data.migration_files : [],
+      });
+      setError(data?.message || data?.user_message || "El módulo documental aún no está activo.");
       return;
     }
 
