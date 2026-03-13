@@ -9,10 +9,23 @@ type CompanyVerificationDocument = {
   storage_bucket?: string | null;
   storage_path?: string | null;
   original_filename?: string | null;
+  mime_type?: string | null;
+  size_bytes?: number | null;
   review_status?: string | null;
   rejected_reason?: string | null;
   review_notes?: string | null;
   reviewed_at?: string | null;
+  lifecycle_status?: string | null;
+  deleted_at?: string | null;
+  extracted_json?: {
+    confidence?: string | null;
+    detected_fields_count?: number | null;
+    detected?: Record<string, any> | null;
+  } | null;
+  extracted_at?: string | null;
+  import_status?: string | null;
+  imported_at?: string | null;
+  import_notes?: string | null;
   created_at?: string | null;
 };
 
@@ -70,6 +83,25 @@ function docStatusClass(raw: unknown) {
   return "border-indigo-200 bg-indigo-50 text-indigo-800";
 }
 
+function lifecycleLabel(raw: unknown) {
+  const v = String(raw || "active").toLowerCase();
+  if (v === "deleted") return "Eliminado";
+  return "Activo";
+}
+
+function lifecycleClass(raw: unknown) {
+  const v = String(raw || "active").toLowerCase();
+  if (v === "deleted") return "border-slate-300 bg-slate-100 text-slate-600";
+  return "border-emerald-200 bg-emerald-50 text-emerald-800";
+}
+
+function importStatusLabel(raw: unknown) {
+  const v = String(raw || "").toLowerCase();
+  if (v === "imported") return "Importado al perfil";
+  if (v === "no_changes") return "Sin cambios al importar";
+  return "Pendiente de importación";
+}
+
 function Section({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -115,6 +147,7 @@ export default function CompanyProfilePage() {
   const [docType, setDocType] = useState<string>(COMPANY_DOCUMENT_TYPES[0].value);
   const [docFile, setDocFile] = useState<File | null>(null);
   const [uploadingDoc, setUploadingDoc] = useState(false);
+  const [docActionLoadingId, setDocActionLoadingId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -229,6 +262,69 @@ export default function CompanyProfilePage() {
     setMessage("Documento subido. Estado actualizado a pendiente de revisión.");
   }
 
+  async function importDetectedData(documentId: string) {
+    setDocActionLoadingId(documentId);
+    setError(null);
+    setMessage(null);
+    const res = await fetch("/api/company/profile/documents", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "import_to_profile",
+        document_id: documentId,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setDocActionLoadingId(null);
+    if (!res.ok) {
+      setError(data?.details || data?.error || "No se pudieron importar los datos detectados.");
+      return;
+    }
+    if (data?.document) {
+      setDocuments((prev) => prev.map((d) => (d.id === documentId ? data.document : d)));
+    }
+    await loadProfileFresh();
+    setMessage(`Datos importados al perfil (${Number(data?.imported_fields || 0)} campos).`);
+  }
+
+  async function deleteDocument(documentId: string) {
+    const confirmed = window.confirm("Se eliminará el documento de forma lógica (soft delete) y quedará trazabilidad. ¿Continuar?");
+    if (!confirmed) return;
+    setDocActionLoadingId(documentId);
+    setError(null);
+    setMessage(null);
+    const res = await fetch("/api/company/profile/documents", {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        action: "delete",
+        document_id: documentId,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setDocActionLoadingId(null);
+    if (!res.ok) {
+      setError(data?.details || data?.error || "No se pudo eliminar el documento.");
+      return;
+    }
+    if (data?.document) {
+      setDocuments((prev) => prev.map((d) => (d.id === documentId ? data.document : d)));
+    }
+    await loadProfileFresh();
+    setMessage("Documento eliminado de forma lógica.");
+  }
+
+  async function loadProfileFresh() {
+    const res = await fetch("/api/company/profile", { cache: "no-store" });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return;
+    setProfile(data.profile || {});
+    setMembershipRole(String(data.membership_role || "reviewer"));
+    setDocuments(Array.isArray(data.verification_documents) ? data.verification_documents : []);
+    setReviewStatus(String(data?.profile?.company_verification_review_status || "unverified"));
+    setDocumentsWarning(data?.verification_documents_warning ? String(data.verification_documents_warning) : null);
+  }
+
   if (loading) return <p className="text-sm text-slate-600">Cargando perfil de empresa…</p>;
 
   if (!profile) return <p className="text-sm text-rose-600">No se pudo cargar el perfil de empresa.</p>;
@@ -242,7 +338,7 @@ export default function CompanyProfilePage() {
             <p className="mt-2 text-sm text-slate-600">
               Completa tu estructura operativa para mejorar confianza, trazabilidad y calidad de verificación en VERIJOB.
             </p>
-            <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(profile.company_verification_status)}`}>
+            <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(reviewStatus)}`}>
               {statusLabel(reviewStatus)}
             </div>
           </div>
@@ -425,10 +521,14 @@ export default function CompanyProfilePage() {
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                     <th className="px-3 py-2">Tipo</th>
+                    <th className="px-3 py-2">Lifecycle</th>
                     <th className="px-3 py-2">Estado</th>
                     <th className="px-3 py-2">Archivo</th>
+                    <th className="px-3 py-2">Extracción</th>
+                    <th className="px-3 py-2">Importación</th>
                     <th className="px-3 py-2">Fecha</th>
                     <th className="px-3 py-2">Revisión</th>
+                    {canEdit ? <th className="px-3 py-2">Acciones</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -436,11 +536,50 @@ export default function CompanyProfilePage() {
                     <tr key={doc.id} className="border-b border-slate-100 text-slate-800">
                       <td className="px-3 py-2">{docTypeLabel(doc.document_type)}</td>
                       <td className="px-3 py-2">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${lifecycleClass(doc.lifecycle_status)}`}>
+                          {lifecycleLabel(doc.lifecycle_status)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2">
                         <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${docStatusClass(doc.review_status)}`}>
                           {docStatusLabel(doc.review_status)}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-xs text-slate-600">{doc.original_filename || doc.storage_path || "documento"}</td>
+                      <td className="px-3 py-2 text-xs text-slate-600">
+                        {doc.original_filename || doc.storage_path || "documento"}
+                        {doc.mime_type ? <div className="text-[11px] text-slate-500">{doc.mime_type}</div> : null}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-600">
+                        {Number(doc?.extracted_json?.detected_fields_count || 0) > 0 ? (
+                          <div>
+                            <div className="font-medium text-slate-700">
+                              {doc.extracted_json?.detected_fields_count} campos detectados
+                            </div>
+                            <div className="text-[11px] text-slate-500">
+                              Confianza {String(doc.extracted_json?.confidence || "baja")}
+                            </div>
+                            {doc.extracted_json?.detected ? (
+                              <div className="mt-1 text-[11px] text-slate-500">
+                                {Object.entries(doc.extracted_json.detected)
+                                  .filter(([, v]) => Boolean(v))
+                                  .slice(0, 3)
+                                  .map(([k]) => k.replaceAll("_", " "))
+                                  .join(", ")}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <span className="text-[11px] text-slate-500">Sin extracción útil</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-slate-600">
+                        <div>{importStatusLabel(doc.import_status)}</div>
+                        {doc.imported_at ? (
+                          <div className="text-[11px] text-slate-500">
+                            {new Date(String(doc.imported_at)).toLocaleDateString("es-ES")}
+                          </div>
+                        ) : null}
+                      </td>
                       <td className="px-3 py-2">{doc.created_at ? new Date(String(doc.created_at)).toLocaleDateString("es-ES") : "—"}</td>
                       <td className="px-3 py-2">
                         {doc.rejected_reason || doc.review_notes ? (
@@ -451,6 +590,34 @@ export default function CompanyProfilePage() {
                           <span className="text-xs text-slate-500">Pendiente de revisión manual</span>
                         )}
                       </td>
+                      {canEdit ? (
+                        <td className="px-3 py-2">
+                          <div className="flex flex-col gap-2">
+                            {String(doc.lifecycle_status || "active").toLowerCase() !== "deleted" ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => importDetectedData(doc.id)}
+                                  disabled={docActionLoadingId === doc.id || Number(doc?.extracted_json?.detected_fields_count || 0) === 0}
+                                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                                >
+                                  {docActionLoadingId === doc.id ? "Procesando…" : "Importar al perfil"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteDocument(doc.id)}
+                                  disabled={docActionLoadingId === doc.id}
+                                  className="rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-100 disabled:opacity-50"
+                                >
+                                  Eliminar
+                                </button>
+                              </>
+                            ) : (
+                              <span className="text-[11px] text-slate-500">Documento archivado (soft delete)</span>
+                            )}
+                          </div>
+                        </td>
+                      ) : null}
                     </tr>
                   ))}
                 </tbody>

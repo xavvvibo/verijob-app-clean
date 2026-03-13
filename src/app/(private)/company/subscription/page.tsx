@@ -87,6 +87,12 @@ function isSubscriptionActive(statusRaw: unknown) {
   return status === "active" || status === "trialing";
 }
 
+function isDocsSchemaError(error: any) {
+  const code = String(error?.code || "");
+  const msg = String(error?.message || "").toLowerCase();
+  return code === "42P01" || code === "PGRST205" || code === "42703" || (msg.includes("column") && msg.includes("does not exist"));
+}
+
 async function resolveCompanyContext(admin: any, userId: string) {
   const { data: profile, error: profileErr } = await admin
     .from("profiles")
@@ -139,7 +145,7 @@ export default async function CompanySubscriptionPage() {
 
   const companyId = (ctx as any).companyId as string;
 
-  const [subscriptionRes, companyProfileRes, companyRes] = await Promise.all([
+  const [subscriptionRes, companyProfileRes, companyRes, docsRes] = await Promise.all([
     admin
       .from("subscriptions")
       .select("id,plan,status,current_period_end,cancel_at_period_end,metadata,created_at,updated_at")
@@ -157,6 +163,12 @@ export default async function CompanySubscriptionPage() {
       .select("name,trade_name,legal_name,company_verification_status")
       .eq("id", companyId)
       .maybeSingle(),
+    admin
+      .from("company_verification_documents")
+      .select("review_status,lifecycle_status")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false })
+      .limit(20),
   ]);
 
   const sub = subscriptionRes.data;
@@ -166,13 +178,20 @@ export default async function CompanySubscriptionPage() {
   const features = planFeatures(label);
   const active = isSubscriptionActive(status);
 
-  const companyVerificationStatus = active
-    ? "verified_paid"
-    : String(
+  let companyVerificationStatus = active ? "verified_paid" : "unverified";
+  if (!active) {
+    if (!docsRes.error && Array.isArray(docsRes.data)) {
+      const activeDocs = docsRes.data.filter((d: any) => String(d?.lifecycle_status || "active").toLowerCase() !== "deleted");
+      const hasApproved = activeDocs.some((d: any) => String(d?.review_status || "").toLowerCase() === "approved");
+      companyVerificationStatus = hasApproved ? "verified_document" : "unverified";
+    } else if (isDocsSchemaError(docsRes.error)) {
+      companyVerificationStatus = String(
         companyProfileRes.data?.company_verification_status ||
           companyRes.data?.company_verification_status ||
           "unverified",
       );
+    }
+  }
   const completeness = Number(companyProfileRes.data?.profile_completeness_score || 0);
 
   const ownerOverride = sub?.metadata && typeof sub.metadata === "object" ? (sub.metadata as any)?.owner_override : null;
@@ -273,4 +292,3 @@ export default async function CompanySubscriptionPage() {
     </div>
   );
 }
-

@@ -97,6 +97,12 @@ function normalizeCompanyVerificationStatus(input: unknown) {
   return "unverified";
 }
 
+function isDocsSchemaError(error: any) {
+  const code = String(error?.code || "");
+  const msg = String(error?.message || "").toLowerCase();
+  return code === "42P01" || code === "PGRST205" || code === "42703" || (msg.includes("column") && msg.includes("does not exist"));
+}
+
 async function resolveCompanyVerificationStatus(
   supabase: any,
   companyId: string,
@@ -107,6 +113,20 @@ async function resolveCompanyVerificationStatus(
     return "verified_paid";
   }
 
+  // Verified_document is only granted by approved active company documents.
+  const docsRes = await supabase
+    .from("company_verification_documents")
+    .select("review_status,lifecycle_status")
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+  if (!docsRes.error && Array.isArray(docsRes.data)) {
+    const activeDocs = docsRes.data.filter((d: any) => String(d?.lifecycle_status || "active").toLowerCase() !== "deleted");
+    const hasApproved = activeDocs.some((d: any) => String(d?.review_status || "").toLowerCase() === "approved");
+    if (hasApproved) return "verified_document";
+    return "unverified";
+  }
+
   const companyRes = await supabase
     .from("companies")
     .select("company_verification_status")
@@ -114,6 +134,7 @@ async function resolveCompanyVerificationStatus(
     .maybeSingle();
 
   if (!companyRes.error && companyRes.data?.company_verification_status) {
+    if (!isDocsSchemaError(docsRes.error)) return "unverified";
     return normalizeCompanyVerificationStatus(companyRes.data.company_verification_status) as any;
   }
 
@@ -124,6 +145,7 @@ async function resolveCompanyVerificationStatus(
     .maybeSingle();
 
   if (!profileRes.error && profileRes.data?.company_verification_status) {
+    if (!isDocsSchemaError(docsRes.error)) return "unverified";
     return normalizeCompanyVerificationStatus(profileRes.data.company_verification_status) as any;
   }
 
