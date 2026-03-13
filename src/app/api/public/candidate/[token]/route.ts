@@ -136,7 +136,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     "full_name",
     "title",
     "location",
-    "languages",
+    profileColumns.has("languages") ? "languages" : null,
     profileColumns.has("lifecycle_status") ? "lifecycle_status" : null,
     profileColumns.has("deleted_at") ? "deleted_at" : null,
   ]
@@ -153,9 +153,32 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     return json(410, { error: "profile_unavailable" });
   }
 
+  const { data: candidateProfileColumnsRes } = await admin
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", "candidate_profiles");
+  const candidateProfileColumns = new Set(
+    (candidateProfileColumnsRes || []).map((row: any) => String(row?.column_name || ""))
+  );
+  const candidateProfileSelect = [
+    "summary",
+    "education",
+    "trust_score",
+    "trust_score_breakdown",
+    "job_search_status",
+    "preferred_workday",
+    "preferred_roles",
+    "work_zones",
+    candidateProfileColumns.has("achievements") ? "achievements" : null,
+    candidateProfileColumns.has("other_achievements") ? "other_achievements" : null,
+  ]
+    .filter(Boolean)
+    .join(",");
+
   const { data: cp } = await admin
     .from("candidate_profiles")
-    .select("summary,education,achievements,other_achievements,trust_score,trust_score_breakdown,job_search_status,preferred_workday,preferred_roles,work_zones")
+    .select(candidateProfileSelect)
     .eq("user_id", candidateId)
     .maybeSingle();
 
@@ -206,14 +229,15 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     0
   );
 
-  const educationTotal = Array.isArray(cp?.education) ? cp.education.length : 0;
-  const achievementsRaw = Array.isArray(cp?.achievements)
-    ? cp.achievements
-    : Array.isArray(cp?.other_achievements)
-      ? cp.other_achievements
+  const candidateProfile = (cp as any) || null;
+  const educationTotal = Array.isArray(candidateProfile?.education) ? candidateProfile.education.length : 0;
+  const achievementsRaw = Array.isArray(candidateProfile?.achievements)
+    ? candidateProfile.achievements
+    : Array.isArray(candidateProfile?.other_achievements)
+      ? candidateProfile.other_achievements
       : [];
 
-  const trustScore = Number(cp?.trust_score ?? 0);
+  const trustScore = Number(candidateProfile?.trust_score ?? 0);
   const profileStatus = resolveProfileStatus({
     totalVerifications,
     evidencesCount: evidences,
@@ -295,7 +319,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     };
   });
 
-  const educationItems = asArray((cp as any)?.education).map((item: any, idx: number) => ({
+  const educationItems = asArray(candidateProfile?.education).map((item: any, idx: number) => ({
     id: String(item?.id || `edu-${idx}`),
     title: asText(item?.title || item?.degree || item?.program, 180) || "Formación",
     institution: asText(item?.institution || item?.school || item?.center, 180) || null,
@@ -304,9 +328,9 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     description: asText(item?.description || item?.notes, 500) || null,
   }));
 
-  const rawAchievements = asArray((cp as any)?.achievements).length
-    ? asArray((cp as any)?.achievements)
-    : asArray((cp as any)?.other_achievements);
+  const rawAchievements = asArray(candidateProfile?.achievements).length
+    ? asArray(candidateProfile?.achievements)
+    : asArray(candidateProfile?.other_achievements);
   const achievementItems = rawAchievements
     .map((item: any) => asText(item, 140))
     .filter(Boolean);
@@ -338,10 +362,10 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const publicName = toPublicName(profileFullName);
   const profileTitle = asText((profile as any)?.title, 140) || null;
   const profileLocation = asText((profile as any)?.location, 140) || null;
-  const profileSummary = asText((cp as any)?.summary, 1200) || null;
-  const availability = asText((cp as any)?.job_search_status, 80) || null;
-  const workMode = asText((cp as any)?.preferred_workday, 80) || null;
-  const sector = asText(asArray((cp as any)?.preferred_roles)?.[0], 120) || null;
+  const profileSummary = asText(candidateProfile?.summary, 1200) || null;
+  const availability = asText(candidateProfile?.job_search_status, 80) || null;
+  const workMode = asText(candidateProfile?.preferred_workday, 80) || null;
+  const sector = asText(asArray(candidateProfile?.preferred_roles)?.[0], 120) || null;
   const teaser = {
     full_name: internalPreviewAllowed ? profileFullName : publicName,
     public_name: publicName,

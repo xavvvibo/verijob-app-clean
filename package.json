@@ -9,7 +9,9 @@
     "test": "node --test tests/**/*.test.mjs",
     "lint": "eslint",
     "postbuild": "node scripts/vercel-fix-missing-manifests.cjs",
-    "stripe:catalog:live": "node scripts/stripe/create-live-catalog.cjs scripts/stripe/verijob-catalog-live-v2.json"
+    "stripe:catalog:live": "node scripts/stripe/create-live-catalog.cjs scripts/stripe/verijob-catalog-live-v2.json",
+    "demo:seed:marta": "node scripts/demo/seed-marta-gil-ortega.mjs seed",
+    "demo:rollback:marta": "node scripts/demo/seed-marta-gil-ortega.mjs rollback"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",
