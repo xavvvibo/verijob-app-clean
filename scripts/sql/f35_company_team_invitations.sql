@@ -9,6 +9,7 @@ create table if not exists public.company_team_invitations (
   status text not null default 'pending',
   invited_by uuid null references public.profiles(id) on delete set null,
   invite_token text not null unique,
+  expires_at timestamptz,
   invited_at timestamptz not null default now(),
   accepted_at timestamptz,
   revoked_at timestamptz,
@@ -44,3 +45,23 @@ create unique index if not exists company_team_invitations_pending_email_uq
 
 create index if not exists idx_company_team_invitations_company_created
   on public.company_team_invitations (company_id, created_at desc);
+
+alter table public.company_team_invitations enable row level security;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'company_team_invitations'
+      and policyname = 'company_team_invitations_service_role_all'
+  ) then
+    create policy company_team_invitations_service_role_all
+      on public.company_team_invitations
+      for all
+      to service_role
+      using (true)
+      with check (true);
+  end if;
+end $$;

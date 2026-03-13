@@ -47,6 +47,17 @@ UPDATE public.company_verification_documents
 SET import_status = 'not_imported'
 WHERE import_status IS NULL;
 
+UPDATE public.company_verification_documents
+SET status = CASE
+  WHEN lifecycle_status = 'deleted' OR deleted_at IS NOT NULL THEN 'deleted'
+  WHEN review_status IN ('approved', 'rejected') THEN review_status
+  ELSE 'pending_review'
+END
+WHERE status IS DISTINCT FROM CASE
+  WHEN lifecycle_status = 'deleted' OR deleted_at IS NOT NULL THEN 'deleted'
+  WHEN review_status IN ('approved', 'rejected') THEN review_status
+  ELSE 'pending_review'
+END;
+
 CREATE INDEX IF NOT EXISTS idx_company_verification_documents_lifecycle
   ON public.company_verification_documents(company_id, lifecycle_status, created_at DESC);
-
