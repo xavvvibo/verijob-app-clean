@@ -75,6 +75,16 @@ type CompanyVerificationDocumentRow = {
   created_at: string | null;
 };
 
+type CompanyChecklistItem = {
+  id: string;
+  title: string;
+  description: string;
+  status: "completed" | "pending" | "recommended" | "optional";
+  priority: "required" | "recommended" | "optional";
+  completed: number;
+  total: number;
+};
+
 const ARRAY_FIELDS = new Set([
   "common_roles_hired",
   "common_contract_types",
@@ -211,39 +221,186 @@ function isDocsSchemaDriftError(error: any) {
   );
 }
 
-function computeCompleteness(profile: Partial<CompanyProfileRow>) {
-  const checks: boolean[] = [
+function isFilledArray(value: unknown) {
+  return Array.isArray(value) && value.map((x) => String(x || "").trim()).filter(Boolean).length > 0;
+}
+
+function buildProfileCompletionModel(args: {
+  profile: Partial<CompanyProfileRow>;
+  activeDocumentsCount: number;
+  memberCount: number;
+}) {
+  const { profile, activeDocumentsCount, memberCount } = args;
+  const requiredChecks = [
     !!asTrimmedText(profile.legal_name),
-    !!asTrimmedText(profile.trade_name),
     !!asTrimmedText(profile.tax_id),
-    !!asTrimmedText(profile.website_url),
     !!asTrimmedText(profile.contact_email),
     !!asTrimmedText(profile.contact_phone),
     !!asTrimmedText(profile.contact_person_name),
-    !!asTrimmedText(profile.contact_person_role),
     !!asTrimmedText(profile.country),
     !!asTrimmedText(profile.province),
     !!asTrimmedText(profile.city),
     !!asTrimmedText(profile.fiscal_address),
     !!asTrimmedText(profile.sector),
-    !!asTrimmedText(profile.subsector),
+    isFilledArray(profile.hiring_zones),
+  ];
+
+  const recommendedChecks = [
+    !!asTrimmedText(profile.trade_name),
+    !!asTrimmedText(profile.contact_person_role),
     !!asTrimmedText(profile.primary_activity),
     !!asTrimmedText(profile.employee_count_range),
     !!asTrimmedText(profile.annual_hiring_volume_range),
-    (profile.common_roles_hired || []).length > 0,
-    (profile.common_contract_types || []).length > 0,
-    (profile.common_workday_types || []).length > 0,
-    (profile.common_languages_required || []).length > 0,
-    (profile.hiring_zones || []).length > 0,
-    !!asTrimmedText(profile.market_segment),
+    isFilledArray(profile.common_roles_hired),
+    isFilledArray(profile.common_contract_types),
+    isFilledArray(profile.common_workday_types),
+    isFilledArray(profile.common_languages_required),
     !!asTrimmedText(profile.business_description),
-    Boolean(profile.verification_document_type),
-    Boolean(profile.verification_document_uploaded_at),
+    !!asTrimmedText(profile.website_url),
+    memberCount > 0,
+    activeDocumentsCount > 0,
   ];
 
-  const total = checks.length;
-  const completed = checks.filter(Boolean).length;
-  return Math.round((completed / total) * 100);
+  const optionalChecks = [
+    !!asTrimmedText(profile.subsector),
+    !!asTrimmedText(profile.business_model),
+    !!asTrimmedText(profile.market_segment),
+    !!asTrimmedText(profile.operating_address),
+    !!asTrimmedText(profile.postal_code),
+    typeof profile.locations_count === "number" && profile.locations_count > 0,
+    typeof profile.founding_year === "number" && profile.founding_year > 1900,
+  ];
+
+  const requiredCompleted = requiredChecks.filter(Boolean).length;
+  const recommendedCompleted = recommendedChecks.filter(Boolean).length;
+  const optionalCompleted = optionalChecks.filter(Boolean).length;
+
+  const requiredScore = requiredChecks.length ? (requiredCompleted / requiredChecks.length) * 70 : 0;
+  const recommendedScore = recommendedChecks.length ? (recommendedCompleted / recommendedChecks.length) * 30 : 0;
+  const score = Math.round(requiredScore + recommendedScore);
+
+  const checklist: CompanyChecklistItem[] = [
+    {
+      id: "identity_legal",
+      title: "Identidad legal",
+      description: "Razon social, NIF/CIF y base legal de empresa.",
+      priority: "required",
+      completed: [profile.legal_name, profile.tax_id].filter((x) => !!asTrimmedText(x)).length,
+      total: 2,
+      status:
+        !!asTrimmedText(profile.legal_name) && !!asTrimmedText(profile.tax_id) ? "completed" : "pending",
+    },
+    {
+      id: "contact_primary",
+      title: "Contacto principal",
+      description: "Persona y canales para operar con candidatos y revisiones.",
+      priority: "required",
+      completed: [
+        profile.contact_email,
+        profile.contact_phone,
+        profile.contact_person_name,
+      ].filter((x) => !!asTrimmedText(x)).length,
+      total: 3,
+      status:
+        !!asTrimmedText(profile.contact_email) &&
+        !!asTrimmedText(profile.contact_phone) &&
+        !!asTrimmedText(profile.contact_person_name)
+          ? "completed"
+          : "pending",
+    },
+    {
+      id: "hiring_coverage",
+      title: "Contratacion y cobertura",
+      description: "Sector, zonas y necesidades reales de contratacion.",
+      priority: "required",
+      completed: [
+        profile.sector,
+        isFilledArray(profile.hiring_zones) ? "ok" : null,
+        isFilledArray(profile.common_roles_hired) ? "ok" : null,
+        isFilledArray(profile.common_languages_required) ? "ok" : null,
+      ].filter(Boolean).length,
+      total: 4,
+      status:
+        !!asTrimmedText(profile.sector) && isFilledArray(profile.hiring_zones)
+          ? isFilledArray(profile.common_roles_hired) || isFilledArray(profile.common_languages_required)
+            ? "completed"
+            : "recommended"
+          : "pending",
+    },
+    {
+      id: "team_permissions",
+      title: "Equipo y permisos",
+      description: "Miembros activos con acceso al espacio empresa.",
+      priority: "recommended",
+      completed: memberCount > 1 ? 2 : memberCount > 0 ? 1 : 0,
+      total: 2,
+      status: memberCount > 1 ? "completed" : memberCount > 0 ? "recommended" : "pending",
+    },
+    {
+      id: "company_documents",
+      title: "Documentacion empresa",
+      description: "Documentos para revision manual y trazabilidad.",
+      priority: "recommended",
+      completed: activeDocumentsCount > 0 ? 1 : 0,
+      total: 1,
+      status: activeDocumentsCount > 0 ? "completed" : "recommended",
+    },
+    {
+      id: "optional_details",
+      title: "Detalles opcionales",
+      description: "Web, descripcion ampliada y datos complementarios.",
+      priority: "optional",
+      completed: optionalCompleted,
+      total: optionalChecks.length,
+      status: optionalCompleted > 0 ? "optional" : "optional",
+    },
+  ];
+
+  return {
+    score,
+    required: {
+      completed: requiredCompleted,
+      total: requiredChecks.length,
+    },
+    recommended: {
+      completed: recommendedCompleted,
+      total: recommendedChecks.length,
+    },
+    optional: {
+      completed: optionalCompleted,
+      total: optionalChecks.length,
+    },
+    checklist,
+  };
+}
+
+function humanizeDocumentsWarning(code: string | null) {
+  if (!code) return null;
+  if (code === "company_verification_documents_missing_migration") {
+    return {
+      code,
+      title: "La verificacion documental aun no esta activada en esta base",
+      message:
+        "El perfil empresa esta listo, pero falta aplicar las migraciones SQL del modulo documental para poder subir y gestionar documentos.",
+      migration_files: [
+        "scripts/sql/f31_company_verification_documents.sql",
+        "scripts/sql/f34_company_verification_documents_lifecycle.sql",
+      ],
+    };
+  }
+  if (code === "company_verification_documents_schema_drift") {
+    return {
+      code,
+      title: "La base tiene una version parcial del modulo documental",
+      message:
+        "La UI se degrada de forma segura. Aplica las migraciones pendientes para activar lifecycle, historico e importacion documental.",
+      migration_files: [
+        "scripts/sql/f31_company_verification_documents.sql",
+        "scripts/sql/f34_company_verification_documents_lifecycle.sql",
+      ],
+    };
+  }
+  return null;
 }
 
 async function resolveContext(supabase: any, admin: any) {
@@ -467,7 +624,7 @@ export async function GET() {
         } as any);
 
     let verificationDocuments: CompanyVerificationDocumentRow[] = [];
-    let verificationDocumentsWarning: string | null = null;
+    let verificationDocumentsWarningCode: string | null = null;
     const docsRes = await admin
       .from("company_verification_documents")
       .select(
@@ -488,7 +645,9 @@ export async function GET() {
           { status: 400 },
         );
       }
-      verificationDocumentsWarning = "company_verification_documents_schema_drift";
+      verificationDocumentsWarningCode = isRelationMissingError(docsRes.error, "company_verification_documents")
+        ? "company_verification_documents_missing_migration"
+        : "company_verification_documents_schema_drift";
       docsReadFailed = true;
     } else {
       verificationDocuments = Array.isArray(docsRes.data) ? (docsRes.data as any) : [];
@@ -498,7 +657,15 @@ export async function GET() {
       (d) => String(d?.lifecycle_status || "active").toLowerCase() !== "deleted",
     );
     const legacyHasDocument = Boolean(baseProfile.verification_document_type || baseProfile.verification_document_uploaded_at);
-    const profileCompletenessScore = computeCompleteness(baseProfile);
+    const { count: membersCount } = await admin
+      .from("company_members")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", companyId);
+    const completion = buildProfileCompletionModel({
+      profile: baseProfile,
+      activeDocumentsCount: activeDocuments.length,
+      memberCount: Number(membersCount || 0),
+    });
     const effectiveVerificationStatus = await getEffectiveVerificationStatus(
       admin,
       user.id,
@@ -518,14 +685,16 @@ export async function GET() {
       profile: {
         ...baseProfile,
         company_verification_status: effectiveVerificationStatus,
-        profile_completeness_score: profileCompletenessScore,
+        profile_completeness_score: completion.score,
         company_verification_review_status: reviewStatus,
         verification_last_reviewed_at: latestReviewed?.reviewed_at || null,
         verification_rejection_reason: latestRejected?.rejected_reason || latestRejected?.review_notes || null,
       },
       verification_documents: verificationDocuments,
       verification_documents_active_count: activeDocuments.length,
-      verification_documents_warning: verificationDocumentsWarning,
+      verification_documents_warning: verificationDocumentsWarningCode,
+      verification_documents_meta: humanizeDocumentsWarning(verificationDocumentsWarningCode),
+      profile_completion: completion,
       membership_role: (ctx as any).membershipRole,
       route_version: ROUTE_VERSION,
     });
@@ -573,10 +742,6 @@ export async function POST(request: Request) {
       profile_completeness_score: 0,
     };
 
-    const computedScore = computeCompleteness(candidateProfile as any);
-    patch.profile_completeness_score = computedScore;
-    patch.updated_at = new Date().toISOString();
-
     let docsForStatus: CompanyVerificationDocumentRow[] = [];
     let docsReadFailed = true;
     const docsRes = await admin
@@ -594,6 +759,15 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
+
+    const completion = buildProfileCompletionModel({
+      profile: candidateProfile as any,
+      activeDocumentsCount: docsForStatus.filter((d) => String((d as any)?.lifecycle_status || "active").toLowerCase() !== "deleted").length,
+      memberCount: 1,
+    });
+    const computedScore = completion.score;
+    patch.profile_completeness_score = computedScore;
+    patch.updated_at = new Date().toISOString();
 
     const effectiveVerificationStatus = await getEffectiveVerificationStatus(
       admin,
@@ -621,6 +795,7 @@ export async function POST(request: Request) {
         company_verification_status: effectiveVerificationStatus,
         profile_completeness_score: computedScore,
       },
+      profile_completion: completion,
       route_version: ROUTE_VERSION,
     });
   } catch (e: any) {

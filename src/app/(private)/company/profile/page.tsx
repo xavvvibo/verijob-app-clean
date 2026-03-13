@@ -29,6 +29,31 @@ type CompanyVerificationDocument = {
   created_at?: string | null;
 };
 
+type DocumentsMeta = {
+  code?: string | null;
+  title?: string | null;
+  message?: string | null;
+  migration_files?: string[] | null;
+} | null;
+
+type ProfileCompletionItem = {
+  id: string;
+  title: string;
+  description: string;
+  status: "completed" | "pending" | "recommended" | "optional";
+  priority: "required" | "recommended" | "optional";
+  completed: number;
+  total: number;
+};
+
+type ProfileCompletion = {
+  score?: number | null;
+  required?: { completed?: number | null; total?: number | null } | null;
+  recommended?: { completed?: number | null; total?: number | null } | null;
+  optional?: { completed?: number | null; total?: number | null } | null;
+  checklist?: ProfileCompletionItem[] | null;
+} | null;
+
 const EMPLOYEE_RANGES = ["1-10", "11-50", "51-200", "201-500", "500+"];
 const HIRING_RANGES = ["1-5/mes", "6-20/mes", "21-50/mes", "50+/mes"];
 const CONTRACT_TYPES = ["Indefinido", "Temporal", "Fijo-discontinuo", "Prácticas", "Autónomo"];
@@ -133,9 +158,27 @@ function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
 
 function parseCsvArray(value: string) {
   return value
-    .split(",")
+    .split(/[\n,]/g)
     .map((x) => x.trim())
     .filter(Boolean);
+}
+
+function formatListInput(value: unknown) {
+  return Array.isArray(value) ? value.join(", ") : "";
+}
+
+function checklistStatusLabel(value: ProfileCompletionItem["status"]) {
+  if (value === "completed") return "Completado";
+  if (value === "recommended") return "Recomendado";
+  if (value === "optional") return "Opcional";
+  return "Pendiente";
+}
+
+function checklistStatusClass(value: ProfileCompletionItem["status"]) {
+  if (value === "completed") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (value === "recommended") return "border-blue-200 bg-blue-50 text-blue-800";
+  if (value === "optional") return "border-slate-200 bg-slate-50 text-slate-700";
+  return "border-amber-200 bg-amber-50 text-amber-800";
 }
 
 export const dynamic = "force-dynamic";
@@ -145,11 +188,15 @@ export default function CompanyProfilePage() {
   const [membershipRole, setMembershipRole] = useState<string>("reviewer");
   const [documents, setDocuments] = useState<CompanyVerificationDocument[]>([]);
   const [reviewStatus, setReviewStatus] = useState<string>("unverified");
-  const [documentsWarning, setDocumentsWarning] = useState<string | null>(null);
+  const [documentsMeta, setDocumentsMeta] = useState<DocumentsMeta>(null);
   const [docType, setDocType] = useState<string>(COMPANY_DOCUMENT_TYPES[0].value);
   const [docFile, setDocFile] = useState<File | null>(null);
   const [uploadingDoc, setUploadingDoc] = useState(false);
   const [docActionLoadingId, setDocActionLoadingId] = useState<string | null>(null);
+  const [commonRolesText, setCommonRolesText] = useState("");
+  const [languagesText, setLanguagesText] = useState("");
+  const [zonesText, setZonesText] = useState("");
+  const [completion, setCompletion] = useState<ProfileCompletion>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -170,7 +217,11 @@ export default function CompanyProfilePage() {
       setMembershipRole(String(data.membership_role || "reviewer"));
       setDocuments(Array.isArray(data.verification_documents) ? data.verification_documents : []);
       setReviewStatus(String(data?.profile?.company_verification_review_status || "unverified"));
-      setDocumentsWarning(data?.verification_documents_warning ? String(data.verification_documents_warning) : null);
+      setDocumentsMeta(data?.verification_documents_meta || null);
+      setCommonRolesText(formatListInput(data?.profile?.common_roles_hired));
+      setLanguagesText(formatListInput(data?.profile?.common_languages_required));
+      setZonesText(formatListInput(data?.profile?.hiring_zones));
+      setCompletion(data?.profile_completion || null);
       setLoading(false);
     })();
 
@@ -179,7 +230,7 @@ export default function CompanyProfilePage() {
     };
   }, []);
 
-  const completeness = Number(profile?.profile_completeness_score || 0);
+  const completeness = Number(completion?.score ?? profile?.profile_completeness_score ?? 0);
   const hasInitialData = Boolean(
     profile?.legal_name ||
       profile?.trade_name ||
@@ -188,9 +239,11 @@ export default function CompanyProfilePage() {
       profile?.tax_id
   );
   const canEdit = membershipRole === "admin";
-  const commonRolesText = useMemo(() => (profile?.common_roles_hired || []).join(", "), [profile?.common_roles_hired]);
-  const languagesText = useMemo(() => (profile?.common_languages_required || []).join(", "), [profile?.common_languages_required]);
-  const zonesText = useMemo(() => (profile?.hiring_zones || []).join(", "), [profile?.hiring_zones]);
+  const activeDocuments = useMemo(
+    () => documents.filter((doc) => String(doc.lifecycle_status || "active").toLowerCase() !== "deleted"),
+    [documents]
+  );
+  const deletedDocuments = Math.max(0, documents.length - activeDocuments.length);
 
   function updateField(key: string, value: any) {
     setProfile((prev) => ({ ...(prev || {}), [key]: value }));
@@ -228,6 +281,7 @@ export default function CompanyProfilePage() {
     if (Array.isArray(data?.verification_documents)) {
       setDocuments(data.verification_documents);
     }
+    setCompletion(data?.profile_completion || completion);
     setMessage("Perfil de empresa actualizado correctamente.");
   }
 
@@ -252,7 +306,12 @@ export default function CompanyProfilePage() {
     setUploadingDoc(false);
 
     if (!res.ok) {
-      setError(data?.details || data?.error || "No se pudo subir el documento.");
+      setError(
+        data?.user_message ||
+          data?.details ||
+          data?.error ||
+          "No se pudo subir el documento."
+      );
       return;
     }
 
@@ -279,7 +338,7 @@ export default function CompanyProfilePage() {
     const data = await res.json().catch(() => ({}));
     setDocActionLoadingId(null);
     if (!res.ok) {
-      setError(data?.details || data?.error || "No se pudieron importar los datos detectados.");
+      setError(data?.user_message || data?.details || data?.error || "No se pudieron importar los datos detectados.");
       return;
     }
     if (data?.document) {
@@ -306,7 +365,7 @@ export default function CompanyProfilePage() {
     const data = await res.json().catch(() => ({}));
     setDocActionLoadingId(null);
     if (!res.ok) {
-      setError(data?.details || data?.error || "No se pudo eliminar el documento.");
+      setError(data?.user_message || data?.details || data?.error || "No se pudo eliminar el documento.");
       return;
     }
     if (data?.document) {
@@ -324,7 +383,11 @@ export default function CompanyProfilePage() {
     setMembershipRole(String(data.membership_role || "reviewer"));
     setDocuments(Array.isArray(data.verification_documents) ? data.verification_documents : []);
     setReviewStatus(String(data?.profile?.company_verification_review_status || "unverified"));
-    setDocumentsWarning(data?.verification_documents_warning ? String(data.verification_documents_warning) : null);
+    setDocumentsMeta(data?.verification_documents_meta || null);
+    setCommonRolesText(formatListInput(data?.profile?.common_roles_hired));
+    setLanguagesText(formatListInput(data?.profile?.common_languages_required));
+    setZonesText(formatListInput(data?.profile?.hiring_zones));
+    setCompletion(data?.profile_completion || null);
   }
 
   if (loading) return <p className="text-sm text-slate-600">Cargando perfil de empresa…</p>;
@@ -344,13 +407,29 @@ export default function CompanyProfilePage() {
               {statusLabel(reviewStatus)}
             </div>
           </div>
-          <div className="min-w-[220px] rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Estado del perfil</p>
+          <div className="min-w-[260px] rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs uppercase tracking-wide text-slate-500">Perfil listo para operacion</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">{completeness}%</p>
             <div className="mt-2 h-2 rounded-full bg-slate-200">
               <div className="h-full rounded-full bg-slate-900" style={{ width: `${Math.max(0, Math.min(100, completeness))}%` }} />
             </div>
-            <p className="mt-2 text-xs text-slate-600">Completa los bloques para mejorar segmentación y credibilidad.</p>
+            <p className="mt-2 text-xs text-slate-600">
+              Obligatorios y recomendados cuentan. Los opcionales no penalizan el porcentaje.
+            </p>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-slate-600">
+              <div className="rounded-xl border border-slate-200 bg-white px-2 py-2">
+                <div className="font-semibold text-slate-900">{Number(completion?.required?.completed || 0)}/{Number(completion?.required?.total || 0)}</div>
+                <div>Obligatorio</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white px-2 py-2">
+                <div className="font-semibold text-slate-900">{Number(completion?.recommended?.completed || 0)}/{Number(completion?.recommended?.total || 0)}</div>
+                <div>Recomendado</div>
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white px-2 py-2">
+                <div className="font-semibold text-slate-900">{Number(completion?.optional?.completed || 0)}/{Number(completion?.optional?.total || 0)}</div>
+                <div>Opcional</div>
+              </div>
+            </div>
           </div>
         </div>
         {error ? <p className="mt-4 text-sm text-rose-600">{error}</p> : null}
@@ -361,6 +440,30 @@ export default function CompanyProfilePage() {
           </div>
         ) : null}
       </section>
+
+      {Array.isArray(completion?.checklist) && completion?.checklist?.length ? (
+        <Section title="Checklist del perfil" subtitle="Vista clara de lo que ya esta listo y lo que conviene completar antes de lanzamiento.">
+          <div className="grid gap-3 lg:grid-cols-2">
+            {completion.checklist.map((item) => (
+              <article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">{item.title}</h3>
+                    <p className="mt-1 text-xs text-slate-600">{item.description}</p>
+                  </div>
+                  <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${checklistStatusClass(item.status)}`}>
+                    {checklistStatusLabel(item.status)}
+                  </span>
+                </div>
+                <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
+                  <span>{item.priority === "required" ? "Obligatorio" : item.priority === "recommended" ? "Recomendado" : "Opcional"}</span>
+                  <span>{item.completed}/{item.total}</span>
+                </div>
+              </article>
+            ))}
+          </div>
+        </Section>
+      ) : null}
 
       <Section title="Identidad de empresa" subtitle="Información legal y de contacto principal para operaciones B2B.">
         <div className="grid gap-3 md:grid-cols-2">
@@ -396,7 +499,6 @@ export default function CompanyProfilePage() {
           <Field label="Actividad principal"><TextInput value={profile.primary_activity || ""} onChange={(e) => updateField("primary_activity", e.target.value)} disabled={!canEdit} /></Field>
           <Field label="Modelo de negocio"><TextInput value={profile.business_model || ""} onChange={(e) => updateField("business_model", e.target.value)} disabled={!canEdit} /></Field>
           <Field label="Segmento de mercado"><TextInput value={profile.market_segment || ""} onChange={(e) => updateField("market_segment", e.target.value)} disabled={!canEdit} /></Field>
-          <Field label="Origen del lead"><TextInput value={profile.lead_source || ""} onChange={(e) => updateField("lead_source", e.target.value)} disabled={!canEdit} /></Field>
           <Field label="Descripción"><TextArea rows={3} value={profile.business_description || ""} onChange={(e) => updateField("business_description", e.target.value)} disabled={!canEdit} /></Field>
           <Field label="Negocio estacional">
             <select className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" value={profile.seasonal_business ? "si" : "no"} onChange={(e) => updateField("seasonal_business", e.target.value === "si")} disabled={!canEdit}>
@@ -428,7 +530,16 @@ export default function CompanyProfilePage() {
               <option value="si">Sí</option>
             </select>
           </Field>
-          <Field label="Roles que contrata (separados por coma)"><TextInput value={commonRolesText} onChange={(e) => updateField("common_roles_hired", parseCsvArray(e.target.value))} disabled={!canEdit} /></Field>
+          <Field label="Roles que contrata">
+            <TextArea
+              rows={2}
+              value={commonRolesText}
+              onChange={(e) => setCommonRolesText(e.target.value)}
+              disabled={!canEdit}
+              placeholder="camarero, jefe de rango, encargado"
+            />
+            <span className="mt-1 block text-xs text-slate-500">Puedes escribir texto natural separado por comas o saltos de linea.</span>
+          </Field>
           <Field label="Tipos de contrato">
             <select multiple className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm h-28" value={profile.common_contract_types || []} onChange={(e) => updateField("common_contract_types", Array.from(e.target.selectedOptions).map((o) => o.value))} disabled={!canEdit}>
               {CONTRACT_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
@@ -439,8 +550,26 @@ export default function CompanyProfilePage() {
               {WORKDAY_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
             </select>
           </Field>
-          <Field label="Idiomas requeridos (separados por coma)"><TextInput value={languagesText} onChange={(e) => updateField("common_languages_required", parseCsvArray(e.target.value))} disabled={!canEdit} /></Field>
-          <Field label="Zonas de contratación (separadas por coma)"><TextInput value={zonesText} onChange={(e) => updateField("hiring_zones", parseCsvArray(e.target.value))} disabled={!canEdit} /></Field>
+          <Field label="Idiomas requeridos">
+            <TextArea
+              rows={2}
+              value={languagesText}
+              onChange={(e) => setLanguagesText(e.target.value)}
+              disabled={!canEdit}
+              placeholder="espanol, ingles, catalan"
+            />
+            <span className="mt-1 block text-xs text-slate-500">Admite comas y espacios normales sin cortar la escritura.</span>
+          </Field>
+          <Field label="Zonas de contratación">
+            <TextArea
+              rows={2}
+              value={zonesText}
+              onChange={(e) => setZonesText(e.target.value)}
+              disabled={!canEdit}
+              placeholder="Barcelona ciudad, Hospitalet, Badalona"
+            />
+            <span className="mt-1 block text-xs text-slate-500">Usa zonas reales de cobertura. Se guardan como lista compatible con el modelo actual.</span>
+          </Field>
         </div>
       </Section>
 
@@ -470,10 +599,21 @@ export default function CompanyProfilePage() {
           </div>
         </div>
 
-        {documentsWarning ? (
-          <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            Falta migración para documentos múltiples: {documentsWarning}.
-          </p>
+        {documentsMeta ? (
+          <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p className="font-semibold">{documentsMeta.title}</p>
+            <p className="mt-1 text-xs">{documentsMeta.message}</p>
+            {Array.isArray(documentsMeta.migration_files) && documentsMeta.migration_files.length ? (
+              <div className="mt-2 text-xs">
+                SQL pendiente:
+                <ul className="mt-1 space-y-1">
+                  {documentsMeta.migration_files.map((file) => (
+                    <li key={file}>{file}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
         ) : null}
 
         {canEdit ? (
@@ -497,17 +637,21 @@ export default function CompanyProfilePage() {
                 accept=".pdf,image/*"
                 className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm"
                 onChange={(e) => setDocFile(e.target.files?.[0] || null)}
+                disabled={Boolean(documentsMeta)}
               />
             </Field>
             <div className="md:col-span-2">
               <button
                 type="button"
                 onClick={uploadVerificationDocument}
-                disabled={!docFile || uploadingDoc}
+                disabled={!docFile || uploadingDoc || Boolean(documentsMeta)}
                 className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
               >
                 {uploadingDoc ? "Subiendo…" : "Subir documento de verificación"}
               </button>
+              <p className="mt-2 text-xs text-slate-500">
+                Puedes anadir varios documentos del mismo tipo sin perder trazabilidad historica.
+              </p>
             </div>
           </div>
         ) : (
@@ -515,10 +659,18 @@ export default function CompanyProfilePage() {
         )}
 
         <div className="mt-5">
-          <h3 className="text-sm font-semibold text-slate-900">Documentos subidos</h3>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold text-slate-900">Historico documental</h3>
+            <div className="flex gap-2 text-xs text-slate-600">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">Activos: {activeDocuments.length}</span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">Eliminados: {deletedDocuments}</span>
+            </div>
+          </div>
           {documents.length === 0 ? (
             <p className="mt-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-sm text-slate-600">
-              No hay documentos de verificación subidos todavía.
+              {documentsMeta
+                ? "La gestion documental quedara disponible cuando se apliquen las migraciones del modulo documental."
+                : "No hay documentos de verificacion subidos todavia."}
             </p>
           ) : (
             <div className="mt-2 overflow-auto">
