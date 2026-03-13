@@ -117,9 +117,9 @@ function AlertCard({ alert }: { alert: AlertItem }) {
 }
 
 function signalStyles(level: GlobalSignalLevel) {
-  if (level === "ok") return { dot: "bg-emerald-500", chip: "border-emerald-200 bg-emerald-50 text-emerald-700", label: "OK" };
-  if (level === "warning") return { dot: "bg-amber-500", chip: "border-amber-200 bg-amber-50 text-amber-700", label: "Atención" };
-  return { dot: "bg-rose-500", chip: "border-rose-200 bg-rose-50 text-rose-700", label: "Acción" };
+  if (level === "ok") return { dot: "bg-emerald-600", chip: "border-emerald-300 bg-emerald-100 text-emerald-900", label: "OK", border: "border-l-emerald-500" };
+  if (level === "warning") return { dot: "bg-amber-600", chip: "border-amber-300 bg-amber-100 text-amber-900", label: "Atención", border: "border-l-amber-500" };
+  return { dot: "bg-rose-600", chip: "border-rose-300 bg-rose-100 text-rose-900", label: "Acción", border: "border-l-rose-500" };
 }
 
 function GlobalSignalCard({
@@ -133,7 +133,7 @@ function GlobalSignalCard({
 }) {
   const styles = signalStyles(level);
   return (
-    <article className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <article className={`rounded-xl border border-slate-200 border-l-4 bg-white p-4 shadow-sm ${styles.border}`}>
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className={`h-2.5 w-2.5 rounded-full ${styles.dot}`} />
@@ -290,8 +290,11 @@ async function OwnerOverviewServer() {
   const twoWeeksAgo = now - 14 * dayMs;
   const monthAgo = now - 30 * dayMs;
   const twoMonthsAgo = now - 60 * dayMs;
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfTodayMs = startOfToday.getTime();
 
-  const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicLinksRes, issuesRes, employmentRes, authUsersTotal] = await Promise.all([
+  const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicLinksRes, issuesRes, employmentRes, candidateProfilesRes, authUsersTotal] = await Promise.all([
     admin.from("profiles").select("id,role,onboarding_completed,created_at,last_activity_at"),
     admin.from("companies").select("id,name,created_at,updated_at,status", { count: "exact" }),
     admin.from("verification_requests").select("id,status,requested_at,created_at,resolved_at,company_id,requested_by,verification_channel,external_resolved"),
@@ -302,6 +305,7 @@ async function OwnerOverviewServer() {
     admin.from("candidate_public_links").select("id,candidate_id,public_token,expires_at,is_active,created_at"),
     admin.from("issue_reports").select("id,status,created_at"),
     admin.from("employment_records").select("id,candidate_id,created_at,verification_status"),
+    admin.from("candidate_profiles").select("user_id,trust_score"),
     countAuthUsers(admin),
   ]);
 
@@ -315,6 +319,7 @@ async function OwnerOverviewServer() {
   const publicLinks = Array.isArray(publicLinksRes.data) ? publicLinksRes.data : [];
   const issues = Array.isArray(issuesRes.data) ? issuesRes.data : [];
   const employments = Array.isArray(employmentRes.data) ? employmentRes.data : [];
+  const candidateProfilesData = Array.isArray(candidateProfilesRes.data) ? candidateProfilesRes.data : [];
   const profilesForActivity = profiles;
   const companiesForActivity = Array.isArray(companiesRes.data) ? companiesRes.data : [];
   const profileById = new Map(profiles.map((row: any) => [String(row.id || ""), row]));
@@ -355,6 +360,23 @@ async function OwnerOverviewServer() {
 
   const onboardingCompleted = candidateProfiles.filter((p: any) => Boolean(p.onboarding_completed)).length;
   const onboardingPending = candidatesTotal - onboardingCompleted;
+
+  const usersCreatedToday = profiles.filter((p: any) => {
+    const ts = Date.parse(String(p.created_at || ""));
+    return Number.isFinite(ts) && ts >= startOfTodayMs;
+  }).length;
+  const usersActiveToday = profilesForActivity.filter((p: any) => {
+    const ts = Date.parse(String(p.last_activity_at || ""));
+    return Number.isFinite(ts) && ts >= startOfTodayMs;
+  }).length;
+  const companiesActiveToday = companiesForActivity.filter((c: any) => {
+    const ts = Date.parse(String(c.updated_at || c.created_at || ""));
+    return Number.isFinite(ts) && ts >= startOfTodayMs;
+  }).length;
+  const candidatesActiveToday = candidateProfiles.filter((p: any) => {
+    const ts = Date.parse(String(p.last_activity_at || ""));
+    return Number.isFinite(ts) && ts >= startOfTodayMs;
+  }).length;
 
   const activeProfiles = profilesForActivity.filter((p: any) => {
     const ts = Date.parse(String(p.last_activity_at || ""));
@@ -434,6 +456,12 @@ async function OwnerOverviewServer() {
   });
 
   const subscriptionsCanceled = subscriptions.filter((s: any) => String(s.status || "").toLowerCase() === "canceled");
+  const subscriptionsActivePrev30d = subscriptions.filter((s: any) => {
+    const st = String(s.status || "").toLowerCase();
+    if (st !== "active" && st !== "trialing") return false;
+    const created = Date.parse(String(s.created_at || ""));
+    return Number.isFinite(created) && created >= twoMonthsAgo && created < monthAgo;
+  }).length;
   const subscriptionsNew30d = subscriptions.filter((s: any) => {
     const created = Date.parse(String(s.created_at || ""));
     return Number.isFinite(created) && created >= monthAgo;
@@ -477,6 +505,17 @@ async function OwnerOverviewServer() {
   });
   const leadsThisWeek = weekCampaigns.reduce((acc: number, row: any) => acc + Number(row.leads_discovered || 0), 0);
   const demosThisWeek = weekCampaigns.reduce((acc: number, row: any) => acc + Number(row.demos_count || 0), 0);
+  const growthTotals = campaigns.reduce(
+    (acc: { leads: number; contacts: number; messages: number; replies: number; demos: number }, row: any) => {
+      acc.leads += Number(row.leads_discovered || 0);
+      acc.contacts += Number(row.contacts_found || 0);
+      acc.messages += Number(row.messages_queued || 0);
+      acc.replies += Number(row.replies_count || 0);
+      acc.demos += Number(row.demos_count || 0);
+      return acc;
+    },
+    { leads: 0, contacts: 0, messages: 0, replies: 0, demos: 0 }
+  );
 
   const failedJobs = jobs.filter((j: any) => String(j.status || "").toLowerCase() === "failed").length;
   const pendingJobs = jobs.filter((j: any) => String(j.status || "").toLowerCase().includes("pending")).length;
@@ -531,13 +570,41 @@ async function OwnerOverviewServer() {
   const funnelStepRegistros = candidatesTotal;
   const funnelStepOnboarding = onboardingCompleted;
   const funnelStepExperience = candidatesWithExperience.size;
-  const funnelStepFirstVerification = candidatesWithVerification.size;
+  const funnelStepEvidence = new Set(
+    evidenceRows
+      .map((row: any) => String(row.uploaded_by || ""))
+      .filter((id: string) => Boolean(id) && candidateIds.has(id))
+  ).size;
+  const funnelStepVerificationRequested = candidatesWithVerification.size;
+  const funnelStepPublicProfileGenerated = new Set(
+    publicLinks
+      .map((row: any) => String(row.candidate_id || ""))
+      .filter((id: string) => Boolean(id) && candidateIds.has(id))
+  ).size;
   const funnelStepVerified = candidatesVerified.size;
 
   const onboardingRate = pct(funnelStepOnboarding, funnelStepRegistros);
   const profileReadyRate = pct(funnelStepExperience, funnelStepOnboarding);
-  const firstVerificationRate = pct(funnelStepFirstVerification, funnelStepExperience);
-  const verifiedRate = pct(funnelStepVerified, funnelStepFirstVerification);
+  const evidenceRate = pct(funnelStepEvidence, funnelStepExperience);
+  const verificationRequestedRate = pct(funnelStepVerificationRequested, funnelStepEvidence || funnelStepExperience);
+  const publicProfileGeneratedRate = pct(funnelStepPublicProfileGenerated, funnelStepVerificationRequested || funnelStepEvidence);
+  const verifiedRate = pct(funnelStepVerified, funnelStepPublicProfileGenerated || funnelStepVerificationRequested);
+
+  const candidateTrustEntries: Array<[string, number]> = candidateProfilesData
+    .map((row: any) => [String(row.user_id || ""), Number(row.trust_score || 0)] as [string, number])
+    .filter((row) => Boolean(row[0]));
+  const candidateTrustById = new Map<string, number>(candidateTrustEntries);
+  let trustHigh = 0;
+  let trustVerified = 0;
+  let trustSignals = 0;
+  let trustInVerification = 0;
+  for (const candidate of candidateProfiles as any[]) {
+    const score = Number(candidateTrustById.get(String(candidate.id || "")) || 0);
+    if (score > 80) trustHigh += 1;
+    else if (score >= 60) trustVerified += 1;
+    else if (score >= 40) trustSignals += 1;
+    else trustInVerification += 1;
+  }
 
   const evidenceByRequest = new Map<string, number>();
   for (const ev of evidenceRows as any[]) {
@@ -635,11 +702,20 @@ async function OwnerOverviewServer() {
   }
 
   if (requestsThisWeek === 0) {
+    const lastVerificationTs = verifiedRows
+      .map((r: any) => Date.parse(String(r.resolved_at || r.requested_at || r.created_at || "")))
+      .filter((ts: number) => Number.isFinite(ts))
+      .sort((a: number, b: number) => b - a)[0];
+    const daysSinceLastVerification =
+      Number.isFinite(lastVerificationTs) ? Math.max(0, Math.floor((now - Number(lastVerificationTs)) / dayMs)) : null;
+    const historicalWeeklyAvg = weeklyVerified.length
+      ? Math.round((weeklyVerified.reduce((a, b) => a + b, 0) / weeklyVerified.length) * 10) / 10
+      : 0;
     alerts.push({
       id: "no-verifications-week",
       severity: "medium",
       title: "Sin verificaciones nuevas esta semana",
-      detail: "No se detectan solicitudes recientes; revisar adquisición y activación.",
+      detail: `Última verificación: ${daysSinceLastVerification !== null ? `hace ${daysSinceLastVerification} días` : "sin histórico"} · media semanal histórica: ${historicalWeeklyAvg}.`,
       actionHref: "/owner/growth",
       actionLabel: "Revisar growth",
     });
@@ -726,8 +802,22 @@ async function OwnerOverviewServer() {
           <MetricCard
             title={<span className="inline-flex items-center gap-2">MRR activo <OwnerTooltip text="Derivado fiable: suma de amount en suscripciones active/trialing." /></span>}
             value={money(totalMrr)}
+            trend={deltaLabel(subscriptionsActive.length, subscriptionsActivePrev30d, " suscripciones")}
             note={`${subscriptionsActive.length} suscripciones activas · ${money(mrr30dAdded)} añadidos en 30d`}
           />
+        </div>
+      </Section>
+
+      <Section
+        title="Actividad de hoy"
+        subtitle="Pulso operativo diario sin estimaciones artificiales de presencia live."
+      >
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <MetricCard title="Nuevos usuarios hoy" value={String(usersCreatedToday)} />
+          <MetricCard title="Usuarios activos hoy" value={String(usersActiveToday)} note="Basado en last_activity_at del día actual" />
+          <MetricCard title="Empresas activas hoy" value={String(companiesActiveToday)} />
+          <MetricCard title="Candidatos activos hoy" value={String(candidatesActiveToday)} />
+          <MetricCard title="Sesiones operativas hoy" value={String(usersActiveToday)} note="Proxy operativo por actividad registrada en perfiles" />
         </div>
       </Section>
 
@@ -740,11 +830,13 @@ async function OwnerOverviewServer() {
             { label: "Registros", value: funnelStepRegistros },
             { label: "Onboarding completado", value: funnelStepOnboarding },
             { label: "Perfil con experiencia", value: funnelStepExperience },
-            { label: "Primera verificación", value: funnelStepFirstVerification },
+            { label: "Evidencia subida", value: funnelStepEvidence },
+            { label: "Verificación solicitada", value: funnelStepVerificationRequested },
+            { label: "Perfil público generado", value: funnelStepPublicProfileGenerated },
             { label: "Perfil verificado", value: funnelStepVerified },
           ]}
         />
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
           <FunnelStep step="Registros" value={funnelStepRegistros} note="Candidatos en profiles" />
           <FunnelStep
             step="Onboarding completado"
@@ -757,9 +849,19 @@ async function OwnerOverviewServer() {
             rate={profileReadyRate}
           />
           <FunnelStep
-            step="Primera verificación"
-            value={funnelStepFirstVerification}
-            rate={firstVerificationRate}
+            step="Evidencia subida"
+            value={funnelStepEvidence}
+            rate={evidenceRate}
+          />
+          <FunnelStep
+            step="Verificación solicitada"
+            value={funnelStepVerificationRequested}
+            rate={verificationRequestedRate}
+          />
+          <FunnelStep
+            step="Perfil público generado"
+            value={funnelStepPublicProfileGenerated}
+            rate={publicProfileGeneratedRate}
           />
           <FunnelStep
             step="Perfil verificado"
@@ -767,6 +869,31 @@ async function OwnerOverviewServer() {
             rate={verifiedRate}
             note="Al menos una verificación en estado verified"
           />
+        </div>
+      </Section>
+
+      <Section
+        title="Distribución de confianza"
+        subtitle="Lectura rápida de salud del Trust Score en la base de candidatos."
+      >
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard title="Alta confianza (>80)" value={String(trustHigh)} note={`Sobre ${candidatesTotal} candidatos`} />
+          <MetricCard title="Perfil verificado (60-79)" value={String(trustVerified)} note={`Sobre ${candidatesTotal} candidatos`} />
+          <MetricCard title="Señales verificadas (40-59)" value={String(trustSignals)} note={`Sobre ${candidatesTotal} candidatos`} />
+          <MetricCard title="En verificación (<40)" value={String(trustInVerification)} note={`Sobre ${candidatesTotal} candidatos`} />
+        </div>
+      </Section>
+
+      <Section
+        title="Resumen de crecimiento"
+        subtitle="Salida operativa agregada del módulo de growth (sin rehacer el módulo completo)."
+      >
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <MetricCard title="Leads descubiertos" value={String(growthTotals.leads)} note="Acumulado growth_campaigns" />
+          <MetricCard title="Contactos encontrados" value={String(growthTotals.contacts)} note="Acumulado growth_campaigns" />
+          <MetricCard title="Mensajes enviados" value={String(growthTotals.messages)} note="Acumulado growth_campaigns" />
+          <MetricCard title="Respuestas" value={String(growthTotals.replies)} note="Acumulado growth_campaigns" />
+          <MetricCard title="Demos agendadas" value={String(growthTotals.demos)} note="Acumulado growth_campaigns" />
         </div>
       </Section>
 
@@ -916,31 +1043,65 @@ async function OwnerOverviewServer() {
             {[
               ...verifiedRows.slice(0, 3).map((r: any) => ({
                 ts: String(r.resolved_at || r.requested_at || r.created_at || ""),
-                text: `Verificación completada · ${String((profileById.get(String(r.requested_by || "")) as any)?.full_name || "Candidato")}`,
+                type: "verification_approved",
+                text: `Verificación aprobada · ${String((profileById.get(String(r.requested_by || "")) as any)?.full_name || "Candidato")}`,
               })),
               ...evidenceRows.slice(0, 3).map((e: any) => ({
                 ts: String(e.created_at || ""),
+                type: "evidence_uploaded",
                 text: `Evidencia subida · ${String((profileById.get(String(e.uploaded_by || "")) as any)?.full_name || "Usuario")}`,
               })),
               ...companiesForActivity.slice(0, 2).map((c: any) => ({
                 ts: String(c.created_at || c.updated_at || ""),
-                text: `Actividad de empresa · ${String((companyById.get(String(c.id || "")) as any)?.name || "Empresa")}`,
+                type: "company_activity",
+                text: `Empresa activa · ${String((companyById.get(String(c.id || "")) as any)?.name || "Empresa")}`,
+              })),
+              ...profiles.slice(0, 2).map((p: any) => ({
+                ts: String(p.created_at || ""),
+                type: "user_registered",
+                text: `Usuario registrado · ${String((profileById.get(String(p.id || "")) as any)?.full_name || "Usuario")}`,
               })),
               ...issues.slice(0, 2).map((i: any) => ({
                 ts: String(i.created_at || ""),
-                text: "Incidencia operativa registrada.",
+                type: "issue_created",
+                text: "Incidencia operativa creada",
               })),
               ...campaigns.slice(0, 2).map((c: any) => ({
                 ts: String(c.created_at || ""),
-                text: "Campaña de crecimiento lanzada.",
+                type: "campaign_created",
+                text: "Campaña de crecimiento lanzada",
+              })),
+              ...subscriptionsActive.slice(0, 2).map((s: any) => ({
+                ts: String(s.created_at || ""),
+                type: "subscription_activated",
+                text: "Suscripción activada",
               })),
             ]
-              .filter((x) => x.ts)
+              .filter((x: any) => x.ts)
               .sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts))
               .slice(0, 10)
               .map((item, idx) => (
                 <li key={`${item.ts}-${idx}`} className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <span>{item.text}</span>
+                  <span className="inline-flex items-center gap-2">
+                    <span className={`h-2 w-2 rounded-full ${
+                      item.type === "verification_approved" ? "bg-emerald-600" :
+                      item.type === "issue_created" ? "bg-rose-600" :
+                      item.type === "evidence_uploaded" ? "bg-indigo-600" :
+                      item.type === "campaign_created" ? "bg-blue-600" :
+                      item.type === "subscription_activated" ? "bg-violet-600" :
+                      "bg-slate-500"
+                    }`} />
+                    <span className="rounded-md border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
+                      {item.type === "verification_approved" ? "Verificación" :
+                        item.type === "issue_created" ? "Incidencia" :
+                        item.type === "evidence_uploaded" ? "Evidencia" :
+                        item.type === "campaign_created" ? "Growth" :
+                        item.type === "subscription_activated" ? "Suscripción" :
+                        item.type === "user_registered" ? "Usuario" :
+                        "Empresa"}
+                    </span>
+                    <span>{item.text}</span>
+                  </span>
                   <span className="text-xs text-slate-500">{new Date(item.ts).toLocaleString("es-ES")}</span>
                 </li>
               ))}
