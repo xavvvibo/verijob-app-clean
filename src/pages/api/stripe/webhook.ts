@@ -2,6 +2,9 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 import { resolvePlanFromPriceId } from "@/utils/stripe/priceMapping";
+import { buildSubscriptionLifecycleEmail } from "@/lib/email/templates/subscriptionLifecycle";
+import { sendTransactionalEmail } from "@/server/email/sendTransactionalEmail";
+import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
 
 function requireEnv(name: string): string {
   const v = process.env[name];
@@ -20,6 +23,26 @@ function firstEnv(...names: string[]): string | null {
 function json(res: NextApiResponse, status: number, body: any) {
   res.setHeader("Cache-Control", "no-store");
   return res.status(status).json({ ...body, route: "/pages/api/stripe/webhook" });
+}
+
+function resolveAppUrl() {
+  return String(process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es").replace(/\/+$/, "");
+}
+
+function planLabel(raw: unknown) {
+  const plan = String(raw || "free").toLowerCase();
+  if (!plan || plan === "free") return "Free";
+  if (plan.includes("candidate_starter")) return "Candidate Starter";
+  if (plan.includes("candidate_proplus")) return "Candidate Pro+";
+  if (plan.includes("candidate_pro")) return "Candidate Pro";
+  if (plan.includes("company_access")) return "Company Access";
+  if (plan.includes("company_hiring")) return "Company Hiring";
+  if (plan.includes("company_team")) return "Company Team";
+  return plan;
+}
+
+function isCompanyPlan(raw: unknown) {
+  return String(raw || "").toLowerCase().startsWith("company_");
 }
 
 async function getRawBody(req: NextApiRequest): Promise<string> {
@@ -80,6 +103,86 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       { auth: { persistSession: false } }
     );
 
+    async function resolveUserEmail(userId: string): Promise<string | null> {
+      const authRes = await supabase.auth.admin.getUserById(userId);
+      const authEmail = String(authRes?.data?.user?.email || "").trim().toLowerCase();
+      if (authEmail) return authEmail;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("email")
+        .eq("id", userId)
+        .maybeSingle();
+      const profileEmail = String((profile as any)?.email || "").trim().toLowerCase();
+      return profileEmail || null;
+    }
+
+    async function sendSubscriptionEmail(args: {
+      kind: "plan_updated" | "owner_plan_updated" | "trial_extended" | "payment_failed" | "subscription_changed" | "subscription_renewed";
+      userId: string;
+      planKey?: string | null;
+      previousPlanKey?: string | null;
+      immediate?: boolean;
+      effectiveAt?: string | null;
+      periodEnd?: string | null;
+      reason?: string | null;
+      sourceEvent: string;
+      sourceEventId: string;
+    }) {
+      const to = await resolveUserEmail(args.userId);
+      if (!to) {
+        await trackEventAdmin({
+          event_name: "subscription_started",
+          user_id: args.userId,
+          metadata: {
+            email_notification: "skipped_no_email",
+            source_event: args.sourceEvent,
+            source_event_id: args.sourceEventId,
+            notification_kind: args.kind,
+          },
+        });
+        return { ok: false, error: "user_email_unavailable" };
+      }
+
+      const appUrl = resolveAppUrl();
+      const isCompany = isCompanyPlan(args.planKey) || isCompanyPlan(args.previousPlanKey);
+      const dashboardUrl = isCompany ? `${appUrl}/company/subscription` : `${appUrl}/candidate/subscription`;
+      const billingUrl = isCompany ? `${appUrl}/company/subscription` : `${appUrl}/candidate/subscription`;
+      const tpl = buildSubscriptionLifecycleEmail({
+        kind: args.kind,
+        planName: planLabel(args.planKey),
+        previousPlanName: args.previousPlanKey ? planLabel(args.previousPlanKey) : null,
+        effectiveAt: args.effectiveAt || null,
+        periodEnd: args.periodEnd || null,
+        immediate: args.immediate,
+        reason: args.reason || null,
+        dashboardUrl,
+        billingUrl,
+      });
+      const sent = await sendTransactionalEmail({
+        to,
+        subject: tpl.subject,
+        html: tpl.html,
+        text: tpl.text,
+      });
+      await trackEventAdmin({
+        event_name: "subscription_started",
+        user_id: args.userId,
+        metadata: {
+          email_notification: sent.ok ? "sent" : sent.skipped ? "skipped" : "failed",
+          provider: sent.provider,
+          provider_message_id: sent.id || null,
+          source_event: args.sourceEvent,
+          source_event_id: args.sourceEventId,
+          notification_kind: args.kind,
+          error: sent.error || null,
+          plan_key: args.planKey || null,
+          previous_plan_key: args.previousPlanKey || null,
+        },
+      });
+      return sent;
+    }
+
     async function resolveUserIdForSubscription(subscription: Stripe.Subscription): Promise<string | null> {
       const fromMetadata = String((subscription.metadata as any)?.user_id || "").trim();
       if (fromMetadata) return fromMetadata;
@@ -134,7 +237,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       checkoutSessionId?: string | null;
       subscriptionId: string;
       sourceEvent: string;
-    }) {
+    }): Promise<{ userId: string; planKey: string | null; previousPlanKey: string | null; periodEndIso: string | null; cancelAtPeriodEnd: boolean }> {
+      const { data: previousByStripe } = await supabase
+        .from("subscriptions")
+        .select("plan")
+        .eq("stripe_subscription_id", args.subscriptionId)
+        .limit(1)
+        .maybeSingle();
+
       const subscription = await stripe.subscriptions.retrieve(args.subscriptionId, {
         expand: ["items.data.price"],
       });
@@ -171,6 +281,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         },
         updated_at: new Date(),
       });
+
+      return {
+        userId,
+        planKey: resolved?.planKey ?? (priceId ? String(priceId) : null),
+        previousPlanKey: previousByStripe?.plan ? String(previousByStripe.plan) : null,
+        periodEndIso: periodEnd ? periodEnd.toISOString() : null,
+        cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
+      };
     }
 
     if (event.type === "checkout.session.completed") {
@@ -179,11 +297,21 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const subscriptionId = session.subscription as string | null;
 
       if (userId && subscriptionId) {
-        await upsertSubscription({
+        const subCtx = await upsertSubscription({
           userId,
           checkoutSessionId: session.id,
           subscriptionId,
           sourceEvent: event.type,
+        });
+        await sendSubscriptionEmail({
+          kind: "plan_updated",
+          userId: subCtx.userId,
+          planKey: subCtx.planKey,
+          previousPlanKey: subCtx.previousPlanKey,
+          immediate: true,
+          periodEnd: subCtx.periodEndIso,
+          sourceEvent: event.type,
+          sourceEventId: event.id,
         });
       }
 
@@ -193,24 +321,91 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
       const sub = event.data.object as Stripe.Subscription;
       if (sub?.id) {
-        await upsertSubscription({
+        const subCtx = await upsertSubscription({
           subscriptionId: sub.id,
           sourceEvent: event.type,
         });
+
+        if (event.type === "customer.subscription.updated") {
+          const prev = ((event as any)?.data?.previous_attributes || {}) as Record<string, any>;
+          const becameCancelAtPeriodEnd =
+            typeof prev.cancel_at_period_end === "boolean" &&
+            prev.cancel_at_period_end === false &&
+            sub.cancel_at_period_end === true;
+          const itemsChanged = Boolean(prev.items);
+          if (becameCancelAtPeriodEnd) {
+            await sendSubscriptionEmail({
+              kind: "subscription_changed",
+              userId: subCtx.userId,
+              planKey: subCtx.planKey,
+              previousPlanKey: subCtx.previousPlanKey,
+              immediate: false,
+              effectiveAt: subCtx.periodEndIso,
+              periodEnd: subCtx.periodEndIso,
+              reason: "La cancelación o downgrade se aplicará al final del periodo.",
+              sourceEvent: event.type,
+              sourceEventId: event.id,
+            });
+          } else if (itemsChanged && subCtx.previousPlanKey && subCtx.previousPlanKey !== subCtx.planKey) {
+            await sendSubscriptionEmail({
+              kind: "plan_updated",
+              userId: subCtx.userId,
+              planKey: subCtx.planKey,
+              previousPlanKey: subCtx.previousPlanKey,
+              immediate: true,
+              periodEnd: subCtx.periodEndIso,
+              sourceEvent: event.type,
+              sourceEventId: event.id,
+            });
+          }
+        }
       }
       return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
     }
 
-    if (event.type === "invoice.paid") {
+    if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
       const invoice = event.data.object as any;
       const subscriptionId =
         typeof invoice.subscription === "string"
           ? invoice.subscription
           : ((invoice.subscription as any)?.id ?? null);
       if (subscriptionId) {
-        await upsertSubscription({
+        const subCtx = await upsertSubscription({
           subscriptionId,
           sourceEvent: event.type,
+        });
+        if (String(invoice?.billing_reason || "").toLowerCase() === "subscription_cycle") {
+          await sendSubscriptionEmail({
+            kind: "subscription_renewed",
+            userId: subCtx.userId,
+            planKey: subCtx.planKey,
+            periodEnd: subCtx.periodEndIso,
+            sourceEvent: event.type,
+            sourceEventId: event.id,
+          });
+        }
+      }
+      return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
+    }
+
+    if (event.type === "invoice.payment_failed") {
+      const invoice = event.data.object as any;
+      const subscriptionId =
+        typeof invoice.subscription === "string"
+          ? invoice.subscription
+          : ((invoice.subscription as any)?.id ?? null);
+      if (subscriptionId) {
+        const subCtx = await upsertSubscription({
+          subscriptionId,
+          sourceEvent: event.type,
+        });
+        await sendSubscriptionEmail({
+          kind: "payment_failed",
+          userId: subCtx.userId,
+          planKey: subCtx.planKey,
+          periodEnd: subCtx.periodEndIso,
+          sourceEvent: event.type,
+          sourceEventId: event.id,
         });
       }
       return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
@@ -219,6 +414,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (event.type === "customer.subscription.deleted") {
       const sub = event.data.object as Stripe.Subscription;
       if (sub?.id) {
+        const previousSub = await supabase
+          .from("subscriptions")
+          .select("user_id,plan,current_period_end")
+          .eq("stripe_subscription_id", sub.id)
+          .maybeSingle();
         const { error } = await supabase
           .from("subscriptions")
           .update({
@@ -229,6 +429,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .eq("stripe_subscription_id", sub.id);
 
         if (error) throw new Error(`Supabase cancel update failed: ${error.message}`);
+
+        const userId = String(previousSub.data?.user_id || "").trim() || (await resolveUserIdForSubscription(sub));
+        if (userId) {
+          await sendSubscriptionEmail({
+            kind: "subscription_changed",
+            userId,
+            planKey: String(previousSub.data?.plan || "free"),
+            immediate: true,
+            periodEnd: previousSub.data?.current_period_end ? new Date(previousSub.data.current_period_end).toISOString() : null,
+            reason: "Tu suscripción ha sido cancelada.",
+            sourceEvent: event.type,
+            sourceEventId: event.id,
+          });
+        }
       }
       return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
     }

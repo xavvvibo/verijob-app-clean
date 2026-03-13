@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireOwner } from "@/app/api/internal/owner/_lib";
+import { buildSubscriptionLifecycleEmail } from "@/lib/email/templates/subscriptionLifecycle";
+import { sendTransactionalEmail } from "@/server/email/sendTransactionalEmail";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -73,6 +75,57 @@ function makeFallbackCompanyName(emailRaw: unknown) {
   const email = String(emailRaw || "").trim().toLowerCase();
   const local = email.split("@")[0] || "empresa";
   return `Empresa ${local.slice(0, 40)}`;
+}
+
+function planLabel(raw: unknown) {
+  const plan = String(raw || "free").toLowerCase();
+  if (!plan || plan === "free") return "Free";
+  if (plan.includes("candidate_starter")) return "Candidate Starter";
+  if (plan.includes("candidate_proplus")) return "Candidate Pro+";
+  if (plan.includes("candidate_pro")) return "Candidate Pro";
+  if (plan.includes("company_access")) return "Company Access";
+  if (plan.includes("company_hiring")) return "Company Hiring";
+  if (plan.includes("company_team")) return "Company Team";
+  return plan;
+}
+
+function isCompanyPlan(raw: unknown) {
+  return String(raw || "").toLowerCase().startsWith("company_");
+}
+
+function getAppUrl() {
+  return String(process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es").replace(/\/+$/, "");
+}
+
+async function sendOwnerSubscriptionEmail(args: {
+  kind: "owner_plan_updated" | "trial_extended";
+  toEmail: string | null;
+  targetPlan?: string | null;
+  previousPlan?: string | null;
+  trialEnd?: string | null;
+  reason: string;
+}) {
+  const to = String(args.toEmail || "").trim().toLowerCase();
+  if (!to) return { ok: false as const, skipped: true as const, error: "target_email_missing" };
+  const appUrl = getAppUrl();
+  const company = isCompanyPlan(args.targetPlan) || isCompanyPlan(args.previousPlan);
+  const dashboardUrl = company ? `${appUrl}/company/subscription` : `${appUrl}/candidate/subscription`;
+  const tpl = buildSubscriptionLifecycleEmail({
+    kind: args.kind,
+    planName: planLabel(args.targetPlan),
+    previousPlanName: args.previousPlan ? planLabel(args.previousPlan) : null,
+    periodEnd: args.trialEnd || null,
+    immediate: true,
+    reason: args.reason,
+    dashboardUrl,
+    billingUrl: dashboardUrl,
+  });
+  return sendTransactionalEmail({
+    to,
+    subject: tpl.subject,
+    html: tpl.html,
+    text: tpl.text,
+  });
 }
 
 async function readProfileById(admin: any, userId: string, columns: Set<string>) {
@@ -219,12 +272,29 @@ export async function POST(req: Request, ctx: any) {
     });
     if (!logged.ok) return json(500, { error: "owner_action_log_failed", details: logged.error.message });
 
+    const targetEmail =
+      asText(targetAuthUser.user.email, 320) ||
+      asText((payload as any)?.email, 320) ||
+      null;
+    const emailResult = await sendOwnerSubscriptionEmail({
+      kind: "owner_plan_updated",
+      toEmail: targetEmail,
+      targetPlan,
+      previousPlan: (latestSub as any)?.plan || null,
+      reason,
+    });
+
     return json(200, {
       ok: true,
       executed: true,
       message: "Cambio de plan aplicado correctamente.",
       action: logged.action,
       result: resultRow,
+      email_notification: {
+        ok: Boolean((emailResult as any)?.ok),
+        skipped: Boolean((emailResult as any)?.skipped),
+        error: (emailResult as any)?.error || null,
+      },
     });
   }
 
@@ -310,12 +380,30 @@ export async function POST(req: Request, ctx: any) {
     });
     if (!logged.ok) return json(500, { error: "owner_action_log_failed", details: logged.error.message });
 
+    const targetEmail =
+      asText(targetAuthUser.user.email, 320) ||
+      asText((payload as any)?.email, 320) ||
+      null;
+    const emailResult = await sendOwnerSubscriptionEmail({
+      kind: "trial_extended",
+      toEmail: targetEmail,
+      targetPlan: (resultRow as any)?.plan || (latestSub as any)?.plan || null,
+      previousPlan: (latestSub as any)?.plan || null,
+      trialEnd: nextPeriodEnd,
+      reason,
+    });
+
     return json(200, {
       ok: true,
       executed: true,
       message: "Extensión de trial aplicada correctamente.",
       action: logged.action,
       result: resultRow,
+      email_notification: {
+        ok: Boolean((emailResult as any)?.ok),
+        skipped: Boolean((emailResult as any)?.skipped),
+        error: (emailResult as any)?.error || null,
+      },
     });
   }
 
