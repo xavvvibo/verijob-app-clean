@@ -294,8 +294,8 @@ async function OwnerOverviewServer() {
   startOfToday.setHours(0, 0, 0, 0);
   const startOfTodayMs = startOfToday.getTime();
 
-  const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicLinksRes, issuesRes, employmentRes, candidateProfilesRes, authUsersTotal] = await Promise.all([
-    admin.from("profiles").select("id,role,onboarding_completed,created_at,last_activity_at"),
+  const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicLinksRes, issuesRes, employmentRes, candidateProfilesRes, platformEventsRes, companyMembersRes, authUsersTotal] = await Promise.all([
+    admin.from("profiles").select("id,role,active_company_id,onboarding_completed,created_at,last_activity_at"),
     admin.from("companies").select("id,name,created_at,updated_at,status", { count: "exact" }),
     admin.from("verification_requests").select("id,status,requested_at,created_at,resolved_at,company_id,requested_by,verification_channel,external_resolved"),
     admin.from("evidences").select("id,evidence_type,document_type,validation_status,verification_request_id,uploaded_by,created_at"),
@@ -306,6 +306,8 @@ async function OwnerOverviewServer() {
     admin.from("issue_reports").select("id,status,created_at"),
     admin.from("employment_records").select("id,candidate_id,created_at,verification_status"),
     admin.from("candidate_profiles").select("user_id,trust_score"),
+    admin.from("platform_events").select("id,user_id,company_id,created_at"),
+    admin.from("company_members").select("user_id,company_id,role"),
     countAuthUsers(admin),
   ]);
 
@@ -320,6 +322,8 @@ async function OwnerOverviewServer() {
   const issues = Array.isArray(issuesRes.data) ? issuesRes.data : [];
   const employments = Array.isArray(employmentRes.data) ? employmentRes.data : [];
   const candidateProfilesData = Array.isArray(candidateProfilesRes.data) ? candidateProfilesRes.data : [];
+  const platformEvents = Array.isArray(platformEventsRes.data) ? platformEventsRes.data : [];
+  const companyMembers = Array.isArray(companyMembersRes.data) ? companyMembersRes.data : [];
   const profilesForActivity = profiles;
   const companiesForActivity = Array.isArray(companiesRes.data) ? companiesRes.data : [];
   const profileById = new Map(profiles.map((row: any) => [String(row.id || ""), row]));
@@ -365,18 +369,48 @@ async function OwnerOverviewServer() {
     const ts = Date.parse(String(p.created_at || ""));
     return Number.isFinite(ts) && ts >= startOfTodayMs;
   }).length;
-  const usersActiveToday = profilesForActivity.filter((p: any) => {
-    const ts = Date.parse(String(p.last_activity_at || ""));
+  const eventsToday = platformEvents.filter((ev: any) => {
+    const ts = Date.parse(String(ev.created_at || ""));
     return Number.isFinite(ts) && ts >= startOfTodayMs;
-  }).length;
-  const companiesActiveToday = companiesForActivity.filter((c: any) => {
-    const ts = Date.parse(String(c.updated_at || c.created_at || ""));
-    return Number.isFinite(ts) && ts >= startOfTodayMs;
-  }).length;
-  const candidatesActiveToday = candidateProfiles.filter((p: any) => {
-    const ts = Date.parse(String(p.last_activity_at || ""));
-    return Number.isFinite(ts) && ts >= startOfTodayMs;
-  }).length;
+  });
+  const todayEventsTotal = eventsToday.length;
+  const activeUsersTodaySet = new Set(
+    eventsToday.map((ev: any) => String(ev.user_id || "")).filter(Boolean)
+  );
+  const usersActiveToday = activeUsersTodaySet.size;
+  const candidatesActiveToday = new Set(
+    Array.from(activeUsersTodaySet).filter((id) => candidateIds.has(id))
+  ).size;
+
+  const memberCompanyIdsByUser = new Map<string, Set<string>>();
+  for (const member of companyMembers as any[]) {
+    const userId = String(member.user_id || "");
+    const companyId = String(member.company_id || "");
+    const role = String(member.role || "").toLowerCase();
+    if (!userId || !companyId) continue;
+    if (role !== "admin" && role !== "reviewer") continue;
+    const current = memberCompanyIdsByUser.get(userId) || new Set<string>();
+    current.add(companyId);
+    memberCompanyIdsByUser.set(userId, current);
+  }
+  const companiesActiveTodaySet = new Set<string>();
+  for (const ev of eventsToday as any[]) {
+    const companyId = String(ev.company_id || "");
+    if (companyId) companiesActiveTodaySet.add(companyId);
+    const userId = String(ev.user_id || "");
+    if (!userId) continue;
+    const actorProfile = profileById.get(userId) as any;
+    const actorRole = String(actorProfile?.role || "").toLowerCase();
+    if (actorRole === "company") {
+      const activeCompanyId = String(actorProfile?.active_company_id || "");
+      if (activeCompanyId) companiesActiveTodaySet.add(activeCompanyId);
+    }
+    const memberCompanySet = memberCompanyIdsByUser.get(userId);
+    if (memberCompanySet) {
+      for (const memberCompanyId of memberCompanySet) companiesActiveTodaySet.add(memberCompanyId);
+    }
+  }
+  const companiesActiveToday = companiesActiveTodaySet.size;
 
   const activeProfiles = profilesForActivity.filter((p: any) => {
     const ts = Date.parse(String(p.last_activity_at || ""));
@@ -814,10 +848,10 @@ async function OwnerOverviewServer() {
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <MetricCard title="Nuevos usuarios hoy" value={String(usersCreatedToday)} />
-          <MetricCard title="Usuarios activos hoy" value={String(usersActiveToday)} note="Basado en last_activity_at del día actual" />
-          <MetricCard title="Empresas activas hoy" value={String(companiesActiveToday)} />
-          <MetricCard title="Candidatos activos hoy" value={String(candidatesActiveToday)} />
-          <MetricCard title="Sesiones operativas hoy" value={String(usersActiveToday)} note="Proxy operativo por actividad registrada en perfiles" />
+          <MetricCard title="Usuarios activos hoy" value={String(usersActiveToday)} note="Usuarios únicos con al menos 1 evento hoy" />
+          <MetricCard title="Empresas activas hoy" value={String(companiesActiveToday)} note="Con evento asociado a company_id o actividad de actor company/admin/reviewer" />
+          <MetricCard title="Candidatos activos hoy" value={String(candidatesActiveToday)} note="Usuarios role=candidate con al menos 1 evento hoy" />
+          <MetricCard title="Eventos operativos hoy" value={String(todayEventsTotal)} note="Total de eventos registrados hoy en platform_events" />
         </div>
       </Section>
 
