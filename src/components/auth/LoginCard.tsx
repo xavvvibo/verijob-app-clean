@@ -17,6 +17,17 @@ function mapOtpErrorMessage(raw: string | null | undefined) {
   const normalized = msg.toLowerCase();
   if (!msg) return "No se pudo completar la operación. Inténtalo de nuevo.";
   if (
+    normalized.includes("sending magic link email") ||
+    normalized.includes("error sending") ||
+    normalized.includes("smtp") ||
+    normalized.includes("email provider")
+  ) {
+    return "No se pudo enviar el código por email en este momento. Inténtalo de nuevo en unos minutos.";
+  }
+  if (normalized.includes("email") && (normalized.includes("invalid") || normalized.includes("not valid"))) {
+    return "El email no es válido. Revisa el formato e inténtalo de nuevo.";
+  }
+  if (
     normalized.includes("expired") ||
     normalized.includes("invalid") ||
     normalized.includes("otp_expired") ||
@@ -28,6 +39,19 @@ function mapOtpErrorMessage(raw: string | null | undefined) {
     return "Has realizado demasiados intentos. Espera unos minutos y vuelve a intentarlo.";
   }
   return msg;
+}
+
+function getEmailRedirectTo() {
+  const envUrl = String(process.env.NEXT_PUBLIC_APP_URL || "").trim();
+  if (envUrl) {
+    try {
+      return new URL("/auth/callback", envUrl).toString();
+    } catch {}
+  }
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}/auth/callback`;
+  }
+  return undefined;
 }
 
 export default function LoginCard() {
@@ -64,14 +88,28 @@ export default function LoginCard() {
     setLoading(true);
     try {
       const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOtp({ email: v });
+      const { error } = await supabase.auth.signInWithOtp({
+        email: v,
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: getEmailRedirectTo(),
+        },
+      });
       if (error) {
+        console.error("[auth][login][sendOtp] supabase_error", {
+          message: error.message,
+          status: (error as any)?.status ?? null,
+          code: (error as any)?.code ?? null,
+        });
         setError(mapOtpErrorMessage(error.message));
         return;
       }
       setStep("otp");
       setNotice(step === "otp" ? "Hemos reenviado un nuevo código a tu email." : "Código enviado. Revisa tu correo.");
     } catch (err: any) {
+      console.error("[auth][login][sendOtp] unexpected_error", {
+        message: err?.message || "unknown_error",
+      });
       setError(mapOtpErrorMessage(err?.message ?? "Error inesperado."));
     } finally {
       setLoading(false);
@@ -106,12 +144,20 @@ export default function LoginCard() {
       });
 
       if (error) {
+        console.error("[auth][login][verifyOtp] supabase_error", {
+          message: error.message,
+          status: (error as any)?.status ?? null,
+          code: (error as any)?.code ?? null,
+        });
         setError(mapOtpErrorMessage(error.message));
         return;
       }
 
       window.location.href = next;
     } catch (err: any) {
+      console.error("[auth][login][verifyOtp] unexpected_error", {
+        message: err?.message || "unknown_error",
+      });
       setError(mapOtpErrorMessage(err?.message ?? "Error inesperado."));
     } finally {
       setLoading(false);

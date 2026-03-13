@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { vjEvents } from "@/lib/analytics";
 import { createClient } from "@/utils/supabase/browser";
+import type { EmailOtpType } from "@supabase/supabase-js";
 
 function safeNext(raw: string | null) {
   const fallback = "/dashboard";
@@ -18,6 +19,17 @@ function mapOtpErrorMessage(raw: string | null | undefined) {
   const normalized = msg.toLowerCase();
   if (!msg) return "No se pudo completar la operación. Inténtalo de nuevo.";
   if (
+    normalized.includes("sending magic link email") ||
+    normalized.includes("error sending") ||
+    normalized.includes("smtp") ||
+    normalized.includes("email provider")
+  ) {
+    return "No se pudo enviar el código por email en este momento. Inténtalo de nuevo en unos minutos.";
+  }
+  if (normalized.includes("email") && (normalized.includes("invalid") || normalized.includes("not valid"))) {
+    return "El email no es válido. Revisa el formato e inténtalo de nuevo.";
+  }
+  if (
     normalized.includes("expired") ||
     normalized.includes("invalid") ||
     normalized.includes("otp_expired") ||
@@ -29,6 +41,19 @@ function mapOtpErrorMessage(raw: string | null | undefined) {
     return "Has realizado demasiados intentos. Espera unos minutos y vuelve a intentarlo.";
   }
   return msg;
+}
+
+function getEmailRedirectTo() {
+  const envUrl = String(process.env.NEXT_PUBLIC_APP_URL || "").trim();
+  if (envUrl) {
+    try {
+      return new URL("/auth/callback", envUrl).toString();
+    } catch {}
+  }
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}/auth/callback`;
+  }
+  return undefined;
 }
 
 export default function SignupClient() {
@@ -56,6 +81,31 @@ export default function SignupClient() {
   const [msg, setMsg] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
 
+  async function verifySignupOtp(supabase: ReturnType<typeof createClient>, cleanEmail: string, cleanToken: string) {
+    const attemptedTypes: EmailOtpType[] = ["signup", "email"];
+    let lastError: any = null;
+
+    for (const otpType of attemptedTypes) {
+      const { error } = await supabase.auth.verifyOtp({
+        email: cleanEmail,
+        token: cleanToken,
+        type: otpType,
+      });
+
+      if (!error) return { ok: true as const, otpType };
+
+      lastError = error;
+      console.warn("[auth][signup][verifyOtp] attempt_failed", {
+        otpType,
+        message: error.message,
+        status: (error as any)?.status ?? null,
+        code: (error as any)?.code ?? null,
+      });
+    }
+
+    return { ok: false as const, error: lastError };
+  }
+
   async function sendOtp(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -68,9 +118,18 @@ export default function SignupClient() {
 
       const { error } = await supabase.auth.signInWithOtp({
         email: cleanEmail,
+        options: {
+          shouldCreateUser: true,
+          emailRedirectTo: getEmailRedirectTo(),
+        },
       });
 
       if (error) {
+        console.error("[auth][signup][sendOtp] supabase_error", {
+          message: error.message,
+          status: (error as any)?.status ?? null,
+          code: (error as any)?.code ?? null,
+        });
         setIsError(true);
         setMsg(mapOtpErrorMessage(error.message));
         return;
@@ -80,9 +139,12 @@ export default function SignupClient() {
       setStep("otp");
       setIsError(false);
       setMsg(step === "otp" ? "Hemos reenviado un nuevo código a tu email." : "Código enviado. Revisa tu email.");
-    } catch {
+    } catch (err: any) {
+      console.error("[auth][signup][sendOtp] unexpected_error", {
+        message: err?.message || "unknown_error",
+      });
       setIsError(true);
-      setMsg("Error inesperado enviando código");
+      setMsg(mapOtpErrorMessage(err?.message || "Error inesperado enviando código"));
     } finally {
       setLoading(false);
     }
@@ -99,13 +161,14 @@ export default function SignupClient() {
       const cleanEmail = email.trim().toLowerCase();
       const cleanToken = token.trim();
 
-      const { error } = await supabase.auth.verifyOtp({
-        email: cleanEmail,
-        token: cleanToken,
-        type: "email",
-      });
-
-      if (error) {
+      const verification = await verifySignupOtp(supabase, cleanEmail, cleanToken);
+      if (!verification.ok) {
+        const error = verification.error;
+        console.error("[auth][signup][verifyOtp] supabase_error", {
+          message: error.message,
+          status: (error as any)?.status ?? null,
+          code: (error as any)?.code ?? null,
+        });
         setIsError(true);
         setMsg(mapOtpErrorMessage(error.message));
         return;
@@ -131,9 +194,12 @@ export default function SignupClient() {
         : fallbackNext;
 
       window.location.href = finalNext;
-    } catch {
+    } catch (err: any) {
+      console.error("[auth][signup][verifyOtp] unexpected_error", {
+        message: err?.message || "unknown_error",
+      });
       setIsError(true);
-      setMsg("Error inesperado verificando código");
+      setMsg(mapOtpErrorMessage(err?.message || "Error inesperado verificando código"));
     } finally {
       setLoading(false);
     }

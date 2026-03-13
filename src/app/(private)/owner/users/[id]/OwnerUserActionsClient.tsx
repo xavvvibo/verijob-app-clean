@@ -39,7 +39,9 @@ const INITIAL_ACTION_STATE: ActionState = {
 const CANDIDATE_PLAN_OPTIONS = [
   "free",
   "candidate_starter_monthly",
+  "candidate_starter_yearly",
   "candidate_pro_monthly",
+  "candidate_pro_yearly",
   "candidate_proplus_monthly",
   "candidate_proplus_yearly",
 ];
@@ -47,9 +49,29 @@ const CANDIDATE_PLAN_OPTIONS = [
 const COMPANY_PLAN_OPTIONS = [
   "free",
   "company_access_monthly",
+  "company_access_yearly",
   "company_hiring_monthly",
+  "company_hiring_yearly",
   "company_team_monthly",
+  "company_team_yearly",
 ];
+
+function ownerActionErrorMessage(errorCode: string, details: string | null) {
+  if (errorCode === "invalid_target_plan") return "El plan seleccionado no está soportado en el catálogo actual.";
+  if (errorCode === "invalid_target_plan_for_role") return "Ese plan no es válido para el tipo de usuario seleccionado.";
+  if (errorCode === "missing_plan_mapping") return "Falta el mapeo interno del plan seleccionado. Revisa catálogo de billing.";
+  if (errorCode === "plan_change_failed") {
+    if (details && /constraint|check|enum|invalid input value/i.test(details)) {
+      return "No se pudo aplicar el plan porque el valor no es válido en la configuración actual.";
+    }
+    if (details && /null value|null/i.test(details)) {
+      return "No se pudo aplicar el plan por un dato interno obligatorio que falta en suscripción.";
+    }
+    return "No se pudo aplicar el cambio de plan. Revisa la configuración interna de suscripciones.";
+  }
+  if (errorCode === "owner_action_failed") return "La acción owner no pudo completarse.";
+  return "No se pudo ejecutar la acción.";
+}
 
 function normalizeRole(raw: string) {
   const r = String(raw || "").toLowerCase();
@@ -127,7 +149,11 @@ export default function OwnerUserActionsClient({
         }),
       });
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j?.error || "owner_action_failed");
+      if (!res.ok) {
+        const code = String(j?.error || "owner_action_failed");
+        const details = typeof j?.details === "string" ? j.details : null;
+        throw new Error(ownerActionErrorMessage(code, details));
+      }
       setActionState(actionType, {
         busy: false,
         isError: false,

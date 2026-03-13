@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/browser";
 import { TrustLevelBadge, VerificationBadge } from "@/components/brand/VerificationBadge";
 
@@ -193,129 +194,127 @@ function AvatarView({
   avatarUrl?: string | null;
   onAvatarSaved: (next: string | null) => void;
 }) {
-  const supabase = useMemo(() => createClient(), []);
-  const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [avatarInput, setAvatarInput] = useState(avatarUrl || "");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  async function saveAvatarUrl() {
+  async function uploadAvatar(file: File) {
     setSaving(true);
     setError(null);
     try {
-      const next = String(avatarInput || "").trim();
-      const payload = next ? next : null;
-      const { data: au } = await supabase.auth.getUser();
-      if (!au?.user?.id) throw new Error("Sesión no válida");
-      const { error: upErr } = await supabase.from("profiles").update({ avatar_url: payload }).eq("id", au.user.id);
-      if (upErr) throw new Error(upErr.message);
-      onAvatarSaved(payload);
-      setOpen(false);
+      const allowed = new Set(["image/jpeg", "image/png", "image/webp"]);
+      if (!allowed.has(file.type)) {
+        throw new Error("Formato no permitido. Usa JPG, PNG o WEBP.");
+      }
+      if (file.size <= 0 || file.size > 4 * 1024 * 1024) {
+        throw new Error("La imagen debe pesar menos de 4MB.");
+      }
+
+      const localPreview = URL.createObjectURL(file);
+      setPreviewUrl(localPreview);
+
+      const fd = new FormData();
+      fd.append("file", file);
+
+      const res = await fetch("/api/candidate/avatar", {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.details || data?.error || "No se pudo subir la foto.");
+
+      const next = String(data?.avatar_url || "").trim();
+      if (!next) throw new Error("No se pudo guardar la foto.");
+      onAvatarSaved(next);
+      setPreviewUrl(null);
     } catch (e: any) {
       setError(e?.message || "No se pudo actualizar la foto de perfil.");
+      setPreviewUrl(null);
     } finally {
       setSaving(false);
     }
   }
 
-  if (avatarUrl) {
-    return (
-      <div className="group relative">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={avatarUrl} alt={fullName || "Avatar"} className="h-28 w-28 rounded-full border border-gray-200 object-cover" />
+  async function removeAvatar() {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/candidate/avatar", { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.details || data?.error || "No se pudo quitar la foto.");
+      onAvatarSaved(null);
+      setPreviewUrl(null);
+    } catch (e: any) {
+      setError(e?.message || "No se pudo quitar la foto.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const finalAvatarUrl = previewUrl || avatarUrl || null;
+  const fallback = (fullName || "C")
+    .trim()
+    .split(/\s+/)
+    .map((x) => x[0] || "")
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "C";
+
+  return (
+    <div>
+      <div className="relative h-28 w-28">
+        {finalAvatarUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={finalAvatarUrl} alt={fullName || "Avatar"} className="h-28 w-28 rounded-full border border-gray-200 object-cover" />
+        ) : (
+          <div className="flex h-28 w-28 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-3xl font-semibold text-gray-700">
+            {fallback}
+          </div>
+        )}
+      </div>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          void uploadAvatar(file);
+          e.currentTarget.value = "";
+        }}
+      />
+
+      <div className="mt-3 flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => {
-            setAvatarInput(avatarUrl || "");
-            setOpen((v) => !v);
-          }}
-          className="absolute inset-0 hidden items-center justify-center rounded-full bg-black/45 text-xs font-semibold text-white group-hover:flex"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={saving}
+          className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
         >
-          Cambiar foto
+          {saving ? "Subiendo…" : "Subir foto"}
         </button>
-        {open ? (
-          <div className="absolute left-0 top-[116%] z-20 w-72 rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
-            <div className="text-xs font-semibold text-gray-900">URL de foto de perfil</div>
-            <input
-              value={avatarInput}
-              onChange={(e) => setAvatarInput(e.target.value)}
-              placeholder="https://..."
-              className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs"
-            />
-            {error ? <div className="mt-2 text-xs text-red-600">{error}</div> : null}
-            <div className="mt-2 flex gap-2">
-              <button
-                type="button"
-                onClick={() => void saveAvatarUrl()}
-                disabled={saving}
-                className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
-              >
-                {saving ? "Guardando…" : "Guardar"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAvatarInput("");
-                  void saveAvatarUrl();
-                }}
-                disabled={saving}
-                className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-60"
-              >
-                Quitar
-              </button>
-            </div>
-          </div>
+        {avatarUrl ? (
+          <button
+            type="button"
+            onClick={() => void removeAvatar()}
+            disabled={saving}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+          >
+            Quitar foto
+          </button>
         ) : null}
       </div>
-    );
-  }
-  const fallback = (fullName || "C").trim().charAt(0).toUpperCase();
-  return (
-    <div className="group relative">
-      <div className="flex h-28 w-28 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-3xl font-semibold text-gray-700">
-        {fallback}
-      </div>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="absolute inset-0 hidden items-center justify-center rounded-full bg-black/45 text-xs font-semibold text-white group-hover:flex"
-      >
-        Cambiar foto
-      </button>
-      {open ? (
-        <div className="absolute left-0 top-[116%] z-20 w-72 rounded-xl border border-gray-200 bg-white p-3 shadow-xl">
-          <div className="text-xs font-semibold text-gray-900">URL de foto de perfil</div>
-          <input
-            value={avatarInput}
-            onChange={(e) => setAvatarInput(e.target.value)}
-            placeholder="https://..."
-            className="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-xs"
-          />
-          {error ? <div className="mt-2 text-xs text-red-600">{error}</div> : null}
-          <div className="mt-2 flex gap-2">
-            <button
-              type="button"
-              onClick={() => void saveAvatarUrl()}
-              disabled={saving}
-              className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
-            >
-              {saving ? "Guardando…" : "Guardar"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50"
-            >
-              Cancelar
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <p className="mt-2 text-xs text-gray-500">JPG, PNG o WEBP. Máximo 4MB.</p>
+      {error ? <div className="mt-2 text-xs text-red-600">{error}</div> : null}
     </div>
   );
 }
 
 export default function CandidateOverview() {
+  const searchParams = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -397,6 +396,7 @@ export default function CandidateOverview() {
 
   const educationCount = useMemo(() => listCount(candidateProfile?.education), [candidateProfile]);
   const achievementsCount = useMemo(() => listCount(candidateProfile?.certifications), [candidateProfile]);
+  const importedFromCompanyCv = searchParams.get("company_cv_import") === "1";
 
   const profileCompletion = useMemo(() => {
     const checks = [
@@ -426,6 +426,15 @@ export default function CandidateOverview() {
 
   return (
     <div className="space-y-6">
+      {importedFromCompanyCv ? (
+        <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+          <p className="text-sm font-semibold text-amber-900">Perfil pre-rellenado desde un CV subido por empresa</p>
+          <p className="mt-2 text-sm leading-6 text-amber-800">
+            Hemos importado información preliminar desde el CV que una empresa incorporó a su proceso. Revísala, corrígela si hace falta y completa tu perfil antes de publicarlo o verificarlo.
+          </p>
+        </section>
+      ) : null}
+
       <header className="relative overflow-hidden rounded-3xl border border-blue-100 bg-gradient-to-br from-white via-blue-50/70 to-white p-7 shadow-sm">
         <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-blue-100/60 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 left-0 h-44 w-72 rounded-full bg-blue-100/40 blur-3xl" />

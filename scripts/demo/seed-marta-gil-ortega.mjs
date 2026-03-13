@@ -408,6 +408,56 @@ function calculateTrustSeedBreakdown() {
   };
 }
 
+async function upsertSingleRowByLookup({
+  admin,
+  table,
+  lookupColumn,
+  lookupValue,
+  insertRow,
+  updateRow,
+  label,
+}) {
+  const { data: existingRows, error: readErr } = await admin
+    .from(table)
+    .select("id")
+    .eq(lookupColumn, lookupValue)
+    .limit(2);
+
+  if (readErr) {
+    throw new Error(`${label} lookup failed: ${readErr.message}`);
+  }
+
+  const rows = Array.isArray(existingRows) ? existingRows : [];
+  if (rows.length > 1) {
+    throw new Error(
+      `${label} lookup found ${rows.length} filas para ${lookupColumn}=${lookupValue}. El seed aborta para no tocar datos ambiguos.`
+    );
+  }
+
+  if (rows.length === 1) {
+    const targetId = String(rows[0].id || "").trim();
+    if (!targetId) {
+      throw new Error(`${label} lookup devolvio una fila sin id utilizable.`);
+    }
+    const { error: updateErr } = await admin
+      .from(table)
+      .update(updateRow)
+      .eq("id", targetId);
+    if (updateErr) {
+      throw new Error(`${label} update failed: ${updateErr.message}`);
+    }
+    return { mode: "update", id: targetId };
+  }
+
+  const { error: insertErr } = await admin
+    .from(table)
+    .insert(insertRow);
+  if (insertErr) {
+    throw new Error(`${label} insert failed: ${insertErr.message}`);
+  }
+  return { mode: "insert", id: String(insertRow.id || "") };
+}
+
 async function seed(admin, candidateId) {
   const trust = calculateTrustSeedBreakdown();
   const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
@@ -447,10 +497,17 @@ async function seed(admin, candidateId) {
     .upsert(profilePayload, { onConflict: "id" });
   if (profileErr) throw new Error(`profiles upsert failed: ${profileErr.message}`);
 
-  const { error: candidateProfileErr } = await admin
-    .from("candidate_profiles")
-    .upsert(candidateProfilePayload, { onConflict: "user_id" });
-  if (candidateProfileErr) throw new Error(`candidate_profiles upsert failed: ${candidateProfileErr.message}`);
+  const { id: _candidateProfileId, ...candidateProfileUpdatePayload } = candidateProfilePayload;
+
+  await upsertSingleRowByLookup({
+    admin,
+    table: "candidate_profiles",
+    lookupColumn: "user_id",
+    lookupValue: candidateId,
+    insertRow: candidateProfilePayload,
+    updateRow: candidateProfileUpdatePayload,
+    label: "candidate_profiles",
+  });
 
   for (const item of EMPLOYMENTS) {
     const employmentPayload = {

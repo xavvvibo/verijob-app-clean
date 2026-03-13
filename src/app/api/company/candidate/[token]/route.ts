@@ -89,7 +89,15 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     p_candidate_id: link.candidate_id,
   });
 
-  if (gateErr) return json(500, { error: "Gate failed", debug: gateErr });
+  if (gateErr) {
+    console.error("[company-candidate-token] gate failed", {
+      candidate_id: link.candidate_id,
+      company_id: (requesterProfile as any)?.active_company_id || null,
+      message: gateErr.message,
+      code: (gateErr as any)?.code || null,
+    });
+    return json(500, { error: "Gate failed" });
+  }
 
   // Si no hay créditos (Pro/Scale/Starter): bloquea
   if (!gate?.allowed) {
