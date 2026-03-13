@@ -34,6 +34,29 @@ function json(status: number, body: any) {
   return NextResponse.json({ ...body, route_version: ROUTE_VERSION }, { status });
 }
 
+function docsMigrationPayload(code: "company_verification_documents_missing_migration" | "company_verification_documents_schema_drift") {
+  if (code === "company_verification_documents_missing_migration") {
+    return {
+      error: code,
+      user_message:
+        "La base actual aun no tiene activado el modulo documental de empresa. Aplica las migraciones SQL para habilitar subida, historico y revision.",
+      migration_files: [
+        "scripts/sql/f31_company_verification_documents.sql",
+        "scripts/sql/f34_company_verification_documents_lifecycle.sql",
+      ],
+    };
+  }
+  return {
+    error: code,
+    user_message:
+      "La base tiene una version parcial del modulo documental. Aplica las migraciones pendientes para activar lifecycle e importacion.",
+    migration_files: [
+      "scripts/sql/f31_company_verification_documents.sql",
+      "scripts/sql/f34_company_verification_documents_lifecycle.sql",
+    ],
+  };
+}
+
 function safeFilename(name: string) {
   const base = name.split("/").pop()?.split("\\").pop() ?? "document";
   const cleaned = base.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 140);
@@ -186,7 +209,7 @@ export async function GET() {
 
     if (docsRes.error) {
       if (isRelationMissingError(docsRes.error, "company_verification_documents")) {
-        return json(200, { documents: [], warning: "company_verification_documents_missing_migration" });
+        return json(200, { documents: [], warning: "company_verification_documents_missing_migration", ...docsMigrationPayload("company_verification_documents_missing_migration") });
       }
       if (isDocsSchemaDriftError(docsRes.error)) {
         docsRes = await admin
@@ -276,10 +299,7 @@ export async function POST(request: Request) {
 
     if (docsInsert.error) {
       if (isRelationMissingError(docsInsert.error, "company_verification_documents")) {
-        return json(400, {
-          error: "company_verification_documents_missing_migration",
-          details: "Ejecuta scripts/sql/f31_company_verification_documents.sql antes de subir documentos.",
-        });
+        return json(409, docsMigrationPayload("company_verification_documents_missing_migration"));
       }
       if (isDocsSchemaDriftError(docsInsert.error)) {
         const legacyInsertPayload = {
@@ -352,10 +372,7 @@ export async function PATCH(request: Request) {
       .maybeSingle();
     if (docErr) {
       if (isDocsSchemaDriftError(docErr)) {
-        return json(400, {
-          error: "company_verification_documents_schema_drift",
-          details: "Ejecuta scripts/sql/f34_company_verification_documents_lifecycle.sql para habilitar lifecycle/importación.",
-        });
+        return json(409, docsMigrationPayload("company_verification_documents_schema_drift"));
       }
       return json(400, { error: "document_read_failed", details: docErr.message });
     }
