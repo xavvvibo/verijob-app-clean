@@ -143,6 +143,13 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
   const verifiedEducation = Number(credibility?.verified_education_count ?? 0);
   const totalVerifications = Number(credibility?.total_verifications ?? 0);
   const evidencesCount = Number(credibility?.evidences_count ?? 0);
+  const lastVerificationAt = timeline
+    .map((item) => item.resolved_at || item.created_at || null)
+    .find(Boolean);
+  const actionableVerification = timeline.find((item) => {
+    const status = String(item.status || "").toLowerCase();
+    return Boolean(item.verification_id) && (status === "pending_company" || status === "reviewing" || status === "draft");
+  });
 
   return (
     <main className="max-w-5xl p-6">
@@ -164,6 +171,55 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
           </span>
         )}
       </div>
+
+      <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Resumen verificable</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Señales clave para entender en segundos cuánto del historial laboral está ya contrastado.
+            </p>
+          </div>
+          {actionableVerification?.verification_id ? (
+            <a
+              href={`/company/verification/${encodeURIComponent(String(actionableVerification.verification_id))}`}
+              className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+            >
+              Confirmar experiencia
+            </a>
+          ) : null}
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <SummaryField label="Estado del perfil" value={mapProfileStatus(String(credibility?.profile_status || "reviewing"))} />
+          <SummaryField label="Experiencias verificadas" value={String(verifiedWork)} />
+          <SummaryField label="Evidencias documentales" value={String(evidencesCount)} />
+          <SummaryField
+            label="Última verificación"
+            value={
+              lastVerificationAt
+                ? new Date(String(lastVerificationAt)).toLocaleDateString("es-ES")
+                : "Pendiente"
+            }
+          />
+          <SummaryField label="Trust Score" value={String(trustScore)} />
+        </div>
+        {timeline.length ? (
+          <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-4">
+            <div className="text-xs font-semibold uppercase tracking-wide text-blue-900">Trayectoria confirmada reciente</div>
+            <ul className="mt-2 space-y-2 text-sm text-slate-700">
+              {timeline.slice(0, 3).map((item, idx) => (
+                <li key={item.verification_id || `summary-${idx}`} className="flex flex-wrap items-center gap-2">
+                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusClass(item.status)}`}>
+                    {statusLabel(item.status)}
+                  </span>
+                  <span className="font-medium text-slate-900">{item.position || "Experiencia verificada"}</span>
+                  <span className="text-slate-500">{item.company_name || "Empresa no indicada"}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </section>
 
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between gap-3">
@@ -208,11 +264,20 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
                       {statusLabel(item.status)}
                     </span>
                   </div>
-                  <p className="mt-2 text-[11px] text-slate-600">
-                    Evidencias: <span className="font-semibold text-slate-900">{Number(item.evidence_count ?? 0)}</span>
-                    {" · "}
-                    Reutilizaciones: <span className="font-semibold text-slate-900">{Number(item.reuse_count ?? 0)}</span>
-                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                    <span>Evidencias: <span className="font-semibold text-slate-900">{Number(item.evidence_count ?? 0)}</span></span>
+                    <span>Reutilizaciones: <span className="font-semibold text-slate-900">{Number(item.reuse_count ?? 0)}</span></span>
+                    {item.verification_id ? (
+                      <a
+                        href={`/company/verification/${encodeURIComponent(String(item.verification_id))}`}
+                        className="ml-auto rounded-full border border-slate-300 bg-white px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-100"
+                      >
+                        {String(item.status || "").toLowerCase() === "verified" || String(item.status || "").toLowerCase() === "rejected"
+                          ? "Ver resolución"
+                          : "Confirmar experiencia"}
+                      </a>
+                    ) : null}
+                  </div>
                 </div>
               </li>
             ))}
@@ -314,6 +379,15 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
         </a>
       </div>
     </main>
+  );
+}
+
+function SummaryField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-slate-900">{value}</div>
+    </div>
   );
 }
 

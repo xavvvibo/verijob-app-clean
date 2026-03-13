@@ -29,6 +29,12 @@ export type PublicCandidateTeaser = {
   subscription_plan?: string | null;
   subscription_status?: string | null;
   qr_enabled?: boolean | null;
+  latest_verification_at?: string | null;
+  featured_verified_experiences?: Array<{
+    position?: string | null;
+    company_name?: string | null;
+    verification_badges?: string[] | null;
+  }> | null;
   trust_score_breakdown?: {
     verification?: number;
     evidence?: number;
@@ -116,6 +122,17 @@ function getModeCapabilities(mode: PublicProfilePreviewMode) {
     showContact: mode === "full",
     maxExperiences: mode === "public" ? 8 : 24,
   };
+}
+
+function formatCompactDate(value?: string | null) {
+  if (!value) return "Sin fecha";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "Sin fecha";
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(d);
 }
 
 export function CandidatePublicProfileRenderer({
@@ -214,6 +231,9 @@ export function CandidatePublicProfileRenderer({
   const hasLanguages = publicLanguages.length > 0;
   const hasAchievements = achievements.length > 0;
   const hasSkills = skills.length > 0;
+  const featuredVerifiedExperiences = Array.isArray(teaser?.featured_verified_experiences)
+    ? teaser.featured_verified_experiences
+    : [];
   const hasProfileCore =
     Boolean(teaser?.summary || teaser?.title || teaser?.location || teaser?.sector || teaser?.work_mode || teaser?.availability) ||
     verificationSummary.experiences > 0 ||
@@ -389,6 +409,55 @@ export function CandidatePublicProfileRenderer({
                 value={showPublicTrustScoreNumber ? trust : "—"}
                 hint={isOpenPublicView ? publicTrustLabel : trustLabel}
               />
+            </div>
+
+            <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-sm font-semibold text-slate-900">Resumen verificable</h2>
+                  <p className="mt-1 text-xs leading-5 text-slate-600">
+                    Lectura rápida de identidad profesional, verificación acumulada y señales de confianza del perfil.
+                  </p>
+                </div>
+                <span className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                  {isOpenPublicView ? publicTrustLabel : trustLabel}
+                </span>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <SummaryInfo label="Estado" value={profileStatus} />
+                <Stat label="Experiencias verificadas" value={verificationSummary.verified} />
+                <Stat label="Evidencias documentales" value={verificationSummary.evidences} />
+                <SummaryInfo
+                  label="Última verificación"
+                  value={teaser?.latest_verification_at ? formatCompactDate(teaser.latest_verification_at) : "Pendiente"}
+                />
+                <SummaryInfo
+                  label={isOpenPublicView && !showPublicTrustScoreNumber ? "Confianza" : "Trust Score"}
+                  value={String(isOpenPublicView && !showPublicTrustScoreNumber ? publicTrustLabel : trust)}
+                />
+              </div>
+              {!isOpenPublicView && featuredVerifiedExperiences.length ? (
+                <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
+                  <div className="text-xs font-semibold uppercase tracking-wide text-blue-900">Experiencias confirmadas destacadas</div>
+                  <ul className="mt-2 space-y-2">
+                    {featuredVerifiedExperiences.map((item, idx) => (
+                      <li key={`${item.position || "exp"}-${idx}`} className="rounded-xl border border-white/80 bg-white px-3 py-2">
+                        <div className="text-sm font-semibold text-slate-900">{item.position || "Experiencia verificada"}</div>
+                        {item.company_name ? <div className="text-xs text-slate-600">{item.company_name}</div> : null}
+                        {Array.isArray(item.verification_badges) && item.verification_badges.length ? (
+                          <div className="mt-1 flex flex-wrap gap-1.5">
+                            {item.verification_badges.map((badge) => (
+                              <span key={`${item.position || idx}-${badge}`} className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                                {badge}
+                              </span>
+                            ))}
+                          </div>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
             </div>
 
             {!isPrintMode ? (
@@ -886,6 +955,15 @@ function Stat({ label, value }: { label: string; value: number }) {
     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
       <div className="text-xs font-medium text-slate-500">{label}</div>
       <div className="mt-1 text-2xl font-semibold text-slate-900">{value}</div>
+    </div>
+  );
+}
+
+function SummaryInfo({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+      <div className="text-xs font-medium text-slate-500">{label}</div>
+      <div className="mt-1 text-sm font-semibold leading-5 text-slate-900">{value}</div>
     </div>
   );
 }

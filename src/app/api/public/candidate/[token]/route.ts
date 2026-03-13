@@ -366,6 +366,20 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     subscription_plan: latestSub?.plan || "free",
     subscription_status: normalizeSubscriptionStatus(latestSub?.status),
     qr_enabled: true,
+    latest_verification_at:
+      verifiedRows
+        .map((row: any) => row?.resolved_at || row?.created_at || null)
+        .find(Boolean) || null,
+    featured_verified_experiences: internalPreviewAllowed
+      ? experiencesEnriched
+          .filter((item: any) => Boolean(item?.is_verified))
+          .slice(0, 3)
+          .map((item: any) => ({
+            position: asText(item?.position, 120) || "Experiencia verificada",
+            company_name: asText(item?.company_name, 120) || null,
+            verification_badges: Array.isArray(item?.verification_badges) ? item.verification_badges.slice(0, 2) : [],
+          }))
+      : [],
     availability,
     work_mode: internalPreviewAllowed ? workMode : null,
     sector: internalPreviewAllowed ? sector : null,

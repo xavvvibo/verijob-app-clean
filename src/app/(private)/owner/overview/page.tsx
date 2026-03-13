@@ -294,7 +294,7 @@ async function OwnerOverviewServer() {
   startOfToday.setHours(0, 0, 0, 0);
   const startOfTodayMs = startOfToday.getTime();
 
-  const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicLinksRes, issuesRes, employmentRes, candidateProfilesRes, platformEventsRes, companyMembersRes, authUsersTotal] = await Promise.all([
+  const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicLinksRes, issuesRes, employmentRes, candidateProfilesRes, platformEventsRes, companyMembersRes, ownerActionsRes, authUsersTotal] = await Promise.all([
     admin.from("profiles").select("id,role,active_company_id,onboarding_completed,created_at,last_activity_at"),
     admin.from("companies").select("id,name,created_at,updated_at,status", { count: "exact" }),
     admin.from("verification_requests").select("id,status,requested_at,created_at,resolved_at,company_id,requested_by,verification_channel,external_resolved"),
@@ -308,6 +308,7 @@ async function OwnerOverviewServer() {
     admin.from("candidate_profiles").select("user_id,trust_score"),
     admin.from("platform_events").select("id,user_id,company_id,created_at"),
     admin.from("company_members").select("user_id,company_id,role"),
+    admin.from("owner_actions").select("id,target_user_id,action_type,reason,created_at").order("created_at", { ascending: false }).limit(20),
     countAuthUsers(admin),
   ]);
 
@@ -324,6 +325,7 @@ async function OwnerOverviewServer() {
   const candidateProfilesData = Array.isArray(candidateProfilesRes.data) ? candidateProfilesRes.data : [];
   const platformEvents = Array.isArray(platformEventsRes.data) ? platformEventsRes.data : [];
   const companyMembers = Array.isArray(companyMembersRes.data) ? companyMembersRes.data : [];
+  const ownerActions = Array.isArray(ownerActionsRes.data) ? ownerActionsRes.data : [];
   const profilesForActivity = profiles;
   const companiesForActivity = Array.isArray(companiesRes.data) ? companiesRes.data : [];
   const profileById = new Map(profiles.map((row: any) => [String(row.id || ""), row]));
@@ -490,6 +492,7 @@ async function OwnerOverviewServer() {
   });
 
   const subscriptionsCanceled = subscriptions.filter((s: any) => String(s.status || "").toLowerCase() === "canceled");
+  const subscriptionsPastDue = subscriptions.filter((s: any) => String(s.status || "").toLowerCase() === "past_due");
   const subscriptionsActivePrev30d = subscriptions.filter((s: any) => {
     const st = String(s.status || "").toLowerCase();
     if (st !== "active" && st !== "trialing") return false;
@@ -691,6 +694,63 @@ async function OwnerOverviewServer() {
   }
 
   const alerts: AlertItem[] = [];
+  const recentCriticalEvents = [
+    ...requests
+      .filter((row: any) => {
+        const ts = Date.parse(String(row.resolved_at || row.requested_at || row.created_at || ""));
+        return Number.isFinite(ts) && ts >= weekAgo && String(row.status || "").toLowerCase() === "verified";
+      })
+      .slice(0, 4)
+      .map((row: any) => ({
+        ts: String(row.resolved_at || row.requested_at || row.created_at || ""),
+        type: "verification_confirmed",
+        title: "Verificación confirmada",
+        detail: `${String((profileById.get(String(row.requested_by || "")) as any)?.full_name || "Candidato")} · ${String(row.verification_channel || "flujo estándar")}`,
+      })),
+    ...evidenceRows
+      .slice(0, 3)
+      .map((row: any) => ({
+        ts: String(row.created_at || ""),
+        type: "evidence_uploaded",
+        title: "Nueva evidencia",
+        detail: `${String((profileById.get(String(row.uploaded_by || "")) as any)?.full_name || "Usuario")} · ${String(row.document_type || row.evidence_type || "documento")}`,
+      })),
+    ...issues
+      .filter((row: any) => {
+        const ts = Date.parse(String(row.created_at || ""));
+        return Number.isFinite(ts) && ts >= weekAgo;
+      })
+      .slice(0, 3)
+      .map((row: any) => ({
+        ts: String(row.created_at || ""),
+        type: "issue_opened",
+        title: "Incidencia reciente",
+        detail: `Estado ${String(row.status || "abierta")}`,
+      })),
+    ...subscriptionsPastDue
+      .slice(0, 3)
+      .map((row: any) => ({
+        ts: String(row.created_at || ""),
+        type: "payment_failed",
+        title: "Pago pendiente/fallido",
+        detail: `${String((profileById.get(String(row.user_id || "")) as any)?.full_name || "Usuario")} · ${String(row.plan || "plan")}`,
+      })),
+    ...ownerActions
+      .filter((row: any) => {
+        const actionType = String(row.action_type || "").toLowerCase();
+        return actionType === "change_plan" || actionType === "extend_trial" || actionType === "cancel_subscription";
+      })
+      .slice(0, 4)
+      .map((row: any) => ({
+        ts: String(row.created_at || ""),
+        type: "owner_billing_action",
+        title: "Cambio manual owner",
+        detail: `${String((profileById.get(String(row.target_user_id || "")) as any)?.full_name || "Usuario")} · ${String(row.action_type || "")}`,
+      })),
+  ]
+    .filter((row: any) => row.ts)
+    .sort((a, b) => Date.parse(String(b.ts || "")) - Date.parse(String(a.ts || "")))
+    .slice(0, 8);
 
   if (verificationSuccessRate < 55 && completedVerifications >= 10) {
     alerts.push({
@@ -1039,6 +1099,40 @@ async function OwnerOverviewServer() {
           </div>
         </Section>
       ) : null}
+
+      <Section
+        title="Eventos recientes y críticos"
+        subtitle="Actividad reciente de alto impacto para operación, soporte y monetización."
+      >
+        <div className="grid gap-3 lg:grid-cols-2">
+          {recentCriticalEvents.length ? (
+            recentCriticalEvents.map((item, idx) => (
+              <article key={`${item.type}-${item.ts}-${idx}`} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-slate-900">{item.title}</div>
+                    <div className="mt-1 text-sm text-slate-600">{item.detail}</div>
+                  </div>
+                  <span className={`mt-0.5 inline-flex h-2.5 w-2.5 rounded-full ${
+                    item.type === "payment_failed" || item.type === "issue_opened"
+                      ? "bg-rose-600"
+                      : item.type === "verification_confirmed"
+                        ? "bg-emerald-600"
+                        : item.type === "owner_billing_action"
+                          ? "bg-violet-600"
+                          : "bg-blue-600"
+                  }`} />
+                </div>
+                <div className="mt-2 text-xs text-slate-500">{new Date(item.ts).toLocaleString("es-ES")}</div>
+              </article>
+            ))
+          ) : (
+            <article className="rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-600 shadow-sm">
+              Sin eventos críticos recientes fuera del flujo operativo habitual.
+            </article>
+          )}
+        </div>
+      </Section>
 
       <Section
         title="Acciones rápidas"

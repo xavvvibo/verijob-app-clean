@@ -73,7 +73,9 @@ function docStatusLabel(raw: unknown) {
   const v = String(raw || "").toLowerCase();
   if (v === "approved") return "Aprobada";
   if (v === "rejected") return "Rechazada";
-  return "En proceso de validación";
+  if (v === "pending_review") return "Pendiente de revisión";
+  if (v === "uploaded") return "Documento subido";
+  return "Pendiente de revisión";
 }
 
 function docStatusClass(raw: unknown) {
@@ -463,6 +465,9 @@ export default function CompanyProfilePage() {
               Última revisión: {new Date(String(profile.verification_last_reviewed_at)).toLocaleDateString("es-ES")}
             </p>
           ) : null}
+          <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
+            Cada documento mantiene trazabilidad propia: lifecycle, revisión manual, extracción de datos e importación controlada al perfil.
+          </div>
         </div>
 
         {documentsWarning ? (
