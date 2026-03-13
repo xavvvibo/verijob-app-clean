@@ -1,0 +1,524 @@
+{
+  "meta": {
+    "dataset_id": "verijob-demo-hosteleria-es-v1",
+    "locale": "es-ES",
+    "country": "España",
+    "sector": "hosteleria",
+    "created_at": "2026-03-13",
+    "intended_use": [
+      "demos_comerciales",
+      "validacion_ux_perfil_publico",
+      "validacion_ux_vista_empresa",
+      "material_comercial_hosteleria"
+    ],
+    "notes": [
+      "Perfiles demo coherentes con hostelería en España.",
+      "Diseñados para entenderse en menos de 1 minuto.",
+      "Incluyen mezcla realista de verificaciones, evidencias y pendientes."
+    ]
+  },
+  "profiles": [
+    {
+      "id": "demo-sala-laura-martin",
+      "segment": "sala",
+      "commercial_goal": "Mostrar estabilidad, trato al cliente y experiencia sólida de cara al público.",
+      "identity": {
+        "full_name": "Laura Martín Serrano",
+        "professional_title": "Camarera de sala | Jefa de rango",
+        "location": "Madrid",
+        "availability": {
+          "job_search_status": "abierta_a_oportunidades",
+          "availability_start": "15_dias",
+          "preferred_workday": "completa",
+          "preferred_roles": [
+            "Camarera",
+            "Jefa de rango"
+          ],
+          "work_zones": "Madrid centro, Chamberí, Salamanca y Retiro",
+          "availability_schedule": [
+            "turno_partido",
+            "tardes",
+            "fin_de_semana"
+          ]
+        },
+        "photo_recommendation": "Retrato profesional luminoso, uniforme neutro o americana negra, fondo claro y expresión cercana."
+      },
+      "professional_summary": "Profesional de sala con 7 años de experiencia en restauración organizada y servicio a la carta. Acostumbrada a ritmo alto, atención al detalle, coordinación con cocina y venta sugerida. Busca entorno estable donde aportar autonomía en sala y buen trato al cliente.",
+      "experiences": [
+        {
+          "company_name": "Restaurante La Marabanda",
+          "company_city": "Madrid",
+          "position": "Jefa de rango",
+          "start_date": "2023-02",
+          "end_date": "2026-02",
+          "employment_type": "indefinido",
+          "highlights": [
+            "Gestión de rango de 8 a 10 mesas en servicio de carta.",
+            "Coordinación con cocina y apoyo en cierres.",
+            "Venta sugerida de vinos, postres y fuera de carta."
+          ],
+          "verification_state": "verified_by_company",
+          "verification_label": "Verificada por empresa",
+          "evidences": [
+            {
+              "type": "nomina",
+              "status": "approved",
+              "scope": "experience"
+            }
+          ]
+        },
+        {
+          "company_name": "Taberna Puerta 57",
+          "company_city": "Madrid",
+          "position": "Camarera de sala",
+          "start_date": "2020-06",
+          "end_date": "2023-01",
+          "employment_type": "temporal_a_indefinido",
+          "highlights": [
+            "Servicio de menús y carta en local de alta rotación.",
+            "Manejo de TPV, cobro y cierre de caja de turno.",
+            "Apoyo en montaje de sala y atención de grupos."
+          ],
+          "verification_state": "verified_by_company",
+          "verification_label": "Verificada por empresa",
+          "evidences": [
+            {
+              "type": "contrato_trabajo",
+              "status": "approved",
+              "scope": "experience"
+            }
+          ]
+        },
+        {
+          "company_name": "Café Bulevar Goya",
+          "company_city": "Madrid",
+          "position": "Runner / Ayudante de sala",
+          "start_date": "2018-09",
+          "end_date": "2020-05",
+          "employment_type": "temporal",
+          "highlights": [
+            "Apoyo en servicio de terraza y barra.",
+            "Reposición, limpieza de estaciones y preparación de sala.",
+            "Primera experiencia continuada en hostelería."
+          ],
+          "verification_state": "pending",
+          "verification_label": "Pendiente",
+          "evidences": []
+        }
+      ],
+      "verification_overview": {
+        "verified_by_company": [
+          "Restaurante La Marabanda",
+          "Taberna Puerta 57"
+        ],
+        "verified_documentary": [],
+        "pending": [
+          "Café Bulevar Goya"
+        ]
+      },
+      "supporting_evidences": [
+        {
+          "type": "vida_laboral",
+          "status": "approved",
+          "scope": "global",
+          "purpose": "Refuerza continuidad laboral y fechas globales."
+        },
+        {
+          "type": "nomina",
+          "status": "approved",
+          "scope": "experience",
+          "linked_company": "Restaurante La Marabanda",
+          "purpose": "Demuestra relación laboral reciente."
+        },
+        {
+          "type": "contrato_trabajo",
+          "status": "approved",
+          "scope": "experience",
+          "linked_company": "Taberna Puerta 57",
+          "purpose": "Apoya una experiencia anterior relevante."
+        }
+      ],
+      "skills": [
+        "Servicio de sala",
+        "Protocolo de mesa",
+        "Venta sugerida",
+        "TPV y cierre de caja",
+        "Gestión de rango",
+        "Atención al cliente",
+        "Coordinación con cocina",
+        "Servicio de terraza"
+      ],
+      "languages": [
+        {
+          "language": "Español",
+          "level": "Nativo"
+        },
+        {
+          "language": "Inglés",
+          "level": "Profesional básico para atención al cliente"
+        }
+      ],
+      "achievements_and_certifications": [
+        "Formación interna en venta sugerida y upselling.",
+        "Reconocida como apoyo habitual en aperturas de turno y cierres."
+      ],
+      "trust_signal": {
+        "approx_trust_score": 71,
+        "label": "Confianza alta",
+        "reasoning": "Dos experiencias verificadas por empresa, vida laboral aprobada y evidencias concretas recientes; mantiene un tramo pendiente que hace la demo más creíble."
+      }
+    },
+    {
+      "id": "demo-cocina-david-ruiz",
+      "segment": "cocina",
+      "commercial_goal": "Mostrar progresión profesional, disciplina operativa y fiabilidad documental.",
+      "identity": {
+        "full_name": "David Ruiz Navarro",
+        "professional_title": "Ayudante de cocina | Cocinero",
+        "location": "Valencia",
+        "availability": {
+          "job_search_status": "busqueda_activa",
+          "availability_start": "inmediata",
+          "preferred_workday": "completa",
+          "preferred_roles": [
+            "Ayudante de cocina",
+            "Cocinero"
+          ],
+          "work_zones": "Valencia capital, Paterna y Burjassot",
+          "availability_schedule": [
+            "mananas",
+            "tardes",
+            "fin_de_semana"
+          ]
+        },
+        "photo_recommendation": "Retrato limpio y directo, chaquetilla de cocina lisa o polo oscuro, fondo neutro."
+      },
+      "professional_summary": "Perfil de cocina con progresión clara desde apoyo en producción hasta cocinero de partida. Acostumbrado a mise en place, control de mermas, fichas técnicas y cumplimiento de APPCC. Destaca por documentación ordenada y continuidad en entornos de volumen medio-alto.",
+      "experiences": [
+        {
+          "company_name": "Arrocería La Dársena",
+          "company_city": "Valencia",
+          "position": "Cocinero",
+          "start_date": "2024-01",
+          "end_date": "2026-02",
+          "employment_type": "indefinido",
+          "highlights": [
+            "Apoyo en partida de calientes y arroces.",
+            "Preparación diaria de mise en place y control de stock.",
+            "Cumplimiento de fichas técnicas y coordinación con jefe de cocina."
+          ],
+          "verification_state": "verified_documentary",
+          "verification_label": "Verificada documentalmente",
+          "evidences": [
+            {
+              "type": "certificado_empresa",
+              "status": "approved",
+              "scope": "experience"
+            },
+            {
+              "type": "nomina",
+              "status": "approved",
+              "scope": "experience"
+            }
+          ]
+        },
+        {
+          "company_name": "Grupo Mercado Norte",
+          "company_city": "Valencia",
+          "position": "Ayudante de cocina",
+          "start_date": "2021-05",
+          "end_date": "2023-12",
+          "employment_type": "temporal_a_indefinido",
+          "highlights": [
+            "Elaboraciones base, recepción de género y etiquetado.",
+            "Soporte en servicios de menú diario y eventos.",
+            "Control de limpieza y orden de cámaras."
+          ],
+          "verification_state": "verified_by_company",
+          "verification_label": "Verificada por empresa",
+          "evidences": [
+            {
+              "type": "contrato_trabajo",
+              "status": "approved",
+              "scope": "experience"
+            }
+          ]
+        },
+        {
+          "company_name": "Panadería Obrador San Telmo",
+          "company_city": "Valencia",
+          "position": "Auxiliar de obrador",
+          "start_date": "2019-10",
+          "end_date": "2021-04",
+          "employment_type": "temporal",
+          "highlights": [
+            "Apoyo en preelaboración, limpieza y preparación de pedidos.",
+            "Trabajo en producción temprana y seguimiento de tiempos."
+          ],
+          "verification_state": "pending",
+          "verification_label": "Pendiente",
+          "evidences": []
+        }
+      ],
+      "verification_overview": {
+        "verified_by_company": [
+          "Grupo Mercado Norte"
+        ],
+        "verified_documentary": [
+          "Arrocería La Dársena"
+        ],
+        "pending": [
+          "Panadería Obrador San Telmo"
+        ]
+      },
+      "supporting_evidences": [
+        {
+          "type": "vida_laboral",
+          "status": "approved",
+          "scope": "global",
+          "purpose": "Permite validar continuidad y secuencia laboral."
+        },
+        {
+          "type": "certificado_empresa",
+          "status": "approved",
+          "scope": "experience",
+          "linked_company": "Arrocería La Dársena",
+          "purpose": "Da fuerza a la verificación documental del puesto actual."
+        },
+        {
+          "type": "nomina",
+          "status": "approved",
+          "scope": "experience",
+          "linked_company": "Arrocería La Dársena",
+          "purpose": "Refuerza la experiencia más reciente."
+        },
+        {
+          "type": "contrato_trabajo",
+          "status": "approved",
+          "scope": "experience",
+          "linked_company": "Grupo Mercado Norte",
+          "purpose": "Acompaña la experiencia ya verificada por empresa."
+        }
+      ],
+      "skills": [
+        "Mise en place",
+        "Partida de calientes",
+        "Control de stock",
+        "APPCC",
+        "Etiquetado y conservación",
+        "Fichas técnicas",
+        "Preelaboración",
+        "Ritmo de servicio"
+      ],
+      "languages": [
+        {
+          "language": "Español",
+          "level": "Nativo"
+        },
+        {
+          "language": "Valenciano",
+          "level": "Conversación"
+        }
+      ],
+      "achievements_and_certifications": [
+        "Carné de manipulador de alimentos actualizado.",
+        "Apoyo recurrente en servicios de alto volumen durante fines de semana."
+      ],
+      "trust_signal": {
+        "approx_trust_score": 68,
+        "label": "Confianza sólida",
+        "reasoning": "Combina verificación por empresa y verificación documental, con vida laboral y documentos de respaldo suficientes para enseñar valor sin parecer artificialmente perfecto."
+      }
+    },
+    {
+      "id": "demo-responsable-marta-gil",
+      "segment": "responsable",
+      "commercial_goal": "Mostrar liderazgo operativo, responsabilidad de equipo y credibilidad alta.",
+      "identity": {
+        "full_name": "Marta Gil Ortega",
+        "professional_title": "Encargada | Responsable de turno | Jefa de sala",
+        "location": "Barcelona",
+        "availability": {
+          "job_search_status": "abierta_a_proyectos_selectivos",
+          "availability_start": "30_dias",
+          "preferred_workday": "completa",
+          "preferred_roles": [
+            "Encargada",
+            "Responsable de turno",
+            "Jefa de sala"
+          ],
+          "work_zones": "Barcelona ciudad y Hospitalet",
+          "availability_schedule": [
+            "turno_partido",
+            "tardes",
+            "fin_de_semana"
+          ]
+        },
+        "photo_recommendation": "Retrato ejecutivo-cercano, blazer o uniforme premium, fondo limpio y buena luz natural."
+      },
+      "professional_summary": "Responsable de hostelería con más de 10 años de trayectoria en sala y gestión operativa. Experiencia liderando equipos, organización de turnos, control de incidencias, coordinación con cocina y seguimiento de ventas. Perfil pensado para transmitir mando intermedio fiable y muy entendible por empresa.",
+      "experiences": [
+        {
+          "company_name": "Brasería Rambla Alta",
+          "company_city": "Barcelona",
+          "position": "Encargada",
+          "start_date": "2022-03",
+          "end_date": "2026-02",
+          "employment_type": "indefinido",
+          "highlights": [
+            "Coordinación de equipo de sala de 9 personas.",
+            "Organización de cuadrantes, incidencias y apertura/cierre.",
+            "Seguimiento de ticket medio, reservas y calidad de servicio."
+          ],
+          "verification_state": "verified_by_company",
+          "verification_label": "Verificada por empresa",
+          "evidences": [
+            {
+              "type": "nomina",
+              "status": "approved",
+              "scope": "experience"
+            }
+          ]
+        },
+        {
+          "company_name": "Grupo Bocana Tapas",
+          "company_city": "Barcelona",
+          "position": "Responsable de turno",
+          "start_date": "2019-01",
+          "end_date": "2022-02",
+          "employment_type": "indefinido",
+          "highlights": [
+            "Gestión operativa de servicio y coordinación entre barra, sala y cocina.",
+            "Formación de nuevas incorporaciones y control de caja.",
+            "Supervisión de estándares de servicio en picos de demanda."
+          ],
+          "verification_state": "verified_by_company",
+          "verification_label": "Verificada por empresa",
+          "evidences": [
+            {
+              "type": "certificado_empresa",
+              "status": "approved",
+              "scope": "experience"
+            }
+          ]
+        },
+        {
+          "company_name": "Hotel Mirador del Port",
+          "company_city": "Barcelona",
+          "position": "Jefa de sala",
+          "start_date": "2015-04",
+          "end_date": "2018-12",
+          "employment_type": "indefinido",
+          "highlights": [
+            "Coordinación de desayunos, eventos y servicio de restaurante.",
+            "Asignación de rangos y control de protocolo en eventos.",
+            "Interlocución habitual con recepción y dirección de F&B."
+          ],
+          "verification_state": "verified_documentary",
+          "verification_label": "Verificada documentalmente",
+          "evidences": [
+            {
+              "type": "contrato_trabajo",
+              "status": "approved",
+              "scope": "experience"
+            },
+            {
+              "type": "certificado_empresa",
+              "status": "approved",
+              "scope": "experience"
+            }
+          ]
+        },
+        {
+          "company_name": "Café Teatre Liceu",
+          "company_city": "Barcelona",
+          "position": "Camarera de sala",
+          "start_date": "2012-09",
+          "end_date": "2015-03",
+          "employment_type": "temporal_a_indefinido",
+          "highlights": [
+            "Base operativa de servicio en sala y atención de eventos pequeños.",
+            "Etapa inicial que explica la progresión hacia puestos de responsabilidad."
+          ],
+          "verification_state": "pending",
+          "verification_label": "Pendiente",
+          "evidences": []
+        }
+      ],
+      "verification_overview": {
+        "verified_by_company": [
+          "Brasería Rambla Alta",
+          "Grupo Bocana Tapas"
+        ],
+        "verified_documentary": [
+          "Hotel Mirador del Port"
+        ],
+        "pending": [
+          "Café Teatre Liceu"
+        ]
+      },
+      "supporting_evidences": [
+        {
+          "type": "vida_laboral",
+          "status": "approved",
+          "scope": "global",
+          "purpose": "Sostiene la antigüedad y la progresión completa."
+        },
+        {
+          "type": "nomina",
+          "status": "approved",
+          "scope": "experience",
+          "linked_company": "Brasería Rambla Alta",
+          "purpose": "Aporta prueba reciente del puesto de encargada."
+        },
+        {
+          "type": "certificado_empresa",
+          "status": "approved",
+          "scope": "experience",
+          "linked_company": "Grupo Bocana Tapas",
+          "purpose": "Refuerza funciones de mando intermedio."
+        },
+        {
+          "type": "contrato_trabajo",
+          "status": "approved",
+          "scope": "experience",
+          "linked_company": "Hotel Mirador del Port",
+          "purpose": "Justifica la verificación documental de una etapa anterior."
+        }
+      ],
+      "skills": [
+        "Liderazgo de equipos",
+        "Planificación de turnos",
+        "Apertura y cierre",
+        "Control de caja",
+        "Resolución de incidencias",
+        "Atención al cliente",
+        "Coordinación sala-cocina",
+        "Formación de personal"
+      ],
+      "languages": [
+        {
+          "language": "Español",
+          "level": "Nativo"
+        },
+        {
+          "language": "Catalán",
+          "level": "Profesional"
+        },
+        {
+          "language": "Inglés",
+          "level": "Profesional para atención al cliente y operativa"
+        }
+      ],
+      "achievements_and_certifications": [
+        "Curso de gestión de equipos y atención al cliente en restauración.",
+        "Responsable habitual de apertura, cierre y resolución de incidencias de turno."
+      ],
+      "trust_signal": {
+        "approx_trust_score": 88,
+        "label": "Confianza muy alta",
+        "reasoning": "Tres etapas relevantes sustentadas por verificaciones fuertes y evidencia documental variada; transmite mando, estabilidad y credibilidad comercial inmediata."
+      }
+    }
+  ]
+}
