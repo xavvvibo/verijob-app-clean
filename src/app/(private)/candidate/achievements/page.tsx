@@ -29,6 +29,13 @@ function normalizeAchievements(raw: any): AchievementItem[] {
   }));
 }
 
+function groupLabel(category: AchievementItem["category"]) {
+  if (category === "idioma") return "Idiomas";
+  if (category === "certificacion") return "Certificaciones";
+  if (category === "premio") return "Premios";
+  return "Otros logros";
+}
+
 function toPayload(items: AchievementItem[]) {
   return items
     .map((x) => ({
@@ -51,7 +58,7 @@ export default function CandidateAchievementsPage() {
     (async () => {
       const r = await fetch("/api/candidate/profile", { credentials: "include", cache: "no-store" as any });
       const j = await r.json().catch(() => ({}));
-      setItems(normalizeAchievements(j?.profile?.certifications));
+      setItems(normalizeAchievements(j?.profile?.achievements_catalog?.all || j?.profile?.achievements || j?.profile?.certifications));
       setLoading(false);
     })();
   }, []);
@@ -84,7 +91,7 @@ export default function CandidateAchievementsPage() {
     const body = {
       summary: profileJson?.profile?.summary ?? null,
       education: Array.isArray(profileJson?.profile?.education) ? profileJson.profile.education : [],
-      certifications: toPayload(items),
+      achievements: toPayload(items),
     };
 
     const r = await fetch("/api/candidate/profile", {
@@ -100,9 +107,16 @@ export default function CandidateAchievementsPage() {
       return;
     }
 
-    setItems(normalizeAchievements(j?.profile?.certifications));
+    setItems(normalizeAchievements(j?.profile?.achievements_catalog?.all || j?.profile?.achievements || j?.profile?.certifications));
     setMessage("Logros guardados correctamente.");
   }
+
+  const grouped = items.reduce<Record<string, AchievementItem[]>>((acc, item) => {
+    const key = item.category;
+    acc[key] = acc[key] || [];
+    acc[key].push(item);
+    return acc;
+  }, {});
 
   return (
     <div className="space-y-4">
@@ -132,6 +146,17 @@ export default function CandidateAchievementsPage() {
 
         {!loading && items.length === 0 ? (
           <p className="mt-4 text-sm text-gray-600">Todavía no has añadido idiomas, certificados o logros.</p>
+        ) : null}
+
+        {!loading && items.length > 0 ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {(["idioma", "certificacion", "premio", "otro"] as AchievementItem["category"][]).map((category) => (
+              <div key={category} className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">{groupLabel(category)}</div>
+                <div className="mt-2 text-2xl font-semibold text-gray-900">{grouped[category]?.length || 0}</div>
+              </div>
+            ))}
+          </div>
         ) : null}
 
         <div className="mt-4 space-y-3">

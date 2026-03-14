@@ -52,6 +52,12 @@ function formatDate(value: string | null | undefined) {
   }).format(date);
 }
 
+function formatPeriod(startDate: unknown, endDate: unknown) {
+  const start = String(startDate || "").trim();
+  const end = String(endDate || "").trim();
+  return `${start || "Fecha no detectada"} — ${end || "Actualidad"}`;
+}
+
 export default function CompanyCandidateImportAcceptClient({ token }: { token: string }) {
   const [payload, setPayload] = useState<InviteResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -131,6 +137,7 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
   const experienceCount = Array.isArray(parsePreview?.experiences) ? parsePreview.experiences.length : 0;
   const educationCount = Array.isArray(parsePreview?.education) ? parsePreview.education.length : 0;
   const languagesCount = Array.isArray(parsePreview?.languages) ? parsePreview.languages.length : 0;
+  const previewExperiences = Array.isArray(parsePreview?.experiences) ? parsePreview.experiences.slice(0, 6) : [];
 
   return (
     <div className="min-h-screen bg-slate-50 px-4 py-10">
@@ -208,18 +215,53 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
               </aside>
             </section>
 
+            <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-900">Hemos detectado estas experiencias en tu CV</h2>
+                  <p className="mt-2 text-sm text-slate-600">
+                    Antes de continuar, revisa rápidamente las experiencias detectadas. Después podrás confirmarlas o editarlas dentro de tu perfil.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                    {experienceCount} experiencias
+                  </span>
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                    {languagesCount} idiomas
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-5 space-y-3">
+                {previewExperiences.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+                    No hemos detectado experiencias con suficiente claridad en este CV. Aun así podrás revisar y completar tu perfil manualmente.
+                  </div>
+                ) : (
+                  previewExperiences.map((item: any, index: number) => (
+                    <article key={`${item?.company_name || "exp"}-${index}`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <p className="text-sm font-semibold text-slate-900">{item?.role_title || "Puesto detectado"}</p>
+                      <p className="mt-1 text-sm text-slate-600">{item?.company_name || "Empresa no detectada"}</p>
+                      <p className="mt-1 text-xs text-slate-500">{formatPeriod(item?.start_date, item?.end_date)}</p>
+                    </article>
+                  ))
+                )}
+              </div>
+            </section>
+
             {!auth?.user_id ? (
               <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
                 <h2 className="text-base font-semibold text-slate-900">Accede con tu email para continuar</h2>
                 <p className="mt-2 text-sm text-slate-600">
-                  Debes entrar o crear tu cuenta en VERIJOB con el email vinculado a la invitación para dejar constancia legal de la aceptación.
+                  Este acceso forma parte de un proceso de registro. Si ya tienes cuenta inicia sesión. Si no, crea tu cuenta para continuar con la importación del CV.
                 </p>
                 <div className="mt-4 flex flex-wrap gap-3">
-                  <Link href={loginHref} className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
-                    Iniciar sesión
-                  </Link>
                   <Link href={signupHref} className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50">
-                    Crear cuenta de candidato
+                    Continuar registro
+                  </Link>
+                  <Link href={loginHref} className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+                    Ya tengo cuenta → iniciar sesión
                   </Link>
                 </div>
               </section>
@@ -309,13 +351,21 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
                   {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div> : null}
                   {notice ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div> : null}
 
-                  <button
-                    type="submit"
-                    disabled={!allChecked || submitting}
-                    className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
-                  >
-                    {submitting ? "Registrando aceptación…" : "Aceptar y continuar"}
-                  </button>
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="submit"
+                      disabled={!allChecked || submitting}
+                      className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
+                    >
+                      {submitting ? "Registrando aceptación…" : "Confirmar experiencias y continuar"}
+                    </button>
+                    <Link
+                      href="/candidate/experience?new=1#manual-experience"
+                      className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                    >
+                      Editar antes de continuar
+                    </Link>
+                  </div>
                 </form>
               </section>
             )}

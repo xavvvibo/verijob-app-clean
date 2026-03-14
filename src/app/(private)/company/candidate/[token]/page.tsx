@@ -2,7 +2,11 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 import { headers } from "next/headers";
 
-type Ctx = { params: Promise<{ token: string }> };
+type Ctx = {
+  params: Promise<{ token: string }>;
+  searchParams?: Promise<{ view?: string }>;
+};
+
 type Availability = {
   job_search_status?: string | null;
   availability_start?: string | null;
@@ -11,6 +15,7 @@ type Availability = {
   work_zones?: string | null;
   availability_schedule?: string[] | null;
 };
+
 type Credibility = {
   verified_work_count?: number | null;
   verified_education_count?: number | null;
@@ -19,12 +24,14 @@ type Credibility = {
   trust_score?: number | null;
   profile_status?: "reviewing" | "partially_verified" | "verified" | string | null;
 };
+
 type TrustComponents = {
   verification?: number | null;
   evidence?: number | null;
   consistency?: number | null;
   reuse?: number | null;
 };
+
 type TimelineRow = {
   verification_id?: string | null;
   position?: string | null;
@@ -38,7 +45,18 @@ type TimelineRow = {
   resolved_at?: string | null;
 };
 
-async function fetchCompanyProfile(token: string) {
+type PreviewSnapshot = {
+  experiences_detected?: number | null;
+  total_verifications?: number | null;
+  approved_verifications?: number | null;
+  verification_types?: string[] | null;
+  languages_detected?: string[] | null;
+  trust_score?: number | null;
+  onboarding_completion?: number | null;
+  onboarding_status?: string | null;
+};
+
+async function fetchCompanyProfile(token: string, view: "preview" | "full") {
   const h = await headers();
   const forwardedProto = h.get("x-forwarded-proto") || "http";
   const forwardedHost = h.get("x-forwarded-host") || h.get("host");
@@ -48,8 +66,10 @@ async function fetchCompanyProfile(token: string) {
     process.env.NEXT_PUBLIC_SITE_URL ||
     "http://localhost:3000";
   const cookie = h.get("cookie") || "";
+  const url = new URL(`${base}/api/company/candidate/${token}`);
+  url.searchParams.set("mode", view);
 
-  const res = await fetch(`${base}/api/company/candidate/${token}`, {
+  const res = await fetch(String(url), {
     cache: "no-store",
     headers: cookie ? { cookie } : undefined,
   });
@@ -58,58 +78,186 @@ async function fetchCompanyProfile(token: string) {
   return { ok: res.ok, status: res.status, body };
 }
 
-export default async function CompanyCandidateTokenPage({ params }: Ctx) {
+export default async function CompanyCandidateTokenPage({ params, searchParams }: Ctx) {
   const { token } = await params;
-  const { ok, status, body } = await fetchCompanyProfile(token);
+  const query = (await searchParams) || {};
+  const requestedView = query.view === "full" ? "full" : "preview";
+  const { ok, status, body } = await fetchCompanyProfile(token, requestedView);
+  const preview: PreviewSnapshot = body?.preview ?? {};
 
   if (!ok) {
+    const upgradeUrl = body?.upgrade_url ?? "/company/upgrade";
+
+    if (status === 409) {
+      return (
+        <main className="max-w-4xl p-6">
+          <section className="rounded-3xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Perfil aún en preparación</p>
+            <h1 className="mt-2 text-2xl font-semibold text-amber-950">Este candidato aún está completando su perfil verificable</h1>
+            <p className="mt-3 text-sm leading-6 text-amber-900">
+              Recibirás una notificación cuando esté disponible. De momento puedes revisar el snapshot actual sin consumir una visualización completa.
+            </p>
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <SnapshotField label="Experiencias detectadas" value={String(preview?.experiences_detected ?? "—")} />
+              <SnapshotField label="Verificaciones" value={String(preview?.total_verifications ?? "—")} />
+              <SnapshotField label="Idiomas detectados" value={String(Array.isArray(preview?.languages_detected) ? preview.languages_detected.length : 0)} />
+              <SnapshotField label="Trust score" value={preview?.trust_score != null ? String(preview.trust_score) : "—"} />
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <a className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100" href={`/company/candidate/${encodeURIComponent(token)}`}>
+                Volver al snapshot
+              </a>
+              <a className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100" href="/company/candidates">
+                Ver base RRHH
+              </a>
+            </div>
+          </section>
+        </main>
+      );
+    }
+
+    if (status === 402) {
+      return (
+        <main className="max-w-4xl p-6">
+          <section className="rounded-3xl border border-rose-200 bg-rose-50 p-6 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Límite de visualizaciones</p>
+            <h1 className="mt-2 text-2xl font-semibold text-rose-950">Has alcanzado el límite de visualizaciones</h1>
+            <p className="mt-3 text-sm leading-6 text-rose-900">
+              Puedes seguir revisando el snapshot del candidato sin coste. Para abrir el perfil completo necesitas una visualización disponible.
+            </p>
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <SnapshotField label="Experiencias detectadas" value={String(preview?.experiences_detected ?? "—")} />
+              <SnapshotField label="Verificaciones" value={String(preview?.total_verifications ?? "—")} />
+              <SnapshotField label="Idiomas detectados" value={String(Array.isArray(preview?.languages_detected) ? preview.languages_detected.length : 0)} />
+              <SnapshotField label="Trust score" value={preview?.trust_score != null ? String(preview.trust_score) : "—"} />
+            </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <a className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black" href="/api/stripe/checkout?plan_key=company_single_cv">
+                Comprar pack de visualizaciones
+              </a>
+              <a className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50" href="/api/stripe/checkout?plan_key=company_pack_5">
+                Comprar pack de 5 visualizaciones
+              </a>
+              <a className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50" href={upgradeUrl}>
+                Actualizar plan empresa
+              </a>
+            </div>
+          </section>
+        </main>
+      );
+    }
+
     const msg =
       status === 401 ? "Necesitas iniciar sesión para acceder a esta vista privada." :
       status === 403 ? "Necesitas un contexto de empresa activo para acceder a esta vista." :
-      status === 402 ? "Has agotado tus créditos. Sube de plan o compra un pack." :
       status === 410 ? "Este enlace ha caducado." :
       status === 429 ? "Demasiadas solicitudes. Inténtalo más tarde." :
       "No encontrado.";
-
-    const upgradeUrl = body?.upgrade_url ?? "/company/upgrade";
 
     return (
       <main className="p-6 max-w-2xl">
         <h1 className="text-xl font-semibold">Perfil (Empresa)</h1>
         <p className="mt-3 text-sm text-gray-600">{msg}</p>
-
-        {status === 401 && (
+        {status === 401 ? (
           <div className="mt-4 flex gap-3">
-            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/login?mode=company">
-              Iniciar sesión
-            </a>
-            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/signup?mode=company">
-              Crear cuenta empresa
+            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/login?mode=company">Iniciar sesión</a>
+            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/signup?mode=company">Crear cuenta empresa</a>
+          </div>
+        ) : null}
+        {status === 403 ? (
+          <div className="mt-4 flex gap-3">
+            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company">Cambiar a empresa</a>
+            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/dashboard">Ir al panel principal</a>
+          </div>
+        ) : null}
+      </main>
+    );
+  }
+
+  if (body?.view_mode === "preview") {
+    const previewLanguages = Array.isArray(preview?.languages_detected) ? preview.languages_detected.slice(0, 6) : [];
+    const verificationTypes = Array.isArray(preview?.verification_types) ? preview.verification_types : [];
+    return (
+      <main className="max-w-5xl p-6">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Candidate Snapshot</p>
+              <h1 className="mt-2 text-2xl font-semibold text-slate-900">Vista previa del candidato</h1>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                Resumen sin datos personales para decidir si merece la pena abrir el perfil completo. Esta vista no consume visualizaciones.
+              </p>
+            </div>
+            <a
+              href={`/company/candidate/${encodeURIComponent(token)}?view=full`}
+              className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+            >
+              Ver perfil completo (-1 visualización)
             </a>
           </div>
-        )}
 
-        {status === 403 && (
-          <div className="mt-4 flex gap-3">
-            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company">
-              Cambiar a empresa
-            </a>
-            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/dashboard">
-              Ir al panel principal
-            </a>
+          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <SnapshotField label="Experiencias detectadas" value={String(preview?.experiences_detected ?? "—")} />
+            <SnapshotField label="Verificaciones" value={String(preview?.total_verifications ?? "—")} />
+            <SnapshotField label="Aprobadas" value={String(preview?.approved_verifications ?? "—")} />
+            <SnapshotField label="Idiomas detectados" value={String(previewLanguages.length)} />
+            <SnapshotField label="Trust score" value={preview?.trust_score != null ? String(preview.trust_score) : "Pendiente"} />
           </div>
-        )}
 
-        {status === 402 && (
-          <div className="mt-4 flex gap-3">
-            <a className="rounded-md border px-4 py-2 text-sm inline-block" href={upgradeUrl}>
-              Ir a Upgrade
-            </a>
-            <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/requests">
-              Volver
-            </a>
+          <div className="mt-6 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <h2 className="text-sm font-semibold text-slate-900">Señales visibles antes de abrir perfil</h2>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {verificationTypes.length ? (
+                  verificationTypes.map((item) => (
+                    <span key={item} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                      Verificación {item}
+                    </span>
+                  ))
+                ) : (
+                  <span className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                    Sin verificaciones todavía
+                  </span>
+                )}
+                <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${preview?.onboarding_status === "candidate_onboarding_in_progress" ? "border-amber-300 bg-amber-50 text-amber-800" : "border-emerald-300 bg-emerald-50 text-emerald-800"}`}>
+                  {preview?.onboarding_status === "candidate_onboarding_in_progress" ? "Perfil aún completándose" : "Perfil listo para revisar"}
+                </span>
+              </div>
+              <div className="mt-4">
+                <div className="mb-1 flex items-center justify-between text-sm text-slate-600">
+                  <span>Progreso de onboarding</span>
+                  <span className="font-semibold text-slate-900">{Number(preview?.onboarding_completion ?? 0)}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-slate-200">
+                  <div className="h-full rounded-full bg-slate-900" style={{ width: `${Math.max(0, Math.min(100, Number(preview?.onboarding_completion ?? 0)))}%` }} />
+                </div>
+              </div>
+            </article>
+
+            <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <h2 className="text-sm font-semibold text-slate-900">Idiomas detectados</h2>
+              {previewLanguages.length ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {previewLanguages.map((item) => (
+                    <span key={item} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-slate-600">Todavía no hay idiomas detectados en el snapshot.</p>
+              )}
+              <div className="mt-5 flex flex-wrap gap-3">
+                <a className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black" href={`/company/candidate/${encodeURIComponent(token)}?view=full`}>
+                  Ver perfil completo (-1 visualización)
+                </a>
+                <a className="inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50" href="/company/candidates">
+                  Volver a candidatos
+                </a>
+              </div>
+            </article>
           </div>
-        )}
+        </section>
       </main>
     );
   }
@@ -143,9 +291,7 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
   const verifiedEducation = Number(credibility?.verified_education_count ?? 0);
   const totalVerifications = Number(credibility?.total_verifications ?? 0);
   const evidencesCount = Number(credibility?.evidences_count ?? 0);
-  const lastVerificationAt = timeline
-    .map((item) => item.resolved_at || item.created_at || null)
-    .find(Boolean);
+  const lastVerificationAt = timeline.map((item) => item.resolved_at || item.created_at || null).find(Boolean);
   const actionableVerification = timeline.find((item) => {
     const status = String(item.status || "").toLowerCase();
     return Boolean(item.verification_id) && (status === "pending_company" || status === "reviewing" || status === "draft");
@@ -195,11 +341,7 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
           <SummaryField label="Evidencias documentales" value={String(evidencesCount)} />
           <SummaryField
             label="Última verificación"
-            value={
-              lastVerificationAt
-                ? new Date(String(lastVerificationAt)).toLocaleDateString("es-ES")
-                : "Pendiente"
-            }
+            value={lastVerificationAt ? new Date(String(lastVerificationAt)).toLocaleDateString("es-ES") : "Pendiente"}
           />
           <SummaryField label="Trust Score" value={String(trustScore)} />
         </div>
@@ -297,25 +439,18 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
                   <div className="text-xs text-gray-500">Email</div>
                   <div className="text-sm font-medium text-gray-900">{contact.email}</div>
                 </div>
-                <a
-                  className="rounded-md border px-3 py-2 text-sm inline-block"
-                  href={`mailto:${contact.email}`}
-                >
+                <a className="rounded-md border px-3 py-2 text-sm inline-block" href={`mailto:${contact.email}`}>
                   Enviar email
                 </a>
               </div>
             ) : null}
-
             {hasPhone ? (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-gray-200 p-3">
                 <div>
                   <div className="text-xs text-gray-500">Teléfono</div>
                   <div className="text-sm font-medium text-gray-900">{contact.phone}</div>
                 </div>
-                <a
-                  className="rounded-md border px-3 py-2 text-sm inline-block"
-                  href={`tel:${String(contact.phone).replace(/\s+/g, "")}`}
-                >
+                <a className="rounded-md border px-3 py-2 text-sm inline-block" href={`tel:${String(contact.phone).replace(/\s+/g, "")}`}>
                   Llamar
                 </a>
               </div>
@@ -330,33 +465,17 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
 
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-base font-semibold text-gray-900">Disponibilidad profesional</h2>
-
         {hasAvailabilityData ? (
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <Field label="Estado actual" value={mapJobSearchStatus(availability?.job_search_status)} />
             <Field label="Incorporación" value={mapAvailabilityStart(availability?.availability_start)} />
             <Field label="Tipo de jornada" value={mapWorkday(availability?.preferred_workday)} />
-            <Field
-              label="Áreas o funciones de interés"
-              value={roles.length ? roles.join(", ") : "Pendiente de completar"}
-            />
-            <Field
-              label="Zona o zonas preferidas"
-              value={
-                typeof availability?.work_zones === "string" && availability.work_zones.trim()
-                  ? availability.work_zones
-                  : "Pendiente de completar"
-              }
-            />
-            <Field
-              label="Disponibilidad horaria"
-              value={schedules.length ? schedules.join(", ") : "Pendiente de completar"}
-            />
+            <Field label="Áreas o funciones de interés" value={roles.length ? roles.join(", ") : "Pendiente de completar"} />
+            <Field label="Zona o zonas preferidas" value={typeof availability?.work_zones === "string" && availability.work_zones.trim() ? availability.work_zones : "Pendiente de completar"} />
+            <Field label="Disponibilidad horaria" value={schedules.length ? schedules.join(", ") : "Pendiente de completar"} />
           </div>
         ) : (
-          <p className="mt-3 text-sm text-gray-600">
-            El candidato todavía no ha completado su disponibilidad profesional.
-          </p>
+          <p className="mt-3 text-sm text-gray-600">El candidato todavía no ha completado su disponibilidad profesional.</p>
         )}
       </section>
 
@@ -371,14 +490,19 @@ export default async function CompanyCandidateTokenPage({ params }: Ctx) {
       </section>
 
       <div className="mt-6 flex gap-3">
-        <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/requests">
-          Continuar evaluación en solicitudes
-        </a>
-        <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/candidates">
-          Ver más candidatos
-        </a>
+        <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/requests">Continuar evaluación en solicitudes</a>
+        <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/candidates">Ver más candidatos</a>
       </div>
     </main>
+  );
+}
+
+function SnapshotField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className="mt-2 text-2xl font-semibold text-slate-900">{value}</div>
+    </div>
   );
 }
 

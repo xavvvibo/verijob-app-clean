@@ -185,6 +185,20 @@ function listCount(raw: any) {
   return Array.isArray(raw) ? raw.length : 0;
 }
 
+function formatMonthYear(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleDateString("es-ES", { month: "short", year: "numeric" });
+}
+
+function formatPeriod(start?: string | null, end?: string | null) {
+  const startText = formatMonthYear(start);
+  const endText = end ? formatMonthYear(end) : "Actualidad";
+  if (!startText && !end) return "Periodo no especificado";
+  return `${startText || "Inicio no definido"} · ${endText}`;
+}
+
 function AvatarView({
   fullName,
   avatarUrl,
@@ -395,8 +409,17 @@ export default function CandidateOverview() {
   }, [verifications, trustScore]);
 
   const educationCount = useMemo(() => listCount(candidateProfile?.education), [candidateProfile]);
-  const achievementsCount = useMemo(() => listCount(candidateProfile?.certifications), [candidateProfile]);
+  const achievementsCount = useMemo(
+    () => listCount(candidateProfile?.achievements_catalog?.all || candidateProfile?.achievements || candidateProfile?.certifications),
+    [candidateProfile]
+  );
   const importedFromCompanyCv = searchParams.get("company_cv_import") === "1";
+  const importedExperiences = useMemo(() => {
+    const rows = Array.isArray(candidateProfile?.raw_cv_json?.company_cv_import?.extracted_payload?.experiences)
+      ? candidateProfile.raw_cv_json.company_cv_import.extracted_payload.experiences
+      : [];
+    return rows.slice(0, 6);
+  }, [candidateProfile]);
   const companyCvPendingUpdates = useMemo(() => {
     const updates = Array.isArray(candidateProfile?.raw_cv_json?.company_cv_import_updates)
       ? candidateProfile.raw_cv_json.company_cv_import_updates
@@ -441,6 +464,20 @@ export default function CandidateOverview() {
           <p className="mt-2 text-sm leading-6 text-amber-800">
             Hemos importado información preliminar desde el CV que una empresa incorporó a su proceso. Revísala, corrígela si hace falta y completa tu perfil antes de publicarlo o verificarlo.
           </p>
+          {importedExperiences.length ? (
+            <div className="mt-4 rounded-2xl border border-amber-300 bg-white p-4">
+              <p className="text-sm font-semibold text-amber-950">Hemos detectado estas experiencias en tu CV</p>
+              <ul className="mt-3 space-y-2 text-sm text-slate-700">
+                {importedExperiences.map((item: any, index: number) => (
+                  <li key={`${item?.company_name || "exp"}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p className="font-semibold text-slate-900">{item?.role_title || "Experiencia detectada"}</p>
+                    <p className="mt-1 text-slate-600">{item?.company_name || "Empresa no indicada"}</p>
+                    <p className="mt-1 text-xs text-slate-500">{formatPeriod(item?.start_date || null, item?.end_date || null)}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {companyCvPendingUpdates > 0 ? (
             <div className="mt-4 flex flex-wrap items-center gap-3">
               <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-900">
@@ -448,6 +485,15 @@ export default function CandidateOverview() {
               </span>
               <Link href="/candidate/import-updates" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">
                 Revisar y actualizar mi perfil
+              </Link>
+            </div>
+          ) : importedExperiences.length ? (
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Link href="/candidate/experience" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">
+                Confirmar experiencias
+              </Link>
+              <Link href="/candidate/experience?new=1#manual-experience" className="inline-flex rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+                Editar antes de continuar
               </Link>
             </div>
           ) : null}

@@ -429,7 +429,7 @@ export default function CompanyCandidatesClient() {
                               href={`/company/candidate/${encodeURIComponent(row.candidate_public_token)}`}
                               className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
                             >
-                              Ver perfil
+                              Ver snapshot
                             </a>
                           ) : null}
                           {row.candidate_already_exists && row.invite_token ? (

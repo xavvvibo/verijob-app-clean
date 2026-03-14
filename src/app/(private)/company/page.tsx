@@ -75,6 +75,8 @@ type CandidateImportRow = {
   company_stage?: "none" | "saved" | "preselected" | string | null;
   created_at?: string | null;
   last_activity_at?: string | null;
+  total_verifications?: number | null;
+  approved_verifications?: number | null;
 };
 
 type CandidatesPayload = {
@@ -91,6 +93,15 @@ type PriorityItem = {
   tone: string;
   priority: number;
   meta: string;
+};
+
+type NotificationItem = {
+  id: string;
+  tone: string;
+  title: string;
+  detail: string;
+  href: string;
+  cta: string;
 };
 
 function formatDate(value?: string | null) {
@@ -289,6 +300,48 @@ export default function CompanyDashboard() {
       .slice(0, 5);
   }, [imports]);
 
+  const notifications = useMemo<NotificationItem[]>(() => {
+    return imports
+      .filter((item) => item.company_stage === "saved" || item.company_stage === "preselected")
+      .flatMap((item) => {
+        const label = item.linked_profile_name || item.candidate_name_raw || item.candidate_email || "Candidato";
+        const href = item.candidate_public_token ? `/company/candidate/${item.candidate_public_token}` : "/company/candidates";
+        const rows: NotificationItem[] = [];
+        if (item.display_status === "profile_created") {
+          rows.push({
+            id: `${item.id}-onboarding`,
+            tone: "border-indigo-200 bg-indigo-50 text-indigo-900",
+            title: `${label} ha terminado el onboarding inicial`,
+            detail: "El perfil ya está disponible para revisar en snapshot antes de consumir una visualización completa.",
+            href,
+            cta: "Revisar candidato",
+          });
+        }
+        if (item.display_status === "verifying") {
+          rows.push({
+            id: `${item.id}-verifying`,
+            tone: "border-blue-200 bg-blue-50 text-blue-900",
+            title: `${label} está avanzando en verificaciones`,
+            detail: "Ya hay actividad de validación sobre el perfil y conviene revisar su progreso.",
+            href,
+            cta: "Ver progreso",
+          });
+        }
+        if (Number(item.total_verifications || 0) > 0 && Number(item.total_verifications || 0) === Number(item.approved_verifications || 0)) {
+          rows.push({
+            id: `${item.id}-verified`,
+            tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
+            title: `${label} ya tiene verificaciones aprobadas`,
+            detail: `${Number(item.approved_verifications || 0)} validaciones aprobadas disponibles para decisión.`,
+            href,
+            cta: "Abrir perfil",
+          });
+        }
+        return rows;
+      })
+      .slice(0, 4);
+  }, [imports]);
+
   return (
     <div className="space-y-6">
       <section className="rounded-[28px] border border-slate-200 bg-white p-7 shadow-sm">
@@ -484,6 +537,37 @@ export default function CompanyDashboard() {
             </div>
           </div>
         </article>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Notificaciones de candidatos guardados</h2>
+            <p className="mt-1 text-sm text-slate-600">Alertas internas para no perder cambios útiles en candidatos que ya estás siguiendo.</p>
+          </div>
+          <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir candidatos</a>
+        </div>
+        <div className="mt-4 space-y-3">
+          {notifications.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+              Todavía no hay notificaciones internas. Guarda o preselecciona candidatos para recibir avisos cuando completen onboarding o avancen en verificaciones.
+            </div>
+          ) : (
+            notifications.map((item) => (
+              <article key={item.id} className={`rounded-2xl border p-4 ${item.tone}`}>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold">{item.title}</p>
+                    <p className="mt-1 text-sm opacity-90">{item.detail}</p>
+                  </div>
+                  <a href={item.href} className="inline-flex rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100">
+                    {item.cta}
+                  </a>
+                </div>
+              </article>
+            ))
+          )}
+        </div>
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">

@@ -38,6 +38,13 @@ function mapOtpErrorMessage(raw: string | null | undefined) {
   if (normalized.includes("rate") || normalized.includes("too many")) {
     return "Has realizado demasiados intentos. Espera unos minutos y vuelve a intentarlo.";
   }
+  if (
+    normalized.includes("signup") && normalized.includes("otp") ||
+    normalized.includes("signups not allowed") ||
+    normalized.includes("sign up not allowed")
+  ) {
+    return "Este acceso forma parte de un proceso de registro. Si ya tienes cuenta inicia sesión. Si no, crea tu cuenta para continuar con la importación del CV.";
+  }
   return msg;
 }
 
@@ -66,6 +73,7 @@ export default function LoginCard() {
     const qs = params.toString();
     return qs ? `/signup?${qs}` : "/signup";
   }, [mode, rawNext, next]);
+  const isCompanyCandidateImportFlow = next.startsWith("/company-candidate-import/");
 
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
@@ -167,6 +175,23 @@ export default function LoginCard() {
   return (
     <div className="w-full rounded-2xl border border-slate-200/80 bg-white/95 p-8 shadow-[0_12px_32px_rgba(15,23,42,0.10)]">
       <h1 className="text-2xl font-semibold text-slate-900">Accede a Verijob</h1>
+
+      {isCompanyCandidateImportFlow ? (
+        <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+          <p className="font-semibold">Este acceso forma parte de un proceso de registro.</p>
+          <p className="mt-1">
+            Si ya tienes cuenta inicia sesión. Si no, crea tu cuenta para continuar con la importación del CV.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link href={signupHref} className="inline-flex rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-900 hover:bg-blue-100">
+              Continuar registro
+            </Link>
+            <span className="inline-flex rounded-lg border border-blue-200 bg-white px-3 py-2 text-xs font-semibold text-blue-900">
+              Ya tengo cuenta → iniciar sesión
+            </span>
+          </div>
+        </div>
+      ) : null}
 
       <form onSubmit={step === "email" ? sendOtp : verifyOtp} className="mt-6 space-y-4">
         <label className="block">

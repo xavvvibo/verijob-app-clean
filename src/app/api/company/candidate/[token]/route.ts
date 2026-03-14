@@ -59,6 +59,8 @@ function toPublicName(fullNameRaw: unknown) {
 
 export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const { token: tokenParam } = await ctx.params;
+  const url = new URL(req.url);
+  const mode = url.searchParams.get("mode") === "full" ? "full" : "preview";
 
   // Auth (empresa logueada)
   const supabase = await createClient();
@@ -84,32 +86,6 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   }
   const link = linkResolved.link;
 
-  // Consumo de crédito (idempotente por company+candidato+periodo)
-  const { data: gate, error: gateErr } = await supabase.rpc("vj_consume_company_profile_view", {
-    p_candidate_id: link.candidate_id,
-  });
-
-  if (gateErr) {
-    console.error("[company-candidate-token] gate failed", {
-      candidate_id: link.candidate_id,
-      company_id: (requesterProfile as any)?.active_company_id || null,
-      message: gateErr.message,
-      code: (gateErr as any)?.code || null,
-    });
-    return json(500, { error: "Gate failed" });
-  }
-
-  // Si no hay créditos (Pro/Scale/Starter): bloquea
-  if (!gate?.allowed) {
-    return json(402, {
-      error: "No credits",
-      reason: gate?.reason ?? "no_credits",
-      credits_remaining: gate?.credits_remaining ?? null,
-      upgrade_url: "/company/upgrade",
-    });
-  }
-
-  // Perfil (por ahora igual que público, pero en ruta privada + gating ya aplicado)
   const { data: profile } = await service
     .from("profiles")
     .select("*,lifecycle_status,deleted_at")
@@ -124,7 +100,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
   const { data: candidateProfile } = await service
     .from("candidate_profiles")
-    .select("allow_company_email_contact,allow_company_phone_contact,job_search_status,availability_start,preferred_workday,preferred_roles,work_zones,availability_schedule,trust_score,trust_score_breakdown,education")
+    .select("allow_company_email_contact,allow_company_phone_contact,job_search_status,availability_start,preferred_workday,preferred_roles,work_zones,availability_schedule,trust_score,trust_score_breakdown,education,achievements,raw_cv_json")
     .eq("user_id", link.candidate_id)
     .maybeSingle();
 
@@ -132,6 +108,18 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     .from("verification_summary")
     .select("*")
     .eq("candidate_id", link.candidate_id);
+
+  const [experienceCountRes, linkedInviteRes] = await Promise.all([
+    service.from("profile_experiences").select("id", { count: "exact", head: true }).eq("user_id", link.candidate_id),
+    service
+      .from("company_candidate_import_invites")
+      .select("id,status,accepted_at,updated_at")
+      .eq("company_id", String((requesterProfile as any)?.active_company_id || ""))
+      .eq("linked_user_id", link.candidate_id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   await service
     .from("candidate_public_links")
@@ -202,6 +190,111 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     profile_status: profileStatus,
   };
   const breakdownRaw = (candidateProfile as any)?.trust_score_breakdown || {};
+  const experienceCount = Number(experienceCountRes.count || 0);
+  const profileLanguages = Array.isArray((profile as any)?.languages)
+    ? (profile as any).languages.map((x: any) => String(x || "").trim()).filter(Boolean)
+    : [];
+  const achievementLanguages = Array.isArray((candidateProfile as any)?.achievements)
+    ? (candidateProfile as any).achievements
+        .filter((item: any) => String(item?.category || "").toLowerCase() === "idioma")
+        .map((item: any) => String(item?.title || "").trim())
+        .filter(Boolean)
+    : [];
+  const importedLanguages = Array.isArray((candidateProfile as any)?.raw_cv_json?.company_cv_import?.extracted_payload?.languages)
+    ? (candidateProfile as any).raw_cv_json.company_cv_import.extracted_payload.languages
+        .map((item: any) => String(item || "").trim())
+        .filter(Boolean)
+    : [];
+  const languagesDetected = Array.from(new Set([...profileLanguages, ...achievementLanguages, ...importedLanguages]));
+  const verificationTypes = Array.from(
+    new Set(
+      verificationRows.flatMap((row: any) => {
+        const badges = new Set<string>();
+        const method = String(row?.verification_channel || "").toLowerCase();
+        const status = String(row?.status_effective || row?.status || "").toLowerCase();
+        if (status === "verified" || status === "approved" || !!row?.company_confirmed) badges.add("empresa");
+        if (method === "documentary" || Number(row?.evidence_count ?? row?.evidences_count ?? 0) > 0) badges.add("documental");
+        if (method === "email") badges.add("email");
+        return Array.from(badges);
+      })
+    )
+  );
+  const completionSignals = [
+    Number(Boolean((profile as any)?.full_name)),
+    Number(Boolean((profile as any)?.title)),
+    Number(Boolean((profile as any)?.location)),
+    Number(experienceCount > 0),
+    Number(Array.isArray((candidateProfile as any)?.education) && (candidateProfile as any).education.length > 0),
+    Number(languagesDetected.length > 0),
+  ];
+  const onboardingCompletion = clampPercent(
+    (completionSignals.reduce((acc, value) => acc + value, 0) / Math.max(1, completionSignals.length)) * 100
+  );
+  const importStatus = String((linkedInviteRes.data as any)?.status || "").toLowerCase();
+  const companyImportInProgress =
+    importStatus === "emailed" ||
+    importStatus === "uploaded" ||
+    importStatus === "accepted" ||
+    (Boolean((candidateProfile as any)?.raw_cv_json?.company_cv_import) && onboardingCompletion < 70);
+  const snapshot = {
+    experiences_detected: experienceCount,
+    total_verifications: totalVerifications,
+    approved_verifications: verifiedRows.length,
+    verification_types: verificationTypes,
+    languages_detected: languagesDetected,
+    trust_score: trustScore,
+    onboarding_completion: onboardingCompletion,
+    onboarding_status: companyImportInProgress ? "candidate_onboarding_in_progress" : "ready",
+  };
+
+  if (mode === "preview") {
+    return json(200, {
+      candidate_id: link.candidate_id,
+      view_mode: "preview",
+      preview: snapshot,
+      gate: {
+        allowed: true,
+        consumed: false,
+        requires_overage: false,
+        credits_remaining: null,
+      },
+    });
+  }
+
+  if (companyImportInProgress) {
+    return json(409, {
+      error: "candidate_profile_incomplete",
+      user_message: "Este candidato aún está completando su perfil verificable. Recibirás una notificación cuando esté disponible.",
+      preview: snapshot,
+      upgrade_url: "/company/subscription",
+    });
+  }
+
+  // Consumo de crédito solo cuando se pide el perfil completo.
+  const { data: gate, error: gateErr } = await supabase.rpc("vj_consume_company_profile_view", {
+    p_candidate_id: link.candidate_id,
+  });
+
+  if (gateErr) {
+    console.error("[company-candidate-token] gate failed", {
+      candidate_id: link.candidate_id,
+      company_id: (requesterProfile as any)?.active_company_id || null,
+      message: gateErr.message,
+      code: (gateErr as any)?.code || null,
+    });
+    return json(500, { error: "Gate failed" });
+  }
+
+  if (!gate?.allowed) {
+    return json(402, {
+      error: "No credits",
+      reason: gate?.reason ?? "no_credits",
+      credits_remaining: gate?.credits_remaining ?? null,
+      upgrade_url: "/company/upgrade",
+      preview: snapshot,
+    });
+  }
+
   const experiencesBase = Math.max(1, verificationRows.length || 0);
   const trustComponents = {
     verification: Number.isFinite(Number(breakdownRaw?.verification))
@@ -243,6 +336,8 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
   return json(200, {
     candidate_id: link.candidate_id,
+    view_mode: "full",
+    preview: snapshot,
     profile: safe,
     contact,
     availability,
