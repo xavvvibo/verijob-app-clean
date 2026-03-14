@@ -57,6 +57,39 @@ function toPublicName(fullNameRaw: unknown) {
   return secondInitial ? `${first} ${secondInitial}.` : first;
 }
 
+async function resolveConsumptionSource(args: {
+  service: ReturnType<typeof createServiceRoleClient>;
+  companyId: string;
+  viewerUserId: string;
+}) {
+  const latestPurchase = await args.service
+    .from("stripe_oneoff_purchases")
+    .select("product_key,created_at")
+    .eq("company_id", args.companyId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const purchaseKey = String((latestPurchase.data as any)?.product_key || "").trim().toLowerCase();
+  if (purchaseKey === "company_single_cv") return "single_unlock";
+  if (purchaseKey === "company_pack_5") return "pack_credit";
+
+  const latestGrant = await args.service
+    .from("credit_grants")
+    .select("source_type,metadata,created_at")
+    .eq("user_id", args.viewerUserId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  const sourceType = String((latestGrant.data as any)?.source_type || "").trim().toLowerCase();
+  const productKey = String((latestGrant.data as any)?.metadata?.product_key || "").trim().toLowerCase();
+  if (productKey === "company_single_cv") return "single_unlock";
+  if (productKey === "company_pack_5") return "pack_credit";
+  if (sourceType.includes("promo")) return "promo";
+  return "grant";
+}
+
 export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const { token: tokenParam } = await ctx.params;
   const url = new URL(req.url);
@@ -317,6 +350,36 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       upgrade_url: "/company/upgrade",
       preview: snapshot,
     });
+  }
+
+  if (gate?.consumed) {
+    const companyId = String((requesterProfile as any)?.active_company_id || "").trim();
+    if (companyId) {
+      const verificationId = String(verificationRows.find((row: any) => row?.verification_id)?.verification_id || "").trim() || null;
+      try {
+        const source = await resolveConsumptionSource({
+          service,
+          companyId,
+          viewerUserId: au.user.id,
+        });
+
+        await service.from("profile_view_consumptions").insert({
+          company_id: companyId,
+          viewer_user_id: au.user.id,
+          candidate_id: link.candidate_id,
+          verification_id: verificationId,
+          credits_spent: 1,
+          source,
+        });
+      } catch (logErr: any) {
+        console.error("[company-candidate-token] consumption log failed", {
+          candidate_id: link.candidate_id,
+          company_id: companyId,
+          viewer_user_id: au.user.id,
+          message: logErr?.message || String(logErr),
+        });
+      }
+    }
   }
 
   const experiencesBase = Math.max(1, verificationRows.length || 0);

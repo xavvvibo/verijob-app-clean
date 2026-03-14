@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import {
+  asTrimmedText,
+  buildCompanyProfileCompletionModel,
+  resolveCompanyDisplayName,
+} from "@/lib/company/company-profile";
 
 const ROUTE_VERSION = "company-profile-v1";
 
@@ -75,16 +80,6 @@ type CompanyVerificationDocumentRow = {
   created_at: string | null;
 };
 
-type CompanyChecklistItem = {
-  id: string;
-  title: string;
-  description: string;
-  status: "completed" | "pending" | "recommended" | "optional";
-  priority: "required" | "recommended" | "optional";
-  completed: number;
-  total: number;
-};
-
 const ARRAY_FIELDS = new Set([
   "common_roles_hired",
   "common_contract_types",
@@ -138,12 +133,6 @@ const ALLOWED_PATCH_FIELDS = [
   "market_segment",
   "onboarding_completed_at",
 ] as const;
-
-function asTrimmedText(value: unknown) {
-  if (value === null || value === undefined) return null;
-  const s = String(value).trim();
-  return s.length ? s : null;
-}
 
 function asStringArray(value: unknown) {
   if (!Array.isArray(value)) return [];
@@ -223,155 +212,6 @@ function isDocsSchemaDriftError(error: any) {
 
 function isFilledArray(value: unknown) {
   return Array.isArray(value) && value.map((x) => String(x || "").trim()).filter(Boolean).length > 0;
-}
-
-function buildProfileCompletionModel(args: {
-  profile: Partial<CompanyProfileRow>;
-  activeDocumentsCount: number;
-  memberCount: number;
-}) {
-  const { profile, activeDocumentsCount, memberCount } = args;
-  const requiredChecks = [
-    !!asTrimmedText(profile.legal_name),
-    !!asTrimmedText(profile.tax_id),
-    !!asTrimmedText(profile.contact_email),
-    !!asTrimmedText(profile.contact_phone),
-    !!asTrimmedText(profile.contact_person_name),
-    !!asTrimmedText(profile.country),
-    !!asTrimmedText(profile.province),
-    !!asTrimmedText(profile.city),
-    !!asTrimmedText(profile.fiscal_address),
-    !!asTrimmedText(profile.sector),
-    isFilledArray(profile.hiring_zones),
-  ];
-
-  const recommendedChecks = [
-    !!asTrimmedText(profile.trade_name),
-    !!asTrimmedText(profile.contact_person_role),
-    !!asTrimmedText(profile.primary_activity),
-    !!asTrimmedText(profile.employee_count_range),
-    !!asTrimmedText(profile.annual_hiring_volume_range),
-    isFilledArray(profile.common_roles_hired),
-    isFilledArray(profile.common_contract_types),
-    isFilledArray(profile.common_workday_types),
-    isFilledArray(profile.common_languages_required),
-    !!asTrimmedText(profile.business_description),
-    !!asTrimmedText(profile.website_url),
-    memberCount > 0,
-    activeDocumentsCount > 0,
-  ];
-
-  const optionalChecks = [
-    !!asTrimmedText(profile.subsector),
-    !!asTrimmedText(profile.business_model),
-    !!asTrimmedText(profile.market_segment),
-    !!asTrimmedText(profile.operating_address),
-    !!asTrimmedText(profile.postal_code),
-    typeof profile.locations_count === "number" && profile.locations_count > 0,
-    typeof profile.founding_year === "number" && profile.founding_year > 1900,
-  ];
-
-  const requiredCompleted = requiredChecks.filter(Boolean).length;
-  const recommendedCompleted = recommendedChecks.filter(Boolean).length;
-  const optionalCompleted = optionalChecks.filter(Boolean).length;
-
-  const requiredScore = requiredChecks.length ? (requiredCompleted / requiredChecks.length) * 70 : 0;
-  const recommendedScore = recommendedChecks.length ? (recommendedCompleted / recommendedChecks.length) * 30 : 0;
-  const score = Math.round(requiredScore + recommendedScore);
-
-  const checklist: CompanyChecklistItem[] = [
-    {
-      id: "identity_legal",
-      title: "Identidad legal",
-      description: "Razon social, NIF/CIF y base legal de empresa.",
-      priority: "required",
-      completed: [profile.legal_name, profile.tax_id].filter((x) => !!asTrimmedText(x)).length,
-      total: 2,
-      status:
-        !!asTrimmedText(profile.legal_name) && !!asTrimmedText(profile.tax_id) ? "completed" : "pending",
-    },
-    {
-      id: "contact_primary",
-      title: "Contacto principal",
-      description: "Persona y canales para operar con candidatos y revisiones.",
-      priority: "required",
-      completed: [
-        profile.contact_email,
-        profile.contact_phone,
-        profile.contact_person_name,
-      ].filter((x) => !!asTrimmedText(x)).length,
-      total: 3,
-      status:
-        !!asTrimmedText(profile.contact_email) &&
-        !!asTrimmedText(profile.contact_phone) &&
-        !!asTrimmedText(profile.contact_person_name)
-          ? "completed"
-          : "pending",
-    },
-    {
-      id: "hiring_coverage",
-      title: "Contratacion y cobertura",
-      description: "Sector, zonas y necesidades reales de contratacion.",
-      priority: "required",
-      completed: [
-        profile.sector,
-        isFilledArray(profile.hiring_zones) ? "ok" : null,
-        isFilledArray(profile.common_roles_hired) ? "ok" : null,
-        isFilledArray(profile.common_languages_required) ? "ok" : null,
-      ].filter(Boolean).length,
-      total: 4,
-      status:
-        !!asTrimmedText(profile.sector) && isFilledArray(profile.hiring_zones)
-          ? isFilledArray(profile.common_roles_hired) || isFilledArray(profile.common_languages_required)
-            ? "completed"
-            : "recommended"
-          : "pending",
-    },
-    {
-      id: "team_permissions",
-      title: "Equipo y permisos",
-      description: "Miembros activos con acceso al espacio empresa.",
-      priority: "recommended",
-      completed: memberCount > 1 ? 2 : memberCount > 0 ? 1 : 0,
-      total: 2,
-      status: memberCount > 1 ? "completed" : memberCount > 0 ? "recommended" : "pending",
-    },
-    {
-      id: "company_documents",
-      title: "Documentacion empresa",
-      description: "Documentos para revision manual y trazabilidad.",
-      priority: "recommended",
-      completed: activeDocumentsCount > 0 ? 1 : 0,
-      total: 1,
-      status: activeDocumentsCount > 0 ? "completed" : "recommended",
-    },
-    {
-      id: "optional_details",
-      title: "Detalles opcionales",
-      description: "Web, descripcion ampliada y datos complementarios.",
-      priority: "optional",
-      completed: optionalCompleted,
-      total: optionalChecks.length,
-      status: optionalCompleted > 0 ? "optional" : "optional",
-    },
-  ];
-
-  return {
-    score,
-    required: {
-      completed: requiredCompleted,
-      total: requiredChecks.length,
-    },
-    recommended: {
-      completed: recommendedCompleted,
-      total: recommendedChecks.length,
-    },
-    optional: {
-      completed: optionalCompleted,
-      total: optionalChecks.length,
-    },
-    checklist,
-  };
 }
 
 function humanizeDocumentsWarning(code: string | null) {
@@ -661,7 +501,7 @@ export async function GET() {
       .from("company_members")
       .select("id", { count: "exact", head: true })
       .eq("company_id", companyId);
-    const completion = buildProfileCompletionModel({
+    const completion = buildCompanyProfileCompletionModel({
       profile: baseProfile,
       activeDocumentsCount: activeDocuments.length,
       memberCount: Number(membersCount || 0),
@@ -684,6 +524,7 @@ export async function GET() {
     return NextResponse.json({
       profile: {
         ...baseProfile,
+        display_name: resolveCompanyDisplayName(baseProfile),
         company_verification_status: effectiveVerificationStatus,
         profile_completeness_score: completion.score,
         company_verification_review_status: reviewStatus,
@@ -760,10 +601,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const completion = buildProfileCompletionModel({
+    const { count: membersCount } = await admin
+      .from("company_members")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", companyId);
+
+    const completion = buildCompanyProfileCompletionModel({
       profile: candidateProfile as any,
       activeDocumentsCount: docsForStatus.filter((d) => String((d as any)?.lifecycle_status || "active").toLowerCase() !== "deleted").length,
-      memberCount: 1,
+      memberCount: Number(membersCount || 0),
     });
     const computedScore = completion.score;
     patch.profile_completeness_score = computedScore;
@@ -792,6 +638,7 @@ export async function POST(request: Request) {
       ok: true,
       profile: {
         ...(data || patch),
+        display_name: resolveCompanyDisplayName((data || patch) as any),
         company_verification_status: effectiveVerificationStatus,
         profile_completeness_score: computedScore,
       },

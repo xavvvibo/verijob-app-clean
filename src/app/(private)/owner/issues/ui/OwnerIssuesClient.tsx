@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type Item = {
@@ -295,20 +296,27 @@ export default function OwnerIssuesClient() {
                     <td className="px-3 py-3 font-semibold text-slate-900">{severityLabel(it.severity)}</td>
                     <td className="px-3 py-3">{it.http_status || "—"}</td>
                     <td className="px-3 py-3">{it.error_code ?? "-"}</td>
-                    <td className="px-3 py-3 font-medium">{it.path}</td>
+                    <td className="px-3 py-3 font-medium">
+                      <div>{it.path}</div>
+                      {String(it.path || "").startsWith("/") ? (
+                        <Link href={it.path} className="mt-1 inline-flex text-xs font-semibold text-slate-700 underline">
+                          Abrir ruta
+                        </Link>
+                      ) : null}
+                    </td>
                     <td className="px-3 py-3 max-w-[340px] truncate" title={it.message}>{it.message || "Sin descripción"}</td>
                     <td className="px-3 py-3">{statusLabel(it.status)}</td>
                     <td className="px-3 py-3">
                       <div className="flex gap-2">
                         <button
-                          disabled={!isUuid(String(it.id || ""))}
+                          disabled={!isUuid(String(it.id || "")) || it.status === "in_progress"}
                           onClick={() => setStatus(it.id, "in_progress")}
                           className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           En curso
                         </button>
                         <button
-                          disabled={!isUuid(String(it.id || ""))}
+                          disabled={!isUuid(String(it.id || "")) || it.status === "resolved"}
                           onClick={() => setStatus(it.id, "resolved")}
                           className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
                         >

@@ -16,7 +16,7 @@ function jobStatusLabel(raw: unknown) {
 export default async function OwnerAiOpsPage() {
   const supabase = await createClient();
 
-  const { data: jobs } = await supabase
+  const { data: jobs, error } = await supabase
     .from("cv_parse_jobs")
     .select("id,status,created_at,started_at,finished_at,updated_at")
     .order("created_at", { ascending: false })
@@ -49,9 +49,18 @@ export default async function OwnerAiOpsPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Procesamiento automático</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Módulo técnico owner para monitorizar jobs internos de parsing y salud operativa de automatizaciones.
+          Módulo técnico owner para monitorizar jobs internos de parsing y salud operativa de automatizaciones conectadas.
+        </p>
+        <p className="mt-2 text-xs text-slate-500">
+          Fuente actual: `cv_parse_jobs`. Si esta fuente no existe o no es accesible, el módulo lo indica de forma explícita.
         </p>
       </section>
+
+      {error ? (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          No se pudo cargar `cv_parse_jobs`. El panel mantiene el módulo visible para owner, pero la infraestructura de jobs no está accesible desde esta consulta.
+        </section>
+      ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <article className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -80,7 +89,9 @@ export default async function OwnerAiOpsPage() {
         <h2 className="text-lg font-semibold text-slate-900">Últimos jobs</h2>
         {rows.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
-            No hay jobs disponibles todavía para mostrar actividad.
+            {error
+              ? "No hay datos disponibles porque la fuente de jobs no está conectada o no existe todavía."
+              : "La infraestructura está conectada, pero todavía no hay jobs disponibles para mostrar actividad."}
           </div>
         ) : (
           <div className="mt-4 overflow-auto">

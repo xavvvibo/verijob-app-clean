@@ -1,3 +1,5 @@
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+
 type CompanyCandidateImportInviteEmailParams = {
   companyName?: string | null;
   candidateEmail?: string | null;
@@ -9,7 +11,7 @@ type CompanyCandidateImportInviteEmailParams = {
 export function buildCompanyCandidateImportInviteEmail(
   params: CompanyCandidateImportInviteEmailParams,
 ) {
-  const companyName = String(params.companyName || "una empresa").trim();
+  const companyName = resolveCompanyDisplayName(params.companyName, "Tu empresa");
   const candidateName = String(params.candidateName || "").trim();
   const targetRole = String(params.targetRole || "").trim();
   const candidateEmail = String(params.candidateEmail || "").trim();

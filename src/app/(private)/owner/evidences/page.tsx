@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
+import { createServerSupabaseClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 
 export const dynamic = "force-dynamic";
 
@@ -32,11 +34,17 @@ export default async function OwnerEvidencesPage({
   const stateFilter = String(sp.state || "all").toLowerCase();
   const linkedFilter = String(sp.linked || "all").toLowerCase();
 
-  const supabase = await createClient();
+  const sessionClient = await createServerSupabaseClient();
+  const { data: auth } = await sessionClient.auth.getUser();
+  if (!auth?.user) redirect("/login?next=/owner/evidences");
+  const { data: ownerProfile } = await sessionClient.from("profiles").select("role").eq("id", auth.user.id).maybeSingle();
+  const ownerRole = String(ownerProfile?.role || "").toLowerCase();
+  if (!["owner", "admin"].includes(ownerRole)) redirect("/dashboard?forbidden=1&from=owner");
 
+  const supabase = createServiceRoleClient();
   const { data: evidences } = await supabase
     .from("evidences")
-    .select("id,uploaded_by,evidence_type,verification_request_id,storage_path,created_at")
+    .select("id,uploaded_by,evidence_type,document_type,validation_status,verification_request_id,storage_path,file_sha256,created_at")
     .order("created_at", { ascending: false })
     .limit(300);
 
@@ -59,11 +67,11 @@ export default async function OwnerEvidencesPage({
   const requests = new Map((Array.isArray(requestsRes.data) ? requestsRes.data : []).map((r: any) => [String(r.id), r]));
 
   const normalized = rows.map((row: any) => {
-    const type = evidenceLabel(row.evidence_type);
+    const type = evidenceLabel(row.evidence_type || row.document_type);
     const req = requests.get(String(row.verification_request_id || "")) as any;
-    const state = verificationState(req?.status);
+    const state = row.validation_status ? String(row.validation_status).toLowerCase() : verificationState(req?.status);
     const linked = Boolean(row.verification_request_id);
-    return { row, type, state, linked };
+    return { row, type, state, linked, verificationId: String(row.verification_request_id || "") };
   });
 
   const filtered = normalized.filter((entry) => {
@@ -80,8 +88,9 @@ export default async function OwnerEvidencesPage({
     acc[entry.type] = (acc[entry.type] || 0) + 1;
     return acc;
   }, {});
-  const noState = normalized.filter((x) => x.state === "pendiente_validacion").length;
+  const noState = normalized.filter((x) => x.state === "pendiente_validacion" || x.state === "needs_review").length;
   const unlinked = normalized.filter((x) => !x.linked).length;
+  const hashed = normalized.filter((x) => Boolean((x.row as any)?.file_sha256)).length;
 
   const types = Array.from(new Set(normalized.map((x) => x.type.toLowerCase()))).filter(Boolean);
 
@@ -90,7 +99,7 @@ export default async function OwnerEvidencesPage({
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Evidencias</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Control de volumen, estado operativo y vinculación de evidencias con procesos de verificación.
+          Control de volumen, validación y vinculación documental con acceso rápido a usuario y verificación.
         </p>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -107,6 +116,10 @@ export default async function OwnerEvidencesPage({
             <div className="text-xl font-semibold text-slate-900">{normalized.length}</div>
           </div>
         </div>
+
+        <p className="mt-3 text-xs text-slate-500">
+          Señal antifraude disponible en {hashed} evidencias con hash. Si no hay hash, el panel no presupone duplicidad ni fraude.
+        </p>
 
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
           {Object.keys(byType).length === 0 ? <span className="text-slate-500">Sin evidencias registradas.</span> : null}
@@ -131,6 +144,7 @@ export default async function OwnerEvidencesPage({
             <option value="pendiente">Pendiente</option>
             <option value="verificada">Verificada</option>
             <option value="rechazada">Rechazada</option>
+            <option value="needs_review">Pendiente de validación</option>
             <option value="pendiente_validacion">Pendiente de validación</option>
           </select>
           <select name="linked" defaultValue={linkedFilter} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
@@ -154,13 +168,14 @@ export default async function OwnerEvidencesPage({
           </div>
         ) : (
           <div className="overflow-auto">
-            <table className="min-w-[1080px] w-full text-sm">
+            <table className="min-w-[1240px] w-full text-sm">
               <thead>
                 <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-3 py-3">Candidato</th>
                   <th className="px-3 py-3">Tipo</th>
                   <th className="px-3 py-3">Estado</th>
                   <th className="px-3 py-3">Vinculación</th>
+                  <th className="px-3 py-3">Contexto</th>
                   <th className="px-3 py-3">Documento</th>
                   <th className="px-3 py-3">Fecha</th>
                 </tr>
@@ -175,10 +190,15 @@ export default async function OwnerEvidencesPage({
                       <td className="px-3 py-3">
                         <div className="font-semibold text-slate-900">{profile?.full_name || profile?.email || "Usuario"}</div>
                         <div className="text-xs text-slate-500">{profile?.email || "—"}</div>
+                        {row.uploaded_by ? (
+                          <Link href={`/owner/users/${row.uploaded_by}`} className="mt-1 inline-flex text-xs font-semibold text-slate-700 underline">
+                            Abrir usuario
+                          </Link>
+                        ) : null}
                       </td>
                       <td className="px-3 py-3">{entry.type}</td>
                       <td className="px-3 py-3">
-                        <span className={entry.state === "pendiente_validacion" ? "font-semibold text-amber-700" : "text-slate-800"}>
+                        <span className={entry.state === "pendiente_validacion" || entry.state === "needs_review" ? "font-semibold text-amber-700" : "text-slate-800"}>
                           {entry.state.replaceAll("_", " ")}
                         </span>
                       </td>
@@ -189,8 +209,22 @@ export default async function OwnerEvidencesPage({
                           <span className="font-semibold text-amber-700">Sin vinculación</span>
                         )}
                       </td>
+                      <td className="px-3 py-3">
+                        {entry.linked ? (
+                          <Link href={`/owner/verifications?focus=${encodeURIComponent(entry.verificationId)}&q=${encodeURIComponent(entry.verificationId)}`} className="inline-flex text-xs font-semibold text-slate-700 underline">
+                            Abrir verificación
+                          </Link>
+                        ) : (
+                          <span className="text-xs text-slate-500">Pendiente de asociar a verificación</span>
+                        )}
+                      </td>
                       <td className="px-3 py-3">{doc}</td>
-                      <td className="px-3 py-3">{row.created_at ? new Date(row.created_at).toLocaleDateString("es-ES") : "—"}</td>
+                      <td className="px-3 py-3">
+                        <div>{row.created_at ? new Date(row.created_at).toLocaleDateString("es-ES") : "—"}</div>
+                        <Link href={`/owner/evidences/${row.id}/open`} target="_blank" className="mt-1 inline-flex text-xs font-semibold text-slate-700 underline">
+                          Abrir documento
+                        </Link>
+                      </td>
                     </tr>
                   );
                 })}

@@ -4,6 +4,10 @@ import {
   computeCompanyKpiFallback,
   mergeCompanyKpis,
 } from "@/lib/company-dashboard-kpis";
+import {
+  buildCompanyProfileCompletionModel,
+  resolveCompanyDisplayName,
+} from "@/lib/company/company-profile";
 
 const ROUTE_VERSION = "company-dashboard-kpis-v2-clean-2026-03-05";
 
@@ -20,74 +24,25 @@ async function resolveCompanyName(supabase: any, companyId: string): Promise<str
   try {
     const { data: companyData } = await supabase
       .from("companies")
-      .select("name,legal_name,trade_name,display_name")
+      .select("name,legal_name,trade_name")
       .eq("id", companyId)
       .maybeSingle();
-
-    const companyName =
-      companyData?.trade_name ||
-      companyData?.display_name ||
-      companyData?.name ||
-      companyData?.legal_name ||
-      null;
-
-    if (companyName) return String(companyName);
+    const companyName = resolveCompanyDisplayName(companyData, "");
+    if (companyName) return companyName;
   } catch {}
 
   try {
     const { data: profileData } = await supabase
       .from("company_profiles")
-      .select("name,legal_name,display_name,trade_name")
+      .select("legal_name,trade_name")
       .eq("company_id", companyId)
       .maybeSingle();
 
-    const profileName =
-      profileData?.trade_name ||
-      profileData?.display_name ||
-      profileData?.name ||
-      profileData?.legal_name ||
-      null;
-
-    if (profileName) return String(profileName);
+    const profileName = resolveCompanyDisplayName(profileData, "");
+    if (profileName) return profileName;
   } catch {}
 
   return null;
-}
-
-function asFilled(value: unknown) {
-  if (value === null || value === undefined) return false;
-  return String(value).trim().length > 0;
-}
-
-function computeProfileCompleteness(profile: any) {
-  if (!profile) return 0;
-  const checks = [
-    asFilled(profile.legal_name),
-    asFilled(profile.trade_name),
-    asFilled(profile.tax_id),
-    asFilled(profile.website_url),
-    asFilled(profile.contact_email),
-    asFilled(profile.contact_phone),
-    asFilled(profile.country),
-    asFilled(profile.province),
-    asFilled(profile.city),
-    asFilled(profile.fiscal_address),
-    asFilled(profile.sector),
-    asFilled(profile.subsector),
-    asFilled(profile.primary_activity),
-    asFilled(profile.employee_count_range),
-    asFilled(profile.annual_hiring_volume_range),
-    Array.isArray(profile.common_roles_hired) && profile.common_roles_hired.length > 0,
-    Array.isArray(profile.common_contract_types) && profile.common_contract_types.length > 0,
-    Array.isArray(profile.common_workday_types) && profile.common_workday_types.length > 0,
-    Array.isArray(profile.common_languages_required) && profile.common_languages_required.length > 0,
-    Array.isArray(profile.hiring_zones) && profile.hiring_zones.length > 0,
-    asFilled(profile.market_segment),
-    asFilled(profile.business_description),
-    asFilled(profile.verification_document_type),
-    asFilled(profile.verification_document_uploaded_at),
-  ];
-  return Math.round((checks.filter(Boolean).length / checks.length) * 100);
 }
 
 function normalizeCompanyVerificationStatus(input: unknown) {
@@ -294,6 +249,29 @@ export async function GET() {
       ])
     );
 
+    const { data: profileData } = await supabase
+      .from("company_profiles")
+      .select("*")
+      .eq("company_id", activeCompanyId)
+      .maybeSingle();
+    const companyName = await resolveCompanyName(supabase, activeCompanyId);
+    const activeDocumentsCountRes = await supabase
+      .from("company_verification_documents")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", activeCompanyId)
+      .neq("lifecycle_status", "deleted");
+    const membersCountRes = await supabase
+      .from("company_members")
+      .select("id", { count: "exact", head: true })
+      .eq("company_id", activeCompanyId);
+    const completion = buildCompanyProfileCompletionModel({
+      profile: profileData || {},
+      activeDocumentsCount: activeDocumentsCountRes.error && isDocsSchemaError(activeDocumentsCountRes.error)
+        ? 0
+        : Number(activeDocumentsCountRes.count || 0),
+      memberCount: Number(membersCountRes.count || 0),
+    });
+
     const recentRequests = recentBase.map((row: any) => {
       const employment = employmentById.get(String(row?.employment_record_id || "")) as any;
       return {
@@ -307,14 +285,6 @@ export async function GET() {
         period_end: employment?.end_date || null,
       };
     });
-
-    const { data: profileData } = await supabase
-      .from("company_profiles")
-      .select("*")
-      .eq("company_id", activeCompanyId)
-      .maybeSingle();
-
-    const companyName = await resolveCompanyName(supabase, activeCompanyId);
     const membershipRole = memberRes?.data?.role ? String(memberRes.data.role) : null;
     const subscriptionPlan = subRes?.data?.plan ? String(subRes.data.plan) : null;
     const subscriptionStatus = subRes?.data?.status ? String(subRes.data.status) : "free";
@@ -334,7 +304,7 @@ export async function GET() {
       plan_label: normalizePlanLabel(subscriptionPlan),
       subscription_status: subscriptionStatus,
       company_verification_status: companyVerificationStatus,
-      profile_completeness_score: Number(profileData?.profile_completeness_score ?? computeProfileCompleteness(profileData)),
+      profile_completeness_score: completion.score,
       current_period_end: currentPeriodEnd,
       kpis: mergedKpis,
       verification_activity: verificationActivity,

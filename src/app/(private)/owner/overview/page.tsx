@@ -249,6 +249,30 @@ function deltaLabel(current: number, previous: number, suffix = "") {
   return `${value} (${ratioSign}${ratio}%) vs periodo anterior`;
 }
 
+type OverviewRange = "today" | "7d" | "30d" | "90d";
+
+function normalizeOverviewRange(raw: unknown): OverviewRange {
+  const value = String(raw || "").trim().toLowerCase();
+  if (value === "today") return "today";
+  if (value === "7d") return "7d";
+  if (value === "90d") return "90d";
+  return "30d";
+}
+
+function overviewRangeDays(range: OverviewRange): number {
+  if (range === "today") return 1;
+  if (range === "7d") return 7;
+  if (range === "90d") return 90;
+  return 30;
+}
+
+function overviewRangeLabel(range: OverviewRange): string {
+  if (range === "today") return "hoy";
+  if (range === "7d") return "7 días";
+  if (range === "90d") return "90 días";
+  return "30 días";
+}
+
 async function countAuthUsers(admin: ReturnType<typeof createServiceRoleClient>) {
   const perPage = 200;
   let page = 1;
@@ -266,11 +290,20 @@ async function countAuthUsers(admin: ReturnType<typeof createServiceRoleClient>)
   return total;
 }
 
-export default function OwnerOverviewPage() {
-  return <OwnerOverviewServer />;
+export default async function OwnerOverviewPage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  return <OwnerOverviewServer searchParams={searchParams} />;
 }
 
-async function OwnerOverviewServer() {
+async function OwnerOverviewServer({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = searchParams ? await searchParams : {};
   const sessionClient = await createServerSupabaseClient();
   const { data: auth } = await sessionClient.auth.getUser();
   if (!auth?.user) redirect("/login?next=/owner/overview");
@@ -286,13 +319,26 @@ async function OwnerOverviewServer() {
   const admin = createServiceRoleClient();
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;
+  const selectedRange = normalizeOverviewRange(sp?.range);
+  const rangeDays = overviewRangeDays(selectedRange);
+  const rangeLabel = overviewRangeLabel(selectedRange);
   const weekAgo = now - 7 * dayMs;
   const twoWeeksAgo = now - 14 * dayMs;
   const monthAgo = now - 30 * dayMs;
   const twoMonthsAgo = now - 60 * dayMs;
+  const rangeStartMs = selectedRange === "today" ? (() => {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    return start.getTime();
+  })() : now - rangeDays * dayMs;
+  const previousRangeStartMs = rangeStartMs - rangeDays * dayMs;
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
   const startOfTodayMs = startOfToday.getTime();
+  const isInRange = (value: unknown, startMs = rangeStartMs, endMs = now) => {
+    const ts = Date.parse(String(value || ""));
+    return Number.isFinite(ts) && ts >= startMs && ts < endMs;
+  };
 
   const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicLinksRes, issuesRes, employmentRes, candidateProfilesRes, platformEventsRes, companyMembersRes, ownerActionsRes, authUsersTotal] = await Promise.all([
     admin.from("profiles").select("id,role,active_company_id,onboarding_completed,created_at,last_activity_at"),
@@ -414,23 +460,11 @@ async function OwnerOverviewServer() {
   }
   const companiesActiveToday = companiesActiveTodaySet.size;
 
-  const activeProfiles = profilesForActivity.filter((p: any) => {
-    const ts = Date.parse(String(p.last_activity_at || ""));
-    return Number.isFinite(ts) && ts >= monthAgo;
-  }).length;
-  const activeProfilesPrev30d = profilesForActivity.filter((p: any) => {
-    const ts = Date.parse(String(p.last_activity_at || ""));
-    return Number.isFinite(ts) && ts >= twoMonthsAgo && ts < monthAgo;
-  }).length;
+  const activeProfiles = profilesForActivity.filter((p: any) => isInRange(p.last_activity_at, rangeStartMs, now)).length;
+  const activeProfilesPrevPeriod = profilesForActivity.filter((p: any) => isInRange(p.last_activity_at, previousRangeStartMs, rangeStartMs)).length;
 
-  const activeCompanies = companiesForActivity.filter((c: any) => {
-    const ts = Date.parse(String(c.updated_at || c.created_at || ""));
-    return Number.isFinite(ts) && ts >= monthAgo;
-  }).length;
-  const activeCompaniesPrev30d = companiesForActivity.filter((c: any) => {
-    const ts = Date.parse(String(c.updated_at || c.created_at || ""));
-    return Number.isFinite(ts) && ts >= twoMonthsAgo && ts < monthAgo;
-  }).length;
+  const activeCompanies = companiesForActivity.filter((c: any) => isInRange(c.updated_at || c.created_at, rangeStartMs, now)).length;
+  const activeCompaniesPrevPeriod = companiesForActivity.filter((c: any) => isInRange(c.updated_at || c.created_at, previousRangeStartMs, rangeStartMs)).length;
   const inactiveCompanies = Math.max(companiesTotal - activeCompanies, 0);
 
   const verificationsTotal = requests.length;
@@ -453,14 +487,8 @@ async function OwnerOverviewServer() {
   const rejectedVerifications = statusCounts.rejected;
   const revokedVerifications = statusCounts.revoked;
 
-  const requestsThisWeek = requests.filter((r: any) => {
-    const ref = Date.parse(String(r.requested_at || r.created_at || ""));
-    return Number.isFinite(ref) && ref >= weekAgo;
-  }).length;
-  const requestsPrevWeek = requests.filter((r: any) => {
-    const ref = Date.parse(String(r.requested_at || r.created_at || ""));
-    return Number.isFinite(ref) && ref >= twoWeeksAgo && ref < weekAgo;
-  }).length;
+  const requestsInRange = requests.filter((r: any) => isInRange(r.requested_at || r.created_at, rangeStartMs, now)).length;
+  const requestsPrevRange = requests.filter((r: any) => isInRange(r.requested_at || r.created_at, previousRangeStartMs, rangeStartMs)).length;
 
   const verificationSuccessRate = pct(verifiedVerifications, completedVerifications);
 
@@ -499,16 +527,20 @@ async function OwnerOverviewServer() {
     const created = Date.parse(String(s.created_at || ""));
     return Number.isFinite(created) && created >= twoMonthsAgo && created < monthAgo;
   }).length;
-  const subscriptionsNew30d = subscriptions.filter((s: any) => {
+  const subscriptionsNewRange = subscriptions.filter((s: any) => {
     const created = Date.parse(String(s.created_at || ""));
-    return Number.isFinite(created) && created >= monthAgo;
+    return Number.isFinite(created) && created >= rangeStartMs && created < now;
+  }).length;
+  const subscriptionsNewPrevRange = subscriptions.filter((s: any) => {
+    const created = Date.parse(String(s.created_at || ""));
+    return Number.isFinite(created) && created >= previousRangeStartMs && created < rangeStartMs;
   }).length;
 
   const totalMrr = subscriptionsActive.reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
-  const mrr30dAdded = subscriptionsActive
+  const mrrRangeAdded = subscriptionsActive
     .filter((row: any) => {
       const created = Date.parse(String(row.created_at || ""));
-      return Number.isFinite(created) && created >= monthAgo;
+      return Number.isFinite(created) && created >= rangeStartMs && created < now;
     })
     .reduce((acc: number, row: any) => acc + Number(row.amount || 0), 0) / 100;
 
@@ -536,13 +568,13 @@ async function OwnerOverviewServer() {
   const arpuCompany = companiesUsersTotal > 0 ? Math.round((companyMrr / companiesUsersTotal) * 100) / 100 : 0;
 
   const activeCampaigns = campaigns.filter((row: any) => String(row.status || "").toLowerCase() === "running").length;
-  const weekCampaigns = campaigns.filter((row: any) => {
+  const campaignsInRange = campaigns.filter((row: any) => {
     const created = Date.parse(String(row.created_at || ""));
-    return Number.isFinite(created) && created >= weekAgo;
+    return Number.isFinite(created) && created >= rangeStartMs && created < now;
   });
-  const leadsThisWeek = weekCampaigns.reduce((acc: number, row: any) => acc + Number(row.leads_discovered || 0), 0);
-  const demosThisWeek = weekCampaigns.reduce((acc: number, row: any) => acc + Number(row.demos_count || 0), 0);
-  const growthTotals = campaigns.reduce(
+  const leadsInRange = campaignsInRange.reduce((acc: number, row: any) => acc + Number(row.leads_discovered || 0), 0);
+  const demosInRange = campaignsInRange.reduce((acc: number, row: any) => acc + Number(row.demos_count || 0), 0);
+  const growthTotals = campaignsInRange.reduce(
     (acc: { leads: number; contacts: number; messages: number; replies: number; demos: number }, row: any) => {
       acc.leads += Number(row.leads_discovered || 0);
       acc.contacts += Number(row.contacts_found || 0);
@@ -599,26 +631,33 @@ async function OwnerOverviewServer() {
     return Number.isFinite(ts) ? ts > now : true;
   }).length;
 
-  const companyProfilesCreatedWeek = companyProfiles.filter((p: any) => {
+  const companyProfilesCreatedInRange = companyProfiles.filter((p: any) => {
     const created = Date.parse(String(p.created_at || ""));
-    return Number.isFinite(created) && created >= weekAgo;
+    return Number.isFinite(created) && created >= rangeStartMs && created < now;
   }).length;
 
-  const funnelStepRegistros = candidatesTotal;
-  const funnelStepOnboarding = onboardingCompleted;
-  const funnelStepExperience = candidatesWithExperience.size;
+  const candidateCohortIds = new Set(
+    candidateProfiles
+      .filter((p: any) => isInRange(p.created_at, rangeStartMs, now))
+      .map((p: any) => String(p.id || ""))
+      .filter(Boolean),
+  );
+
+  const funnelStepRegistros = candidateCohortIds.size;
+  const funnelStepOnboarding = candidateProfiles.filter((p: any) => candidateCohortIds.has(String(p.id || "")) && Boolean(p.onboarding_completed)).length;
+  const funnelStepExperience = new Set(Array.from(candidatesWithExperience).filter((id) => candidateCohortIds.has(id))).size;
   const funnelStepEvidence = new Set(
     evidenceRows
       .map((row: any) => String(row.uploaded_by || ""))
-      .filter((id: string) => Boolean(id) && candidateIds.has(id))
+      .filter((id: string) => Boolean(id) && candidateCohortIds.has(id))
   ).size;
-  const funnelStepVerificationRequested = candidatesWithVerification.size;
+  const funnelStepVerificationRequested = new Set(Array.from(candidatesWithVerification).filter((id) => candidateCohortIds.has(id))).size;
   const funnelStepPublicProfileGenerated = new Set(
     publicLinks
       .map((row: any) => String(row.candidate_id || ""))
-      .filter((id: string) => Boolean(id) && candidateIds.has(id))
+      .filter((id: string) => Boolean(id) && candidateCohortIds.has(id))
   ).size;
-  const funnelStepVerified = candidatesVerified.size;
+  const funnelStepVerified = new Set(Array.from(candidatesVerified).filter((id) => candidateCohortIds.has(id))).size;
 
   const onboardingRate = pct(funnelStepOnboarding, funnelStepRegistros);
   const profileReadyRate = pct(funnelStepExperience, funnelStepOnboarding);
@@ -689,8 +728,8 @@ async function OwnerOverviewServer() {
   if (activeProfiles > activeCompanies * 3) {
     growthOpportunities.push("Desbalance candidatos/empresas: conviene reforzar captación de empresas en zonas con mayor volumen de perfiles.");
   }
-  if (leadsThisWeek === 0 && activeProfiles > 0) {
-    growthOpportunities.push("Sin leads de growth esta semana pese a actividad de perfiles: revisar campañas y canal.");
+  if (leadsInRange === 0 && activeProfiles > 0) {
+    growthOpportunities.push(`Sin leads de growth en ${rangeLabel} pese a actividad de perfiles: revisar campañas y canal.`);
   }
 
   const alerts: AlertItem[] = [];
@@ -698,7 +737,7 @@ async function OwnerOverviewServer() {
     ...requests
       .filter((row: any) => {
         const ts = Date.parse(String(row.resolved_at || row.requested_at || row.created_at || ""));
-        return Number.isFinite(ts) && ts >= weekAgo && String(row.status || "").toLowerCase() === "verified";
+        return Number.isFinite(ts) && ts >= rangeStartMs && String(row.status || "").toLowerCase() === "verified";
       })
       .slice(0, 4)
       .map((row: any) => ({
@@ -708,6 +747,7 @@ async function OwnerOverviewServer() {
         detail: `${String((profileById.get(String(row.requested_by || "")) as any)?.full_name || "Candidato")} · ${String(row.verification_channel || "flujo estándar")}`,
       })),
     ...evidenceRows
+      .filter((row: any) => isInRange(row.created_at, rangeStartMs, now))
       .slice(0, 3)
       .map((row: any) => ({
         ts: String(row.created_at || ""),
@@ -718,7 +758,7 @@ async function OwnerOverviewServer() {
     ...issues
       .filter((row: any) => {
         const ts = Date.parse(String(row.created_at || ""));
-        return Number.isFinite(ts) && ts >= weekAgo;
+        return Number.isFinite(ts) && ts >= rangeStartMs;
       })
       .slice(0, 3)
       .map((row: any) => ({
@@ -728,6 +768,7 @@ async function OwnerOverviewServer() {
         detail: `Estado ${String(row.status || "abierta")}`,
       })),
     ...subscriptionsPastDue
+      .filter((row: any) => isInRange(row.created_at, rangeStartMs, now))
       .slice(0, 3)
       .map((row: any) => ({
         ts: String(row.created_at || ""),
@@ -738,7 +779,7 @@ async function OwnerOverviewServer() {
     ...ownerActions
       .filter((row: any) => {
         const actionType = String(row.action_type || "").toLowerCase();
-        return actionType === "change_plan" || actionType === "extend_trial" || actionType === "cancel_subscription";
+        return (actionType === "change_plan" || actionType === "extend_trial" || actionType === "cancel_subscription") && isInRange(row.created_at, rangeStartMs, now);
       })
       .slice(0, 4)
       .map((row: any) => ({
@@ -769,7 +810,7 @@ async function OwnerOverviewServer() {
       severity: "high",
       title: "Cola de verificaciones alta",
       detail: `${pendingVerifications} verificaciones están pendientes y pueden frenar conversión.`,
-      actionHref: "/owner/verifications?status=pendiente",
+      actionHref: "/owner/verifications",
       actionLabel: "Abrir cola pendiente",
     });
   }
@@ -795,7 +836,7 @@ async function OwnerOverviewServer() {
     });
   }
 
-  if (requestsThisWeek === 0) {
+  if (requestsInRange === 0) {
     const lastVerificationTs = verifiedRows
       .map((r: any) => Date.parse(String(r.resolved_at || r.requested_at || r.created_at || "")))
       .filter((ts: number) => Number.isFinite(ts))
@@ -808,7 +849,7 @@ async function OwnerOverviewServer() {
     alerts.push({
       id: "no-verifications-week",
       severity: "medium",
-      title: "Sin verificaciones nuevas esta semana",
+      title: `Sin verificaciones nuevas en ${rangeLabel}`,
       detail: `Última verificación: ${daysSinceLastVerification !== null ? `hace ${daysSinceLastVerification} días` : "sin histórico"} · media semanal histórica: ${historicalWeeklyAvg}.`,
       actionHref: "/owner/growth",
       actionLabel: "Revisar growth",
@@ -836,13 +877,44 @@ async function OwnerOverviewServer() {
     });
   }
 
+  const lastUpdated = new Date().toLocaleString("es-ES");
+
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Centro de dirección owner</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Overview owner</h1>
         <p className="mt-1 text-sm text-slate-600">
           Cockpit ejecutivo para seguir activación, operación, calidad de verificación y economía del negocio.
         </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {([
+            { value: "today", label: "Hoy" },
+            { value: "7d", label: "7d" },
+            { value: "30d", label: "30d" },
+            { value: "90d", label: "90d" },
+          ] as const).map((item) => {
+            const active = selectedRange === item.value;
+            return (
+              <Link
+                key={item.value}
+                href={`/owner/overview?range=${item.value}`}
+                className={[
+                  "rounded-full border px-3 py-1.5 text-xs font-semibold",
+                  active
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+                ].join(" ")}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-700">Rango activo: {rangeLabel}</span>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-700">Última actualización: {lastUpdated}</span>
+          <span className="text-slate-500">Los bloques dependientes del periodo se recalculan con este rango; los fijos lo indican en subtítulo.</span>
+        </div>
       </section>
 
       <Section
@@ -873,31 +945,30 @@ async function OwnerOverviewServer() {
         </div>
       </Section>
 
-      <Section title="Métricas clave" subtitle="Estado del negocio en una lectura de 3 segundos.">
+      <Section title="Métricas clave" subtitle={`Estado del negocio para ${rangeLabel}, manteniendo MRR como foto actual.`}>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard
-            title={<span className="inline-flex items-center gap-2">Perfiles activos (30d) <OwnerTooltip text="Perfiles con señal de actividad en los últimos 30 días según last_activity_at." /></span>}
+            title={<span className="inline-flex items-center gap-2">Perfiles activos ({rangeLabel}) <OwnerTooltip text="Perfiles con señal de actividad en el rango activo según last_activity_at." /></span>}
             value={String(activeProfiles)}
-            trend={deltaLabel(activeProfiles, activeProfilesPrev30d)}
+            trend={deltaLabel(activeProfiles, activeProfilesPrevPeriod)}
             note={`Total auth.users: ${usersTotal}`}
           />
           <MetricCard
-            title={<span className="inline-flex items-center gap-2">Empresas activas (30d) <OwnerTooltip text="Empresas con actividad reciente según updated_at/created_at en los últimos 30 días." /></span>}
+            title={<span className="inline-flex items-center gap-2">Empresas activas ({rangeLabel}) <OwnerTooltip text="Empresas con actividad en el rango activo según updated_at/created_at." /></span>}
             value={String(activeCompanies)}
-            trend={deltaLabel(activeCompanies, activeCompaniesPrev30d)}
+            trend={deltaLabel(activeCompanies, activeCompaniesPrevPeriod)}
             note={`Empresas totales: ${companiesTotal} · inactivas: ${inactiveCompanies}`}
           />
           <MetricCard
-            title={<span className="inline-flex items-center gap-2">Verificaciones (7 días) <OwnerTooltip text="Solicitudes de verificación creadas/solicitadas durante la última semana." /></span>}
-            value={String(requestsThisWeek)}
-            trend={deltaLabel(requestsThisWeek, requestsPrevWeek)}
+            title={<span className="inline-flex items-center gap-2">Verificaciones ({rangeLabel}) <OwnerTooltip text="Solicitudes creadas o solicitadas dentro del rango activo." /></span>}
+            value={String(requestsInRange)}
+            trend={deltaLabel(requestsInRange, requestsPrevRange)}
             note={`${pendingVerifications} en cola · ${verificationsTotal} acumuladas`}
           />
           <MetricCard
             title={<span className="inline-flex items-center gap-2">MRR activo <OwnerTooltip text="Derivado fiable: suma de amount en suscripciones active/trialing." /></span>}
             value={money(totalMrr)}
-            trend={deltaLabel(subscriptionsActive.length, subscriptionsActivePrev30d, " suscripciones")}
-            note={`${subscriptionsActive.length} suscripciones activas · ${money(mrr30dAdded)} añadidos en 30d`}
+            note={`${subscriptionsActive.length} suscripciones activas · ${money(mrrRangeAdded)} añadidos en ${rangeLabel}`}
           />
         </div>
       </Section>
@@ -917,7 +988,7 @@ async function OwnerOverviewServer() {
 
       <Section
         title="Embudo de activación"
-        subtitle="Detección rápida de fricción desde registro candidato hasta perfil verificado."
+        subtitle={`Cohorte de candidatos registrados en ${rangeLabel} y su estado actual dentro del funnel.`}
       >
         <FunnelVisual
           steps={[
@@ -980,14 +1051,14 @@ async function OwnerOverviewServer() {
 
       <Section
         title="Resumen de crecimiento"
-        subtitle="Salida operativa agregada del módulo de growth (sin rehacer el módulo completo)."
+        subtitle={`Salida operativa agregada de campañas creadas en ${rangeLabel}.`}
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <MetricCard title="Leads descubiertos" value={String(growthTotals.leads)} note="Acumulado growth_campaigns" />
-          <MetricCard title="Contactos encontrados" value={String(growthTotals.contacts)} note="Acumulado growth_campaigns" />
-          <MetricCard title="Mensajes enviados" value={String(growthTotals.messages)} note="Acumulado growth_campaigns" />
-          <MetricCard title="Respuestas" value={String(growthTotals.replies)} note="Acumulado growth_campaigns" />
-          <MetricCard title="Demos agendadas" value={String(growthTotals.demos)} note="Acumulado growth_campaigns" />
+          <MetricCard title="Leads descubiertos" value={String(growthTotals.leads)} note={`Campañas creadas en ${rangeLabel}`} />
+          <MetricCard title="Contactos encontrados" value={String(growthTotals.contacts)} note={`Campañas creadas en ${rangeLabel}`} />
+          <MetricCard title="Mensajes enviados" value={String(growthTotals.messages)} note={`Campañas creadas en ${rangeLabel}`} />
+          <MetricCard title="Respuestas" value={String(growthTotals.replies)} note={`Campañas creadas en ${rangeLabel}`} />
+          <MetricCard title="Demos agendadas" value={String(growthTotals.demos)} note={`Campañas creadas en ${rangeLabel}`} />
         </div>
       </Section>
 
@@ -1005,7 +1076,7 @@ async function OwnerOverviewServer() {
       <div className="grid gap-6 xl:grid-cols-2">
         <Section
           title="Operaciones diarias"
-          subtitle="Cola operativa para decisiones del día y revisión manual."
+          subtitle="Foto actual de backlog y operación. Este bloque no se reescala con el rango para no mezclar inventario con flujo."
         >
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <MetricCard title="Borrador pendiente de envío" value={String(statusCounts.draft)} />
@@ -1018,8 +1089,8 @@ async function OwnerOverviewServer() {
             <MetricCard title="Evidencias pendientes de clasificación" value={String(evidencesWithoutStatus)} />
             <MetricCard title="Evidencias sin vinculación" value={String(evidencesUnlinked)} note={`Vinculadas: ${evidencesLinked}`} />
             <MetricCard title="Incidencias abiertas" value={String(openIssues)} />
-            <MetricCard title="Perfiles activos (30d)" value={String(activeProfiles)} />
-            <MetricCard title="Empresas nuevas (7 días)" value={String(companyProfilesCreatedWeek)} />
+            <MetricCard title={`Perfiles activos (${rangeLabel})`} value={String(activeProfiles)} />
+            <MetricCard title={`Empresas nuevas (${rangeLabel})`} value={String(companyProfilesCreatedInRange)} />
           </div>
         </Section>
 
@@ -1054,7 +1125,7 @@ async function OwnerOverviewServer() {
 
       <Section
         title="Oportunidades de crecimiento"
-        subtitle="Brechas detectadas entre oferta verificada y demanda empresarial."
+        subtitle={`Brechas detectadas con señales actuales y actividad de ${rangeLabel}.`}
       >
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           {growthOpportunities.length === 0 ? (
@@ -1071,14 +1142,14 @@ async function OwnerOverviewServer() {
 
       <Section
         title="Economía del negocio"
-        subtitle="Composición de ingresos y ritmo de monetización actual."
+        subtitle={`Composición de ingresos actual y ritmo de altas en ${rangeLabel}.`}
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard title="MRR total" value={money(totalMrr)} note="Suscripciones activas/trialing" />
           <MetricCard title="MRR candidatos" value={money(candidateMrr)} note="Planes candidate_*" />
           <MetricCard title="MRR empresas" value={money(companyMrr)} note="Planes company/enterprise" />
           <MetricCard title="Suscripciones activas" value={String(subscriptionsActive.length)} />
-          <MetricCard title="Altas últimos 30 días" value={String(subscriptionsNew30d)} />
+          <MetricCard title={`Altas ${rangeLabel}`} value={String(subscriptionsNewRange)} note={deltaLabel(subscriptionsNewRange, subscriptionsNewPrevRange)} />
           <MetricCard title="Canceladas" value={String(subscriptionsCanceled.length)} />
           <MetricCard title="ARPU candidato (derivado)" value={money(arpuCandidate)} note="MRR candidato / total candidatos" />
           <MetricCard title="ARPU empresa (derivado)" value={money(arpuCompany)} note="MRR empresa / perfiles empresa" />
@@ -1153,53 +1224,53 @@ async function OwnerOverviewServer() {
           </Link>
           <Link href="/owner/monetization" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
             Monetización
-            <span className="mt-1 block text-xs font-normal text-slate-500">MRR {money(totalMrr)} · altas 30d {subscriptionsNew30d}</span>
+            <span className="mt-1 block text-xs font-normal text-slate-500">MRR {money(totalMrr)} · altas {rangeLabel} {subscriptionsNewRange}</span>
           </Link>
           <Link href="/owner/growth" className="rounded-lg bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800">
             Centro de crecimiento
-            <span className="mt-1 block text-xs font-normal text-blue-100">{activeCampaigns} campañas activas · {leadsThisWeek} leads/semana</span>
+            <span className="mt-1 block text-xs font-normal text-blue-100">{activeCampaigns} campañas activas · {leadsInRange} leads en {rangeLabel}</span>
           </Link>
         </div>
       </Section>
 
       <Section
         title="Timeline global del sistema"
-        subtitle="Actividad reciente para seguimiento operativo transversal."
+        subtitle={`Actividad reciente filtrada por ${rangeLabel}.`}
       >
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <ul className="space-y-2 text-sm text-slate-700">
             {[
-              ...verifiedRows.slice(0, 3).map((r: any) => ({
+              ...verifiedRows.filter((r: any) => isInRange(r.resolved_at || r.requested_at || r.created_at, rangeStartMs, now)).slice(0, 3).map((r: any) => ({
                 ts: String(r.resolved_at || r.requested_at || r.created_at || ""),
                 type: "verification_approved",
                 text: `Verificación aprobada · ${String((profileById.get(String(r.requested_by || "")) as any)?.full_name || "Candidato")}`,
               })),
-              ...evidenceRows.slice(0, 3).map((e: any) => ({
+              ...evidenceRows.filter((e: any) => isInRange(e.created_at, rangeStartMs, now)).slice(0, 3).map((e: any) => ({
                 ts: String(e.created_at || ""),
                 type: "evidence_uploaded",
                 text: `Evidencia subida · ${String((profileById.get(String(e.uploaded_by || "")) as any)?.full_name || "Usuario")}`,
               })),
-              ...companiesForActivity.slice(0, 2).map((c: any) => ({
+              ...companiesForActivity.filter((c: any) => isInRange(c.created_at || c.updated_at, rangeStartMs, now)).slice(0, 2).map((c: any) => ({
                 ts: String(c.created_at || c.updated_at || ""),
                 type: "company_activity",
                 text: `Empresa activa · ${String((companyById.get(String(c.id || "")) as any)?.name || "Empresa")}`,
               })),
-              ...profiles.slice(0, 2).map((p: any) => ({
+              ...profiles.filter((p: any) => isInRange(p.created_at, rangeStartMs, now)).slice(0, 2).map((p: any) => ({
                 ts: String(p.created_at || ""),
                 type: "user_registered",
                 text: `Usuario registrado · ${String((profileById.get(String(p.id || "")) as any)?.full_name || "Usuario")}`,
               })),
-              ...issues.slice(0, 2).map((i: any) => ({
+              ...issues.filter((i: any) => isInRange(i.created_at, rangeStartMs, now)).slice(0, 2).map((i: any) => ({
                 ts: String(i.created_at || ""),
                 type: "issue_created",
                 text: "Incidencia operativa creada",
               })),
-              ...campaigns.slice(0, 2).map((c: any) => ({
+              ...campaigns.filter((c: any) => isInRange(c.created_at, rangeStartMs, now)).slice(0, 2).map((c: any) => ({
                 ts: String(c.created_at || ""),
                 type: "campaign_created",
                 text: "Campaña de crecimiento lanzada",
               })),
-              ...subscriptionsActive.slice(0, 2).map((s: any) => ({
+              ...subscriptionsActive.filter((s: any) => isInRange(s.created_at, rangeStartMs, now)).slice(0, 2).map((s: any) => ({
                 ts: String(s.created_at || ""),
                 type: "subscription_activated",
                 text: "Suscripción activada",
@@ -1235,7 +1306,7 @@ async function OwnerOverviewServer() {
               ))}
           </ul>
           <p className="mt-3 text-xs text-slate-500">
-            Perfiles públicos activos: {activePublicProfiles} · Jobs de parsing pendientes: {pendingJobs} · Demos de campañas esta semana: {demosThisWeek}.
+            Perfiles públicos activos: {activePublicProfiles} · Jobs de parsing pendientes: {pendingJobs} · Demos de campañas en {rangeLabel}: {demosInRange}.
           </p>
         </div>
       </Section>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 
 type InvitePayload = {
   id: string;
@@ -131,7 +132,7 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
   const invite = payload?.invite;
   const auth = payload?.auth;
   const statements = Array.isArray(payload?.legal?.snapshot?.statements) ? payload?.legal?.snapshot?.statements : [];
-  const companyName = invite?.company?.name || "la empresa";
+  const companyName = resolveCompanyDisplayName(invite?.company?.name || null, "Tu empresa");
   const candidateAlreadyExists = Boolean(invite?.candidate_already_exists);
   const parsePreview = invite?.extracted_payload_json || null;
   const experienceCount = Array.isArray(parsePreview?.experiences) ? parsePreview.experiences.length : 0;

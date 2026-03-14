@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import {
   ensureCandidatePublicToken,
   extractStructuredCvFromBuffer,
@@ -104,7 +105,7 @@ async function resolveContext() {
 
   const [{ data: membership, error: membershipErr }, { data: company, error: companyErr }] = await Promise.all([
     admin.from("company_members").select("role").eq("company_id", companyId).eq("user_id", user.id).maybeSingle(),
-    admin.from("companies").select("id,name").eq("id", companyId).maybeSingle(),
+    admin.from("companies").select("id,name,trade_name,legal_name").eq("id", companyId).maybeSingle(),
   ]);
 
   if (membershipErr) return { error: json(400, { error: "company_membership_read_failed", details: membershipErr.message }) };
@@ -115,7 +116,7 @@ async function resolveContext() {
     user,
     companyId,
     membershipRole: String(membership.role || "reviewer").toLowerCase(),
-    companyName: normalizeText(company?.name) || "la empresa",
+    companyName: resolveCompanyDisplayName(company, "Tu empresa"),
     admin,
   };
 }

@@ -26,7 +26,7 @@ export default function Topbar({ role }: { role?: Role }) {
   const [candidatePlanLabel, setCandidatePlanLabel] = useState<string>("CANDIDATO FREE");
 
   const userPlanLabel = useMemo(() => {
-    if (r === "owner") return "Plan Owner";
+    if (r === "owner") return "Acceso owner";
     if (r === "company") return `Plan Empresa ${companyPlanLabel || "Free"}`;
     return candidatePlanLabel;
   }, [candidatePlanLabel, companyPlanLabel, r]);
@@ -136,7 +136,7 @@ export default function Topbar({ role }: { role?: Role }) {
               href="https://verijob.es"
               className="hidden sm:inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:opacity-90"
             >
-              Web
+              Web pública
             </a>
 
             <button

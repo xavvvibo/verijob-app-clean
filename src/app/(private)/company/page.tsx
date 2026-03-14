@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 
 type Kpis = {
   pending_requests: number;
@@ -203,7 +204,7 @@ export default function CompanyDashboard() {
         ]);
 
         if (!dashboardRes.ok) {
-          throw new Error(dashboardBody?.error || "No se pudo cargar el panel de empresa.");
+          throw new Error("No se pudo cargar el panel de empresa.");
         }
         if (!alive) return;
         setDashboard(dashboardBody || {});
@@ -221,8 +222,15 @@ export default function CompanyDashboard() {
     };
   }, []);
 
-  const companyName =
-    String(profileData?.profile?.trade_name || "").trim() || dashboard?.company_name || "Tu empresa";
+  const companyName = resolveCompanyDisplayName(
+    {
+      trade_name: profileData?.profile?.trade_name,
+      legal_name: profileData?.profile?.legal_name,
+      display_name: profileData?.profile?.display_name,
+      name: dashboard?.company_name,
+    },
+    "Tu empresa"
+  );
   const planLabel = dashboard?.plan_label || teamData?.plan?.label || "Free";
   const verificationStatus = dashboard?.company_verification_status || "unverified";
   const profileCompletion = Number(profileData?.profile_completion?.score ?? dashboard?.profile_completeness_score ?? 0);

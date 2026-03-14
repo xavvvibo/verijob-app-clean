@@ -35,6 +35,13 @@ function getOrigin(req: Request) {
   return `${proto}://${host}`;
 }
 
+function toOwnerProductKey(planKey: string | null) {
+  const normalized = String(planKey || "").trim().toLowerCase();
+  if (normalized === "company_single_profile") return "company_single_cv";
+  if (normalized === "company_pack5_profiles") return "company_pack_5";
+  return normalized || null;
+}
+
 async function createCheckoutSession(req: Request) {
   const stripe = getStripe();
   const supabase = await createRouteHandlerClient();
@@ -81,8 +88,26 @@ async function createCheckoutSession(req: Request) {
     return NextResponse.json({ error: "unsupported_plan", details: String(planRaw ?? "") }, { status: 400 });
   }
 
-  const origin = getOrigin(req);
   const isCompanyPlan = String(selection.planKey || "").startsWith("company_");
+  let activeCompanyId = "";
+  if (isCompanyPlan) {
+    const { data: profile, error: profileErr } = await supabase
+      .from("profiles")
+      .select("active_company_id")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (profileErr) {
+      return NextResponse.json({ error: "company_context_unavailable", details: profileErr.message }, { status: 400 });
+    }
+
+    activeCompanyId = String((profile as any)?.active_company_id || "").trim();
+    if (!activeCompanyId) {
+      return NextResponse.json({ error: "company_context_required" }, { status: 403 });
+    }
+  }
+
+  const origin = getOrigin(req);
   const safeReturnPath =
     typeof returnPathRaw === "string" && returnPathRaw.startsWith("/") && !returnPathRaw.startsWith("//")
       ? returnPathRaw
@@ -103,8 +128,9 @@ async function createCheckoutSession(req: Request) {
     cancel_url: cancelUrl,
     metadata: {
       user_id: user.id,
-      company_id: "",
+      company_id: activeCompanyId,
       plan_key: selection.planKey,
+      product_key: toOwnerProductKey(selection.planKey) || "",
       price_id: selection.priceId,
       return_path: safeReturnPath || "",
     },

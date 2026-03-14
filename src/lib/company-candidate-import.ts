@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "crypto";
 import { extractCvTextFromBuffer } from "@/utils/cv/extractText";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import {
   normalizeCvLanguages,
   selectLanguagesPersistenceTarget,
@@ -516,7 +517,7 @@ export function buildCompanyCvImportLegalSnapshot(params: {
   candidateEmail: string;
   targetRole?: string | null;
 }) {
-  const companyName = String(params.companyName || "la empresa").trim();
+  const companyName = resolveCompanyDisplayName(params.companyName, "Tu empresa");
   const candidateEmail = String(params.candidateEmail || "").trim();
   const targetRole = String(params.targetRole || "").trim() || null;
   return {
@@ -596,7 +597,7 @@ export async function persistImportedCandidateProfile(params: {
           ? [
               {
                 invite_id: inviteId,
-                company_name: String(params.companyName || "").trim() || null,
+                company_name: resolveCompanyDisplayName(params.companyName || null, "") || null,
                 imported_at: nowIso,
                 mode,
                 experience_suggestions: experienceSuggestions,

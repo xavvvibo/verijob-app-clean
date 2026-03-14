@@ -34,6 +34,14 @@ function companyStatusLabel(status: string) {
   return "Pendiente de clasificación";
 }
 
+function activityBadge(activityState: string, completion: number, pending: number) {
+  if (pending > 0) return "Con trabajo pendiente";
+  if (activityState === "inactive" && completion < 80) return "Dormida e incompleta";
+  if (activityState === "inactive") return "Dormida";
+  if (completion >= 80) return "Operativa";
+  return "Activa con perfil parcial";
+}
+
 export default async function OwnerCompaniesPage({
   searchParams,
 }: {
@@ -165,6 +173,7 @@ export default async function OwnerCompaniesPage({
   const totalInactive = normalized.filter((x) => x.activityState === "inactive").length;
   const totalPending = normalized.reduce((acc, x) => acc + x.pending, 0);
   const incomplete = normalized.filter((x) => x.completion < 80).length;
+  const highUsage = normalized.filter((x) => x.reqCount >= 10).length;
   const verifiedByStatus =
     rows.filter((r: any) => String(r.status || "").toLowerCase() === "verified").length ||
     normalized.filter((x) => x.status === "verified_document" || x.status === "verified_paid").length;
@@ -195,7 +204,7 @@ export default async function OwnerCompaniesPage({
           </div>
         </div>
         <p className="mt-3 text-xs text-slate-500">
-          Actividad: {rows.length - totalInactive} activas · {totalInactive} inactivas · {totalPending} pendientes · {incomplete} con perfil incompleto.
+          Actividad: {rows.length - totalInactive} activas · {totalInactive} inactivas · {totalPending} pendientes · {incomplete} con perfil incompleto · {highUsage} con uso alto.
         </p>
       </section>
 
@@ -247,6 +256,7 @@ export default async function OwnerCompaniesPage({
                   <th className="px-3 py-3">Solicitudes</th>
                   <th className="px-3 py-3">Pendientes</th>
                   <th className="px-3 py-3">Perfil</th>
+                  <th className="px-3 py-3">Señal owner</th>
                   <th className="px-3 py-3">Última actividad</th>
                   <th className="px-3 py-3">Creación</th>
                 </tr>
@@ -254,7 +264,22 @@ export default async function OwnerCompaniesPage({
               <tbody>
                 {filtered.map((entry) => (
                   <tr key={entry.id} className="border-b border-slate-100 text-slate-800">
-                    <td className="px-3 py-3 font-semibold text-slate-900">{entry.row.name || "Empresa sin nombre"}</td>
+                    <td className="px-3 py-3">
+                      <Link href={`/owner/companies/${entry.id}`} className="font-semibold text-slate-900 underline">
+                        {entry.row.name || "Empresa sin nombre"}
+                      </Link>
+                      <div className="mt-1 flex flex-wrap gap-2 text-xs">
+                        <Link href={`/owner/verifications?company=${encodeURIComponent(String(entry.row.name || ""))}`} className="font-semibold text-slate-700 underline">
+                          Ver solicitudes
+                        </Link>
+                        <Link href="/owner/users?quick=with_company" className="font-semibold text-slate-700 underline">
+                          Ver usuarios empresa
+                        </Link>
+                        <Link href={`/owner/companies/${entry.id}`} className="font-semibold text-slate-700 underline">
+                          Abrir ficha
+                        </Link>
+                      </div>
+                    </td>
                     <td className="px-3 py-3"><Badge label={companyStatusLabel(entry.status)} /></td>
                     <td className="px-3 py-3">{entry.members}</td>
                     <td className="px-3 py-3">{entry.reqCount}</td>
@@ -262,6 +287,9 @@ export default async function OwnerCompaniesPage({
                     <td className="px-3 py-3">
                       <span className="font-semibold text-slate-900">{entry.completion}%</span>
                       <span className="ml-2 text-xs text-slate-500">{scoreLabel(entry.completion)}</span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <span className="text-xs font-semibold text-slate-700">{activityBadge(entry.activityState, entry.completion, entry.pending)}</span>
                     </td>
                     <td className="px-3 py-3">{entry.lastActivity ? new Date(entry.lastActivity).toLocaleDateString("es-ES") : "Sin actividad"}</td>
                     <td className="px-3 py-3">{entry.row.created_at ? new Date(entry.row.created_at).toLocaleDateString("es-ES") : "—"}</td>

@@ -74,9 +74,9 @@ function getSections(role: Role, candidateOnboardingLocked = false): Section[] {
   if (r === "owner") {
     return [
       {
-        title: "CORE",
+        title: "Owner",
         items: [
-          { href: "/owner/overview", label: "Métricas clave" },
+          { href: "/owner/overview", label: "Overview" },
           { href: "/owner/users", label: "Usuarios" },
           { href: "/owner/companies", label: "Empresas" },
           { href: "/owner/verifications", label: "Verificaciones" },
@@ -84,18 +84,18 @@ function getSections(role: Role, candidateOnboardingLocked = false): Section[] {
         ],
       },
       {
-        title: "GROWTH",
+        title: "Growth",
         items: [
-          { href: "/owner/growth", label: "Centro de crecimiento" },
-          { href: "/owner/marketing", label: "Centro de marketing" },
+          { href: "/owner/growth", label: "Crecimiento" },
+          { href: "/owner/marketing", label: "Marketing" },
           { href: "/owner/monetization", label: "Monetización" },
         ],
       },
       {
-        title: "OPERATIONS",
+        title: "Operaciones",
         items: [
           { href: "/owner/ai-ops", label: "Procesamiento automático" },
-          { href: "/owner/issues", label: "Centro de incidencias", badge: "LIVE" },
+          { href: "/owner/issues", label: "Incidencias" },
           { href: "/owner/settings", label: "Configuración" },
         ],
       },
@@ -193,7 +193,7 @@ export default function Sidebar({ role }: { role?: Role }) {
             href="https://verijob.es"
             className="block rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
           >
-            Ir a la web
+            Verijob web
           </a>
         </div>
       </div>

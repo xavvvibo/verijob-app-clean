@@ -1,3 +1,5 @@
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+
 type ExternalExperienceVerificationEmailParams = {
   candidateName?: string | null;
   companyName?: string | null;
@@ -15,7 +17,7 @@ export function buildExternalExperienceVerificationEmail(
     params.verificationLink || params.link || "",
   ).trim();
   const candidateName = String(params.candidateName || "Candidato").trim();
-  const companyName = String(params.companyName || "su empresa").trim();
+  const companyName = resolveCompanyDisplayName(params.companyName, "Tu empresa");
   const roleTitle = String(params.roleTitle || "puesto no especificado").trim();
 
   const text = [

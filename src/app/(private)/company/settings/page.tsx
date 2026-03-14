@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 
 type Settings = {
   show_risk_panel: boolean;
@@ -14,6 +15,8 @@ type SettingsMeta = {
 
 type CompanyProfileSummary = {
   trade_name?: string | null;
+  legal_name?: string | null;
+  display_name?: string | null;
   contact_email?: string | null;
   company_verification_review_status?: string | null;
 };
@@ -84,6 +87,8 @@ export default function CompanySettingsPage() {
       if (profileRes.ok) {
         setProfileSummary({
           trade_name: profileData?.profile?.trade_name || null,
+          legal_name: profileData?.profile?.legal_name || null,
+          display_name: profileData?.profile?.display_name || null,
           contact_email: profileData?.profile?.contact_email || null,
           company_verification_review_status: profileData?.profile?.company_verification_review_status || null,
         });
@@ -159,7 +164,9 @@ export default function CompanySettingsPage() {
           <div className="mt-3 space-y-3 text-sm text-slate-600">
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500">Empresa</p>
-              <p className="mt-1 font-semibold text-slate-900">{profileSummary?.trade_name || "Perfil empresa"}</p>
+              <p className="mt-1 font-semibold text-slate-900">
+                {resolveCompanyDisplayName(profileSummary || null, "Tu empresa")}
+              </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500">Contacto principal</p>

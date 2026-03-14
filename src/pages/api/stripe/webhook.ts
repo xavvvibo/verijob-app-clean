@@ -45,6 +45,22 @@ function isCompanyPlan(raw: unknown) {
   return String(raw || "").toLowerCase().startsWith("company_");
 }
 
+function normalizeOneoffProduct(args: { planKey?: string | null; priceId?: string | null }) {
+  const direct = String(args.planKey || "").trim().toLowerCase();
+  const resolved = direct ? null : resolvePlanFromPriceId(args.priceId);
+  const effective = direct || String(resolved?.planKey || "").trim().toLowerCase();
+
+  if (effective === "company_single_profile" || effective === "company_single_cv") {
+    return { productKey: "company_single_cv" as const, creditsGranted: 1, resolvedPlanKey: effective || "company_single_profile" };
+  }
+
+  if (effective === "company_pack5_profiles" || effective === "company_pack_5") {
+    return { productKey: "company_pack_5" as const, creditsGranted: 5, resolvedPlanKey: effective || "company_pack5_profiles" };
+  }
+
+  return null;
+}
+
 async function getRawBody(req: NextApiRequest): Promise<string> {
   return await new Promise((resolve, reject) => {
     let data = "";
@@ -214,6 +230,87 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return null;
     }
 
+    async function resolveCompanyIdForSession(session: Stripe.Checkout.Session, userId: string): Promise<string | null> {
+      const fromMeta = String((session.metadata as any)?.company_id || "").trim();
+      if (fromMeta) return fromMeta;
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("active_company_id")
+        .eq("id", userId)
+        .maybeSingle();
+
+      const fromProfile = String((profile as any)?.active_company_id || "").trim();
+      return fromProfile || null;
+    }
+
+    async function persistOneoffPurchase(args: {
+      session: Stripe.Checkout.Session;
+      userId: string;
+      companyId: string;
+      productKey: "company_single_cv" | "company_pack_5";
+      creditsGranted: number;
+      priceId: string;
+    }) {
+      const amount = Number(args.session.amount_total || 0);
+      const currency = String(args.session.currency || "eur").toLowerCase();
+
+      const upsertRes = await supabase
+        .from("stripe_oneoff_purchases")
+        .upsert(
+          {
+            stripe_session_id: args.session.id,
+            company_id: args.companyId,
+            buyer_user_id: args.userId,
+            price_id: args.priceId,
+            product_key: args.productKey,
+            amount,
+            currency,
+            credits_granted: args.creditsGranted,
+          },
+          { onConflict: "stripe_session_id" }
+        )
+        .select("id")
+        .single();
+
+      if (upsertRes.error || !upsertRes.data?.id) {
+        throw new Error(`stripe_oneoff_purchase_persist_failed_${upsertRes.error?.message || "unknown"}`);
+      }
+
+      const purchaseId = String(upsertRes.data.id);
+      const existingGrant = await supabase
+        .from("credit_grants")
+        .select("id")
+        .eq("source_type", "stripe_oneoff_purchase")
+        .eq("source_id", purchaseId)
+        .limit(1)
+        .maybeSingle();
+
+      if (!existingGrant.data) {
+        const grantRes = await supabase
+          .from("credit_grants")
+          .insert({
+            user_id: args.userId,
+            credits: args.creditsGranted,
+            source_type: "stripe_oneoff_purchase",
+            source_id: purchaseId,
+            starts_at: new Date().toISOString(),
+            is_active: true,
+            granted_by: args.userId,
+            metadata: {
+              company_id: args.companyId,
+              stripe_session_id: args.session.id,
+              product_key: args.productKey,
+              price_id: args.priceId,
+            },
+          });
+
+        if (grantRes.error) {
+          throw new Error(`credit_grant_create_failed_${grantRes.error.message}`);
+        }
+      }
+    }
+
     async function persistSubscriptionRow(row: Record<string, any>) {
       const primary = await supabase
         .from("subscriptions")
@@ -293,8 +390,32 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session;
-      const userId = session.client_reference_id;
+      const userId = String(session.client_reference_id || (session.metadata as any)?.user_id || "").trim() || null;
       const subscriptionId = session.subscription as string | null;
+      const sessionPriceId =
+        String((session.metadata as any)?.price_id || "").trim() ||
+        String(((session as any)?.amount_subtotal ? (session as any)?.price_id : "") || "").trim() ||
+        null;
+      const oneoffProduct = normalizeOneoffProduct({
+        planKey: String((session.metadata as any)?.plan_key || (session.metadata as any)?.product_key || "").trim() || null,
+        priceId: sessionPriceId,
+      });
+
+      if (userId && !subscriptionId && oneoffProduct) {
+        const companyId = await resolveCompanyIdForSession(session, userId);
+        if (!companyId) {
+          throw new Error(`company_id_unresolved_for_oneoff_${session.id}`);
+        }
+
+        await persistOneoffPurchase({
+          session,
+          userId,
+          companyId,
+          productKey: oneoffProduct.productKey,
+          creditsGranted: oneoffProduct.creditsGranted,
+          priceId: sessionPriceId || "",
+        });
+      }
 
       if (userId && subscriptionId) {
         const subCtx = await upsertSubscription({

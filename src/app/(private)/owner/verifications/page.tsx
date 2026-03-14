@@ -354,10 +354,10 @@ export default async function OwnerVerificationsPage({
                       <td className="px-3 py-3">
                         <div className="flex flex-wrap gap-1.5">
                           <Link
-                            href={`/owner/verifications?focus=${row.id}${statusFilter !== "all" ? `&status=${encodeURIComponent(statusFilter)}` : ""}${methodFilter !== "all" ? `&method=${encodeURIComponent(methodFilter)}` : ""}${rangeFilter !== "all" ? `&range=${encodeURIComponent(rangeFilter)}` : ""}${companyFilter ? `&company=${encodeURIComponent(companyFilter)}` : ""}${q ? `&q=${encodeURIComponent(q)}` : ""}`}
+                            href={`/owner/verifications/${row.id}`}
                             className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                           >
-                            Ver detalle
+                            Abrir ficha
                           </Link>
                           {row.requested_by ? (
                             <Link href={`/owner/users/${row.requested_by}`} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50">
@@ -365,7 +365,7 @@ export default async function OwnerVerificationsPage({
                             </Link>
                           ) : null}
                           {entry.companyName ? (
-                            <Link href={`/owner/companies?q=${encodeURIComponent(entry.companyName)}`} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                            <Link href={row.company_id ? `/owner/companies/${row.company_id}` : `/owner/companies?q=${encodeURIComponent(entry.companyName)}`} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                               Abrir empresa
                             </Link>
                           ) : null}

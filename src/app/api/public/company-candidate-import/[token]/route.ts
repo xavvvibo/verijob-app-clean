@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import {
   buildCompanyCvImportLegalSnapshot,
   COMPANY_CV_IMPORT_LEGAL_VERSION,
@@ -40,7 +41,7 @@ function displayStatus(invite: any) {
 async function readInviteByToken(admin: any, token: string) {
   const { data, error } = await admin
     .from("company_candidate_import_invites")
-    .select("*, companies:company_id(id,name)")
+    .select("*, companies:company_id(id,name,trade_name,legal_name)")
     .eq("invite_token", token)
     .maybeSingle();
 
@@ -86,7 +87,7 @@ export async function GET(
       data: { user },
     } = await supabase.auth.getUser();
 
-    const companyName = normalizeText((invite as any)?.companies?.name) || "la empresa";
+    const companyName = resolveCompanyDisplayName((invite as any)?.companies || null, "Tu empresa");
     const importMeta = invite?.extracted_payload_json?._verijob_import_meta || {};
     const legalSnapshot = buildCompanyCvImportLegalSnapshot({
       companyName,
@@ -192,7 +193,7 @@ export async function POST(
       });
     }
 
-    const companyName = normalizeText((invite as any)?.companies?.name) || "la empresa";
+    const companyName = resolveCompanyDisplayName((invite as any)?.companies || null, "Tu empresa");
     const legalSnapshot = buildCompanyCvImportLegalSnapshot({
       companyName,
       candidateEmail: inviteEmail,

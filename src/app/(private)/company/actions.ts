@@ -2,6 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 
 type SetCompanyVerificationStatusInput = {
   verificationRequestId: string;
@@ -37,19 +38,19 @@ async function resolveCompanyVerificationStatus(supabase: any, companyId: string
   if (company?.company_verification_status) {
     return {
       status: String(company.company_verification_status),
-      companyName: String(company.name || company.trade_name || company.legal_name || ""),
+      companyName: resolveCompanyDisplayName(company, "Tu empresa"),
     };
   }
 
   const { data: companyProfile } = await supabase
     .from("company_profiles")
-    .select("company_verification_status,name,trade_name,legal_name")
+    .select("company_verification_status,trade_name,legal_name")
     .eq("company_id", companyId)
     .maybeSingle();
 
   return {
     status: String(companyProfile?.company_verification_status || "unverified"),
-    companyName: String(companyProfile?.name || companyProfile?.trade_name || companyProfile?.legal_name || ""),
+    companyName: resolveCompanyDisplayName(companyProfile, "Tu empresa"),
   };
 }
 
