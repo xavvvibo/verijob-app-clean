@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+import { effectivePlanDisplay, readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import OwnerUserActionsClient from "./OwnerUserActionsClient";
@@ -141,6 +142,8 @@ export default async function OwnerUserDetailPage({ params }: any) {
     deletion_reason: profileUser?.deletion_reason ? String(profileUser.deletion_reason) : null,
   };
   const latestSub = Array.isArray(subscriptionsRes.data) && subscriptionsRes.data.length > 0 ? subscriptionsRes.data[0] : null;
+  const effectiveSubscription = await readEffectiveSubscriptionState(admin, targetUserId);
+  const effectivePlan = effectivePlanDisplay(effectiveSubscription);
 
   let activeCompanyName: string | null = null;
   if (user.active_company_id) {
@@ -156,7 +159,7 @@ export default async function OwnerUserDetailPage({ params }: any) {
   const experiences = Array.isArray(experiencesRes.data) ? experiencesRes.data : [];
   const actions = Array.isArray(actionsRes.data) ? actionsRes.data : [];
   const trustScore = candidateProfileRes.data?.trust_score ?? null;
-  const currentPlan = String(latestSub?.plan || "free");
+  const currentPlan = String(effectiveSubscription.plan || latestSub?.plan || "free");
 
   const activityDates = [
     user.created_at,
@@ -209,8 +212,12 @@ export default async function OwnerUserDetailPage({ params }: any) {
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Plan</div>
-            <div className="text-sm font-semibold text-slate-900">{latestSub?.plan || "free"}</div>
-            <div className="text-xs text-slate-500">{latestSub?.status || "sin suscripción activa"}</div>
+            <div className="text-sm font-semibold text-slate-900">{effectivePlan.planLabel}</div>
+            <div className="text-xs text-slate-500">
+              {effectiveSubscription.source === "override"
+                ? "override manual owner activo"
+                : latestSub?.status || "sin suscripción activa"}
+            </div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Onboarding / perfil</div>

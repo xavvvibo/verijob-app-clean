@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import CompanyPlanActions from "./CompanyPlanActions";
@@ -172,9 +173,10 @@ export default async function CompanySubscriptionPage() {
       .limit(20),
   ]);
 
-  const sub = subscriptionRes.data;
-  const plan = String(sub?.plan || "company_free");
-  const status = normalizeSubscriptionStatus(sub?.status || "free");
+  const effectiveSubscription = await readEffectiveSubscriptionState(admin, auth.user.id);
+  const sub = effectiveSubscription.subscription || subscriptionRes.data;
+  const plan = String(effectiveSubscription.plan || sub?.plan || "company_free");
+  const status = normalizeSubscriptionStatus(effectiveSubscription.status || sub?.status || "free");
   const label = planLabel(plan);
   const features = planFeatures(label);
   const active = isSubscriptionActive(status);
@@ -195,9 +197,9 @@ export default async function CompanySubscriptionPage() {
   }
   const completeness = Number(companyProfileRes.data?.profile_completeness_score || 0);
 
-  const ownerOverride = sub?.metadata && typeof sub.metadata === "object" ? (sub.metadata as any)?.owner_override : null;
-  const isManualOverride = Boolean(ownerOverride?.type);
-  const renewalText = status === "free" ? "No aplica" : formatDate(sub?.current_period_end || null);
+  const ownerOverride = effectiveSubscription.metadata && typeof effectiveSubscription.metadata === "object" ? (effectiveSubscription.metadata as any)?.owner_override : null;
+  const isManualOverride = Boolean(ownerOverride?.type) || effectiveSubscription.source === "override";
+  const renewalText = status === "free" ? "No aplica" : formatDate(effectiveSubscription.current_period_end || sub?.current_period_end || null);
 
   return (
     <div className="space-y-6">
@@ -283,7 +285,7 @@ export default async function CompanySubscriptionPage() {
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
             <p className="font-semibold text-slate-900">Coherencia de estado</p>
             <ul className="mt-2 space-y-1">
-              <li>• Fuente plan/estado: `public.subscriptions`.</li>
+              <li>• Fuente plan/estado: suscripción real o override manual owner activo.</li>
               <li>• Verificación empresa: suscripción activa o estado documental.</li>
               <li>• Upgrade y cobro: checkout real desde <span className="font-semibold">/company/upgrade</span> cuando Stripe está configurado.</li>
             </ul>

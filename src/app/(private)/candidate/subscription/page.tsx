@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { createClient } from "@/utils/supabase/client";
 import { useSearchParams } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +26,7 @@ type SubscriptionRow = {
   status: string | null;
   current_period_end: string | null;
   metadata: any;
+  source?: "subscription" | "override" | "none";
 };
 
 type PlanOption = {
@@ -80,7 +80,6 @@ function formatDateEs(value?: string | null): string {
 }
 
 export default function CandidateSubscriptionPage() {
-  const supabase = useMemo(() => createClient(), []);
   const searchParams = useSearchParams();
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [loadingPortal, setLoadingPortal] = useState(false);
@@ -105,32 +104,20 @@ export default function CandidateSubscriptionPage() {
   async function loadSubscriptionState(): Promise<SubscriptionRow | null> {
     setLoadingSubscription(true);
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-
-      if (!user?.id) {
+      const res = await fetch("/api/account/subscription-state", {
+        method: "GET",
+        cache: "no-store",
+        credentials: "include",
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok || !payload?.subscription) {
         setSubscription(null);
         setScheduledChange(null);
         return null;
       }
 
-      const { data, error } = await supabase
-        .from("subscriptions")
-        .select("plan,status,current_period_end,metadata")
-        .eq("user_id", user.id)
-        .in("status", ["active", "trialing", "trial", "past_due", "incomplete"])
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (error || !data) {
-        setSubscription(null);
-        setScheduledChange(null);
-        return null;
-      }
-
-      setSubscription(data as SubscriptionRow);
+      const data = payload.subscription as SubscriptionRow;
+      setSubscription(data);
       const raw = (data as any)?.metadata?.scheduled_change;
       if (raw && typeof raw === "object" && raw.type === "downgrade" && raw.target_plan_key && raw.effective_at) {
         setScheduledChange(raw as ScheduledChange);
@@ -368,7 +355,9 @@ export default function CandidateSubscriptionPage() {
           )}
 
           <h3 className="mt-4 text-xs font-semibold uppercase tracking-wide text-gray-500">Bajar de plan</h3>
-          {downgrades.length > 0 ? (
+          {subscription?.source === "override" ? (
+            <p className="mt-2 text-sm text-gray-600">Los cambios de plan se gestionan manualmente mientras el override owner esté activo.</p>
+          ) : downgrades.length > 0 ? (
             <>
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 {downgrades.map((plan) => (
@@ -407,14 +396,20 @@ export default function CandidateSubscriptionPage() {
             </a>
             <button
               onClick={openPortal}
-              disabled={loadingPortal}
+              disabled={loadingPortal || subscription?.source === "override"}
               className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-60"
             >
-              {loadingPortal ? "Abriendo…" : "Gestionar facturación"}
+              {loadingPortal ? "Abriendo…" : subscription?.source === "override" ? "Plan gestionado por VERIJOB" : "Gestionar facturación"}
             </button>
           </div>
         </section>
       </div>
+
+      {subscription?.source === "override" ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Tu plan está aplicado mediante override interno de VERIJOB. La facturación y los cambios automáticos no se gestionan desde Stripe en este estado.
+        </div>
+      ) : null}
 
       {!loadingSubscription && !subscription ? (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">

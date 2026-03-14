@@ -6,6 +6,7 @@ import {
   managedPlanLabel,
   normalizeManagedSubscriptionPlanKey,
 } from "@/lib/billing/managedPlans";
+import { readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
 import { buildSubscriptionLifecycleEmail } from "@/lib/email/templates/subscriptionLifecycle";
 import { sendTransactionalEmail } from "@/server/email/sendTransactionalEmail";
 
@@ -221,6 +222,7 @@ export async function POST(req: Request, ctx: any) {
   const role = String(targetProfile?.role || "").toLowerCase();
 
   if (actionType === ACTION_CHANGE_PLAN || actionType === ACTION_CANCEL_SUBSCRIPTION) {
+    const effectiveBefore = await readEffectiveSubscriptionState(owner.admin, targetUserId);
     const targetPlan =
       actionType === ACTION_CANCEL_SUBSCRIPTION
         ? "free"
@@ -251,6 +253,19 @@ export async function POST(req: Request, ctx: any) {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
+
+    await owner.admin
+      .from("plan_overrides")
+      .update({
+        is_active: false,
+        metadata: {
+          deactivated_by_owner: owner.ownerId,
+          deactivated_at: new Date().toISOString(),
+          deactivation_reason: reason,
+        },
+      })
+      .eq("user_id", targetUserId)
+      .eq("is_active", true);
 
     const columns = await getTableColumns(owner.admin, "subscriptions");
     const metadata = {
@@ -292,53 +307,50 @@ export async function POST(req: Request, ctx: any) {
       }
       resultRow = updated;
     } else {
-      const insertPayload: Record<string, any> = {
-        user_id: targetUserId,
-        plan: targetPlan,
-        status: nextStatus,
-        metadata,
-      };
-      if (columns.has("current_period_end")) insertPayload.current_period_end = targetPlan === "free" ? new Date().toISOString() : null;
-      if (columns.has("amount")) insertPayload.amount = estimatedAmount ?? 0;
-      if (columns.has("currency")) insertPayload.currency = "eur";
-
-      const { data: inserted, error: insertErr } = await owner.admin
-        .from("subscriptions")
-        .insert(insertPayload)
-        .select("id,plan,status,current_period_end,metadata")
-        .single();
-      if (insertErr) {
-        const { data: existingByUser } = await owner.admin
-          .from("subscriptions")
-          .select("id")
-          .eq("user_id", targetUserId)
-          .order("updated_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (existingByUser?.id) {
-          const { data: updatedFallback, error: updateFallbackErr } = await owner.admin
-            .from("subscriptions")
-            .update(updatePayload)
-            .eq("id", existingByUser.id)
-            .select("id,plan,status,current_period_end,metadata")
-            .single();
-          if (updateFallbackErr) {
-            const classified = classifyPlanPersistenceError(updateFallbackErr);
-            return json(400, classified);
-          }
-          resultRow = updatedFallback;
-        } else {
-          const classified = classifyPlanPersistenceError(insertErr);
-          return json(400, classified);
+      if (targetPlan !== "free") {
+        const { data: overrideRow, error: overrideErr } = await owner.admin
+          .from("plan_overrides")
+          .insert({
+            user_id: targetUserId,
+            plan_key: targetPlan,
+            source_type: "owner_manual_plan_change",
+            source_id: null,
+            starts_at: new Date().toISOString(),
+            expires_at: null,
+            is_active: true,
+            metadata: {
+              reason,
+              owner_user_id: owner.ownerId,
+              target_plan: targetPlan,
+            },
+          })
+          .select("id,plan_key,source_type,source_id,starts_at,expires_at,is_active,metadata,created_at")
+          .single();
+        if (overrideErr) {
+          return json(400, { error: "plan_override_create_failed", details: overrideErr.message });
         }
+        resultRow = {
+          id: overrideRow.id,
+          plan: overrideRow.plan_key,
+          status: "active",
+          current_period_end: overrideRow.expires_at,
+          metadata: overrideRow.metadata,
+          source: "override",
+        };
       } else {
-        resultRow = inserted;
+        resultRow = {
+          id: null,
+          plan: "free",
+          status: "free",
+          current_period_end: null,
+          metadata: {},
+          source: "none",
+        };
       }
     }
 
     const logged = await logOwnerAction(owner, targetUserId, actionType, reason, {
-      before: latestSub || null,
+      before: effectiveBefore,
       after: resultRow || null,
     });
     if (!logged.ok) return json(500, { error: "owner_action_log_failed", details: logged.error.message });
@@ -351,7 +363,7 @@ export async function POST(req: Request, ctx: any) {
       kind: "owner_plan_updated",
       toEmail: targetEmail,
       targetPlan,
-      previousPlan: (latestSub as any)?.plan || null,
+      previousPlan: effectiveBefore.plan || null,
       reason,
     });
 

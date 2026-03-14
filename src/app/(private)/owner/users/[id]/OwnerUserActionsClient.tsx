@@ -45,9 +45,12 @@ function ownerActionErrorMessage(errorCode: string, details: string | null) {
   if (errorCode === "invalid_target_plan") return "El plan seleccionado no está soportado en el catálogo actual.";
   if (errorCode === "invalid_target_plan_for_role") return "Ese plan no es válido para el tipo de usuario seleccionado.";
   if (errorCode === "missing_plan_mapping") return "Falta el mapeo interno del plan seleccionado. Revisa catálogo de billing.";
+  if (errorCode === "plan_persistence_rejected") {
+    return "El plan es válido en la app, pero la base remota ha rechazado guardarlo. Revisa la restricción legacy de subscriptions antes de reintentar.";
+  }
   if (errorCode === "plan_change_failed") {
     if (details && /constraint|check|enum|invalid input value/i.test(details)) {
-      return "No se pudo aplicar el plan porque el valor no es válido en la configuración actual.";
+      return "No se pudo aplicar el plan porque la persistencia remota lo ha rechazado. Revisa la configuración legacy de subscriptions.";
     }
     if (details && /null value|null/i.test(details)) {
       return "No se pudo aplicar el plan por un dato interno obligatorio que falta en suscripción.";
@@ -171,7 +174,7 @@ export default function OwnerUserActionsClient({
       "change_plan",
       reason,
       { target_plan: planTarget },
-      `Se aplicará cambio de plan de "${currentPlan || "free"}" a "${planTarget}". ¿Confirmas?`
+      `Se aplicará cambio de plan de "${managedPlanLabel(currentPlan || "free")}" a "${managedPlanLabel(planTarget)}". ¿Confirmas?`
     );
     if (result) setPlanReason("");
   }
