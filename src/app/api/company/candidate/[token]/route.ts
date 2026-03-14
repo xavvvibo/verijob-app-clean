@@ -3,6 +3,11 @@ import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { sanitizePublic } from "@/utils/sanitizePublic";
 import { resolveActiveCandidatePublicLink } from "@/lib/public/candidate-public-link";
+import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
+import {
+  deriveCompanyCandidateAccess,
+  resolveCompanyCandidateAccess,
+} from "@/lib/company/profile-access";
 
 type Params = { token: string };
 
@@ -127,7 +132,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
   if (!profile) return json(404, { error: "Not found" });
   const lifecycleStatus = String((profile as any)?.lifecycle_status || "active").toLowerCase();
-  if (lifecycleStatus === "deleted" || lifecycleStatus === "disabled") {
+  if (isUnavailableLifecycleStatus(lifecycleStatus)) {
     return json(410, { error: "Profile unavailable" });
   }
 
@@ -304,11 +309,21 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     last_activity_at: lastActivityAt,
   };
 
+  const companyId = String((requesterProfile as any)?.active_company_id || "").trim();
+  const access = companyId
+    ? await resolveCompanyCandidateAccess({
+        service,
+        companyId,
+        candidateId: String(link.candidate_id),
+      })
+    : deriveCompanyCandidateAccess(null, null);
+
   if (mode === "preview") {
     return json(200, {
       candidate_id: link.candidate_id,
       view_mode: "preview",
       preview: snapshot,
+      access,
       gate: {
         allowed: true,
         consumed: false,
@@ -323,63 +338,87 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       error: "candidate_profile_incomplete",
       user_message: "Este candidato aún está completando su perfil verificable. Recibirás una notificación cuando esté disponible.",
       preview: snapshot,
+      access,
       upgrade_url: "/company/subscription",
     });
   }
 
-  // Consumo de crédito solo cuando se pide el perfil completo.
-  const { data: gate, error: gateErr } = await supabase.rpc("vj_consume_company_profile_view", {
-    p_candidate_id: link.candidate_id,
-  });
+  let gate: any = {
+    allowed: true,
+    consumed: false,
+    requires_overage: false,
+    overage_price: null,
+    credits_remaining: null,
+    period_start: null,
+  };
+  let resolvedAccess = access;
 
-  if (gateErr) {
-    console.error("[company-candidate-token] gate failed", {
-      candidate_id: link.candidate_id,
-      company_id: (requesterProfile as any)?.active_company_id || null,
-      message: gateErr.message,
-      code: (gateErr as any)?.code || null,
+  if (access.access_status !== "active") {
+    // Consumo de crédito solo cuando se pide el perfil completo y no existe acceso activo.
+    const gateRes = await supabase.rpc("vj_consume_company_profile_view", {
+      p_candidate_id: link.candidate_id,
     });
-    return json(500, { error: "Gate failed" });
-  }
+    gate = gateRes.data;
+    const gateErr = gateRes.error;
 
-  if (!gate?.allowed) {
-    return json(402, {
-      error: "No credits",
-      reason: gate?.reason ?? "no_credits",
-      credits_remaining: gate?.credits_remaining ?? null,
-      upgrade_url: "/company/upgrade",
-      preview: snapshot,
-    });
-  }
+    if (gateErr) {
+      console.error("[company-candidate-token] gate failed", {
+        candidate_id: link.candidate_id,
+        company_id: (requesterProfile as any)?.active_company_id || null,
+        message: gateErr.message,
+        code: (gateErr as any)?.code || null,
+      });
+      return json(500, { error: "Gate failed" });
+    }
 
-  if (gate?.consumed) {
-    const companyId = String((requesterProfile as any)?.active_company_id || "").trim();
-    if (companyId) {
-      const verificationId = String(verificationRows.find((row: any) => row?.verification_id)?.verification_id || "").trim() || null;
-      try {
-        const source = await resolveConsumptionSource({
-          service,
-          companyId,
-          viewerUserId: au.user.id,
-        });
+    if (!gate?.allowed) {
+      return json(402, {
+        error: "No credits",
+        reason: gate?.reason ?? "no_credits",
+        credits_remaining: gate?.credits_remaining ?? null,
+        upgrade_url: "/company/upgrade",
+        preview: snapshot,
+        access,
+      });
+    }
 
-        await service.from("profile_view_consumptions").insert({
-          company_id: companyId,
-          viewer_user_id: au.user.id,
-          candidate_id: link.candidate_id,
-          verification_id: verificationId,
-          credits_spent: 1,
-          source,
-        });
-      } catch (logErr: any) {
-        console.error("[company-candidate-token] consumption log failed", {
-          candidate_id: link.candidate_id,
-          company_id: companyId,
-          viewer_user_id: au.user.id,
-          message: logErr?.message || String(logErr),
-        });
+    if (gate?.consumed) {
+      if (companyId) {
+        const verificationId = String(verificationRows.find((row: any) => row?.verification_id)?.verification_id || "").trim() || null;
+        try {
+          const source = await resolveConsumptionSource({
+            service,
+            companyId,
+            viewerUserId: au.user.id,
+          });
+
+          await service.from("profile_view_consumptions").insert({
+            company_id: companyId,
+            viewer_user_id: au.user.id,
+            candidate_id: link.candidate_id,
+            verification_id: verificationId,
+            credits_spent: 1,
+            source,
+          });
+          resolvedAccess = deriveCompanyCandidateAccess(new Date().toISOString(), source);
+        } catch (logErr: any) {
+          console.error("[company-candidate-token] consumption log failed", {
+            candidate_id: link.candidate_id,
+            company_id: companyId,
+            viewer_user_id: au.user.id,
+            message: logErr?.message || String(logErr),
+          });
+          resolvedAccess = deriveCompanyCandidateAccess(new Date().toISOString(), null);
+        }
       }
     }
+  } else {
+    gate = {
+      ...gate,
+      allowed: true,
+      consumed: false,
+      credits_remaining: null,
+    };
   }
 
   const experiencesBase = Math.max(1, verificationRows.length || 0);
@@ -425,6 +464,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     candidate_id: link.candidate_id,
     view_mode: "full",
     preview: snapshot,
+    access: resolvedAccess,
     profile: safe,
     contact,
     availability,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/utils/supabase/server"
 import crypto from "crypto"
+import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
 
 function newToken() {
   return crypto.randomBytes(16).toString("hex")
@@ -15,6 +16,21 @@ export async function POST(req: Request, ctx: any) {
 
   const { data: { user }, error: authError } = await supabase.auth.getUser()
   if (authError || !user) return NextResponse.json({ error: "unauthorized" }, { status: 401 })
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("lifecycle_status")
+    .eq("id", user.id)
+    .maybeSingle()
+  if (isUnavailableLifecycleStatus((profile as any)?.lifecycle_status)) {
+    return NextResponse.json(
+      {
+        error: "profile_unavailable",
+        user_message: "Tu perfil esta desactivado o eliminado. Reactivalo antes de compartir credenciales.",
+      },
+      { status: 423 }
+    )
+  }
 
   const { data: vr, error: vrErr } = await supabase
     .from("verification_requests")

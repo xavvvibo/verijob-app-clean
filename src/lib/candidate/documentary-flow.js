@@ -1,3 +1,5 @@
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+
 export function getActiveDocumentaryVerificationId(rows) {
   if (!Array.isArray(rows) || rows.length === 0) return null;
   const firstId = rows[0]?.id;
@@ -20,7 +22,7 @@ export function buildDocumentaryVerificationInsert({
     verification_channel: "documentary",
     status: "reviewing",
     requested_at: nowIso,
-    company_name_target: String(companyName || "").trim() || "Empresa",
+    company_name_target: resolveCompanyDisplayName(companyName || null, "Tu empresa"),
     request_context: {
       source: "candidate_evidence_upload",
       auto_associated: true,

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { requireOwner } from "../_lib";
 
 function json(status: number, body: any) {
@@ -32,8 +33,8 @@ export async function GET(req: Request) {
       .limit(limit),
     owner.admin
       .from("companies")
-      .select("id,name,status,created_at")
-      .ilike("name", `%${q}%`)
+      .select("id,name,trade_name,legal_name,status,created_at")
+      .or(`name.ilike.%${q}%,trade_name.ilike.%${q}%,legal_name.ilike.%${q}%`)
       .order("created_at", { ascending: false })
       .limit(limit),
     owner.admin
@@ -56,7 +57,7 @@ export async function GET(req: Request) {
       ? owner.admin.from("profiles").select("id,full_name,email").in("id", verificationUserIds)
       : Promise.resolve({ data: [] } as any),
     verificationCompanyIds.length
-      ? owner.admin.from("companies").select("id,name").in("id", verificationCompanyIds)
+      ? owner.admin.from("companies").select("id,name,trade_name,legal_name").in("id", verificationCompanyIds)
       : Promise.resolve({ data: [] } as any),
   ]);
 
@@ -71,7 +72,8 @@ export async function GET(req: Request) {
     .map((row: any) => {
       const candidate = profileById.get(String(row.requested_by || "")) as any;
       const company = companyById.get(String(row.company_id || "")) as any;
-      const haystack = [row.id, row.status, candidate?.full_name, candidate?.email, company?.name]
+      const companyName = resolveCompanyDisplayName(company, "");
+      const haystack = [row.id, row.status, candidate?.full_name, candidate?.email, companyName]
         .map((value) => String(value || "").toLowerCase())
         .join(" ");
       return {
@@ -79,7 +81,7 @@ export async function GET(req: Request) {
         status: String(row.status || ""),
         created_at: String(row.created_at || ""),
         candidate_name: String(candidate?.full_name || candidate?.email || ""),
-        company_name: String(company?.name || ""),
+        company_name: companyName,
         matched: haystack.includes(q.toLowerCase()) || (isUuid(q) && String(row.id || "") === q),
       };
     })
@@ -89,7 +91,10 @@ export async function GET(req: Request) {
 
   return json(200, {
     users: Array.isArray(usersRes.data) ? usersRes.data : [],
-    companies: Array.isArray(companiesRes.data) ? companiesRes.data : [],
+    companies: (Array.isArray(companiesRes.data) ? companiesRes.data : []).map((row: any) => ({
+      ...row,
+      name: resolveCompanyDisplayName(row, "Tu empresa"),
+    })),
     verifications: verificationMatches,
   });
 }

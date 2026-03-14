@@ -52,13 +52,13 @@ export default async function OwnerAiOpsPage() {
           Módulo técnico owner para monitorizar jobs internos de parsing y salud operativa de automatizaciones conectadas.
         </p>
         <p className="mt-2 text-xs text-slate-500">
-          Fuente actual: `cv_parse_jobs`. Si esta fuente no existe o no es accesible, el módulo lo indica de forma explícita.
+          La lectura actual se apoya en el registro de procesamiento disponible. Si esa fuente no existe o no es accesible, el módulo lo indica de forma explícita.
         </p>
       </section>
 
       {error ? (
         <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-          No se pudo cargar `cv_parse_jobs`. El panel mantiene el módulo visible para owner, pero la infraestructura de jobs no está accesible desde esta consulta.
+          No se pudo cargar la fuente de procesamiento. El panel mantiene el módulo visible para owner, pero la infraestructura de jobs no está accesible desde esta consulta.
         </section>
       ) : null}
 

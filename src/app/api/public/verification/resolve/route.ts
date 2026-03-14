@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 
@@ -84,10 +85,7 @@ export async function POST(req: Request) {
 
       snapshotCompanyName =
         snapshotCompanyName ||
-        asText((company as any)?.name, 180) ||
-        asText((company as any)?.trade_name, 180) ||
-        asText((company as any)?.legal_name, 180) ||
-        snapshotCompanyName;
+        resolveCompanyDisplayName(company as any, "Tu empresa");
 
       const companyStatus = asText((company as any)?.company_verification_status, 60);
       if (companyStatus) snapshotCompanyVerificationStatus = companyStatus;

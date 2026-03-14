@@ -149,14 +149,14 @@ export default async function OwnerMonetizationPage() {
           Control ejecutivo de ingresos recurrentes y monetización puntual. Se separan claramente las suscripciones locales, las compras one-off persistidas y el consumo real de visualizaciones registrado.
         </p>
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
-          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-700">Fuente recurrente: `subscriptions`</span>
-          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-800">Fuente puntual: `stripe_oneoff_purchases`</span>
-          <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 font-semibold text-sky-800">Consumo: `profile_view_consumptions`</span>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-700">Suscripción recurrente</span>
+          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-800">Compras puntuales</span>
+          <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 font-semibold text-sky-800">Consumo de visualizaciones</span>
           <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-800">Stripe LIVE: reconciliación parcial</span>
         </div>
         <p className="mt-2 inline-flex items-center gap-2 text-xs text-slate-500">
           Definiciones de monetización
-          <OwnerTooltip text="MRR = suma de amounts activos/trialing en subscriptions. One-off = compras persistidas por checkout.session.completed. Consumo = unlocks registrados al abrir perfil completo." />
+          <OwnerTooltip text="MRR = suma de suscripciones activas o en prueba. Compras puntuales = ventas registradas al completar checkout. Consumo = aperturas completas de perfil que gastan crédito." />
         </p>
       </section>
 
@@ -167,7 +167,7 @@ export default async function OwnerMonetizationPage() {
             <p className="mt-1">Se han consumido más créditos de los concedidos en la fuente auditada actual. Revisa grants legacy o consumos previos a este log.</p>
           ) : null}
           {hasConsumptionWithoutPurchaseWarning ? (
-            <p className="mt-1">Hay consumo registrado sin compra puntual en `stripe_oneoff_purchases`. Puede deberse a grants manuales, promociones o compras anteriores no persistidas.</p>
+            <p className="mt-1">Hay consumo registrado sin compra puntual visible en la trazabilidad actual. Puede deberse a grants manuales, promociones o compras anteriores no persistidas.</p>
           ) : null}
         </section>
       ) : null}
@@ -254,14 +254,14 @@ export default async function OwnerMonetizationPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Consumo puntual y conciliación</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Esta sección separa compras one-off y unlocks consumidos. El flujo ya es auditable desde `stripe_oneoff_purchases` y `profile_view_consumptions`.
+          Esta sección separa compras puntuales y visualizaciones consumidas. La trazabilidad ya permite auditar ingresos y gasto de créditos recientes.
         </p>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Última compra one-off</p>
             <p className="mt-1 text-sm font-semibold text-slate-900">{fmtDate(summary?.last_oneoff_purchase_at || purchases[0]?.created_at)}</p>
-            <p className="mt-1 text-xs text-slate-500">Registra compras de `company_single_cv` y `company_pack_5` desde Stripe.</p>
+            <p className="mt-1 text-xs text-slate-500">Incluye compras de visualización individual y packs de visualizaciones.</p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estado de conciliación</p>
@@ -280,7 +280,7 @@ export default async function OwnerMonetizationPage() {
         <p className="mt-1 text-sm text-slate-600">Histórico canónico de sesiones one-off completadas en Stripe.</p>
         {purchases.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
-            Todavía no hay filas en `stripe_oneoff_purchases`.
+            Aún no se han registrado compras puntuales en esta fuente.
           </div>
         ) : (
           <div className="mt-4 overflow-auto">
@@ -317,7 +317,7 @@ export default async function OwnerMonetizationPage() {
         <p className="mt-1 text-sm text-slate-600">Consumo real de visualizaciones al abrir perfil completo.</p>
         {consumptions.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
-            Todavía no hay filas en `profile_view_consumptions`.
+            Todavía no hay visualizaciones consumidas registradas.
           </div>
         ) : (
           <div className="mt-4 overflow-auto">
@@ -354,7 +354,7 @@ export default async function OwnerMonetizationPage() {
         <p className="mt-1 text-sm text-slate-600">Distribución activa y aportación mensual estimada por plan.</p>
         {sortedPlans.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
-            No hay datos suficientes en `subscriptions` para construir resumen por plan.
+            Aún no hay actividad suficiente de suscripción para construir un resumen por plan.
           </div>
         ) : (
           <div className="mt-4 overflow-auto">
@@ -388,7 +388,7 @@ export default async function OwnerMonetizationPage() {
 
         {latestRows.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
-            Todavía no hay filas en `subscriptions` para mostrar.
+            Todavía no hay suscripciones registradas para mostrar actividad reciente.
           </div>
         ) : (
           <div className="mt-4 overflow-auto">

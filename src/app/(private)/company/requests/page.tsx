@@ -256,7 +256,7 @@ export default async function CompanyRequestsPage({
           <div className="mt-2 text-2xl font-semibold">{counts.withEvidence}</div>
         </Link>
         <Link href="?filter=with_reuse&sort=priority" className={`rounded-2xl border p-4 ${filter === "with_reuse" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`}>
-          <div className="text-xs uppercase tracking-wide">Con reutilización</div>
+          <div className="text-xs uppercase tracking-wide">Con uso histórico</div>
           <div className="mt-2 text-2xl font-semibold">{counts.withReuse}</div>
         </Link>
       </section>
@@ -296,7 +296,7 @@ export default async function CompanyRequestsPage({
                     ) : null}
                     {row.reuse_events > 0 ? (
                       <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
-                        {row.reuse_events} reutilizaciones
+                        {row.reuse_events} usos históricos
                       </span>
                     ) : null}
                   </div>

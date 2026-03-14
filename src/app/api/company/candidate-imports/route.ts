@@ -3,11 +3,13 @@ import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
 import {
   ensureCandidatePublicToken,
   extractStructuredCvFromBuffer,
   sha256Hex,
 } from "@/lib/company-candidate-import";
+import { resolveCompanyCandidateAccessMap } from "@/lib/company/profile-access";
 import { sendTransactionalEmail } from "@/lib/email/sendTransactionalEmail";
 import { buildCompanyCandidateImportInviteEmail } from "@/lib/email/templates/companyCandidateImportInvite";
 
@@ -191,11 +193,17 @@ async function readInvitesSnapshot(admin: any, companyId: string) {
     if (String(row?.status || "").toLowerCase() === "approved") current.approved += 1;
     verificationStats.set(userId, current);
   }
+  const accessByCandidateId = await resolveCompanyCandidateAccessMap({
+    service: admin,
+    companyId,
+    candidateIds: linkedUserIds,
+  });
 
   const invites = baseInvites.map((row: any) => {
     const linkedUserId = String(row?.linked_user_id || "");
     const linkedProfile = (linkedUserId ? profilesById.get(linkedUserId) : null) as any;
     const stats = linkedUserId ? verificationStats.get(linkedUserId) || { total: 0, approved: 0 } : { total: 0, approved: 0 };
+    const access = linkedUserId ? accessByCandidateId.get(linkedUserId) : null;
     const importMeta = row?.extracted_payload_json?._verijob_import_meta || {};
     const companyState = row?.extracted_payload_json?._verijob_company_state || {};
     const normalized = {
@@ -209,6 +217,10 @@ async function readInvitesSnapshot(admin: any, companyId: string) {
       approved_verifications: stats.approved,
       company_stage: normalizeCompanyStage(companyState?.stage),
       company_stage_updated_at: companyState?.updated_at || null,
+      access_status: access?.access_status || "never",
+      access_granted_at: access?.access_granted_at || null,
+      access_expires_at: access?.access_expires_at || null,
+      access_source: access?.source || null,
       last_activity_at:
         row?.accepted_at ||
         row?.emailed_at ||
@@ -257,6 +269,16 @@ export async function POST(request: Request) {
     const ctx = await resolveContext();
     if ((ctx as any).error) return (ctx as any).error;
     const { user, companyId, membershipRole, companyName, admin } = ctx as any;
+    const companyLifecycle = await readCompanyLifecycle(admin, companyId);
+    if (!companyLifecycle.ok) {
+      return json(400, { error: "company_read_failed", details: companyLifecycle.error.message });
+    }
+    if (isCompanyLifecycleBlocked(companyLifecycle.lifecycleStatus)) {
+      return json(423, {
+        error: "company_inactive",
+        user_message: "La empresa esta desactivada o cerrada. Reactivala desde ajustes antes de importar nuevos CV.",
+      });
+    }
 
     if (membershipRole !== "admin") {
       return json(403, { error: "forbidden", user_message: "Solo administradores pueden invitar candidatos desde CV." });

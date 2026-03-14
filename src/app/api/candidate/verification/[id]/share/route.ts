@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
+import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
 
 export async function POST(_req: Request, ctx: any) {
   const verificationId = ctx?.params?.id as string | undefined;
@@ -13,6 +14,21 @@ export async function POST(_req: Request, ctx: any) {
   const { data: auth } = await supabase.auth.getUser();
   const user = auth?.user;
   if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("lifecycle_status")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (isUnavailableLifecycleStatus((profile as any)?.lifecycle_status)) {
+    return NextResponse.json(
+      {
+        error: "profile_unavailable",
+        user_message: "Tu perfil esta desactivado o eliminado. Reactivalo antes de compartir verificaciones.",
+      },
+      { status: 423 }
+    );
+  }
 
   // 1) Idempotente: si existe token, lo reutiliza
   const { data: existing, error: existingErr } = await supabase

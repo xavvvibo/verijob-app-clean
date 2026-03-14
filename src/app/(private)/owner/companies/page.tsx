@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 
@@ -69,14 +70,14 @@ export default async function OwnerCompaniesPage({
   let companies: any[] = [];
   const companiesWithStatus = await supabase
     .from("companies")
-    .select("id,name,created_at,updated_at,status")
+    .select("id,name,trade_name,legal_name,created_at,updated_at,status")
     .order("created_at", { ascending: false })
     .limit(250);
 
   if (companiesWithStatus.error) {
     const fallbackCompanies = await supabase
       .from("companies")
-      .select("id,name,created_at,updated_at")
+      .select("id,name,trade_name,legal_name,created_at,updated_at")
       .order("created_at", { ascending: false })
       .limit(250);
     companies = Array.isArray(fallbackCompanies.data) ? fallbackCompanies.data : [];
@@ -148,6 +149,7 @@ export default async function OwnerCompaniesPage({
     return {
       row,
       id,
+      displayName: resolveCompanyDisplayName(row, "Tu empresa"),
       status,
       completion,
       reqCount,
@@ -166,7 +168,7 @@ export default async function OwnerCompaniesPage({
       if (profileFilter === "completo" && entry.completion < 80) return false;
       if (profileFilter === "incompleto" && entry.completion >= 80) return false;
     }
-    if (q && !String(entry.row?.name || "").toLowerCase().includes(q)) return false;
+    if (q && !entry.displayName.toLowerCase().includes(q)) return false;
     return true;
   });
 
@@ -266,10 +268,10 @@ export default async function OwnerCompaniesPage({
                   <tr key={entry.id} className="border-b border-slate-100 text-slate-800">
                     <td className="px-3 py-3">
                       <Link href={`/owner/companies/${entry.id}`} className="font-semibold text-slate-900 underline">
-                        {entry.row.name || "Empresa sin nombre"}
+                        {entry.displayName}
                       </Link>
                       <div className="mt-1 flex flex-wrap gap-2 text-xs">
-                        <Link href={`/owner/verifications?company=${encodeURIComponent(String(entry.row.name || ""))}`} className="font-semibold text-slate-700 underline">
+                        <Link href={`/owner/verifications?company=${encodeURIComponent(entry.displayName)}`} className="font-semibold text-slate-700 underline">
                           Ver solicitudes
                         </Link>
                         <Link href="/owner/users?quick=with_company" className="font-semibold text-slate-700 underline">

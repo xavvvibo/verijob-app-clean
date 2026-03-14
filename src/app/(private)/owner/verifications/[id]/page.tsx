@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 
@@ -38,7 +39,7 @@ export default async function OwnerVerificationDetailPage({ params }: { params: 
       ? admin.from("profiles").select("id,full_name,email").eq("id", verification.requested_by).maybeSingle()
       : Promise.resolve({ data: null } as any),
     verification.company_id
-      ? admin.from("companies").select("id,name,status").eq("id", verification.company_id).maybeSingle()
+      ? admin.from("companies").select("id,name,trade_name,legal_name,status").eq("id", verification.company_id).maybeSingle()
       : Promise.resolve({ data: null } as any),
     verification.employment_record_id
       ? admin.from("employment_records").select("id,position,company_name_freeform,start_date,end_date,verification_status").eq("id", verification.employment_record_id).maybeSingle()
@@ -55,6 +56,15 @@ export default async function OwnerVerificationDetailPage({ params }: { params: 
   const employment = employmentRes.data as any;
   const evidences = Array.isArray(evidencesRes.data) ? evidencesRes.data : [];
   const requestContext = verification.request_context && typeof verification.request_context === "object" ? verification.request_context : {};
+  const companyDisplayName = resolveCompanyDisplayName(
+    company
+      ? {
+          ...(company || {}),
+          company_name: verification.company_name_target || String((requestContext as any)?.company_name || "") || employment?.company_name_freeform || null,
+        }
+      : verification.company_name_target || String((requestContext as any)?.company_name || "") || employment?.company_name_freeform || null,
+    "Tu empresa",
+  );
 
   return (
     <div className="space-y-5">
@@ -73,7 +83,7 @@ export default async function OwnerVerificationDetailPage({ params }: { params: 
           <Card label="Estado" value={String(verification.status || "—")} />
           <Card label="Método" value={String(verification.verification_channel || "email")} />
           <Card label="Candidato" value={candidate?.full_name || candidate?.email || "Sin candidato"} />
-          <Card label="Empresa" value={company?.name || verification.company_name_target || "Empresa externa"} />
+          <Card label="Empresa" value={companyDisplayName} />
           <Card label="Experiencia" value={employment?.position || String((requestContext as any)?.role_title || "Experiencia no indicada")} />
           <Card label="Creada" value={fmtDate(verification.created_at || verification.requested_at)} />
           <Card label="Actualizada" value={fmtDate(verification.updated_at)} />
@@ -107,7 +117,7 @@ export default async function OwnerVerificationDetailPage({ params }: { params: 
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <div className="text-xs text-slate-500">Empresa objetivo</div>
-              <div className="font-semibold text-slate-900">{company?.name || verification.company_name_target || String((requestContext as any)?.company_name || "No indicada")}</div>
+              <div className="font-semibold text-slate-900">{companyDisplayName}</div>
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <div className="text-xs text-slate-500">Fechas</div>

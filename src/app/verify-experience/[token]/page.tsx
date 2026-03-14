@@ -1,4 +1,5 @@
 import ResolveExperienceForm from "./ResolveExperienceForm";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 
@@ -125,7 +126,10 @@ export default async function VerifyExperiencePage({ params }: PageProps) {
     : { data: null as any };
 
   const candidateName = String(candidateProfile?.full_name || "").trim() || "Candidato";
-  const companyName = String(requestRow.company_name_target || employment?.company_name_freeform || "").trim() || "Empresa no especificada";
+  const companyName = resolveCompanyDisplayName(
+    requestRow.company_name_target || employment?.company_name_freeform || null,
+    "Tu empresa",
+  );
   const roleTitle =
     String((requestRow.request_context as any)?.position || employment?.position || "").trim() || "Puesto no especificado";
 

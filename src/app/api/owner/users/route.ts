@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
@@ -177,7 +178,7 @@ export async function GET(req: Request) {
       const { data: companyMatches } = await admin
         .from("companies")
         .select("id")
-        .ilike("name", `%${q}%`)
+        .or(`name.ilike.%${q}%,trade_name.ilike.%${q}%,legal_name.ilike.%${q}%`)
         .limit(100);
 
       companyMatchIds = new Set(
@@ -263,7 +264,7 @@ export async function GET(req: Request) {
             .order("created_at", { ascending: false })
         : Promise.resolve({ data: [] as any[] } as any),
       companyIds.length
-        ? admin.from("companies").select("id,name").in("id", companyIds)
+        ? admin.from("companies").select("id,name,trade_name,legal_name").in("id", companyIds)
         : Promise.resolve({ data: [] as any[] } as any),
       userIds.length
         ? admin.from("candidate_profiles").select("user_id,trust_score").in("user_id", userIds)
@@ -297,7 +298,7 @@ export async function GET(req: Request) {
 
     const companyNameById = new Map<string, string>();
     for (const c of Array.isArray(companiesRes.data) ? companiesRes.data : []) {
-      companyNameById.set(String((c as any)?.id || ""), String((c as any)?.name || ""));
+      companyNameById.set(String((c as any)?.id || ""), resolveCompanyDisplayName(c as any, "Tu empresa"));
     }
 
     const trustByUser = new Map<string, number>();

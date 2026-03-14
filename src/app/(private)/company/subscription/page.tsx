@@ -141,7 +141,7 @@ export default async function CompanySubscriptionPage() {
   if (!auth?.user) redirect("/login?next=/company/subscription");
 
   const ctx = await resolveCompanyContext(admin, auth.user.id);
-  if ((ctx as any).error === "no_active_company") redirect("/company/reuse");
+  if ((ctx as any).error === "no_active_company") redirect("/company/candidates");
   if ((ctx as any).error) redirect("/company?error=subscription_context");
 
   const companyId = (ctx as any).companyId as string;

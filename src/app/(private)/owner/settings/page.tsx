@@ -36,7 +36,7 @@ export default async function OwnerSettingsPage() {
 
   const operations = [
     { label: "Incidencias registradas", value: issuesRes.error ? "Fuente no disponible" : String(issuesRes.count || 0) },
-    { label: "Jobs de parsing", value: jobsRes.error ? "Infra pendiente" : String(jobsRes.count || 0) },
+    { label: "Procesos automáticos registrados", value: jobsRes.error ? "Fuente no disponible" : String(jobsRes.count || 0) },
     { label: "Acciones owner trazadas", value: actionsRes.error ? "Sin fuente" : String(actionsRes.count || 0) },
   ];
 

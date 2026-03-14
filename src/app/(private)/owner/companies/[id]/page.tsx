@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 
@@ -35,7 +36,7 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
   const admin = createServiceRoleClient();
   const companyRes = await admin
     .from("companies")
-    .select("id,name,status,created_at,updated_at")
+    .select("id,name,trade_name,legal_name,status,created_at,updated_at")
     .eq("id", id)
     .maybeSingle();
 
@@ -95,13 +96,14 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
 
   const completion = Number((profileRes.data as any)?.profile_completeness_score || 0);
   const verificationStatus = String((profileRes.data as any)?.company_verification_status || company.status || "");
+  const companyDisplayName = resolveCompanyDisplayName(company, "Tu empresa");
 
   return (
     <div className="space-y-5">
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">{company.name || "Empresa sin nombre"}</h1>
+            <h1 className="text-2xl font-semibold text-slate-900">{companyDisplayName}</h1>
             <p className="mt-1 text-sm text-slate-600">Ficha owner mínima de empresa para operación, seguimiento y navegación cruzada.</p>
           </div>
           <Link href="/owner/companies" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700">
@@ -121,7 +123,7 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2 text-sm">
-          <Link href={`/owner/verifications?company=${encodeURIComponent(String(company.name || ""))}`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700">
+          <Link href={`/owner/verifications?company=${encodeURIComponent(companyDisplayName)}`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700">
             Abrir verificaciones
           </Link>
           <Link href="/owner/users?quick=with_company" className="rounded-lg border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700">

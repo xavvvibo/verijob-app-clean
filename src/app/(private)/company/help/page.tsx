@@ -6,8 +6,8 @@ const FAQS = [
     a: "Desde Solicitudes puedes filtrar por estado, abrir el detalle de cada verificación y tomar decisiones con trazabilidad.",
   },
   {
-    q: "¿Cómo reutilizo una verificación existente?",
-    a: "En Reutilización introduce el ID de verificación ya resuelta. El sistema registra la acción y te permite continuar el proceso con mayor velocidad.",
+    q: "¿Cómo desbloqueo un candidato completo?",
+    a: "Desde Candidatos abre el snapshot y, si te interesa, desbloquea el perfil completo. El acceso queda activo temporalmente para tu empresa.",
   },
   {
     q: "¿Cómo accedo a un candidato completo?",
@@ -25,7 +25,7 @@ export default function CompanyHelpPage() {
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Centro de ayuda para empresa</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Resuelve dudas operativas sobre revisión de candidatos, reutilización de verificaciones y gestión de plan.
+          Resuelve dudas operativas sobre revisión de candidatos, acceso a perfiles completos y gestión de plan.
         </p>
       </section>
 
@@ -36,7 +36,7 @@ export default function CompanyHelpPage() {
             <li>1. Configura tu panel en <a href="/company/settings" className="underline underline-offset-2">Ajustes</a>.</li>
             <li>2. Revisa la cola de verificación en <a href="/company/requests" className="underline underline-offset-2">Solicitudes</a>.</li>
             <li>3. Consulta candidatos por token en <a href="/company/candidates" className="underline underline-offset-2">Candidatos</a>.</li>
-            <li>4. Optimiza tiempos con <a href="/company/reuse" className="underline underline-offset-2">Reutilización</a>.</li>
+            <li>4. Gestiona accesos desde <a href="/company/reuse" className="underline underline-offset-2">Accesos</a>.</li>
             <li>5. Revisa límites y plan en <a href="/company/billing" className="underline underline-offset-2">Suscripción</a>.</li>
           </ol>
         </article>

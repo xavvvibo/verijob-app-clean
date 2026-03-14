@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import OwnerUserActionsClient from "./OwnerUserActionsClient";
@@ -145,10 +146,10 @@ export default async function OwnerUserDetailPage({ params }: any) {
   if (user.active_company_id) {
     const { data: company } = await admin
       .from("companies")
-      .select("id,name")
+      .select("id,name,trade_name,legal_name")
       .eq("id", user.active_company_id)
       .maybeSingle();
-    activeCompanyName = company?.name ? String(company.name) : null;
+    activeCompanyName = resolveCompanyDisplayName(company as any, "Tu empresa");
   }
 
   const verifications = Array.isArray(verificationsRes.data) ? verificationsRes.data : [];

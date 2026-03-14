@@ -6,6 +6,7 @@ import {
   buildCompanyProfileCompletionModel,
   resolveCompanyDisplayName,
 } from "@/lib/company/company-profile";
+import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
 
 const ROUTE_VERSION = "company-profile-v1";
 
@@ -552,6 +553,20 @@ export async function POST(request: Request) {
     if ((ctx as any).error) return (ctx as any).error;
 
     const { user, companyId, membershipRole } = ctx as any;
+    const companyLifecycle = await readCompanyLifecycle(admin, companyId);
+    if (!companyLifecycle.ok) {
+      return NextResponse.json({ error: "company_read_failed", details: companyLifecycle.error.message, route_version: ROUTE_VERSION }, { status: 400 });
+    }
+    if (isCompanyLifecycleBlocked(companyLifecycle.lifecycleStatus)) {
+      return NextResponse.json(
+        {
+          error: "company_inactive",
+          user_message: "La empresa esta desactivada o cerrada. Reactivala desde ajustes antes de editar el perfil.",
+          route_version: ROUTE_VERSION,
+        },
+        { status: 423 },
+      );
+    }
     if (membershipRole !== "admin") {
       return NextResponse.json({ error: "forbidden", details: "Solo administradores pueden editar el perfil de empresa." }, { status: 403 });
     }

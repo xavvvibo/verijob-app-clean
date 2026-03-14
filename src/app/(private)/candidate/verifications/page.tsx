@@ -94,7 +94,7 @@ export default async function CandidateVerificationsPage() {
               {visibleRows.map((row: any) => (
                 <tr key={row.id}>
                   <td className="px-4 py-3 text-slate-900">
-                    <div className="font-medium">{row.company_name_target || "Empresa no indicada"}</div>
+                    <div className="font-medium">{row.company_name_target || "Empresa"}</div>
                     <div className="text-xs text-slate-500">{row.company_email_target || "Sin email"}</div>
                   </td>
                   <td className="px-4 py-3 text-slate-700">{statusLabel(row.status)}</td>

@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { createPagesRouteClient } from "@/utils/supabase/pages";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { rateLimit } from "@/utils/rateLimit";
+import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
 
 function json(res: NextApiResponse, status: number, body: any) {
   res.setHeader("Cache-Control", "no-store");
@@ -45,6 +46,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const service = createServiceRoleClient();
+    const { data: profile } = await service
+      .from("profiles")
+      .select("lifecycle_status")
+      .eq("id", user.id)
+      .maybeSingle();
+    if (isUnavailableLifecycleStatus((profile as any)?.lifecycle_status)) {
+      return json(res, 423, {
+        error: "profile_unavailable",
+        route: "/pages/api/candidate/public-link",
+        user_message: "Tu perfil esta desactivado o eliminado y no puede generar enlaces publicos.",
+      });
+    }
 
     const { data: activeRows, error: existingErr } = await service
       .from("candidate_public_links")

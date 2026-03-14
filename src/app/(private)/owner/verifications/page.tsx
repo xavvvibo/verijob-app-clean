@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 
@@ -112,7 +113,7 @@ export default async function OwnerVerificationsPage({
       ? supabase.from("profiles").select("id,full_name,email").in("id", userIds)
       : Promise.resolve({ data: [] } as any),
     companyIds.length
-      ? supabase.from("companies").select("id,name").in("id", companyIds)
+      ? supabase.from("companies").select("id,name,trade_name,legal_name").in("id", companyIds)
       : Promise.resolve({ data: [] } as any),
     employmentIds.length
       ? supabase.from("employment_records").select("id,position,company_name_freeform,start_date,end_date").in("id", employmentIds)
@@ -143,7 +144,15 @@ export default async function OwnerVerificationsPage({
     const roleTitle = String((requestContext as any)?.role_title || "").trim();
     const companyNameFromContext = String((requestContext as any)?.company_name || "").trim();
     const candidateName = String(profile?.full_name || profile?.email || "").trim();
-    const companyName = String(company?.name || row.company_name_target || companyNameFromContext || employment?.company_name_freeform || "").trim();
+    const companyName = resolveCompanyDisplayName(
+      company
+        ? {
+            ...(company || {}),
+            company_name: row.company_name_target || companyNameFromContext || employment?.company_name_freeform || null,
+          }
+        : row.company_name_target || companyNameFromContext || employment?.company_name_freeform || null,
+      "Tu empresa",
+    );
     const experienceLabel = String(employment?.position || roleTitle || "Experiencia no indicada").trim();
     return {
       row,
@@ -244,7 +253,7 @@ export default async function OwnerVerificationsPage({
             </div>
             <div>
               <div className="text-xs uppercase tracking-wide text-slate-500">Empresa</div>
-              <div className="font-medium text-slate-900">{focusEntry.companyName || "Empresa externa"}</div>
+              <div className="font-medium text-slate-900">{focusEntry.companyName || "Empresa"}</div>
             </div>
             <div>
               <div className="text-xs uppercase tracking-wide text-slate-500">Experiencia</div>
@@ -338,7 +347,7 @@ export default async function OwnerVerificationsPage({
                         <div className="font-semibold text-slate-900">{entry.candidateName || "Candidato sin perfil"}</div>
                         <div className="text-xs text-slate-500">{row.requested_by || "—"}</div>
                       </td>
-                      <td className="px-3 py-3">{entry.companyName || "Empresa externa"}</td>
+                      <td className="px-3 py-3">{entry.companyName || "Empresa"}</td>
                       <td className="px-3 py-3">{entry.experienceLabel}</td>
                       <td className="px-3 py-3">{methodLabel(entry.method)}</td>
                       <td className="px-3 py-3">

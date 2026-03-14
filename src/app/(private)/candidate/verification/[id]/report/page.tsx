@@ -120,8 +120,7 @@ export default async function CandidateVerificationReportPage({
   const level = labelForLevel(s.verification_level);
 
   const companyLabel =
-    s.company_name_freeform ||
-    (s.company_id ? `ID empresa: ${s.company_id}` : "Empresa no especificada");
+    String(s.company_name_freeform || "").trim() || "Empresa";
 
   const dateRange =
     s.start_date && s.end_date

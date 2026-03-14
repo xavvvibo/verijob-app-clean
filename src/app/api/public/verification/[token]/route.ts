@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
 
 function adminSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL
@@ -49,6 +50,17 @@ export async function GET(
     .maybeSingle()
 
   if (sumErr || !summary) return NextResponse.json({ error: "not_found" }, { status: 404 })
+
+  if ((summary as any)?.candidate_id) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("lifecycle_status")
+      .eq("id", (summary as any).candidate_id)
+      .maybeSingle()
+    if (isUnavailableLifecycleStatus((profile as any)?.lifecycle_status)) {
+      return NextResponse.json({ error: "profile_unavailable" }, { status: 410 })
+    }
+  }
 
   const { count: evidenceCount } = await supabase
     .from("evidences")

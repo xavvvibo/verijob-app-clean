@@ -399,9 +399,9 @@ export function CandidatePublicProfileRenderer({
               />
               {!isOpenPublicView ? (
                 <SignalCard
-                  label="Reutilización"
+                  label="Uso empresarial"
                   value={verificationSummary.reuse}
-                  hint="Reutilización en procesos reales"
+                  hint="Actividad empresarial registrada"
                 />
               ) : null}
               <SignalCard
@@ -506,7 +506,7 @@ export function CandidatePublicProfileRenderer({
                     <Stat label="Verificaciones" value={verificationSummary.verified} />
                     <Stat label="Evidencias" value={verificationSummary.evidences} />
                     {!isOpenPublicView ? <Stat label="Experiencias" value={verificationSummary.experiences} /> : null}
-                    {!isOpenPublicView ? <Stat label="Reutilizaciones" value={verificationSummary.reuse} /> : null}
+                    {!isOpenPublicView ? <Stat label="Uso empresarial" value={verificationSummary.reuse} /> : null}
                     {!isOpenPublicView ? <Stat label="Formación" value={Number(teaser?.education_total ?? education.length)} /> : null}
                     {!isOpenPublicView ? <Stat label="Logros" value={Number(teaser?.achievements_total ?? achievements.length)} /> : null}
                   </div>
@@ -529,7 +529,7 @@ export function CandidatePublicProfileRenderer({
                                 <div className="flex flex-wrap items-start justify-between gap-2">
                                   <div>
                                     <p className="text-sm font-semibold text-slate-900">{exp?.position || "Experiencia"}</p>
-                                    <p className="text-xs text-slate-600">{exp?.company_name || "Empresa no especificada"}</p>
+                                    <p className="text-xs text-slate-600">{exp?.company_name || "Empresa"}</p>
                                     <p className="mt-1 text-[11px] text-slate-500">{formatPeriod(exp?.start_date, exp?.end_date)}</p>
                                   </div>
                                   <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadge.className}`}>
@@ -550,7 +550,7 @@ export function CandidatePublicProfileRenderer({
                                   {!isOpenPublicView ? (
                                     <>
                                       {" · "}
-                                      Reutilizaciones: <span className="font-semibold text-slate-900">{Number(exp?.reuse_count ?? 0)}</span>
+                                      Uso empresarial: <span className="font-semibold text-slate-900">{Number(exp?.reuse_count ?? 0)}</span>
                                     </>
                                   ) : null}
                                 </div>
@@ -628,7 +628,7 @@ export function CandidatePublicProfileRenderer({
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div>
                               <h4 className="text-base font-semibold text-slate-900">{exp?.position || "Experiencia"}</h4>
-                              <p className="text-sm text-slate-600">{exp?.company_name || "Empresa no especificada"}</p>
+                              <p className="text-sm text-slate-600">{exp?.company_name || "Empresa"}</p>
                               <p className="mt-1 text-xs text-slate-500">{formatPeriod(exp?.start_date, exp?.end_date)}</p>
                             </div>
                             <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusBadge.className}`}>
@@ -654,7 +654,7 @@ export function CandidatePublicProfileRenderer({
                             <div>Credibilidad: <span className="font-semibold text-slate-900">{Number(exp?.score ?? 0)}</span></div>
                             <div>Evidencias asociadas: <span className="font-semibold text-slate-900">{Number(exp?.evidence_count ?? 0)}</span></div>
                             {!isOpenPublicView ? (
-                              <div>Reutilizaciones: <span className="font-semibold text-slate-900">{Number(exp?.reuse_count ?? 0)}</span></div>
+                              <div>Uso empresarial: <span className="font-semibold text-slate-900">{Number(exp?.reuse_count ?? 0)}</span></div>
                             ) : null}
                           </div>
                         </article>
@@ -795,7 +795,7 @@ export function CandidatePublicProfileRenderer({
                 <TrustBreakdownBar label="Verificaciones" value={trustComponents.verification} />
                 <TrustBreakdownBar label="Evidencias" value={trustComponents.evidence} />
                 <TrustBreakdownBar label="Consistencia" value={trustComponents.consistency} />
-                <TrustBreakdownBar label="Reutilización" value={trustComponents.reuse} />
+                <TrustBreakdownBar label="Cobertura histórica" value={trustComponents.reuse} />
               </div>
             ) : null}
           </section>

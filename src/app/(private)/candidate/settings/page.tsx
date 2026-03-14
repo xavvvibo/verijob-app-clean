@@ -16,6 +16,16 @@ type Settings = {
   availability_schedule: string[];
 };
 
+type CandidateAccount = {
+  lifecycle_status: string;
+  deleted_at: string | null;
+  deletion_requested_at: string | null;
+  deletion_mode: string | null;
+  identity_type: string | null;
+  identity_masked: string | null;
+  has_identity: boolean;
+};
+
 const JOB_SEARCH_OPTIONS = [
   { value: "buscando_activamente", label: "Buscando activamente" },
   { value: "abierto_oportunidades", label: "Abierto a oportunidades" },
@@ -56,6 +66,12 @@ const SCHEDULE_OPTIONS = [
   { value: "turnos_rotativos", label: "Turnos rotativos" },
 ];
 
+const IDENTITY_TYPE_OPTIONS = [
+  { value: "dni", label: "DNI" },
+  { value: "nif", label: "NIF" },
+  { value: "passport", label: "Pasaporte" },
+];
+
 function normalizeLegacyWorkday(value: string) {
   if (value === "extras_eventos" || value === "fines_semana") return "temporal_proyectos";
   return value;
@@ -78,19 +94,27 @@ function normalizeLegacySchedule(value: string) {
   return value;
 }
 
+function lifecycleLabel(raw: unknown) {
+  const value = String(raw || "active").toLowerCase();
+  if (value === "disabled") return "Desactivado temporalmente";
+  if (value === "scheduled_for_deletion") return "Pendiente de eliminación";
+  if (value === "deleted") return "Eliminado";
+  return "Activo";
+}
+
 function Toggle({ label, checked, onChange, help }: { label: string; checked: boolean; onChange: (v: boolean) => void; help?: string }) {
   return (
-    <div className="flex items-center justify-between gap-4 border border-gray-200 rounded-2xl p-4">
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-gray-200 p-4">
       <div className="min-w-0">
         <div className="text-sm font-semibold text-gray-900">{label}</div>
         {help ? <div className="mt-1 text-xs text-gray-500">{help}</div> : null}
       </div>
       <button
         onClick={() => onChange(!checked)}
-        className={`shrink-0 inline-flex h-9 w-16 items-center rounded-full border transition ${checked ? "bg-blue-600 border-blue-600" : "bg-gray-100 border-gray-200"}`}
+        className={`inline-flex h-9 w-16 shrink-0 items-center rounded-full border transition ${checked ? "border-blue-600 bg-blue-600" : "border-gray-200 bg-gray-100"}`}
         aria-pressed={checked}
       >
-        <span className={`h-7 w-7 rounded-full bg-white shadow transform transition ${checked ? "translate-x-8" : "translate-x-1"}`} />
+        <span className={`h-7 w-7 rounded-full bg-white shadow transition ${checked ? "translate-x-8" : "translate-x-1"}`} />
       </button>
     </div>
   );
@@ -147,9 +171,7 @@ function MultiSelectChecks({
               <input
                 type="checkbox"
                 checked={checked}
-                onChange={(e) =>
-                  onChange(e.target.checked ? [...selected, o.value] : selected.filter((x) => x !== o.value))
-                }
+                onChange={(e) => onChange(e.target.checked ? [...selected, o.value] : selected.filter((x) => x !== o.value))}
               />
               <span>{o.label}</span>
             </label>
@@ -161,185 +183,388 @@ function MultiSelectChecks({
 }
 
 export default function CandidateSettings() {
-  const [s, setS] = useState<Settings | null>(null);
+  const [settings, setSettings] = useState<Settings | null>(null);
   const [initial, setInitial] = useState<Settings | null>(null);
+  const [account, setAccount] = useState<CandidateAccount | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [accountSaving, setAccountSaving] = useState(false);
+  const [accountMessage, setAccountMessage] = useState<string | null>(null);
+  const [accountError, setAccountError] = useState<string | null>(null);
+  const [identityType, setIdentityType] = useState("dni");
+  const [identityValue, setIdentityValue] = useState("");
+  const [disableConfirmed, setDisableConfirmed] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   useEffect(() => {
     (async () => {
-      const r = await fetch("/api/candidate/settings", { cache: "no-store" as any });
-      const j = await r.json();
-      if (!r.ok) { setErr(j?.error || "No se pudieron cargar los ajustes."); return; }
-      const loaded: Settings = {
-        show_trust_score: !!j?.settings?.show_trust_score,
-        show_verification_counts: !!j?.settings?.show_verification_counts,
-        show_verified_timeline: !!j?.settings?.show_verified_timeline,
-        allow_company_email_contact: !!j?.settings?.allow_company_email_contact,
-        allow_company_phone_contact: !!j?.settings?.allow_company_phone_contact,
-        job_search_status: String(j?.settings?.job_search_status || "abierto_oportunidades"),
-        availability_start: String(j?.settings?.availability_start || "mas_adelante"),
-        preferred_workday: normalizeLegacyWorkday(String(j?.settings?.preferred_workday || "flexible")),
-        preferred_roles: Array.isArray(j?.settings?.preferred_roles)
-          ? Array.from(new Set(j.settings.preferred_roles.map((x: string) => normalizeLegacyRole(String(x)))))
-          : [],
-        work_zones: String(j?.settings?.work_zones || ""),
-        availability_schedule: Array.isArray(j?.settings?.availability_schedule)
-          ? Array.from(new Set(j.settings.availability_schedule.map((x: string) => normalizeLegacySchedule(String(x)))))
-          : [],
-      };
-      setS(loaded);
-      setInitial(loaded);
+      const [settingsRes, accountRes] = await Promise.all([
+        fetch("/api/candidate/settings", { cache: "no-store" as any }),
+        fetch("/api/candidate/account", { cache: "no-store" as any }),
+      ]);
+      const [settingsJson, accountJson] = await Promise.all([
+        settingsRes.json().catch(() => ({})),
+        accountRes.json().catch(() => ({})),
+      ]);
+
+      if (!settingsRes.ok) {
+        setErr(settingsJson?.error || "No se pudieron cargar los ajustes.");
+      } else {
+        const loaded: Settings = {
+          show_trust_score: !!settingsJson?.settings?.show_trust_score,
+          show_verification_counts: !!settingsJson?.settings?.show_verification_counts,
+          show_verified_timeline: !!settingsJson?.settings?.show_verified_timeline,
+          allow_company_email_contact: !!settingsJson?.settings?.allow_company_email_contact,
+          allow_company_phone_contact: !!settingsJson?.settings?.allow_company_phone_contact,
+          job_search_status: String(settingsJson?.settings?.job_search_status || "abierto_oportunidades"),
+          availability_start: String(settingsJson?.settings?.availability_start || "mas_adelante"),
+          preferred_workday: normalizeLegacyWorkday(String(settingsJson?.settings?.preferred_workday || "flexible")),
+          preferred_roles: Array.isArray(settingsJson?.settings?.preferred_roles)
+            ? Array.from(new Set(settingsJson.settings.preferred_roles.map((x: string) => normalizeLegacyRole(String(x)))))
+            : [],
+          work_zones: String(settingsJson?.settings?.work_zones || ""),
+          availability_schedule: Array.isArray(settingsJson?.settings?.availability_schedule)
+            ? Array.from(new Set(settingsJson.settings.availability_schedule.map((x: string) => normalizeLegacySchedule(String(x)))))
+            : [],
+        };
+        setSettings(loaded);
+        setInitial(loaded);
+      }
+
+      if (accountRes.ok) {
+        const nextAccount: CandidateAccount = {
+          lifecycle_status: String(accountJson?.account?.lifecycle_status || "active"),
+          deleted_at: accountJson?.account?.deleted_at || null,
+          deletion_requested_at: accountJson?.account?.deletion_requested_at || null,
+          deletion_mode: accountJson?.account?.deletion_mode || null,
+          identity_type: accountJson?.account?.identity_type || null,
+          identity_masked: accountJson?.account?.identity_masked || null,
+          has_identity: Boolean(accountJson?.account?.has_identity),
+        };
+        setAccount(nextAccount);
+        if (nextAccount.identity_type) setIdentityType(nextAccount.identity_type);
+      } else {
+        setAccountError(accountJson?.error || "No se pudo cargar el estado de la cuenta.");
+      }
     })();
   }, []);
 
   function setPatch(patch: Partial<Settings>) {
-    if (!s) return;
-    setS({ ...s, ...patch });
+    if (!settings) return;
+    setSettings({ ...settings, ...patch });
     setOk(null);
     setErr(null);
   }
 
-  async function save() {
-    if (!s) return;
+  async function saveSettings() {
+    if (!settings) return;
     setSaving(true);
     setErr(null);
     setOk(null);
-    const r = await fetch("/api/candidate/settings", {
+    const response = await fetch("/api/candidate/settings", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(s),
+      body: JSON.stringify(settings),
     });
-    const j = await r.json().catch(() => ({}));
+    const payload = await response.json().catch(() => ({}));
     setSaving(false);
-    if (!r.ok) {
-      setErr(j?.error ? `${j.error}${j.details ? `: ${j.details}` : ""}` : "No se pudieron guardar los ajustes.");
+    if (!response.ok) {
+      setErr(payload?.error ? `${payload.error}${payload.details ? `: ${payload.details}` : ""}` : "No se pudieron guardar los ajustes.");
       return;
     }
-    setInitial(s);
+    setInitial(settings);
     setOk("Cambios guardados correctamente.");
   }
 
-  const hasChanges = !!(s && initial && JSON.stringify(s) !== JSON.stringify(initial));
+  async function runAccountAction(action: string, extra?: Record<string, any>) {
+    setAccountSaving(true);
+    setAccountMessage(null);
+    setAccountError(null);
+    const response = await fetch("/api/candidate/account", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action, ...extra }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    setAccountSaving(false);
+    if (!response.ok) {
+      setAccountError(payload?.user_message || payload?.error || "No se pudo completar la acción.");
+      return null;
+    }
+    if (payload?.account) {
+      setAccount((current) => ({
+        lifecycle_status: payload.account.lifecycle_status ?? current?.lifecycle_status ?? "active",
+        deleted_at: payload.account.deleted_at ?? current?.deleted_at ?? null,
+        deletion_requested_at: payload.account.deletion_requested_at ?? current?.deletion_requested_at ?? null,
+        deletion_mode: payload.account.deletion_mode ?? current?.deletion_mode ?? null,
+        identity_type: payload.account.identity_type ?? current?.identity_type ?? null,
+        identity_masked: payload.account.identity_masked ?? current?.identity_masked ?? null,
+        has_identity: payload.account.has_identity ?? current?.has_identity ?? false,
+      }));
+    }
+    setAccountMessage(payload?.user_message || "Acción completada correctamente.");
+    return payload;
+  }
+
+  async function saveIdentity() {
+    const result = await runAccountAction("update_identity", {
+      identity_type: identityType,
+      identity_value: identityValue,
+    });
+    if (result?.account) setIdentityValue("");
+  }
+
+  async function clearIdentity() {
+    const result = await runAccountAction("clear_identity");
+    if (result?.ok) {
+      setIdentityValue("");
+    }
+  }
+
+  async function deleteProfile() {
+    const result = await runAccountAction("delete_profile");
+    if (result?.ok) {
+      window.setTimeout(() => {
+        window.location.href = "/login?account_deleted=1";
+      }, 900);
+    }
+  }
+
+  const hasChanges = !!(settings && initial && JSON.stringify(settings) !== JSON.stringify(initial));
+  const isDisabled = String(account?.lifecycle_status || "active").toLowerCase() === "disabled";
+  const isDeleted = String(account?.lifecycle_status || "active").toLowerCase() === "deleted";
 
   return (
     <div className="space-y-6">
-      <div className="bg-white border border-gray-200 rounded-3xl shadow-sm p-7">
+      <div className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">
         <div className="text-2xl font-semibold text-gray-900">Ajustes</div>
         <div className="mt-2 text-sm text-gray-600">
-          Aquí gestionas privacidad, visibilidad, contacto y disponibilidad profesional.
-        </div>
-        <div className="mt-2 text-xs text-gray-500">
-          Los datos de identidad personal se editan en la sección Perfil.
+          Aquí gestionas privacidad, visibilidad, contacto, disponibilidad profesional y el estado de tu perfil.
         </div>
         {err ? <div className="mt-3 text-sm text-red-600">{err}</div> : null}
       </div>
 
-      {s ? (
+      {settings ? (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
+          <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
             <div className="space-y-4">
-              <div className="bg-white border border-gray-200 rounded-2xl p-5">
+              <div className="rounded-2xl border border-gray-200 bg-white p-5">
                 <div className="text-base font-semibold text-gray-900">Visibilidad de credibilidad</div>
                 <div className="mt-3 space-y-3">
                   <Toggle
                     label="Mostrar Trust Score"
-                    checked={s.show_trust_score}
+                    checked={settings.show_trust_score}
                     onChange={(v) => setPatch({ show_trust_score: v })}
                     help="Puedes ocultarlo en el perfil compartido para reforzar privacidad."
                   />
                   <Toggle
-                    label="Mostrar número de verificaciones (total + por tipo)"
-                    checked={s.show_verification_counts}
+                    label="Mostrar número de verificaciones"
+                    checked={settings.show_verification_counts}
                     onChange={(v) => setPatch({ show_verification_counts: v })}
-                    help="Se mostrará en CV compartido/exportado para reflejar credibilidad real."
+                    help="Se mostrará en CV compartido y exportado como señal de confianza."
                   />
                   <Toggle
-                    label="Mostrar cronología verificada (CV + verificaciones)"
-                    checked={s.show_verified_timeline}
+                    label="Mostrar cronología verificada"
+                    checked={settings.show_verified_timeline}
                     onChange={(v) => setPatch({ show_verified_timeline: v })}
-                    help="Si lo ocultas, la empresa verá menos señal (pero siempre respetamos tu privacidad)."
+                    help="Si la ocultas, compartes menos señal histórica en el perfil público."
                   />
                 </div>
               </div>
 
-              <div className="bg-white border border-gray-200 rounded-2xl p-5">
+              <div className="rounded-2xl border border-gray-200 bg-white p-5">
                 <div className="text-base font-semibold text-gray-900">Configuración de contacto</div>
                 <div className="mt-2 text-sm text-gray-600">
-                  Decide si las empresas registradas en VERIJOB pueden ver métodos de contacto directo en tu perfil ampliado.
+                  Decide si las empresas registradas pueden ver tus métodos de contacto directo en el perfil ampliado.
                 </div>
                 <div className="mt-4 space-y-3">
                   <Toggle
                     label="Mostrar email a empresas registradas"
-                    checked={s.allow_company_email_contact}
+                    checked={settings.allow_company_email_contact}
                     onChange={(v) => setPatch({ allow_company_email_contact: v })}
                   />
                   <Toggle
                     label="Mostrar teléfono a empresas registradas"
-                    checked={s.allow_company_phone_contact}
+                    checked={settings.allow_company_phone_contact}
                     onChange={(v) => setPatch({ allow_company_phone_contact: v })}
                   />
                 </div>
-                <div className="mt-3 text-xs text-gray-500">
-                  Estos datos no se mostrarán en tu perfil público abierto.
-                </div>
+                <div className="mt-3 text-xs text-gray-500">Estos datos no se mostrarán en tu perfil público abierto.</div>
               </div>
             </div>
 
-            <div className="bg-white border border-gray-200 rounded-2xl p-5">
+            <div className="rounded-2xl border border-gray-200 bg-white p-5">
               <div className="text-base font-semibold text-gray-900">Disponibilidad profesional</div>
               <div className="mt-2 text-sm text-gray-600">
-                Completa esta información para ayudar a las empresas registradas a entender tu disponibilidad y tipo de oportunidad profesional que buscas.
+                Completa esta información para ayudar a las empresas registradas a entender tu disponibilidad real.
               </div>
 
               <div className="mt-4 grid gap-4">
                 <SelectField
                   label="Estado de búsqueda"
-                  value={s.job_search_status}
+                  value={settings.job_search_status}
                   onChange={(v) => setPatch({ job_search_status: v })}
                   options={JOB_SEARCH_OPTIONS}
                 />
                 <SelectField
                   label="Incorporación"
-                  value={s.availability_start}
+                  value={settings.availability_start}
                   onChange={(v) => setPatch({ availability_start: v })}
                   options={AVAILABILITY_START_OPTIONS}
                 />
                 <SelectField
                   label="Jornada preferida"
-                  value={s.preferred_workday}
+                  value={settings.preferred_workday}
                   onChange={(v) => setPatch({ preferred_workday: v })}
                   options={WORKDAY_OPTIONS}
                 />
                 <MultiSelectChecks
                   label="Áreas o funciones de interés"
                   options={ROLE_OPTIONS}
-                  selected={s.preferred_roles}
+                  selected={settings.preferred_roles}
                   onChange={(v) => setPatch({ preferred_roles: Array.from(new Set(v)) })}
                 />
                 <label className="block">
                   <div className="text-sm font-semibold text-gray-900">Zona o zonas donde prefieres trabajar</div>
                   <input
                     type="text"
-                    value={s.work_zones}
+                    value={settings.work_zones}
                     onChange={(e) => setPatch({ work_zones: e.target.value })}
                     placeholder="Ej.: Madrid centro, Chamberí y Salamanca"
                     className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900"
                   />
-                  <div className="mt-1 text-xs text-gray-500">
-                    Puedes indicar ciudades, zonas o áreas donde te gustaría trabajar.
-                  </div>
                 </label>
                 <MultiSelectChecks
                   label="Disponibilidad horaria"
                   options={SCHEDULE_OPTIONS}
-                  selected={s.availability_schedule}
+                  selected={settings.availability_schedule}
                   onChange={(v) => setPatch({ availability_schedule: Array.from(new Set(v)) })}
                 />
               </div>
             </div>
           </div>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Gestión de perfil / cuenta</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Controla el estado de tu perfil y la identidad asociada sin exponer el documento completo.
+                </p>
+              </div>
+              <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                Estado: {lifecycleLabel(account?.lifecycle_status)}
+              </div>
+            </div>
+
+            {accountError ? <p className="mt-4 text-sm text-rose-600">{accountError}</p> : null}
+            {accountMessage ? <p className="mt-4 text-sm text-emerald-700">{accountMessage}</p> : null}
+
+            <div className="mt-6 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+              <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+                <h3 className="text-sm font-semibold text-slate-900">Identidad asociada</h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Guardamos solo la máscara y el hash del documento para deduplicación y auditoría interna.
+                </p>
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Documento actual</p>
+                  <p className="mt-1 font-semibold text-slate-900">
+                    {account?.has_identity ? `${String(account?.identity_type || "").toUpperCase()} · ${account?.identity_masked}` : "Todavía no has asociado un documento."}
+                  </p>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-[180px_1fr]">
+                  <SelectField label="Tipo" value={identityType} onChange={setIdentityType} options={IDENTITY_TYPE_OPTIONS} />
+                  <label className="block">
+                    <div className="text-sm font-semibold text-gray-900">Documento</div>
+                    <input
+                      type="text"
+                      value={identityValue}
+                      onChange={(e) => setIdentityValue(e.target.value)}
+                      placeholder="Introduce el documento solo para registrarlo"
+                      className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900"
+                    />
+                  </label>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    disabled={accountSaving || !identityValue.trim()}
+                    onClick={saveIdentity}
+                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+                  >
+                    Guardar identidad
+                  </button>
+                  <button
+                    type="button"
+                    disabled={accountSaving || !account?.has_identity}
+                    onClick={clearIdentity}
+                    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Borrar asociación
+                  </button>
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+                  <h3 className="text-sm font-semibold text-amber-950">Desactivar perfil temporalmente</h3>
+                  <p className="mt-2 text-sm text-amber-900">
+                    Tu perfil público dejará de estar disponible y no aparecerás como candidato activo, pero tus datos seguirán recuperables.
+                  </p>
+                  <label className="mt-4 flex items-start gap-2 text-sm text-amber-900">
+                    <input type="checkbox" checked={disableConfirmed} onChange={(e) => setDisableConfirmed(e.target.checked)} />
+                    <span>Entiendo que la desactivación oculta mi perfil y puedo reactivarlo más adelante.</span>
+                  </label>
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      disabled={accountSaving || isDisabled || isDeleted || !disableConfirmed}
+                      onClick={() => runAccountAction("disable_profile")}
+                      className="rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-amber-300"
+                    >
+                      Desactivar perfil
+                    </button>
+                    <button
+                      type="button"
+                      disabled={accountSaving || !isDisabled}
+                      onClick={() => runAccountAction("reactivate_profile")}
+                      className="rounded-xl border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-900 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Reactivar perfil
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
+                  <h3 className="text-sm font-semibold text-rose-950">Eliminar perfil definitivamente</h3>
+                  <p className="mt-2 text-sm text-rose-900">
+                    Esta acción es irreversible. El perfil público desaparecerá y conservaremos solo la información mínima necesaria para integridad técnica e histórica.
+                  </p>
+                  <p className="mt-2 text-sm text-rose-900">
+                    Las verificaciones ya emitidas no se destruyen, pero el perfil y los enlaces públicos dejarán de estar disponibles.
+                  </p>
+                  <label className="mt-4 block">
+                    <span className="text-sm font-semibold text-rose-950">Escribe ELIMINAR para confirmar</span>
+                    <input
+                      type="text"
+                      value={deleteConfirmation}
+                      onChange={(e) => setDeleteConfirmation(e.target.value)}
+                      className="mt-2 w-full rounded-xl border border-rose-300 bg-white px-3 py-2.5 text-sm text-slate-900"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={accountSaving || isDeleted || deleteConfirmation.trim().toUpperCase() !== "ELIMINAR"}
+                    onClick={deleteProfile}
+                    className="mt-4 rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-rose-300"
+                  >
+                    Eliminar perfil definitivamente
+                  </button>
+                </div>
+              </section>
+            </div>
+          </section>
 
           <div className="pb-28" />
         </div>
@@ -347,7 +572,7 @@ export default function CandidateSettings() {
         <div className="text-sm text-gray-600">Cargando…</div>
       )}
 
-      {s ? (
+      {settings ? (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur">
           <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-3 px-6 py-3">
             <div className="min-w-0">
@@ -358,10 +583,10 @@ export default function CandidateSettings() {
             </div>
             <button
               type="button"
-              onClick={save}
+              onClick={saveSettings}
               disabled={saving || !hasChanges}
               className={`inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition ${
-                saving || !hasChanges ? "bg-gray-400 cursor-not-allowed" : "bg-blue-700 hover:bg-blue-800"
+                saving || !hasChanges ? "cursor-not-allowed bg-gray-400" : "bg-blue-700 hover:bg-blue-800"
               }`}
             >
               {saving ? "Guardando…" : "Guardar cambios"}
@@ -372,3 +597,4 @@ export default function CandidateSettings() {
     </div>
   );
 }
+

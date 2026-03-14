@@ -1,5 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
 import crypto from "crypto"
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -72,7 +74,23 @@ export default async function Page(ctx:any){
         .maybeSingle()
     : { data: null as any }
 
+  if (summary?.candidate_id) {
+    const { data: profileLifecycle } = await supabase
+      .from("profiles")
+      .select("lifecycle_status")
+      .eq("id", summary.candidate_id)
+      .maybeSingle()
+    if (isUnavailableLifecycleStatus((profileLifecycle as any)?.lifecycle_status)) {
+      return(
+        <div style={{padding:40,fontFamily:"sans-serif"}}>
+          Esta credencial ya no esta disponible publicamente.
+        </div>
+      )
+    }
+  }
+
   const trustScore = Number(candidateProfile?.trust_score ?? summary?.trust_score ?? 0)
+  const companyName = resolveCompanyDisplayName(data.company_name_freeform || null, "Tu empresa");
 
   return(
 
@@ -107,7 +125,7 @@ export default async function Page(ctx:any){
       <div style={{marginBottom:20}}>
 
         <strong>Empresa</strong><br/>
-        {data.company_name_freeform||"Empresa"}
+        {companyName}
 
       </div>
 

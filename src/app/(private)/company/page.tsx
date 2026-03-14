@@ -6,10 +6,7 @@ import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 type Kpis = {
   pending_requests: number;
   verified_30d: number;
-  reuse_rate_pct: number;
   risk_signals: number;
-  reuse_events_30d: number;
-  reuse_events_total: number;
   completed_requests?: number;
   avg_resolution_hours?: number | null;
   verified_candidates?: number;
@@ -78,6 +75,8 @@ type CandidateImportRow = {
   last_activity_at?: string | null;
   total_verifications?: number | null;
   approved_verifications?: number | null;
+  access_status?: "active" | "expired" | "never" | string | null;
+  access_expires_at?: string | null;
 };
 
 type CandidatesPayload = {
@@ -204,6 +203,17 @@ export default function CompanyDashboard() {
         ]);
 
         if (!dashboardRes.ok) {
+          if (dashboardRes.status === 423) {
+            if (!alive) return;
+            setDashboard(dashboardBody || {});
+            setProfileData(profileRes.ok ? profileBody || {} : null);
+            setTeamData(teamRes.ok ? teamBody || {} : null);
+            setCandidateData(candidateRes.ok ? candidateBody || {} : null);
+            setErrorMessage(
+              dashboardBody?.user_message || "La empresa está desactivada o cerrada. Reactívala desde ajustes para retomar la operación."
+            );
+            return;
+          }
           throw new Error("No se pudo cargar el panel de empresa.");
         }
         if (!alive) return;
@@ -298,21 +308,22 @@ export default function CompanyDashboard() {
         });
       });
 
-    if (Number(kpis?.reuse_events_total || 0) > 0) {
+    const expiredAccessCount = imports.filter((item) => item.access_status === "expired").length;
+    if (expiredAccessCount > 0) {
       items.push({
-        id: "reuse",
-        title: "Oportunidad de reutilización",
-        detail: "Reutiliza verificaciones ya realizadas para acelerar la validación de candidatos.",
-        href: "/company/reuse",
-        cta: "Abrir reutilización",
+        id: "expired-access",
+        title: "Accesos a renovar",
+        detail: "Algunos candidatos de tu base RRHH ya no tienen acceso activo al perfil completo.",
+        href: "/company/candidates",
+        cta: "Revisar accesos",
         tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
         priority: 50,
-        meta: `${Number(kpis?.reuse_events_total || 0)} reutilizaciones acumuladas`,
+        meta: `${expiredAccessCount} accesos expirados en tu base`,
       });
     }
 
     return items.sort((a, b) => b.priority - a.priority).slice(0, 6);
-  }, [imports, kpis?.reuse_events_total, recentRequests]);
+  }, [imports, recentRequests]);
 
   const rrhhRows = useMemo(() => {
     return imports
@@ -447,7 +458,7 @@ export default function CompanyDashboard() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Hoy / prioridades</h2>
-              <p className="mt-1 text-sm text-slate-600">Lo más accionable ahora mismo: solicitudes, candidatos importados y reutilización.</p>
+              <p className="mt-1 text-sm text-slate-600">Lo más accionable ahora mismo: solicitudes, candidatos importados y accesos a perfiles.</p>
             </div>
             <a href="/company/requests" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir inbox</a>
           </div>

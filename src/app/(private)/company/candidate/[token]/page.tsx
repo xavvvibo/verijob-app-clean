@@ -63,6 +63,20 @@ type PreviewSnapshot = {
   last_activity_at?: string | null;
 };
 
+type AccessState = {
+  access_status?: "active" | "expired" | "never" | string | null;
+  access_granted_at?: string | null;
+  access_expires_at?: string | null;
+  source?: string | null;
+};
+
+function mapAccessStatus(raw: unknown) {
+  const value = String(raw || "").toLowerCase();
+  if (value === "active") return "Acceso activo";
+  if (value === "expired") return "Acceso expirado";
+  return "Sin acceso activo";
+}
+
 async function fetchCompanyProfile(token: string, view: "preview" | "full") {
   const h = await headers();
   const forwardedProto = h.get("x-forwarded-proto") || "http";
@@ -92,6 +106,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
   const checkoutState = query.checkout === "success" ? "success" : query.checkout === "cancel" ? "cancel" : null;
   const { ok, status, body } = await fetchCompanyProfile(token, requestedView);
   const preview: PreviewSnapshot = body?.preview ?? {};
+  const access: AccessState = body?.access ?? {};
   const returnPath = `/company/candidate/${encodeURIComponent(token)}`;
 
   if (!ok) {
@@ -104,7 +119,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Perfil aún en preparación</p>
             <h1 className="mt-2 text-2xl font-semibold text-amber-950">Este candidato aún está completando su perfil verificable</h1>
             <p className="mt-3 text-sm leading-6 text-amber-900">
-              Recibirás una notificación cuando esté disponible. De momento puedes revisar el snapshot actual sin consumir una visualización completa.
+              Recibirás una notificación cuando esté disponible. De momento puedes revisar el snapshot actual sin consumir una visualización ni desbloquear el perfil completo.
             </p>
             <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <SnapshotField label="Experiencias detectadas" value={String(preview?.experiences_detected ?? "—")} />
@@ -135,12 +150,12 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
             <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Límite de visualizaciones</p>
             <h1 className="mt-2 text-2xl font-semibold text-rose-950">Has alcanzado el límite de visualizaciones</h1>
             <p className="mt-3 text-sm leading-6 text-rose-900">
-              Puedes seguir revisando el snapshot del candidato sin coste. Para abrir el perfil completo necesitas una visualización disponible. Cada apertura completa consume 1 visualización.
+              Puedes seguir revisando el snapshot del candidato sin coste. Para abrir el perfil completo necesitas una visualización disponible. Cada apertura completa consume 1 visualización y activa acceso temporal para tu empresa.
             </p>
             <div className="mt-4 rounded-2xl border border-rose-200 bg-white p-4 text-sm text-rose-900">
               <p className="font-semibold">Visualizaciones disponibles</p>
               <p className="mt-1">{body?.credits_remaining != null ? String(body.credits_remaining) : "0"} disponibles ahora mismo.</p>
-              <p className="mt-1 text-rose-800">Después de comprar volverás a este snapshot y podrás decidir cuándo abrir el perfil completo.</p>
+              <p className="mt-1 text-rose-800">Después de comprar volverás a este snapshot y podrás decidir cuándo desbloquear el perfil completo.</p>
             </div>
             <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <SnapshotField label="Experiencias detectadas" value={String(preview?.experiences_detected ?? "—")} />
@@ -205,13 +220,20 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
           ) : null}
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Candidate Snapshot</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Snapshot del candidato</p>
               <h1 className="mt-2 text-2xl font-semibold text-slate-900">Vista previa del candidato</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                Resumen sin datos personales para decidir si merece la pena abrir el perfil completo. Esta vista no consume visualizaciones.
+                Resumen sin datos personales para decidir si merece la pena desbloquear el perfil completo. Esta vista no consume visualizaciones.
               </p>
               <p className="mt-2 text-sm text-slate-600">
-                Abrir el perfil completo consume 1 visualización y no se descuenta en esta vista previa.
+                Abrir el perfil completo consume 1 visualización, activa acceso temporal para tu empresa y no se descuenta en esta vista previa.
+              </p>
+              <p className="mt-2 text-sm text-slate-600">
+                {access?.access_status === "active" && access?.access_expires_at
+                  ? `Acceso activo hasta ${formatDateTime(access.access_expires_at)}.`
+                  : access?.access_status === "expired" && access?.access_expires_at
+                    ? `El acceso anterior expiró el ${formatDateTime(access.access_expires_at)}.`
+                    : "Tu empresa todavía no ha desbloqueado este perfil completo."}
               </p>
             </div>
             <a
@@ -301,6 +323,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
 
   const profile = body?.profile ?? {};
   const gate = body?.gate ?? {};
+  const fullAccess: AccessState = body?.access ?? access;
   const contact = body?.contact ?? {};
   const availability: Availability = body?.availability ?? {};
   const credibility: Credibility = body?.credibility ?? {};
@@ -349,10 +372,10 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
             Enterprise: overage pendiente ({gate?.overage_price ?? "—"}€)
           </span>
         ) : (
-          <span className="text-xs rounded-full border px-3 py-1">
-            Créditos restantes: {gate?.credits_remaining ?? "—"}
-          </span>
-        )}
+            <span className="text-xs rounded-full border px-3 py-1">
+              {mapAccessStatus(fullAccess?.access_status)}{fullAccess?.access_expires_at ? ` · hasta ${formatDateTime(fullAccess.access_expires_at)}` : ""}
+            </span>
+          )}
       </div>
 
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -421,7 +444,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
           <BreakdownBar label="Verificaciones" value={Number(trustComponents?.verification ?? 0)} />
           <BreakdownBar label="Evidencias" value={Number(trustComponents?.evidence ?? 0)} />
           <BreakdownBar label="Consistencia" value={Number(trustComponents?.consistency ?? 0)} />
-          <BreakdownBar label="Reutilización" value={Number(trustComponents?.reuse ?? 0)} />
+          <BreakdownBar label="Cobertura histórica" value={Number(trustComponents?.reuse ?? 0)} />
         </div>
       </section>
 
@@ -445,7 +468,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
                     <span>Evidencias: <span className="font-semibold text-slate-900">{Number(item.evidence_count ?? 0)}</span></span>
-                    <span>Reutilizaciones: <span className="font-semibold text-slate-900">{Number(item.reuse_count ?? 0)}</span></span>
+                    <span>Confirmaciones históricas: <span className="font-semibold text-slate-900">{Number(item.reuse_count ?? 0)}</span></span>
                     {item.verification_id ? (
                       <a
                         href={`/company/verification/${encodeURIComponent(String(item.verification_id))}`}

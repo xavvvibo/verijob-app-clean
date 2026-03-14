@@ -8,6 +8,7 @@ import {
   buildCompanyProfileCompletionModel,
   resolveCompanyDisplayName,
 } from "@/lib/company/company-profile";
+import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
 
 const ROUTE_VERSION = "company-dashboard-kpis-v2-clean-2026-03-05";
 
@@ -163,6 +164,21 @@ export async function GET() {
     }
 
     if (!activeCompanyId) return NextResponse.json({ error: "no_active_company", route_version: ROUTE_VERSION }, { status: 400 });
+    const companyLifecycle = await readCompanyLifecycle(supabase, activeCompanyId);
+    if (!companyLifecycle.ok) {
+      return NextResponse.json({ error: "company_read_failed", details: companyLifecycle.error.message, route_version: ROUTE_VERSION }, { status: 400 });
+    }
+    if (isCompanyLifecycleBlocked(companyLifecycle.lifecycleStatus)) {
+      return NextResponse.json(
+        {
+          status: "company_inactive",
+          error: "company_inactive",
+          user_message: "La empresa esta desactivada o cerrada. Reactivala desde ajustes para retomar operaciones.",
+          route_version: ROUTE_VERSION,
+        },
+        { status: 423 }
+      );
+    }
 
     const [{ data, error: rpcErr }, memberRes, subRes, requestsRes, reuseRes] = await Promise.all([
       supabase.rpc("company_dashboard_kpis_v2"),

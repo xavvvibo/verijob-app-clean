@@ -17,7 +17,7 @@ const PLANS: PlanCard[] = [
     name: "Hiring",
     price: "99 €/mes",
     summary: "Equilibrio entre velocidad de evaluación y volumen de procesos.",
-    bullets: ["Mayor capacidad de revisión", "Flujo de reutilización ampliado", "Soporte para equipo en crecimiento"],
+    bullets: ["Mayor capacidad de revisión", "Más accesos simultáneos a perfiles", "Soporte para equipo en crecimiento"],
     featured: true,
   },
   {

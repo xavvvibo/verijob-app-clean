@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import type { ReactNode } from "react";
+import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import OwnerTooltip from "@/components/ui/OwnerTooltip";
 
 type Severity = "high" | "medium" | "low";
@@ -342,7 +343,7 @@ async function OwnerOverviewServer({
 
   const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicLinksRes, issuesRes, employmentRes, candidateProfilesRes, platformEventsRes, companyMembersRes, ownerActionsRes, authUsersTotal] = await Promise.all([
     admin.from("profiles").select("id,role,active_company_id,onboarding_completed,created_at,last_activity_at"),
-    admin.from("companies").select("id,name,created_at,updated_at,status", { count: "exact" }),
+    admin.from("companies").select("id,name,trade_name,legal_name,created_at,updated_at,status", { count: "exact" }),
     admin.from("verification_requests").select("id,status,requested_at,created_at,resolved_at,company_id,requested_by,verification_channel,external_resolved"),
     admin.from("evidences").select("id,evidence_type,document_type,validation_status,verification_request_id,uploaded_by,created_at"),
     admin.from("subscriptions").select("id,user_id,status,amount,created_at,plan"),
@@ -1253,7 +1254,7 @@ async function OwnerOverviewServer({
               ...companiesForActivity.filter((c: any) => isInRange(c.created_at || c.updated_at, rangeStartMs, now)).slice(0, 2).map((c: any) => ({
                 ts: String(c.created_at || c.updated_at || ""),
                 type: "company_activity",
-                text: `Empresa activa · ${String((companyById.get(String(c.id || "")) as any)?.name || "Empresa")}`,
+                text: `Empresa activa · ${resolveCompanyDisplayName(companyById.get(String(c.id || "")) as any, "Tu empresa")}`,
               })),
               ...profiles.filter((p: any) => isInRange(p.created_at, rangeStartMs, now)).slice(0, 2).map((p: any) => ({
                 ts: String(p.created_at || ""),

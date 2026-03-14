@@ -471,7 +471,7 @@ export default function CandidateOverview() {
                 {importedExperiences.map((item: any, index: number) => (
                   <li key={`${item?.company_name || "exp"}-${index}`} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <p className="font-semibold text-slate-900">{item?.role_title || "Experiencia detectada"}</p>
-                    <p className="mt-1 text-slate-600">{item?.company_name || "Empresa no indicada"}</p>
+                    <p className="mt-1 text-slate-600">{item?.company_name || "Empresa"}</p>
                     <p className="mt-1 text-xs text-slate-500">{formatPeriod(item?.start_date || null, item?.end_date || null)}</p>
                   </li>
                 ))}

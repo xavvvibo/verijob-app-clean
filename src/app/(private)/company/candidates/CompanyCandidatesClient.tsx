@@ -21,6 +21,10 @@ type ImportRow = {
   candidate_already_exists?: boolean | null;
   company_stage?: "none" | "saved" | "preselected" | string | null;
   last_activity_at?: string | null;
+  access_status?: "active" | "expired" | "never" | string | null;
+  access_granted_at?: string | null;
+  access_expires_at?: string | null;
+  access_source?: string | null;
 };
 
 type ImportsMeta = {
@@ -65,6 +69,13 @@ function statusMeta(status: string | null | undefined) {
   if (key === "parse_failed") return { label: "Importación parcial", tone: "bg-rose-50 text-rose-700 border-rose-200" };
   if (key === "processing") return { label: "Importando", tone: "bg-slate-100 text-slate-700 border-slate-200" };
   return { label: "Subido", tone: "bg-slate-100 text-slate-700 border-slate-200" };
+}
+
+function accessMeta(status: string | null | undefined) {
+  const key = String(status || "").toLowerCase();
+  if (key === "active") return { label: "Acceso activo", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" };
+  if (key === "expired") return { label: "Acceso expirado", tone: "border-amber-200 bg-amber-50 text-amber-800" };
+  return { label: "Sin acceso", tone: "border-slate-200 bg-slate-100 text-slate-700" };
 }
 
 export default function CompanyCandidatesClient() {
@@ -369,6 +380,7 @@ export default function CompanyCandidatesClient() {
                 <th className="py-3 pr-4">Email</th>
                 <th className="py-3 pr-4">Puesto</th>
                 <th className="py-3 pr-4">Estado</th>
+                <th className="py-3 pr-4">Acceso</th>
                 <th className="py-3 pr-4">Última actividad</th>
                 <th className="py-3 pr-4">Acción</th>
               </tr>
@@ -376,19 +388,27 @@ export default function CompanyCandidatesClient() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-500">
+                  <td colSpan={7} className="py-8 text-center text-slate-500">
                     Cargando candidatos…
                   </td>
                 </tr>
               ) : imports.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-500">
+                  <td colSpan={7} className="py-8 text-center text-slate-500">
                     Todavía no hay candidatos importados desde CV externo.
                   </td>
                 </tr>
               ) : (
                 imports.map((row) => {
                   const status = statusMeta(row.display_status);
+                  const access = accessMeta(row.access_status);
+                  const canOpenSnapshot = Boolean(row.linked_user_id && row.candidate_public_token);
+                  const accessActionLabel =
+                    row.access_status === "active"
+                      ? "Ver CV completo"
+                      : row.access_status === "expired"
+                        ? "Volver a desbloquear"
+                        : "Desbloquear perfil";
                   return (
                     <tr key={row.id}>
                       <td className="py-4 pr-4 align-top">
@@ -421,15 +441,37 @@ export default function CompanyCandidatesClient() {
                           </div>
                         ) : null}
                       </td>
+                      <td className="py-4 pr-4 align-top">
+                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${access.tone}`}>
+                          {access.label}
+                        </span>
+                        {row.access_status === "active" && row.access_expires_at ? (
+                          <div className="mt-1 text-xs text-slate-500">Disponible hasta {formatDate(row.access_expires_at)}</div>
+                        ) : null}
+                        {row.access_status === "expired" && row.access_expires_at ? (
+                          <div className="mt-1 text-xs text-slate-500">Caducó el {formatDate(row.access_expires_at)}</div>
+                        ) : null}
+                        {row.access_status === "never" ? (
+                          <div className="mt-1 text-xs text-slate-500">Aún no has abierto el CV completo.</div>
+                        ) : null}
+                      </td>
                       <td className="py-4 pr-4 align-top text-slate-700">{formatDate(row.last_activity_at || row.created_at)}</td>
                       <td className="py-4 pr-4 align-top">
                         <div className="flex flex-wrap gap-2">
-                          {row.linked_user_id && row.candidate_public_token ? (
+                          {canOpenSnapshot ? (
                             <a
                               href={`/company/candidate/${encodeURIComponent(row.candidate_public_token)}`}
                               className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
                             >
                               Ver snapshot
+                            </a>
+                          ) : null}
+                          {canOpenSnapshot ? (
+                            <a
+                              href={`/company/candidate/${encodeURIComponent(row.candidate_public_token)}?view=full`}
+                              className="inline-flex rounded-xl border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black"
+                            >
+                              {accessActionLabel}
                             </a>
                           ) : null}
                           {row.candidate_already_exists && row.invite_token ? (

@@ -48,7 +48,7 @@ export default function VerifiedCV({ data }: Props) {
             <TrustItem label="Verificaciones" value={Number((trustComponents as any)?.verification ?? 0)} />
             <TrustItem label="Evidencias" value={Number((trustComponents as any)?.evidence ?? 0)} />
             <TrustItem label="Consistencia" value={Number((trustComponents as any)?.consistency ?? 0)} />
-            <TrustItem label="Reutilización" value={Number((trustComponents as any)?.reuse ?? 0)} />
+            <TrustItem label="Cobertura histórica" value={Number((trustComponents as any)?.reuse ?? 0)} />
           </div>
         </section>
       ) : null}
@@ -63,7 +63,7 @@ export default function VerifiedCV({ data }: Props) {
                 className="break-inside-avoid rounded-xl border border-slate-200 p-4"
               >
                 <h3 className="font-semibold">{exp?.position || "Experiencia"}</h3>
-                <p className="text-sm text-slate-700">{exp?.company_name || "Empresa no indicada"}</p>
+                <p className="text-sm text-slate-700">{exp?.company_name || "Empresa"}</p>
                 <p className="mt-1 text-xs text-slate-500">{formatPeriod(exp?.start_date, exp?.end_date)}</p>
                 {Array.isArray(exp?.verification_badges) && exp.verification_badges.length ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">

@@ -4,7 +4,7 @@ import { createServerSupabaseClient } from "@/utils/supabase/server";
 
 export const metadata: Metadata = {
   title: { default: "VERIJOB — Empresa", template: "VERIJOB Empresa — %s" },
-  description: "Dashboard de empresa: verificación, cola y reutilización.",
+  description: "Dashboard de empresa: verificación, cola y acceso temporal a perfiles.",
 };
 
 type Props = { children: React.ReactNode };
@@ -32,7 +32,7 @@ export default async function CompanyLayout({ children }: Props) {
 
   if (!profile?.onboarding_completed) redirect("/onboarding/company?blocked=1&source=company");
 
-  if (!profile?.active_company_id) redirect("/company/reuse");
+  if (!profile?.active_company_id) redirect("/company/candidates");
 
   return <>{children}</>;
 }

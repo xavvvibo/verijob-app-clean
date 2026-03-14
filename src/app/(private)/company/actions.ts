@@ -3,6 +3,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
 
 type SetCompanyVerificationStatusInput = {
   verificationRequestId: string;
@@ -71,6 +72,11 @@ export async function setCompanyVerificationStatus(input: SetCompanyVerification
 
   const activeCompanyId = (profile as any)?.active_company_id;
   if (!activeCompanyId) throw new Error("No active company context");
+  const companyLifecycle = await readCompanyLifecycle(supabase, String(activeCompanyId));
+  if (!companyLifecycle.ok) throw new Error(companyLifecycle.error.message);
+  if (isCompanyLifecycleBlocked(companyLifecycle.lifecycleStatus)) {
+    throw new Error("La empresa esta desactivada o cerrada y no puede resolver verificaciones nuevas");
+  }
 
   const { data: vr } = await supabase
     .from("verification_requests")

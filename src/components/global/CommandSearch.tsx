@@ -150,7 +150,7 @@ export default function CommandSearch() {
                       className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left hover:bg-slate-50"
                     >
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">{row.name || "Empresa sin nombre"}</p>
+                        <p className="text-sm font-semibold text-slate-900">{row.name || "Tu empresa"}</p>
                         <p className="text-xs text-slate-500">Estado: {row.status || "sin clasificar"}</p>
                       </div>
                       <span className="text-xs font-medium text-slate-500">Empresa</span>
@@ -167,7 +167,7 @@ export default function CommandSearch() {
                       className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-left hover:bg-slate-50"
                     >
                       <div>
-                        <p className="text-sm font-semibold text-slate-900">{row.company_name || "Empresa"} · {row.candidate_name || "Candidato"}</p>
+                        <p className="text-sm font-semibold text-slate-900">{row.company_name || "Tu empresa"} · {row.candidate_name || "Candidato"}</p>
                         <p className="text-xs text-slate-500">#{row.id.slice(0, 8)} · {row.status || "sin estado"}</p>
                       </div>
                       <span className="text-xs font-medium text-slate-500">Verificación</span>

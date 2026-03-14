@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -244,6 +245,17 @@ export async function POST(request: Request) {
     const ctx = await resolveContext();
     if ((ctx as any).error) return (ctx as any).error;
     const { user, companyId, membershipRole, admin } = ctx as any;
+    const companyLifecycle = await readCompanyLifecycle(admin, companyId);
+    if (!companyLifecycle.ok) {
+      return json(400, { error: "company_read_failed", details: companyLifecycle.error.message });
+    }
+    if (isCompanyLifecycleBlocked(companyLifecycle.lifecycleStatus)) {
+      return json(423, {
+        error: "company_inactive",
+        status: "company_inactive",
+        message: "La empresa esta desactivada o cerrada. Reactivala desde ajustes antes de subir nuevos documentos.",
+      });
+    }
 
     if (membershipRole !== "admin") {
       return json(403, { error: "forbidden", details: "Solo administradores de empresa pueden subir documentación." });
@@ -364,6 +376,17 @@ export async function PATCH(request: Request) {
     const ctx = await resolveContext();
     if ((ctx as any).error) return (ctx as any).error;
     const { user, companyId, membershipRole, admin } = ctx as any;
+    const companyLifecycle = await readCompanyLifecycle(admin, companyId);
+    if (!companyLifecycle.ok) {
+      return json(400, { error: "company_read_failed", details: companyLifecycle.error.message });
+    }
+    if (isCompanyLifecycleBlocked(companyLifecycle.lifecycleStatus)) {
+      return json(423, {
+        error: "company_inactive",
+        status: "company_inactive",
+        message: "La empresa esta desactivada o cerrada. Reactivala desde ajustes antes de modificar documentos.",
+      });
+    }
 
     if (membershipRole !== "admin") {
       return json(403, { error: "forbidden", details: "Solo administradores de empresa pueden gestionar documentación." });

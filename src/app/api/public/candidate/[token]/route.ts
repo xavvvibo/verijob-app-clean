@@ -3,6 +3,7 @@ import { createServiceRoleClient } from "@/utils/supabase/service";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { normalizePublicLanguages } from "@/lib/public/profile-languages";
 import { resolveActiveCandidatePublicLink } from "@/lib/public/candidate-public-link";
+import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
 
 type Params = { token: string };
 
@@ -149,7 +150,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     .eq("id", candidateId)
     .maybeSingle();
   const lifecycleStatus = String((profile as any)?.lifecycle_status || "active").toLowerCase();
-  if (lifecycleStatus === "deleted" || lifecycleStatus === "disabled") {
+  if (isUnavailableLifecycleStatus(lifecycleStatus)) {
     return json(410, { error: "profile_unavailable" });
   }
 
