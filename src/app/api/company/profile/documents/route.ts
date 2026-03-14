@@ -7,7 +7,7 @@ import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/l
 export const dynamic = "force-dynamic";
 
 const ROUTE_VERSION = "company-profile-documents-v1";
-const BUCKET = "evidence";
+const BUCKET = "evidences_company";
 const MAX_SIZE_BYTES = 20 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["application/pdf", "image/png", "image/jpeg", "image/webp"]);
 const ALLOWED_DOCUMENT_TYPES = new Set(["modelo_036", "modelo_037", "cif_nif", "certificado_censal", "escritura", "otro"]);
