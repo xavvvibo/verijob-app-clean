@@ -221,9 +221,9 @@ function humanizeDocumentsWarning(code: string | null) {
   if (code === "company_verification_documents_missing_migration") {
     return {
       code,
-      title: "La verificacion documental aun no esta activada en esta base",
+      title: "La verificación documental aún no está activada en esta base",
       message:
-        "El perfil empresa esta listo, pero falta aplicar las migraciones SQL del modulo documental para poder subir y gestionar documentos.",
+        "El perfil empresa está listo, pero falta aplicar las migraciones SQL del módulo documental para poder subir y gestionar documentos.",
       migration_files: [
         "scripts/sql/f31_company_verification_documents.sql",
         "scripts/sql/f34_company_verification_documents_lifecycle.sql",
@@ -233,9 +233,9 @@ function humanizeDocumentsWarning(code: string | null) {
   if (code === "company_verification_documents_schema_drift") {
     return {
       code,
-      title: "La base tiene una version parcial del modulo documental",
+      title: "La base tiene una versión parcial del módulo documental",
       message:
-        "La UI se degrada de forma segura. Aplica las migraciones pendientes para activar lifecycle, historico e importacion documental.",
+        "La UI se degrada de forma segura. Aplica las migraciones pendientes para activar lifecycle, histórico e importación documental.",
       migration_files: [
         "scripts/sql/f31_company_verification_documents.sql",
         "scripts/sql/f34_company_verification_documents_lifecycle.sql",
@@ -568,7 +568,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error: "unhandled_exception",
-        user_message: "No se pudo cargar el perfil de empresa. Intentalo de nuevo en unos minutos.",
+        user_message: "No se pudo cargar el perfil de empresa. Inténtalo de nuevo en unos minutos.",
         route_version: ROUTE_VERSION,
       },
       { status: 500 }
@@ -592,7 +592,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error: "company_inactive",
-          user_message: "La empresa esta desactivada o cerrada. Reactivala desde ajustes antes de editar el perfil.",
+          user_message: "La empresa está desactivada o cerrada. Reactívala desde ajustes antes de editar el perfil.",
           route_version: ROUTE_VERSION,
         },
         { status: 423 },
@@ -706,7 +706,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: "unhandled_exception",
-        user_message: "No se pudo guardar el perfil de empresa. Intentalo de nuevo en unos minutos.",
+        user_message: "No se pudo guardar el perfil de empresa. Inténtalo de nuevo en unos minutos.",
         route_version: ROUTE_VERSION,
       },
       { status: 500 }

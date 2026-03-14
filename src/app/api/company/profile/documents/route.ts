@@ -42,7 +42,7 @@ function docsMigrationPayload(code: "company_verification_documents_missing_migr
       error: code,
       message: "El módulo documental aún no está activo.",
       user_message:
-        "La base actual aun no tiene activado el modulo documental de empresa. Aplica las migraciones SQL para habilitar subida, historico y revision.",
+        "La base actual aún no tiene activado el módulo documental de empresa. Aplica las migraciones SQL para habilitar subida, histórico y revisión.",
       migration_files: [
         "scripts/sql/f31_company_verification_documents.sql",
         "scripts/sql/f34_company_verification_documents_lifecycle.sql",
@@ -54,7 +54,7 @@ function docsMigrationPayload(code: "company_verification_documents_missing_migr
     error: code,
     message: "El módulo documental necesita sincronizar su esquema antes de operar correctamente.",
     user_message:
-      "La base tiene una version parcial del modulo documental. Aplica las migraciones pendientes para activar lifecycle e importacion.",
+      "La base tiene una versión parcial del módulo documental. Aplica las migraciones pendientes para activar lifecycle e importación.",
       migration_files: [
       "scripts/sql/f31_company_verification_documents.sql",
       "scripts/sql/f34_company_verification_documents_lifecycle.sql",
@@ -270,7 +270,7 @@ export async function GET() {
   } catch (e: any) {
     return json(500, {
       error: "unhandled_exception",
-      user_message: "No se pudo cargar la documentacion de empresa. Intentalo de nuevo en unos minutos.",
+      user_message: "No se pudo cargar la documentación de empresa. Inténtalo de nuevo en unos minutos.",
     });
   }
 }
@@ -288,7 +288,7 @@ export async function POST(request: Request) {
       return json(423, {
         error: "company_inactive",
         status: "company_inactive",
-        message: "La empresa esta desactivada o cerrada. Reactivala desde ajustes antes de subir nuevos documentos.",
+        message: "La empresa está desactivada o cerrada. Reactívala desde ajustes antes de subir nuevos documentos.",
       });
     }
 
@@ -438,7 +438,7 @@ export async function POST(request: Request) {
   } catch (e: any) {
     return json(500, {
       error: "unhandled_exception",
-      user_message: "No se pudo subir el documento. Intentalo de nuevo en unos minutos.",
+      user_message: "No se pudo subir el documento. Inténtalo de nuevo en unos minutos.",
     });
   }
 }
@@ -456,7 +456,7 @@ export async function PATCH(request: Request) {
       return json(423, {
         error: "company_inactive",
         status: "company_inactive",
-        message: "La empresa esta desactivada o cerrada. Reactivala desde ajustes antes de modificar documentos.",
+        message: "La empresa está desactivada o cerrada. Reactívala desde ajustes antes de modificar documentos.",
       });
     }
 
@@ -576,7 +576,7 @@ export async function PATCH(request: Request) {
   } catch (e: any) {
     return json(500, {
       error: "unhandled_exception",
-      user_message: "No se pudo actualizar el estado del documento. Intentalo de nuevo en unos minutos.",
+      user_message: "No se pudo actualizar el estado del documento. Inténtalo de nuevo en unos minutos.",
     });
   }
 }

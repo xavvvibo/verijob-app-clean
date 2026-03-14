@@ -492,7 +492,7 @@ export default function CompanyProfilePage() {
             ) : null}
           </div>
           <div className="min-w-[260px] rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs uppercase tracking-wide text-slate-500">Perfil listo para operacion</p>
+            <p className="text-xs uppercase tracking-wide text-slate-500">Perfil listo para operación</p>
             <p className="mt-1 text-2xl font-semibold text-slate-900">{completeness}%</p>
             <div className="mt-2 h-2 rounded-full bg-slate-200">
               <div className="h-full rounded-full bg-slate-900" style={{ width: `${Math.max(0, Math.min(100, completeness))}%` }} />
@@ -622,7 +622,7 @@ export default function CompanyProfilePage() {
               disabled={!canEdit}
               placeholder="camarero, jefe de rango, encargado"
             />
-            <span className="mt-1 block text-xs text-slate-500">Puedes escribir texto natural separado por comas o saltos de linea.</span>
+            <span className="mt-1 block text-xs text-slate-500">Puedes escribir texto natural separado por comas o saltos de línea.</span>
           </Field>
           <Field label="Tipos de contrato">
             <div className="flex flex-wrap gap-2">
@@ -752,7 +752,7 @@ export default function CompanyProfilePage() {
                 {uploadingDoc ? "Subiendo…" : "Subir documento de verificación"}
               </button>
               <p className="mt-2 text-xs text-slate-500">
-                Puedes anadir varios documentos del mismo tipo sin perder trazabilidad historica.
+                Puedes añadir varios documentos del mismo tipo sin perder trazabilidad histórica.
               </p>
             </div>
           </div>
@@ -762,7 +762,7 @@ export default function CompanyProfilePage() {
 
         <div className="mt-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="text-sm font-semibold text-slate-900">Historico documental</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Histórico documental</h3>
             <div className="flex gap-2 text-xs text-slate-600">
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">Activos: {activeDocuments.length}</span>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">Eliminados: {deletedDocuments}</span>
@@ -771,8 +771,8 @@ export default function CompanyProfilePage() {
           {documents.length === 0 ? (
             <p className="mt-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-sm text-slate-600">
               {documentsMeta
-                ? "La gestion documental quedara disponible cuando se apliquen las migraciones del modulo documental."
-                : "No hay documentos de verificacion subidos todavia."}
+                ? "La gestión documental quedará disponible cuando se apliquen las migraciones del módulo documental."
+                : "No hay documentos de verificación subidos todavía."}
             </p>
           ) : (
             <div className="mt-2 overflow-auto">
