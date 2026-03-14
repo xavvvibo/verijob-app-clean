@@ -79,13 +79,19 @@ export async function POST(req: Request) {
       snapshotCompanyVerificationStatus = "registered_in_verijob";
       const { data: company } = await admin
         .from("companies")
-        .select("name,trade_name,legal_name,company_verification_status")
+        .select("name,company_verification_status")
         .eq("id", snapshotCompanyId)
+        .maybeSingle();
+
+      const { data: companyProfile } = await admin
+        .from("company_profiles")
+        .select("trade_name,legal_name")
+        .eq("company_id", snapshotCompanyId)
         .maybeSingle();
 
       snapshotCompanyName =
         snapshotCompanyName ||
-        resolveCompanyDisplayName(company as any, "Tu empresa");
+        resolveCompanyDisplayName({ ...(company || {}), ...(companyProfile || {}) } as any, "Tu empresa");
 
       const companyStatus = asText((company as any)?.company_verification_status, 60);
       if (companyStatus) snapshotCompanyVerificationStatus = companyStatus;

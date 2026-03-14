@@ -104,7 +104,7 @@ export default async function Page(ctx:any){
     }}>
 
       <h1 style={{fontSize:28,marginBottom:8}}>
-        Verijob Verification
+        Credencial verificable VERIJOB
       </h1>
 
       <div style={{color:"#64748b",marginBottom:30}}>
@@ -163,7 +163,7 @@ export default async function Page(ctx:any){
 
       <div style={{fontSize:13,color:"#64748b"}}>
 
-        Signature: {signature}
+        Estado del sello: {valid ? "verificado" : "no valido"}
 
       </div>
 

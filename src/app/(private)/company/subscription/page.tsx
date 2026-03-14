@@ -161,7 +161,7 @@ export default async function CompanySubscriptionPage() {
       .maybeSingle(),
     admin
       .from("companies")
-      .select("name,trade_name,legal_name,company_verification_status")
+      .select("name,company_verification_status")
       .eq("id", companyId)
       .maybeSingle(),
     admin

@@ -105,20 +105,26 @@ async function resolveContext() {
   }
   if (!companyId) return { error: json(400, { error: "no_active_company" }) };
 
-  const [{ data: membership, error: membershipErr }, { data: company, error: companyErr }] = await Promise.all([
+  const [
+    { data: membership, error: membershipErr },
+    { data: company, error: companyErr },
+    { data: companyProfile, error: companyProfileErr },
+  ] = await Promise.all([
     admin.from("company_members").select("role").eq("company_id", companyId).eq("user_id", user.id).maybeSingle(),
-    admin.from("companies").select("id,name,trade_name,legal_name").eq("id", companyId).maybeSingle(),
+    admin.from("companies").select("id,name").eq("id", companyId).maybeSingle(),
+    admin.from("company_profiles").select("company_id,trade_name,legal_name").eq("company_id", companyId).maybeSingle(),
   ]);
 
   if (membershipErr) return { error: json(400, { error: "company_membership_read_failed", details: membershipErr.message }) };
   if (!membership) return { error: json(403, { error: "company_membership_required" }) };
   if (companyErr) return { error: json(400, { error: "companies_read_failed", details: companyErr.message }) };
+  if (companyProfileErr) return { error: json(400, { error: "company_profiles_read_failed", details: companyProfileErr.message }) };
 
   return {
     user,
     companyId,
     membershipRole: String(membership.role || "reviewer").toLowerCase(),
-    companyName: resolveCompanyDisplayName(company, "Tu empresa"),
+    companyName: resolveCompanyDisplayName({ ...(company || {}), ...(companyProfile || {}) }, "Tu empresa"),
     admin,
   };
 }

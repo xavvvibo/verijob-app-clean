@@ -541,7 +541,14 @@ export async function GET() {
       route_version: ROUTE_VERSION,
     });
   } catch (e: any) {
-    return NextResponse.json({ error: "unhandled_exception", details: e?.message || String(e), route_version: ROUTE_VERSION }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "unhandled_exception",
+        user_message: "No se pudo cargar el perfil de empresa. Intentalo de nuevo en unos minutos.",
+        route_version: ROUTE_VERSION,
+      },
+      { status: 500 }
+    );
   }
 }
 
@@ -661,6 +668,13 @@ export async function POST(request: Request) {
       route_version: ROUTE_VERSION,
     });
   } catch (e: any) {
-    return NextResponse.json({ error: "unhandled_exception", details: e?.message || String(e), route_version: ROUTE_VERSION }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "unhandled_exception",
+        user_message: "No se pudo guardar el perfil de empresa. Intentalo de nuevo en unos minutos.",
+        route_version: ROUTE_VERSION,
+      },
+      { status: 500 }
+    );
   }
 }

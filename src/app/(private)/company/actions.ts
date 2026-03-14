@@ -30,28 +30,28 @@ async function resolveCompanyVerificationStatus(supabase: any, companyId: string
   const subscriptionStatus = String(sub?.status || "").toLowerCase();
   if (subscriptionStatus === "active" || subscriptionStatus === "trialing") return "verified_paid";
 
-  const { data: company } = await supabase
-    .from("companies")
-    .select("company_verification_status,name,trade_name,legal_name")
-    .eq("id", companyId)
-    .maybeSingle();
-
-  if (company?.company_verification_status) {
-    return {
-      status: String(company.company_verification_status),
-      companyName: resolveCompanyDisplayName(company, "Tu empresa"),
-    };
-  }
-
   const { data: companyProfile } = await supabase
     .from("company_profiles")
     .select("company_verification_status,trade_name,legal_name")
     .eq("company_id", companyId)
     .maybeSingle();
 
+  const { data: company } = await supabase
+    .from("companies")
+    .select("company_verification_status,name")
+    .eq("id", companyId)
+    .maybeSingle();
+
+  if (company?.company_verification_status) {
+    return {
+      status: String(company.company_verification_status),
+      companyName: resolveCompanyDisplayName({ ...(company || {}), ...(companyProfile || {}) }, "Tu empresa"),
+    };
+  }
+
   return {
     status: String(companyProfile?.company_verification_status || "unverified"),
-    companyName: resolveCompanyDisplayName(companyProfile, "Tu empresa"),
+    companyName: resolveCompanyDisplayName({ ...(company || {}), ...(companyProfile || {}) }, "Tu empresa"),
   };
 }
 

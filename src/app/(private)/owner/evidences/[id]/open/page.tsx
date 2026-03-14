@@ -33,7 +33,7 @@ export default async function OwnerEvidenceOpenPage({ params }: { params: Promis
     return (
       <main className="max-w-2xl p-6">
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-sm text-amber-900">
-          Esta evidencia no tiene `storage_path` registrado. No se puede abrir el documento.
+          Esta evidencia no tiene un documento disponible para abrir ahora mismo.
           <div className="mt-4">
             <Link href="/owner/evidences" className="font-semibold underline">Volver a evidencias</Link>
           </div>
@@ -48,7 +48,7 @@ export default async function OwnerEvidenceOpenPage({ params }: { params: Promis
       <main className="max-w-2xl p-6">
         <section className="rounded-2xl border border-rose-200 bg-rose-50 p-6 text-sm text-rose-900">
           No se pudo generar una URL segura para este documento.
-          <div className="mt-2 text-xs text-rose-800">{signed.error?.message || "signed_url_unavailable"}</div>
+          <div className="mt-2 text-xs text-rose-800">Revisa si el archivo sigue disponible en almacenamiento o vuelve a intentarlo más tarde.</div>
           <div className="mt-4">
             <Link href="/owner/evidences" className="font-semibold underline">Volver a evidencias</Link>
           </div>

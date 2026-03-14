@@ -1,5 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireOwner } from "@/app/api/internal/owner/_lib";
+import {
+  estimateManagedPlanAmountCents,
+  getManagedSubscriptionPlansForRole,
+  managedPlanLabel,
+  normalizeManagedSubscriptionPlanKey,
+} from "@/lib/billing/managedPlans";
 import { buildSubscriptionLifecycleEmail } from "@/lib/email/templates/subscriptionLifecycle";
 import { sendTransactionalEmail } from "@/server/email/sendTransactionalEmail";
 
@@ -26,42 +32,6 @@ const ALLOWED_ACTIONS = new Set([
   ACTION_ARCHIVE_USER,
 ]);
 
-const ALLOWED_PLAN_KEYS = new Set([
-  "free",
-  "candidate_starter_monthly",
-  "candidate_starter_yearly",
-  "candidate_pro_monthly",
-  "candidate_pro_yearly",
-  "candidate_proplus_monthly",
-  "candidate_proplus_yearly",
-  "company_access_monthly",
-  "company_access_yearly",
-  "company_hiring_monthly",
-  "company_hiring_yearly",
-  "company_team_monthly",
-  "company_team_yearly",
-]);
-
-const CANDIDATE_PLAN_KEYS = new Set([
-  "free",
-  "candidate_starter_monthly",
-  "candidate_starter_yearly",
-  "candidate_pro_monthly",
-  "candidate_pro_yearly",
-  "candidate_proplus_monthly",
-  "candidate_proplus_yearly",
-]);
-
-const COMPANY_PLAN_KEYS = new Set([
-  "free",
-  "company_access_monthly",
-  "company_access_yearly",
-  "company_hiring_monthly",
-  "company_hiring_yearly",
-  "company_team_monthly",
-  "company_team_yearly",
-]);
-
 function json(status: number, body: any) {
   const res = NextResponse.json(body, { status });
   res.headers.set("Cache-Control", "no-store");
@@ -78,6 +48,37 @@ function asObject(v: unknown): Record<string, any> {
 
 function asText(v: unknown, max = 500) {
   return String(v || "").trim().slice(0, max);
+}
+
+function classifyPlanPersistenceError(error: any) {
+  const code = String(error?.code || "").trim();
+  const message = String(error?.message || "").trim();
+  const lower = message.toLowerCase();
+  const isConstraintLike =
+    code === "23514" ||
+    code === "22P02" ||
+    code === "23502" ||
+    lower.includes("check constraint") ||
+    lower.includes("violates check constraint") ||
+    lower.includes("violates not-null constraint") ||
+    lower.includes("invalid input value") ||
+    lower.includes("enum") ||
+    lower.includes("subscriptions_plan") ||
+    (lower.includes("plan") && lower.includes("constraint"));
+
+  if (isConstraintLike) {
+    return {
+      error: "plan_persistence_rejected",
+      probable_cause: "remote_subscription_plan_constraint",
+      details: message || null,
+    };
+  }
+
+  return {
+    error: "plan_change_failed",
+    probable_cause: null,
+    details: message || null,
+  };
 }
 
 function toIsoDate(v: unknown) {
@@ -105,33 +106,7 @@ function makeFallbackCompanyName(emailRaw: unknown) {
 }
 
 function planLabel(raw: unknown) {
-  const plan = String(raw || "free").toLowerCase();
-  if (!plan || plan === "free") return "Free";
-  if (plan.includes("candidate_starter")) return "Candidate Starter";
-  if (plan.includes("candidate_proplus")) return "Candidate Pro+";
-  if (plan.includes("candidate_pro")) return "Candidate Pro";
-  if (plan.includes("company_access")) return "Company Access";
-  if (plan.includes("company_hiring")) return "Company Hiring";
-  if (plan.includes("company_team")) return "Company Team";
-  return plan;
-}
-
-function estimatePlanAmountCents(planRaw: unknown) {
-  const plan = String(planRaw || "").toLowerCase();
-  if (!plan || plan === "free") return 0;
-  if (plan === "candidate_starter_monthly") return 299;
-  if (plan === "candidate_starter_yearly") return 2990;
-  if (plan === "candidate_pro_monthly") return 499;
-  if (plan === "candidate_pro_yearly") return 4990;
-  if (plan === "candidate_proplus_monthly") return 999;
-  if (plan === "candidate_proplus_yearly") return 9990;
-  if (plan === "company_access_monthly") return 4900;
-  if (plan === "company_access_yearly") return 49000;
-  if (plan === "company_hiring_monthly") return 9900;
-  if (plan === "company_hiring_yearly") return 99000;
-  if (plan === "company_team_monthly") return 19900;
-  if (plan === "company_team_yearly") return 199000;
-  return null;
+  return managedPlanLabel(raw);
 }
 
 function isCompanyPlan(raw: unknown) {
@@ -249,8 +224,8 @@ export async function POST(req: Request, ctx: any) {
     const targetPlan =
       actionType === ACTION_CANCEL_SUBSCRIPTION
         ? "free"
-        : String(payload?.target_plan || "").trim().toLowerCase();
-    if (!ALLOWED_PLAN_KEYS.has(targetPlan)) {
+        : normalizeManagedSubscriptionPlanKey(payload?.target_plan);
+    if (!targetPlan) {
       return json(400, { error: "invalid_target_plan" });
     }
 
@@ -262,8 +237,10 @@ export async function POST(req: Request, ctx: any) {
           : targetPlan.startsWith("company_")
             ? "company"
             : "candidate";
-    const rolePlans = inferredRole === "company" ? COMPANY_PLAN_KEYS : CANDIDATE_PLAN_KEYS;
-    if (!rolePlans.has(targetPlan)) {
+    const rolePlans = new Set(
+      getManagedSubscriptionPlansForRole(inferredRole === "company" ? "company" : "candidate").map((plan) => plan.key)
+    );
+    if (!rolePlans.has(targetPlan as any)) {
       return json(400, { error: "invalid_target_plan_for_role" });
     }
 
@@ -288,10 +265,7 @@ export async function POST(req: Request, ctx: any) {
     };
 
     const nextStatus = targetPlan === "free" ? "canceled" : "active";
-    const estimatedAmount = estimatePlanAmountCents(targetPlan);
-    if (estimatedAmount == null && targetPlan !== "free") {
-      return json(400, { error: "missing_plan_mapping" });
-    }
+    const estimatedAmount = estimateManagedPlanAmountCents(targetPlan);
 
     const updatePayload: Record<string, any> = {
       plan: targetPlan,
@@ -312,7 +286,10 @@ export async function POST(req: Request, ctx: any) {
         .eq("id", (latestSub as any).id)
         .select("id,plan,status,current_period_end,metadata")
         .single();
-      if (updateErr) return json(400, { error: "plan_change_failed", details: updateErr.message });
+      if (updateErr) {
+        const classified = classifyPlanPersistenceError(updateErr);
+        return json(400, classified);
+      }
       resultRow = updated;
     } else {
       const insertPayload: Record<string, any> = {
@@ -347,11 +324,13 @@ export async function POST(req: Request, ctx: any) {
             .select("id,plan,status,current_period_end,metadata")
             .single();
           if (updateFallbackErr) {
-            return json(400, { error: "plan_change_failed", details: updateFallbackErr.message });
+            const classified = classifyPlanPersistenceError(updateFallbackErr);
+            return json(400, classified);
           }
           resultRow = updatedFallback;
         } else {
-          return json(400, { error: "plan_change_failed", details: insertErr.message });
+          const classified = classifyPlanPersistenceError(insertErr);
+          return json(400, classified);
         }
       } else {
         resultRow = inserted;

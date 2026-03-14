@@ -183,7 +183,10 @@ export async function GET() {
       ...snapshot,
     });
   } catch (error: any) {
-    return json(500, { error: "unhandled_exception", details: String(error?.message || error) });
+    return json(500, {
+      error: "unhandled_exception",
+      user_message: "No se pudo cargar el equipo de empresa. Intentalo de nuevo en unos minutos.",
+    });
   }
 }
 
@@ -275,7 +278,10 @@ export async function POST(request: Request) {
       user_message: "Invitacion creada. Puedes copiar el enlace y compartirlo con tu equipo.",
     });
   } catch (error: any) {
-    return json(500, { error: "unhandled_exception", details: String(error?.message || error) });
+    return json(500, {
+      error: "unhandled_exception",
+      user_message: "No se pudo crear la invitacion del equipo. Intentalo de nuevo en unos minutos.",
+    });
   }
 }
 
@@ -320,6 +326,9 @@ export async function PATCH(request: Request) {
 
     return json(200, { ok: true, invitation, user_message: "Invitacion cancelada." });
   } catch (error: any) {
-    return json(500, { error: "unhandled_exception", details: String(error?.message || error) });
+    return json(500, {
+      error: "unhandled_exception",
+      user_message: "No se pudo actualizar la invitacion del equipo. Intentalo de nuevo en unos minutos.",
+    });
   }
 }

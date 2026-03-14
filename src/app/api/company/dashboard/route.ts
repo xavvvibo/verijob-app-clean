@@ -25,21 +25,16 @@ async function resolveCompanyName(supabase: any, companyId: string): Promise<str
   try {
     const { data: companyData } = await supabase
       .from("companies")
-      .select("name,legal_name,trade_name")
+      .select("name")
       .eq("id", companyId)
       .maybeSingle();
-    const companyName = resolveCompanyDisplayName(companyData, "");
-    if (companyName) return companyName;
-  } catch {}
-
-  try {
     const { data: profileData } = await supabase
       .from("company_profiles")
       .select("legal_name,trade_name")
       .eq("company_id", companyId)
       .maybeSingle();
 
-    const profileName = resolveCompanyDisplayName(profileData, "");
+    const profileName = resolveCompanyDisplayName({ ...(companyData || {}), ...(profileData || {}) }, "");
     if (profileName) return profileName;
   } catch {}
 
@@ -330,6 +325,13 @@ export async function GET() {
 
     return NextResponse.json(payload);
   } catch (e: any) {
-    return NextResponse.json({ error: "unhandled_exception", details: e?.message || String(e), route_version: ROUTE_VERSION }, { status: 500 });
+    return NextResponse.json(
+      {
+        error: "unhandled_exception",
+        user_message: "No se pudo cargar el panel de empresa. Intentalo de nuevo en unos minutos.",
+        route_version: ROUTE_VERSION,
+      },
+      { status: 500 }
+    );
   }
 }

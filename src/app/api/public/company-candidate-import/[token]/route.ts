@@ -41,7 +41,7 @@ function displayStatus(invite: any) {
 async function readInviteByToken(admin: any, token: string) {
   const { data, error } = await admin
     .from("company_candidate_import_invites")
-    .select("*, companies:company_id(id,name,trade_name,legal_name)")
+    .select("*")
     .eq("invite_token", token)
     .maybeSingle();
 
@@ -61,8 +61,21 @@ async function readInviteByToken(admin: any, token: string) {
 
   if (!data) return { error: json(404, { error: "invite_not_found", user_message: "La invitación no existe o ya no está disponible." }) };
 
+  const companyId = String(data?.company_id || "").trim();
+  let company: any = null;
+  if (companyId) {
+    const [{ data: companyRow }, { data: companyProfileRow }] = await Promise.all([
+      admin.from("companies").select("id,name").eq("id", companyId).maybeSingle(),
+      admin.from("company_profiles").select("company_id,trade_name,legal_name").eq("company_id", companyId).maybeSingle(),
+    ]);
+    company = { ...(companyRow || {}), ...(companyProfileRow || {}) };
+  }
+
   return {
-    invite: data,
+    invite: {
+      ...data,
+      company,
+    },
   };
 }
 
@@ -87,7 +100,7 @@ export async function GET(
       data: { user },
     } = await supabase.auth.getUser();
 
-    const companyName = resolveCompanyDisplayName((invite as any)?.companies || null, "Tu empresa");
+    const companyName = resolveCompanyDisplayName((invite as any)?.company || null, "Tu empresa");
     const importMeta = invite?.extracted_payload_json?._verijob_import_meta || {};
     const legalSnapshot = buildCompanyCvImportLegalSnapshot({
       companyName,
@@ -126,7 +139,10 @@ export async function GET(
       },
     });
   } catch (error: any) {
-    return json(500, { error: "unhandled_exception", details: String(error?.message || error) });
+    return json(500, {
+      error: "unhandled_exception",
+      user_message: "No se pudo cargar la invitacion en este momento. Intentalo de nuevo en unos minutos.",
+    });
   }
 }
 
@@ -193,7 +209,7 @@ export async function POST(
       });
     }
 
-    const companyName = resolveCompanyDisplayName((invite as any)?.companies || null, "Tu empresa");
+    const companyName = resolveCompanyDisplayName((invite as any)?.company || null, "Tu empresa");
     const legalSnapshot = buildCompanyCvImportLegalSnapshot({
       companyName,
       candidateEmail: inviteEmail,
@@ -266,6 +282,9 @@ export async function POST(
         : "Invitación aceptada. Tu perfil preliminar ya está preparado para revisión.",
     });
   } catch (error: any) {
-    return json(500, { error: "unhandled_exception", details: String(error?.message || error) });
+    return json(500, {
+      error: "unhandled_exception",
+      user_message: "No se pudo aceptar la invitacion en este momento. Intentalo de nuevo en unos minutos.",
+    });
   }
 }

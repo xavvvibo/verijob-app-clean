@@ -236,7 +236,10 @@ export async function GET() {
 
     return json(200, { documents: Array.isArray(docsRes.data) ? docsRes.data : [] });
   } catch (e: any) {
-    return json(500, { error: "unhandled_exception", details: e?.message || String(e) });
+    return json(500, {
+      error: "unhandled_exception",
+      user_message: "No se pudo cargar la documentacion de empresa. Intentalo de nuevo en unos minutos.",
+    });
   }
 }
 
@@ -367,7 +370,10 @@ export async function POST(request: Request) {
 
     return json(200, { ok: true, document: docsInsert.data });
   } catch (e: any) {
-    return json(500, { error: "unhandled_exception", details: e?.message || String(e) });
+    return json(500, {
+      error: "unhandled_exception",
+      user_message: "No se pudo subir el documento. Intentalo de nuevo en unos minutos.",
+    });
   }
 }
 
@@ -502,6 +508,9 @@ export async function PATCH(request: Request) {
 
     return json(400, { error: "unsupported_action" });
   } catch (e: any) {
-    return json(500, { error: "unhandled_exception", details: e?.message || String(e) });
+    return json(500, {
+      error: "unhandled_exception",
+      user_message: "No se pudo actualizar el estado del documento. Intentalo de nuevo en unos minutos.",
+    });
   }
 }

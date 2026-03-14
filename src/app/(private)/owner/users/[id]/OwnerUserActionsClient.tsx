@@ -1,6 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import {
+  getManagedSubscriptionPlansForRole,
+  managedPlanLabel,
+  normalizeManagedSubscriptionPlanKey,
+} from "@/lib/billing/managedPlans";
 
 type ExperienceItem = {
   id: string;
@@ -36,26 +41,6 @@ const INITIAL_ACTION_STATE: ActionState = {
   isError: false,
 };
 
-const CANDIDATE_PLAN_OPTIONS = [
-  "free",
-  "candidate_starter_monthly",
-  "candidate_starter_yearly",
-  "candidate_pro_monthly",
-  "candidate_pro_yearly",
-  "candidate_proplus_monthly",
-  "candidate_proplus_yearly",
-];
-
-const COMPANY_PLAN_OPTIONS = [
-  "free",
-  "company_access_monthly",
-  "company_access_yearly",
-  "company_hiring_monthly",
-  "company_hiring_yearly",
-  "company_team_monthly",
-  "company_team_yearly",
-];
-
 function ownerActionErrorMessage(errorCode: string, details: string | null) {
   if (errorCode === "invalid_target_plan") return "El plan seleccionado no está soportado en el catálogo actual.";
   if (errorCode === "invalid_target_plan_for_role") return "Ese plan no es válido para el tipo de usuario seleccionado.";
@@ -80,12 +65,6 @@ function normalizeRole(raw: string) {
   return "candidate";
 }
 
-function planOptionsForRole(role: string) {
-  const normalized = normalizeRole(role);
-  if (normalized === "company") return COMPANY_PLAN_OPTIONS;
-  return CANDIDATE_PLAN_OPTIONS;
-}
-
 export default function OwnerUserActionsClient({
   targetUserId,
   role,
@@ -96,7 +75,17 @@ export default function OwnerUserActionsClient({
   evidences,
 }: Props) {
   const [stateByAction, setStateByAction] = useState<Record<string, ActionState>>({});
-  const [planTarget, setPlanTarget] = useState<string>(currentPlan || "free");
+  const normalizedRole = normalizeRole(role);
+  const planOptions = useMemo(
+    () => getManagedSubscriptionPlansForRole(normalizedRole === "company" ? "company" : "candidate"),
+    [normalizedRole]
+  );
+  const normalizedCurrentPlan = normalizeManagedSubscriptionPlanKey(currentPlan);
+  const initialPlanTarget =
+    normalizedCurrentPlan && planOptions.some((plan) => plan.key === normalizedCurrentPlan)
+      ? normalizedCurrentPlan
+      : planOptions[0]?.key || "free";
+  const [planTarget, setPlanTarget] = useState<string>(initialPlanTarget);
   const [planReason, setPlanReason] = useState("");
 
   const [trialMode, setTrialMode] = useState<"days" | "date">("days");
@@ -120,8 +109,6 @@ export default function OwnerUserActionsClient({
 
   const [archiveReason, setArchiveReason] = useState("");
   const [archiveConfirmPhrase, setArchiveConfirmPhrase] = useState("");
-
-  const planOptions = useMemo(() => planOptionsForRole(role), [role]);
 
   function setActionState(actionKey: string, partial: Partial<ActionState>) {
     setStateByAction((prev) => ({
@@ -372,14 +359,19 @@ export default function OwnerUserActionsClient({
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <article className="rounded-lg border border-slate-200 bg-slate-50 p-3">
           <h3 className="text-sm font-semibold text-slate-900">Cambio de plan</h3>
-          <p className="mt-1 text-xs text-slate-600">Plan actual: <span className="font-semibold">{currentPlan || "free"}</span></p>
+          <p className="mt-1 text-xs text-slate-600">Plan actual: <span className="font-semibold">{managedPlanLabel(currentPlan || "free")}</span></p>
+          {!normalizedCurrentPlan ? (
+            <p className="mt-1 text-xs text-amber-700">
+              El plan actual no está en el catálogo canónico owner. Puedes mover al usuario a un plan válido desde esta lista.
+            </p>
+          ) : null}
           <select
             value={planTarget}
             onChange={(e) => setPlanTarget(e.target.value)}
             className="mt-3 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
           >
             {planOptions.map((plan) => (
-              <option key={plan} value={plan}>{plan}</option>
+              <option key={plan.key} value={plan.key}>{plan.label}</option>
             ))}
           </select>
           <textarea

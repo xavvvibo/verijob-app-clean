@@ -144,12 +144,11 @@ export default async function OwnerUserDetailPage({ params }: any) {
 
   let activeCompanyName: string | null = null;
   if (user.active_company_id) {
-    const { data: company } = await admin
-      .from("companies")
-      .select("id,name,trade_name,legal_name")
-      .eq("id", user.active_company_id)
-      .maybeSingle();
-    activeCompanyName = resolveCompanyDisplayName(company as any, "Tu empresa");
+    const [{ data: company }, { data: companyProfile }] = await Promise.all([
+      admin.from("companies").select("id,name").eq("id", user.active_company_id).maybeSingle(),
+      admin.from("company_profiles").select("company_id,trade_name,legal_name").eq("company_id", user.active_company_id).maybeSingle(),
+    ]);
+    activeCompanyName = resolveCompanyDisplayName({ ...(company || {}), ...(companyProfile || {}) } as any, "Tu empresa");
   }
 
   const verifications = Array.isArray(verificationsRes.data) ? verificationsRes.data : [];
