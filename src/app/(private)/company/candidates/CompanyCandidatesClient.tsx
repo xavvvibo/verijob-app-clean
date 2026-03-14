@@ -78,6 +78,27 @@ function accessMeta(status: string | null | undefined) {
   return { label: "Sin acceso", tone: "border-slate-200 bg-slate-100 text-slate-700" };
 }
 
+function actionButtonClass({
+  primary = false,
+  danger = false,
+  disabled = false,
+}: {
+  primary?: boolean;
+  danger?: boolean;
+  disabled?: boolean;
+}) {
+  if (disabled) {
+    return "inline-flex rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-400 cursor-not-allowed";
+  }
+  if (danger) {
+    return "inline-flex rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100";
+  }
+  if (primary) {
+    return "inline-flex rounded-xl border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black";
+  }
+  return "inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50";
+}
+
 export default function CompanyCandidatesClient() {
   const router = useRouter();
   const [token, setToken] = useState("");
@@ -382,7 +403,7 @@ export default function CompanyCandidatesClient() {
                 <th className="py-3 pr-4">Estado</th>
                 <th className="py-3 pr-4">Acceso</th>
                 <th className="py-3 pr-4">Última actividad</th>
-                <th className="py-3 pr-4">Acción</th>
+                <th className="py-3 pr-4">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -403,6 +424,7 @@ export default function CompanyCandidatesClient() {
                   const status = statusMeta(row.display_status);
                   const access = accessMeta(row.access_status);
                   const canOpenSnapshot = Boolean(row.linked_user_id && row.candidate_public_token);
+                  const canOpenInvitation = Boolean(row.invite_token);
                   const accessActionLabel =
                     row.access_status === "active"
                       ? "Ver CV completo"
@@ -452,7 +474,7 @@ export default function CompanyCandidatesClient() {
                           <div className="mt-1 text-xs text-slate-500">Caducó el {formatDate(row.access_expires_at)}</div>
                         ) : null}
                         {row.access_status === "never" ? (
-                          <div className="mt-1 text-xs text-slate-500">Aún no has abierto el CV completo.</div>
+                          <div className="mt-1 text-xs text-slate-500">Todavía no has desbloqueado el perfil completo de este candidato.</div>
                         ) : null}
                       </td>
                       <td className="py-4 pr-4 align-top text-slate-700">{formatDate(row.last_activity_at || row.created_at)}</td>
@@ -461,39 +483,38 @@ export default function CompanyCandidatesClient() {
                           {canOpenSnapshot ? (
                             <a
                               href={`/company/candidate/${encodeURIComponent(row.candidate_public_token)}`}
-                              className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
+                              className={actionButtonClass({})}
                             >
-                              Ver snapshot
+                              Ver resumen
                             </a>
-                          ) : null}
-                          {canOpenSnapshot ? (
+                          ) : (
+                            <span className={actionButtonClass({ disabled: true })}>Ver resumen</span>
+                          )}
+                          {canOpenInvitation ? (
                             <a
-                              href={`/company/candidate/${encodeURIComponent(row.candidate_public_token)}?view=full`}
-                              className="inline-flex rounded-xl border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black"
-                            >
-                              {accessActionLabel}
-                            </a>
-                          ) : null}
-                          {row.candidate_already_exists && row.invite_token ? (
-                            <a
-                              href={`/company-candidate-import/${encodeURIComponent(row.invite_token)}`}
-                              className="inline-flex rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-semibold text-violet-700 hover:bg-violet-100"
-                            >
-                              Solicitar actualización
-                            </a>
-                          ) : row.invite_token ? (
-                            <a
-                              href={`/company-candidate-import/${encodeURIComponent(row.invite_token)}`}
-                              className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
+                              href={`/company-candidate-import/${encodeURIComponent(String(row.invite_token))}`}
+                              className={actionButtonClass({})}
                             >
                               Ver invitación
                             </a>
-                          ) : null}
+                          ) : (
+                            <span className={actionButtonClass({ disabled: true })}>Ver invitación</span>
+                          )}
+                          {canOpenSnapshot ? (
+                            <a
+                              href={`/company/candidate/${encodeURIComponent(row.candidate_public_token)}?view=full`}
+                              className={actionButtonClass({ primary: true })}
+                            >
+                              {accessActionLabel}
+                            </a>
+                          ) : (
+                            <span className={actionButtonClass({ primary: true, disabled: true })}>Desbloquear perfil</span>
+                          )}
                           <button
                             type="button"
                             onClick={() => updateCompanyStage(row.id, row.company_stage === "saved" ? "none" : "saved")}
                             disabled={actionId === row.id}
-                            className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                            className={`${actionButtonClass({})} disabled:opacity-60`}
                           >
                             {actionId === row.id && row.company_stage !== "saved"
                               ? "Guardando…"
@@ -505,7 +526,7 @@ export default function CompanyCandidatesClient() {
                             type="button"
                             onClick={() => updateCompanyStage(row.id, row.company_stage === "preselected" ? "none" : "preselected")}
                             disabled={actionId === row.id}
-                            className="inline-flex rounded-xl border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black disabled:opacity-60"
+                            className={`${actionButtonClass({ primary: true })} disabled:opacity-60`}
                           >
                             {actionId === row.id && row.company_stage !== "preselected"
                               ? "Actualizando…"
@@ -513,6 +534,18 @@ export default function CompanyCandidatesClient() {
                                 ? "Quitar preselección"
                                 : "Preseleccionar"}
                           </button>
+                          <span
+                            className={actionButtonClass({ disabled: true })}
+                            title="La acción de archivado todavía no está disponible en este flujo."
+                          >
+                            Archivar
+                          </span>
+                          <span
+                            className={actionButtonClass({ danger: true, disabled: true })}
+                            title="La eliminación todavía no está disponible en este flujo."
+                          >
+                            Eliminar
+                          </span>
                         </div>
                       </td>
                     </tr>

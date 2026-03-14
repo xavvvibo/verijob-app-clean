@@ -103,11 +103,15 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
 
   const completion = Number((profileRes.data as any)?.profile_completeness_score || 0);
   const verificationStatus = String((profileRes.data as any)?.company_verification_status || company.status || "");
-  const approvedDocs = !docsRes.error && Array.isArray(docsRes.data)
-    ? docsRes.data
-        .filter((doc: any) => String(doc?.lifecycle_status || "active").toLowerCase() !== "deleted")
-        .some((doc: any) => String(doc?.review_status || "").toLowerCase() === "approved")
-    : false;
+  const activeDocs = !docsRes.error && Array.isArray(docsRes.data)
+    ? docsRes.data.filter((doc: any) => String(doc?.lifecycle_status || "active").toLowerCase() !== "deleted")
+    : [];
+  const approvedDocs = activeDocs.some((doc: any) => String(doc?.review_status || "").toLowerCase() === "approved");
+  const pendingDocs = activeDocs.filter((doc: any) => {
+    const value = String(doc?.review_status || "").toLowerCase();
+    return value === "pending_review" || value === "uploaded";
+  }).length;
+  const rejectedDocs = activeDocs.filter((doc: any) => String(doc?.review_status || "").toLowerCase() === "rejected").length;
   const verificationMethod = deriveCompanyVerificationMethod({
     contactEmail: (profileRes.data as any)?.contact_email,
     websiteUrl: (profileRes.data as any)?.website_url,
@@ -129,7 +133,17 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <Card label="Estado" value={verificationLabel(verificationStatus)} note={verificationMethod.label} />
+          <Card
+            label="Estado"
+            value={verificationLabel(verificationStatus)}
+            note={
+              pendingDocs > 0
+                ? `${verificationMethod.label} · ${pendingDocs} documento${pendingDocs === 1 ? "" : "s"} pendiente${pendingDocs === 1 ? "" : "s"}`
+                : rejectedDocs > 0
+                  ? `${verificationMethod.label} · ${rejectedDocs} rechazo${rejectedDocs === 1 ? "" : "s"} documental${rejectedDocs === 1 ? "" : "es"}`
+                  : verificationMethod.label
+            }
+          />
           <Card label="Perfil empresa" value={`${completion}%`} note={completion >= 80 ? "Completo" : completion >= 40 ? "Parcial" : "Incompleto"} />
           <Card label="Miembros" value={String(members.length)} />
           <Card label="Solicitudes" value={String(requests.length)} note={`${pendingRequests} pendientes`} />
@@ -142,6 +156,11 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
           <div className={`mt-4 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${companyVerificationMethodTone(verificationMethod.method)}`}>
             {verificationMethod.detail}
           </div>
+        ) : null}
+        {pendingDocs > 0 ? (
+          <p className="mt-3 text-sm text-slate-600">
+            Hay {pendingDocs} documento{pendingDocs === 1 ? "" : "s"} de empresa pendiente{pendingDocs === 1 ? "" : "s"} de revisión manual.
+          </p>
         ) : null}
 
         <div className="mt-4 flex flex-wrap gap-2 text-sm">

@@ -131,6 +131,99 @@ function importStatusLabel(raw: unknown) {
   return "Pendiente de importación";
 }
 
+function extractionSummary(doc: CompanyVerificationDocument) {
+  const count = Number(doc?.extracted_json?.detected_fields_count || 0);
+  if (count <= 0) {
+    return {
+      label: "Sin datos útiles detectados",
+      detail: "Puedes subir otro documento más legible si quieres completar mejor el perfil.",
+    };
+  }
+  if (count <= 2) {
+    return {
+      label: "Pocos datos detectados",
+      detail: `${count} campo${count === 1 ? "" : "s"} detectado${count === 1 ? "" : "s"} para ayudarte a completar el perfil.`,
+    };
+  }
+  if (count <= 5) {
+    return {
+      label: "Datos detectados",
+      detail: `${count} campos detectados para ayudarte a completar el perfil.`,
+    };
+  }
+  return {
+    label: "Muchos datos detectados",
+    detail: `${count} campos detectados para completar el perfil con más rapidez.`,
+  };
+}
+
+function documentaryNextStep(doc: CompanyVerificationDocument) {
+  const lifecycle = String(doc.lifecycle_status || "active").toLowerCase();
+  const review = String(doc.review_status || "").toLowerCase();
+  const detected = Number(doc?.extracted_json?.detected_fields_count || 0);
+  const importStatus = String(doc.import_status || "").toLowerCase();
+
+  if (lifecycle === "deleted") return "Documento archivado. No requiere acción adicional.";
+  if (review === "rejected") return "Revisa el motivo indicado y sube una nueva versión del documento.";
+  if (review === "pending_review" || review === "uploaded") {
+    return detected > 0
+      ? "Sigue pendiente de revisión manual. Si quieres, puedes usar los datos detectados para completar el perfil."
+      : "Sigue pendiente de revisión manual. No necesitas hacer nada más hasta que revisemos el documento.";
+  }
+  if (review === "approved") {
+    if (detected > 0 && importStatus !== "imported") {
+      return "Documento validado. Puedes usar los datos detectados para completar el perfil si te encajan.";
+    }
+    return "Documento validado. No requiere más acciones.";
+  }
+  return "Documento recibido. Te avisaremos si hace falta revisar o completar algo.";
+}
+
+function globalDocumentarySummary(input: {
+  approvedDocumentsCount: number;
+  pendingDocumentsCount: number;
+  rejectedDocumentsCount: number;
+  activeDocumentsCount: number;
+}) {
+  const { approvedDocumentsCount, pendingDocumentsCount, rejectedDocumentsCount, activeDocumentsCount } = input;
+  if (approvedDocumentsCount > 0) {
+    return {
+      title: "La verificación documental ya está completada",
+      detail:
+        pendingDocumentsCount > 0
+          ? "Ya tienes documentación válida, aunque aún queda alguna revisión abierta en documentos más recientes."
+          : "Tu empresa ya cuenta con al menos un documento validado.",
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    };
+  }
+  if (pendingDocumentsCount > 0) {
+    return {
+      title: "Tu documentación sigue en revisión manual",
+      detail: "Hemos recibido tus documentos. El equipo de revisión todavía tiene una tarea pendiente antes de validar la empresa.",
+      tone: "border-indigo-200 bg-indigo-50 text-indigo-900",
+    };
+  }
+  if (rejectedDocumentsCount > 0) {
+    return {
+      title: "Hay documentación rechazada pendiente de corregir",
+      detail: "Revisa el motivo indicado en cada documento y sube una nueva versión para retomar la validación.",
+      tone: "border-rose-200 bg-rose-50 text-rose-900",
+    };
+  }
+  if (activeDocumentsCount > 0) {
+    return {
+      title: "La documentación se ha recibido correctamente",
+      detail: "El flujo sigue abierto hasta que la revisión manual confirme la validez del documento.",
+      tone: "border-slate-200 bg-slate-50 text-slate-900",
+    };
+  }
+  return {
+    title: "Todavía no has iniciado la verificación documental",
+    detail: "Sube un documento oficial para que podamos revisar la información de tu empresa.",
+    tone: "border-slate-200 bg-slate-50 text-slate-900",
+  };
+}
+
 function Section({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -287,6 +380,36 @@ export default function CompanyProfilePage() {
     [documents]
   );
   const deletedDocuments = Math.max(0, documents.length - activeDocuments.length);
+  const approvedDocumentsCount = useMemo(
+    () => activeDocuments.filter((doc) => String(doc.review_status || "").toLowerCase() === "approved").length,
+    [activeDocuments]
+  );
+  const pendingDocumentsCount = useMemo(
+    () =>
+      activeDocuments.filter((doc) => {
+        const value = String(doc.review_status || "").toLowerCase();
+        return value === "pending_review" || value === "uploaded";
+      }).length,
+    [activeDocuments]
+  );
+  const rejectedDocumentsCount = useMemo(
+    () => activeDocuments.filter((doc) => String(doc.review_status || "").toLowerCase() === "rejected").length,
+    [activeDocuments]
+  );
+  const documentsWithDetectedDataCount = useMemo(
+    () => activeDocuments.filter((doc) => Number(doc?.extracted_json?.detected_fields_count || 0) > 0).length,
+    [activeDocuments]
+  );
+  const documentarySummary = useMemo(
+    () =>
+      globalDocumentarySummary({
+        approvedDocumentsCount,
+        pendingDocumentsCount,
+        rejectedDocumentsCount,
+        activeDocumentsCount: activeDocuments.length,
+      }),
+    [activeDocuments.length, approvedDocumentsCount, pendingDocumentsCount, rejectedDocumentsCount]
+  );
 
   function updateField(key: string, value: any) {
     setProfile((prev) => ({ ...(prev || {}), [key]: value }));
@@ -676,15 +799,31 @@ export default function CompanyProfilePage() {
       </Section>
 
       <Section title="Verificación documental de empresa" subtitle="Sube documentación oficial para iniciar o reforzar la verificación de empresa.">
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <div className={`rounded-xl border p-4 ${documentarySummary.tone}`}>
           <p className="text-sm text-slate-700">
             Estado actual:{" "}
             <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(reviewStatus)}`}>
               {statusLabel(reviewStatus)}
             </span>
           </p>
-          <p className="mt-2 text-xs text-slate-600">
-            La revisión es manual. Subir documentación no aprueba automáticamente la empresa.
+          <p className="mt-3 text-sm font-semibold">{documentarySummary.title}</p>
+          <p className="mt-1 text-xs text-slate-600">{documentarySummary.detail}</p>
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
+            <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 text-xs text-slate-700">
+              <div className="font-semibold text-slate-900">Documentos activos</div>
+              <div className="mt-1">{activeDocuments.length}</div>
+            </div>
+            <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 text-xs text-slate-700">
+              <div className="font-semibold text-slate-900">Pendientes de revisión</div>
+              <div className="mt-1">{pendingDocumentsCount}</div>
+            </div>
+            <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 text-xs text-slate-700">
+              <div className="font-semibold text-slate-900">Con datos detectados</div>
+              <div className="mt-1">{documentsWithDetectedDataCount}</div>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-slate-600">
+            La revisión documental es manual. Incorporar datos al perfil te ayuda a completar la ficha, pero no valida por sí solo la empresa.
           </p>
           {profile?.verification_rejection_reason ? (
             <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
@@ -697,7 +836,7 @@ export default function CompanyProfilePage() {
             </p>
           ) : null}
           <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
-            Cada documento mantiene trazabilidad propia: lifecycle, revisión manual, extracción de datos e importación controlada al perfil.
+            Verás por separado el estado del documento, los datos detectados para completar el perfil y la siguiente acción recomendada en cada caso.
           </div>
         </div>
 
@@ -768,6 +907,9 @@ export default function CompanyProfilePage() {
               <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">Eliminados: {deletedDocuments}</span>
             </div>
           </div>
+          <p className="mt-2 text-xs text-slate-600">
+            Cada fila indica si el documento ya está revisado, si sigue pendiente y si puede ayudarte a completar el perfil.
+          </p>
           {documents.length === 0 ? (
             <p className="mt-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-sm text-slate-600">
               {documentsMeta
@@ -780,13 +922,10 @@ export default function CompanyProfilePage() {
                 <thead>
                   <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
                     <th className="px-3 py-2">Tipo</th>
-                    <th className="px-3 py-2">Lifecycle</th>
-                    <th className="px-3 py-2">Estado</th>
-                    <th className="px-3 py-2">Archivo</th>
-                    <th className="px-3 py-2">Extracción</th>
-                    <th className="px-3 py-2">Importación</th>
                     <th className="px-3 py-2">Fecha</th>
-                    <th className="px-3 py-2">Revisión</th>
+                    <th className="px-3 py-2">Estado documental</th>
+                    <th className="px-3 py-2">Datos detectados</th>
+                    <th className="px-3 py-2">Siguiente paso</th>
                     {canEdit ? <th className="px-3 py-2">Acciones</th> : null}
                   </tr>
                 </thead>
@@ -794,29 +933,28 @@ export default function CompanyProfilePage() {
                   {documents.map((doc) => (
                     <tr key={doc.id} className="border-b border-slate-100 text-slate-800">
                       <td className="px-3 py-2">{docTypeLabel(doc.document_type)}</td>
+                      <td className="px-3 py-2">{doc.created_at ? new Date(String(doc.created_at)).toLocaleDateString("es-ES") : "—"}</td>
                       <td className="px-3 py-2">
-                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${lifecycleClass(doc.lifecycle_status)}`}>
-                          {lifecycleLabel(doc.lifecycle_status)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${docStatusClass(doc.review_status)}`}>
-                          {docStatusLabel(doc.review_status)}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-xs text-slate-600">
-                        {doc.original_filename || doc.storage_path || "documento"}
-                        {doc.mime_type ? <div className="text-[11px] text-slate-500">{doc.mime_type}</div> : null}
+                        <div className="space-y-1">
+                          <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${docStatusClass(doc.review_status)}`}>
+                            {docStatusLabel(doc.review_status)}
+                          </span>
+                          <div>
+                            <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${lifecycleClass(doc.lifecycle_status)}`}>
+                              {lifecycleLabel(doc.lifecycle_status)}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-500">
+                            {doc.original_filename || doc.storage_path || "documento"}
+                            {doc.mime_type ? ` · ${doc.mime_type}` : ""}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-xs text-slate-600">
                         {Number(doc?.extracted_json?.detected_fields_count || 0) > 0 ? (
                           <div>
-                            <div className="font-medium text-slate-700">
-                              {doc.extracted_json?.detected_fields_count} campos detectados
-                            </div>
-                            <div className="text-[11px] text-slate-500">
-                              Confianza {String(doc.extracted_json?.confidence || "baja")}
-                            </div>
+                            <div className="font-medium text-slate-700">{extractionSummary(doc).label}</div>
+                            <div className="text-[11px] text-slate-500">{extractionSummary(doc).detail}</div>
                             {doc.extracted_json?.detected ? (
                               <div className="mt-1 text-[11px] text-slate-500">
                                 {Object.entries(doc.extracted_json.detected)
@@ -828,26 +966,21 @@ export default function CompanyProfilePage() {
                             ) : null}
                           </div>
                         ) : (
-                          <span className="text-[11px] text-slate-500">Sin extracción útil</span>
+                          <span className="text-[11px] text-slate-500">Todavía no hemos detectado datos útiles para completar el perfil.</span>
                         )}
                       </td>
                       <td className="px-3 py-2 text-xs text-slate-600">
-                        <div>{importStatusLabel(doc.import_status)}</div>
-                        {doc.imported_at ? (
-                          <div className="text-[11px] text-slate-500">
-                            {new Date(String(doc.imported_at)).toLocaleDateString("es-ES")}
+                        <div>{documentaryNextStep(doc)}</div>
+                        {doc.rejected_reason || doc.review_notes ? (
+                          <div className="mt-1 text-[11px] text-rose-700">{doc.rejected_reason || doc.review_notes}</div>
+                        ) : doc.reviewed_at ? (
+                          <div className="mt-1 text-[11px] text-slate-500">
+                            Revisado el {new Date(String(doc.reviewed_at)).toLocaleDateString("es-ES")}
                           </div>
                         ) : null}
-                      </td>
-                      <td className="px-3 py-2">{doc.created_at ? new Date(String(doc.created_at)).toLocaleDateString("es-ES") : "—"}</td>
-                      <td className="px-3 py-2">
-                        {doc.rejected_reason || doc.review_notes ? (
-                          <span className="text-xs text-rose-700">{doc.rejected_reason || doc.review_notes}</span>
-                        ) : doc.reviewed_at ? (
-                          <span className="text-xs text-slate-600">Revisado {new Date(String(doc.reviewed_at)).toLocaleDateString("es-ES")}</span>
-                        ) : (
-                          <span className="text-xs text-slate-500">Pendiente de revisión manual</span>
-                        )}
+                        {String(doc.import_status || "").toLowerCase() !== "" ? (
+                          <div className="mt-1 text-[11px] text-slate-500">{importStatusLabel(doc.import_status)}</div>
+                        ) : null}
                       </td>
                       {canEdit ? (
                         <td className="px-3 py-2">
@@ -860,7 +993,7 @@ export default function CompanyProfilePage() {
                                   disabled={docActionLoadingId === doc.id || Number(doc?.extracted_json?.detected_fields_count || 0) === 0}
                                   className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                                 >
-                                  {docActionLoadingId === doc.id ? "Procesando…" : "Importar al perfil"}
+                                  {docActionLoadingId === doc.id ? "Procesando…" : "Completar perfil con este documento"}
                                 </button>
                                 <button
                                   type="button"
