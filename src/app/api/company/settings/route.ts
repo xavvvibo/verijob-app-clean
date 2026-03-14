@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 
+function isSettingsTableMissing(error: any) {
+  const code = String(error?.code || "");
+  const msg = String(error?.message || "").toLowerCase();
+  return code === "42P01" || code === "PGRST205" || msg.includes("company_settings");
+}
+
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -22,11 +28,24 @@ export async function GET() {
     .eq("company_id", companyId)
     .maybeSingle();
 
-  if (error) return NextResponse.json({ error: "read_failed", details: error.message }, { status: 400 });
+  if (error) {
+    if (isSettingsTableMissing(error)) {
+      return NextResponse.json({
+        company_id: companyId,
+        settings: { show_risk_panel: true, show_reuse_hints: true },
+        settings_meta: {
+          available: false,
+          warning_message: "Los ajustes avanzados aún no están activos en esta base. Se aplican valores por defecto.",
+        },
+      });
+    }
+    return NextResponse.json({ error: "read_failed", details: error.message }, { status: 400 });
+  }
 
   return NextResponse.json({
     company_id: companyId,
-    settings: data || { show_risk_panel: true, show_reuse_hints: true }
+    settings: data || { show_risk_panel: true, show_reuse_hints: true },
+    settings_meta: { available: true, warning_message: null },
   });
 }
 
@@ -58,7 +77,19 @@ export async function POST(req: Request) {
     .from("company_settings")
     .upsert(patch, { onConflict: "company_id" });
 
-  if (error) return NextResponse.json({ error: "upsert_failed", details: error.message }, { status: 400 });
+  if (error) {
+    if (isSettingsTableMissing(error)) {
+      return NextResponse.json({
+        ok: true,
+        settings: patch,
+        settings_meta: {
+          available: false,
+          warning_message: "La tabla de ajustes aún no está activa. Los cambios no se persisten en esta base.",
+        },
+      });
+    }
+    return NextResponse.json({ error: "upsert_failed", details: error.message }, { status: 400 });
+  }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, settings: patch, settings_meta: { available: true, warning_message: null } });
 }

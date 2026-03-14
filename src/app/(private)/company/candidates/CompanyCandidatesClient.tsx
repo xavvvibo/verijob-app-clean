@@ -19,6 +19,8 @@ type ImportRow = {
   candidate_public_token?: string | null;
   linked_user_id?: string | null;
   candidate_already_exists?: boolean | null;
+  company_stage?: "none" | "saved" | "preselected" | string | null;
+  last_activity_at?: string | null;
 };
 
 type ImportsMeta = {
@@ -72,6 +74,7 @@ export default function CompanyCandidatesClient() {
   const [importsMeta, setImportsMeta] = useState<ImportsMeta>({ available: true, migration_files: [] });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [actionId, setActionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -154,6 +157,43 @@ export default function CompanyCandidatesClient() {
       setError(e?.message || "No se pudo crear la invitación.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function updateCompanyStage(inviteId: string, stage: "saved" | "preselected" | "none") {
+    setActionId(inviteId);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/company/candidate-imports", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "set_stage",
+          invite_id: inviteId,
+          stage,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.user_message || data?.details || data?.error || "No se pudo actualizar el estado del candidato.");
+      }
+      setNotice(data?.user_message || "Estado actualizado.");
+      setImports((prev) =>
+        prev.map((row) =>
+          row.id === inviteId
+            ? {
+                ...row,
+                company_stage: stage,
+                last_activity_at: data?.invite?.last_activity_at || new Date().toISOString(),
+              }
+            : row
+        )
+      );
+    } catch (e: any) {
+      setError(e?.message || "No se pudo actualizar el estado del candidato.");
+    } finally {
+      setActionId(null);
     }
   }
 
@@ -329,7 +369,7 @@ export default function CompanyCandidatesClient() {
                 <th className="py-3 pr-4">Email</th>
                 <th className="py-3 pr-4">Puesto</th>
                 <th className="py-3 pr-4">Estado</th>
-                <th className="py-3 pr-4">Fecha</th>
+                <th className="py-3 pr-4">Última actividad</th>
                 <th className="py-3 pr-4">Acción</th>
               </tr>
             </thead>
@@ -364,13 +404,24 @@ export default function CompanyCandidatesClient() {
                         <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${status.tone}`}>
                           {status.label}
                         </span>
+                        {row.company_stage && row.company_stage !== "none" ? (
+                          <div className="mt-2">
+                            <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
+                              row.company_stage === "preselected"
+                                ? "border-slate-900 bg-slate-900 text-white"
+                                : "border-slate-200 bg-slate-100 text-slate-700"
+                            }`}>
+                              {row.company_stage === "preselected" ? "Preseleccionado" : "Guardado"}
+                            </span>
+                          </div>
+                        ) : null}
                         {row.total_verifications ? (
                           <div className="mt-1 text-xs text-slate-500">
                             {row.approved_verifications || 0} aprobadas de {row.total_verifications}
                           </div>
                         ) : null}
                       </td>
-                      <td className="py-4 pr-4 align-top text-slate-700">{formatDate(row.created_at)}</td>
+                      <td className="py-4 pr-4 align-top text-slate-700">{formatDate(row.last_activity_at || row.created_at)}</td>
                       <td className="py-4 pr-4 align-top">
                         <div className="flex flex-wrap gap-2">
                           {row.linked_user_id && row.candidate_public_token ? (
@@ -396,6 +447,30 @@ export default function CompanyCandidatesClient() {
                               Ver invitación
                             </a>
                           ) : null}
+                          <button
+                            type="button"
+                            onClick={() => updateCompanyStage(row.id, row.company_stage === "saved" ? "none" : "saved")}
+                            disabled={actionId === row.id}
+                            className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                          >
+                            {actionId === row.id && row.company_stage !== "saved"
+                              ? "Guardando…"
+                              : row.company_stage === "saved"
+                                ? "Quitar guardado"
+                                : "Guardar"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => updateCompanyStage(row.id, row.company_stage === "preselected" ? "none" : "preselected")}
+                            disabled={actionId === row.id}
+                            className="inline-flex rounded-xl border border-slate-900 bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black disabled:opacity-60"
+                          >
+                            {actionId === row.id && row.company_stage !== "preselected"
+                              ? "Actualizando…"
+                              : row.company_stage === "preselected"
+                                ? "Quitar preselección"
+                                : "Preseleccionar"}
+                          </button>
                         </div>
                       </td>
                     </tr>

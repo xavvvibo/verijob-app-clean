@@ -65,14 +65,17 @@ async function createCheckoutSession(req: Request) {
   }
 
   const origin = getOrigin(req);
+  const isCompanyPlan = String(selection.planKey || "").startsWith("company_");
+  const successUrl = `${origin}${isCompanyPlan ? "/company/subscription?checkout=success" : "/candidate/subscription?checkout=success"}`;
+  const cancelUrl = `${origin}${isCompanyPlan ? "/company/subscription?checkout=cancel" : "/candidate/subscription?checkout=cancel"}`;
 
   const session = await stripe.checkout.sessions.create({
     mode: selection.mode,
     line_items: [{ price: selection.priceId, quantity: 1 }],
     allow_promotion_codes: true,
     client_reference_id: user.id,
-    success_url: `${origin}/candidate/subscription?checkout=success`,
-    cancel_url: `${origin}/candidate/subscription?checkout=cancel`,
+    success_url: successUrl,
+    cancel_url: cancelUrl,
     metadata: {
       user_id: user.id,
       company_id: "",

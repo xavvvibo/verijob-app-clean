@@ -51,7 +51,7 @@ export async function POST(req: Request) {
 
     const { data: sub, error: subErr } = await supabase
       .from("subscriptions")
-      .select("stripe_customer_id")
+      .select("stripe_customer_id,plan")
       .eq("user_id", user.id)
       .eq("status", "active")
       .maybeSingle();
@@ -64,9 +64,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "no_active_subscription" }, { status: 400 });
     }
 
+    const returnPath = String(sub?.plan || "").startsWith("company_")
+      ? "/company/subscription"
+      : "/candidate/subscription";
+
     const session = await stripe.billingPortal.sessions.create({
       customer: sub.stripe_customer_id,
-      return_url: `${appUrl}/candidate/subscription`,
+      return_url: `${appUrl}${returnPath}`,
     });
 
     return NextResponse.json({ ok: true, route_version: "stripe-portal-v1-app", url: session.url }, { status: 200 });

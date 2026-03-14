@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { shouldShowCompanyNoActivityState } from "@/lib/company-dashboard-kpis";
 
 type Kpis = {
   pending_requests: number;
@@ -15,24 +14,101 @@ type Kpis = {
   verified_candidates?: number;
 };
 
+type RecentRequest = {
+  id: string;
+  candidate_name: string;
+  status: "pending" | "verified" | "rejected" | "other";
+  requested_at?: string | null;
+  position?: string | null;
+  company_name?: string | null;
+};
+
 type DashboardPayload = {
-  company_id?: string;
   company_name?: string;
-  membership_role?: string;
-  plan?: string;
   plan_label?: string;
   subscription_status?: string;
-  company_verification_status?: "unverified" | "verified_document" | "verified_paid" | string;
+  company_verification_status?: string;
   profile_completeness_score?: number;
-  current_period_end?: string | null;
   kpis?: Kpis | null;
+  verification_activity?: {
+    pending?: number;
+    verified?: number;
+    rejected?: number;
+  } | null;
+  recent_requests?: RecentRequest[] | null;
 };
+
+type ProfileCompletionItem = {
+  id: string;
+  title: string;
+  status: "completed" | "pending" | "recommended" | "optional";
+  priority: "required" | "recommended" | "optional";
+};
+
+type ProfilePayload = {
+  profile?: Record<string, any> | null;
+  profile_completion?: {
+    score?: number | null;
+    required?: { completed?: number; total?: number } | null;
+    recommended?: { completed?: number; total?: number } | null;
+    checklist?: ProfileCompletionItem[] | null;
+  } | null;
+};
+
+type TeamPayload = {
+  plan?: {
+    label?: string;
+    seats_limit?: number;
+    seats_used?: number;
+    pending_invitations?: number;
+  } | null;
+};
+
+type CandidateImportRow = {
+  id: string;
+  candidate_name_raw?: string | null;
+  linked_profile_name?: string | null;
+  candidate_email?: string | null;
+  target_role?: string | null;
+  display_status?: string | null;
+  candidate_public_token?: string | null;
+  company_stage?: "none" | "saved" | "preselected" | string | null;
+  created_at?: string | null;
+  last_activity_at?: string | null;
+};
+
+type CandidatesPayload = {
+  imports?: CandidateImportRow[] | null;
+  imports_meta?: { available?: boolean } | null;
+};
+
+type PriorityItem = {
+  id: string;
+  title: string;
+  detail: string;
+  href: string;
+  cta: string;
+  tone: string;
+  priority: number;
+  meta: string;
+};
+
+function formatDate(value?: string | null) {
+  if (!value) return "Sin fecha";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Sin fecha";
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
 
 function verificationStatusLabel(statusRaw: unknown) {
   const status = String(statusRaw || "").toLowerCase();
-  if (status === "verified_paid") return "Empresa verificada (plan activo)";
+  if (status === "verified_paid") return "Empresa verificada por plan";
   if (status === "verified_document") return "Empresa verificada por documentación";
-  return "Empresa no verificada";
+  return "Empresa pendiente de verificación";
 }
 
 function verificationStatusClass(statusRaw: unknown) {
@@ -42,57 +118,36 @@ function verificationStatusClass(statusRaw: unknown) {
   return "border-amber-200 bg-amber-50 text-amber-800";
 }
 
-function formatDate(value?: string | null) {
-  if (!value) return "No disponible";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "No disponible";
-  return d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+function checklistDot(status: ProfileCompletionItem["status"]) {
+  if (status === "completed") return "bg-emerald-500";
+  if (status === "recommended") return "bg-blue-500";
+  if (status === "optional") return "bg-slate-400";
+  return "bg-amber-500";
 }
 
-function isActiveSubscription(status?: string | null) {
-  const s = String(status || "").toLowerCase();
-  return s === "active" || s === "trialing";
+function importBadge(raw: string | null | undefined) {
+  const value = String(raw || "").toLowerCase();
+  if (value === "verified") return { label: "Listo para decisión", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" };
+  if (value === "profile_created" || value === "existing_candidate") return { label: "Listo para revisar", tone: "border-indigo-200 bg-indigo-50 text-indigo-700" };
+  if (value === "verifying") return { label: "En validación", tone: "border-blue-200 bg-blue-50 text-blue-700" };
+  if (value === "acceptance_pending") return { label: "Pendiente de aceptación", tone: "border-amber-200 bg-amber-50 text-amber-800" };
+  return { label: "Importado", tone: "border-slate-200 bg-slate-100 text-slate-700" };
 }
 
-function MetricCard({ title, value, helper }: { title: string; value: string; helper: string }) {
+function ProgressBar({ value, tone }: { value: number; tone: string }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</p>
-      <p className="mt-3 text-3xl font-semibold text-slate-900 tabular-nums">{value}</p>
-      <p className="mt-2 text-sm text-slate-600">{helper}</p>
+    <div className="h-2 rounded-full bg-slate-200">
+      <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(0, Math.min(100, value))}%` }} />
     </div>
   );
 }
 
-function ActionCard({
-  title,
-  subtitle,
-  ctaLabel,
-  ctaHref,
-  secondaryLabel,
-  secondaryHref,
-}: {
-  title: string;
-  subtitle: string;
-  ctaLabel: string;
-  ctaHref: string;
-  secondaryLabel?: string;
-  secondaryHref?: string;
-}) {
+function MetricCard({ title, value, helper }: { title: string; value: string; helper: string }) {
   return (
-    <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-base font-semibold text-slate-900">{title}</h2>
-      <p className="mt-2 text-sm text-slate-600">{subtitle}</p>
-      <div className="mt-5 flex flex-wrap gap-3">
-        <a href={ctaHref} className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black transition">
-          {ctaLabel}
-        </a>
-        {secondaryLabel && secondaryHref ? (
-          <a href={secondaryHref} className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">
-            {secondaryLabel}
-          </a>
-        ) : null}
-      </div>
+    <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      <p className="mt-2 text-3xl font-semibold text-slate-900 tabular-nums">{value}</p>
+      <p className="mt-2 text-sm text-slate-600">{helper}</p>
     </article>
   );
 }
@@ -100,209 +155,409 @@ function ActionCard({
 export const dynamic = "force-dynamic";
 
 export default function CompanyDashboard() {
-  const [payload, setPayload] = useState<DashboardPayload | null>(null);
+  const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
+  const [profileData, setProfileData] = useState<ProfilePayload | null>(null);
+  const [teamData, setTeamData] = useState<TeamPayload | null>(null);
+  const [candidateData, setCandidateData] = useState<CandidatesPayload | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const response = await fetch("/api/company/dashboard", { cache: "no-store" as any });
-        const body = await response.json().catch(() => ({}));
+        const [dashboardRes, profileRes, teamRes, candidateRes] = await Promise.all([
+          fetch("/api/company/dashboard", { cache: "no-store" as any }),
+          fetch("/api/company/profile", { cache: "no-store" as any }),
+          fetch("/api/company/team", { cache: "no-store" as any }),
+          fetch("/api/company/candidate-imports", { cache: "no-store" as any }),
+        ]);
+        const [dashboardBody, profileBody, teamBody, candidateBody] = await Promise.all([
+          dashboardRes.json().catch(() => ({})),
+          profileRes.json().catch(() => ({})),
+          teamRes.json().catch(() => ({})),
+          candidateRes.json().catch(() => ({})),
+        ]);
 
-        if (!response.ok) {
-          throw new Error(body?.error ? `${body.error}${body?.details ? `: ${body.details}` : ""}` : "No se pudo cargar el panel.");
+        if (!dashboardRes.ok) {
+          throw new Error(dashboardBody?.error || "No se pudo cargar el panel de empresa.");
         }
-
         if (!alive) return;
-        setPayload(body || {});
+        setDashboard(dashboardBody || {});
+        setProfileData(profileRes.ok ? profileBody || {} : null);
+        setTeamData(teamRes.ok ? teamBody || {} : null);
+        setCandidateData(candidateRes.ok ? candidateBody || {} : null);
         setErrorMessage(null);
       } catch (e: any) {
         if (!alive) return;
         setErrorMessage(e?.message || "No se pudo cargar el panel de empresa.");
       }
     })();
-
     return () => {
       alive = false;
     };
   }, []);
 
-  const kpis = payload?.kpis || null;
-  const companyName = payload?.company_name || "Tu empresa";
-  const roleLabel = payload?.membership_role ? String(payload.membership_role).toUpperCase() : "REVIEWER";
-  const planLabel = payload?.plan_label || "Free";
-  const subscriptionStatus = payload?.subscription_status || "free";
-  const verificationStatus = payload?.company_verification_status || "unverified";
-  const profileCompleteness = Number(payload?.profile_completeness_score ?? 0);
-  const activePlan = isActiveSubscription(subscriptionStatus);
+  const companyName =
+    String(profileData?.profile?.trade_name || "").trim() || dashboard?.company_name || "Tu empresa";
+  const planLabel = dashboard?.plan_label || teamData?.plan?.label || "Free";
+  const verificationStatus = dashboard?.company_verification_status || "unverified";
+  const profileCompletion = Number(profileData?.profile_completion?.score ?? dashboard?.profile_completeness_score ?? 0);
+  const checklist = Array.isArray(profileData?.profile_completion?.checklist)
+    ? profileData?.profile_completion?.checklist?.slice(0, 4)
+    : [];
+  const kpis = dashboard?.kpis || null;
+  const recentRequests = Array.isArray(dashboard?.recent_requests) ? dashboard.recent_requests : [];
+  const imports = Array.isArray(candidateData?.imports) ? candidateData.imports : [];
+  const importsAvailable = candidateData?.imports_meta?.available !== false;
+  const verificationActivity = dashboard?.verification_activity || { pending: 0, verified: 0, rejected: 0 };
+  const verificationTotal = Math.max(1, Number(verificationActivity.pending || 0) + Number(verificationActivity.verified || 0) + Number(verificationActivity.rejected || 0));
+  const seatsLimit = Number(teamData?.plan?.seats_limit || 0);
+  const seatsUsed = Number(teamData?.plan?.seats_used || 0);
+  const pendingInvitations = Number(teamData?.plan?.pending_invitations || 0);
+  const seatUsagePct = seatsLimit > 0 ? Math.round(((seatsUsed + pendingInvitations) / seatsLimit) * 100) : 0;
 
-  const planSummary = useMemo(() => {
-    if (activePlan) {
-      return `Plan ${planLabel} activo · Renovación: ${formatDate(payload?.current_period_end ?? null)}`;
+  const pipeline = useMemo(() => {
+    const byReview = Number(kpis?.pending_requests || 0) + imports.filter((item) => item.display_status === "acceptance_pending" || item.display_status === "processing").length;
+    const validating = imports.filter((item) => item.display_status === "verifying" || item.display_status === "profile_created").length;
+    const ready = imports.filter((item) => item.display_status === "existing_candidate" || item.display_status === "verified").length;
+    return { byReview, validating, ready };
+  }, [imports, kpis?.pending_requests]);
+
+  const priorities = useMemo<PriorityItem[]>(() => {
+    const items: PriorityItem[] = [];
+
+    recentRequests
+      .filter((item) => item.status === "pending")
+      .slice(0, 4)
+      .forEach((item, index) => {
+        items.push({
+          id: `req-${item.id}`,
+          title: item.candidate_name || "Solicitud pendiente",
+          detail: `${item.position || "Experiencia sin puesto"} · ${item.company_name || "Empresa"}`,
+          href: `/company/verification/${item.id}`,
+          cta: "Resolver ahora",
+          tone: "border-amber-200 bg-amber-50 text-amber-900",
+          priority: 100 - index,
+          meta: `Pendiente desde ${formatDate(item.requested_at)}`,
+        });
+      });
+
+    imports
+      .filter((item) => item.display_status === "acceptance_pending" || item.display_status === "existing_candidate" || item.display_status === "profile_created")
+      .slice(0, 4)
+      .forEach((item, index) => {
+        items.push({
+          id: `imp-${item.id}`,
+          title: item.linked_profile_name || item.candidate_name_raw || item.candidate_email || "Candidato importado",
+          detail:
+            item.display_status === "acceptance_pending"
+              ? "CV importado pendiente de aceptación del candidato."
+              : item.display_status === "existing_candidate"
+                ? "El candidato ya existe en VERIJOB y puede revisarse desde perfil."
+                : "Perfil creado y listo para revisión interna.",
+          href: item.candidate_public_token ? `/company/candidate/${item.candidate_public_token}` : "/company/candidates",
+          cta: item.candidate_public_token ? "Abrir perfil" : "Abrir base RRHH",
+          tone:
+            item.display_status === "acceptance_pending"
+              ? "border-blue-200 bg-blue-50 text-blue-900"
+              : "border-violet-200 bg-violet-50 text-violet-900",
+          priority: 80 - index,
+          meta: `Última actividad ${formatDate(item.last_activity_at || item.created_at)}`,
+        });
+      });
+
+    if (Number(kpis?.reuse_events_total || 0) > 0) {
+      items.push({
+        id: "reuse",
+        title: "Oportunidad de reutilización",
+        detail: "Reutiliza verificaciones ya realizadas para acelerar la validación de candidatos.",
+        href: "/company/reuse",
+        cta: "Abrir reutilización",
+        tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
+        priority: 50,
+        meta: `${Number(kpis?.reuse_events_total || 0)} reutilizaciones acumuladas`,
+      });
     }
-    return "Plan Free o sin suscripción activa · acceso básico habilitado";
-  }, [activePlan, payload?.current_period_end, planLabel]);
+
+    return items.sort((a, b) => b.priority - a.priority).slice(0, 6);
+  }, [imports, kpis?.reuse_events_total, recentRequests]);
+
+  const rrhhRows = useMemo(() => {
+    return imports
+      .slice()
+      .sort((a, b) => Date.parse(String(b.last_activity_at || b.created_at || 0)) - Date.parse(String(a.last_activity_at || a.created_at || 0)))
+      .slice(0, 5);
+  }, [imports]);
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <section className="rounded-[28px] border border-slate-200 bg-white p-7 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Command Center Empresa</p>
-            <h1 className="mt-1 text-3xl font-semibold text-slate-900">{companyName}</h1>
-            <p className="mt-2 text-sm text-slate-600">
-              Supervisa solicitudes, revisa candidatos verificables y acelera decisiones de contratación con trazabilidad.
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Panel de control</p>
+            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">{companyName}</h1>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">
+              Vista operativa para priorizar el trabajo de hoy, mover candidatos y tener claro qué limita o desbloquea tu operación.
             </p>
-            <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">Rol: {roleLabel}</span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">{planSummary}</span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1">Perfil {profileCompleteness}% completado</span>
-              <span className={`rounded-full border px-3 py-1 font-semibold ${verificationStatusClass(verificationStatus)}`}>
-                {verificationStatusLabel(verificationStatus)}
-              </span>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {profileCompleteness < 100 ? (
-                <a href="/company/profile" className="inline-flex rounded-xl border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100">
-                  Completar perfil de empresa
-                </a>
-              ) : null}
-              {String(verificationStatus).toLowerCase() === "unverified" ? (
-                <a href="/company/profile" className="inline-flex rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-100">
-                  Verificar empresa
-                </a>
-              ) : null}
+            <div className="mt-4 flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">Plan {planLabel}</span>
+              <span className={`rounded-full border px-3 py-1 font-semibold ${verificationStatusClass(verificationStatus)}`}>{verificationStatusLabel(verificationStatus)}</span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">Perfil {profileCompletion}% listo</span>
             </div>
           </div>
-
           <div className="flex flex-wrap gap-2">
-            <a href="/company/requests" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black transition">
-              Revisar solicitudes
-            </a>
-            <a href="/company/candidates" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">
-              Abrir candidato
-            </a>
-            <a href="/company/billing" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">
-              Ver suscripción
-            </a>
+            <a href="/company/requests" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black transition">Revisar solicitudes</a>
+            <a href="/company/candidates" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">Abrir base RRHH</a>
+            <a href="/company/subscription" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">Plan y capacidad</a>
           </div>
         </div>
-        {errorMessage ? <p className="mt-4 text-sm text-red-600">{errorMessage}</p> : null}
+        {errorMessage ? <p className="mt-4 text-sm text-rose-600">{errorMessage}</p> : null}
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          title="Solicitudes pendientes"
-          value={kpis ? String(kpis.pending_requests) : "—"}
-          helper="Cola operativa de revisión"
-        />
-        <MetricCard
-          title="Verificadas (30 días)"
-          value={kpis ? String(kpis.verified_30d) : "—"}
-          helper="Candidatos validados recientemente"
-        />
-        <MetricCard
-          title="Reutilización"
-          value={kpis ? `${kpis.reuse_rate_pct}%` : "—"}
-          helper="Aprovechamiento de verificaciones existentes"
-        />
-        <MetricCard
-          title="Señales de riesgo"
-          value={kpis ? String(kpis.risk_signals) : "—"}
-          helper="Incidencias que requieren seguimiento"
-        />
+        <MetricCard title="Pendientes hoy" value={kpis ? String(kpis.pending_requests) : "—"} helper="Solicitudes listas para resolver." />
+        <MetricCard title="Confirmadas 30 días" value={kpis ? String(kpis.verified_30d) : "—"} helper="Experiencias confirmadas recientemente." />
+        <MetricCard title="Tiempo medio" value={kpis?.avg_resolution_hours != null ? `${kpis.avg_resolution_hours} h` : "—"} helper="Desde petición hasta resolución." />
+        <MetricCard title="Perfiles útiles" value={kpis ? String(Number(kpis.verified_candidates || 0)) : "—"} helper="Candidatos con historial ya validado." />
       </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-        <MetricCard
-          title="Solicitudes completadas"
-          value={kpis ? String(Number(kpis.completed_requests || 0)) : "—"}
-          helper="Verificadas, rechazadas o revocadas"
-        />
-        <MetricCard
-          title="Tiempo medio resolución"
-          value={kpis && kpis.avg_resolution_hours !== null && kpis.avg_resolution_hours !== undefined ? `${kpis.avg_resolution_hours}h` : "—"}
-          helper="Desde solicitud hasta resolución"
-        />
-        <MetricCard
-          title="Candidatos verificados"
-          value={kpis ? String(Number(kpis.verified_candidates || 0)) : "—"}
-          helper="Con al menos una verificación validada"
-        />
+      <section className="grid gap-4 xl:grid-cols-[1.12fr_0.88fr]">
+        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Hoy / prioridades</h2>
+              <p className="mt-1 text-sm text-slate-600">Lo más accionable ahora mismo: solicitudes, candidatos importados y reutilización.</p>
+            </div>
+            <a href="/company/requests" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir inbox</a>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            {priorities.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+                No hay pendientes críticos ahora. Buen momento para completar perfil, ampliar equipo o cargar nuevos candidatos.
+              </div>
+            ) : (
+              priorities.map((item) => (
+                <article key={item.id} className={`rounded-2xl border p-4 ${item.tone}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">{item.title}</p>
+                      <p className="mt-1 text-sm opacity-90">{item.detail}</p>
+                      <p className="mt-2 text-xs opacity-75">{item.meta}</p>
+                    </div>
+                    <a href={item.href} className="inline-flex rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100">
+                      {item.cta}
+                    </a>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </article>
+
+        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Estado del perfil empresa</h2>
+              <p className="mt-1 text-sm text-slate-600">Checklist corta para que tu operación tenga más contexto y credibilidad.</p>
+            </div>
+            <a href="/company/profile" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Editar perfil</a>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">{profileCompletion}% completado</p>
+                <p className="mt-1 text-xs text-slate-600">
+                  Obligatorio {Number(profileData?.profile_completion?.required?.completed || 0)}/{Number(profileData?.profile_completion?.required?.total || 0)} ·
+                  Recomendado {Number(profileData?.profile_completion?.recommended?.completed || 0)}/{Number(profileData?.profile_completion?.recommended?.total || 0)}
+                </p>
+              </div>
+            </div>
+            <div className="mt-3">
+              <ProgressBar value={profileCompletion} tone="bg-slate-900" />
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {checklist.map((item) => (
+              <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-slate-900">{item.title}</p>
+                  <span className={`h-2.5 w-2.5 rounded-full ${checklistDot(item.status)}`} />
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  {item.priority === "required" ? "Obligatorio" : item.priority === "recommended" ? "Recomendado" : "Opcional"}
+                </p>
+              </div>
+            ))}
+          </div>
+        </article>
       </section>
 
-      {!activePlan ? (
-        <section className="rounded-3xl border border-amber-200 bg-amber-50 p-6">
-          <h2 className="text-base font-semibold text-amber-900">Acceso limitado del plan actual</h2>
-          <p className="mt-2 text-sm text-amber-900/90">
-            Tu empresa puede operar en modo básico. Activa un plan superior para ampliar volumen de revisiones, equipo y trazabilidad avanzada.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-3">
-            <a href="/company/upgrade" className="inline-flex rounded-xl bg-amber-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-800 transition">
-              Mejorar plan
+      <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Pipeline RRHH ligero</h2>
+              <p className="mt-1 text-sm text-slate-600">Vista mínima de trabajo sin convertir VERIJOB en un ATS nuevo.</p>
+            </div>
+            <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir candidatos</a>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-xs uppercase tracking-wide text-amber-800">Por revisar</p>
+              <p className="mt-2 text-3xl font-semibold text-amber-900">{pipeline.byReview}</p>
+              <p className="mt-1 text-sm text-amber-900/80">Solicitudes pendientes e importaciones esperando siguiente paso.</p>
+            </div>
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+              <p className="text-xs uppercase tracking-wide text-blue-800">En validación</p>
+              <p className="mt-2 text-3xl font-semibold text-blue-900">{pipeline.validating}</p>
+              <p className="mt-1 text-sm text-blue-900/80">Perfiles ya moviéndose en revisión o validación documental.</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <p className="text-xs uppercase tracking-wide text-emerald-800">Listos para decisión</p>
+              <p className="mt-2 text-3xl font-semibold text-emerald-900">{pipeline.ready}</p>
+              <p className="mt-1 text-sm text-emerald-900/80">Perfiles que ya merece la pena abrir y decidir.</p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
+            {[
+              { label: "Pendientes", value: Number(verificationActivity.pending || 0), tone: "bg-amber-500" },
+              { label: "Confirmadas", value: Number(verificationActivity.verified || 0), tone: "bg-emerald-500" },
+              { label: "Rechazadas", value: Number(verificationActivity.rejected || 0), tone: "bg-rose-500" },
+            ].map((item) => (
+              <div key={item.label}>
+                <div className="mb-1 flex items-center justify-between text-sm">
+                  <span className="font-medium text-slate-900">{item.label}</span>
+                  <span className="text-slate-500">{item.value}</span>
+                </div>
+                <ProgressBar value={(item.value / verificationTotal) * 100} tone={item.tone} />
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Plan y capacidad</h2>
+              <p className="mt-1 text-sm text-slate-600">Qué tienes ahora, qué te limita hoy y cuál es el siguiente salto útil.</p>
+            </div>
+            <a href="/company/subscription" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Gestionar plan</a>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-slate-900">{seatsUsed + pendingInvitations}/{seatsLimit || 1} plazas en uso</p>
+                <p className="mt-1 text-xs text-slate-600">{seatsUsed} activas · {pendingInvitations} invitaciones pendientes</p>
+              </div>
+              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">Plan {planLabel}</span>
+            </div>
+            <div className="mt-3">
+              <ProgressBar value={seatUsagePct} tone={seatUsagePct >= 85 ? "bg-amber-500" : "bg-blue-600"} />
+            </div>
+          </div>
+
+          <div className="mt-4 space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-sm font-semibold text-slate-900">Qué te está limitando hoy</p>
+              <p className="mt-1 text-sm text-slate-600">
+                {seatsLimit <= 1
+                  ? "La colaboración de equipo es mínima y conviene ampliar plazas."
+                  : seatUsagePct >= 85
+                    ? "Estás cerca del límite de plazas y pronto vas a necesitar más capacidad."
+                    : "Tu plan actual cubre la operación de hoy con margen razonable."}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
+              <p className="text-sm font-semibold">Qué desbloquea el upgrade</p>
+              <p className="mt-1 text-sm">
+                Más capacidad de equipo, más ritmo operativo y un panel empresa que puede crecer contigo sin fricciones.
+              </p>
+              <a href="/company/upgrade" className="mt-3 inline-flex rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800">
+                Ver y contratar planes
+              </a>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Base RRHH</h2>
+              <p className="mt-1 text-sm text-slate-600">Tus candidatos importados como base interna ligera para seguimiento diario.</p>
+            </div>
+            <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir base completa</a>
+          </div>
+
+          {!importsAvailable ? (
+            <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+              La base RRHH aún no está activada en esta base. El espacio queda preparado para usar importaciones y seguimiento en cuanto esté disponible.
+            </div>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {rrhhRows.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+                  No tienes candidatos en la base interna todavía. El mejor siguiente paso es importar un CV o revisar candidatos ya compartidos.
+                </div>
+              ) : (
+                rrhhRows.map((item) => {
+                  const badge = importBadge(item.display_status);
+                  return (
+                    <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">
+                            {item.linked_profile_name || item.candidate_name_raw || item.candidate_email || "Candidato"}
+                          </p>
+                          <p className="mt-1 text-sm text-slate-600">{item.target_role || "Sin puesto definido"}</p>
+                          <p className="mt-1 text-xs text-slate-500">Última actividad {formatDate(item.last_activity_at || item.created_at)}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${badge.tone}`}>{badge.label}</span>
+                          {item.company_stage && item.company_stage !== "none" ? (
+                            <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                              item.company_stage === "preselected"
+                                ? "border-slate-900 bg-slate-900 text-white"
+                                : "border-slate-200 bg-slate-100 text-slate-700"
+                            }`}>
+                              {item.company_stage === "preselected" ? "Preseleccionado" : "Guardado"}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+        </article>
+
+        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Acciones rápidas</h2>
+          <p className="mt-1 text-sm text-slate-600">Atajos a las zonas que más mueven el trabajo diario.</p>
+          <div className="mt-4 grid gap-3">
+            <a href="/company/profile" className="rounded-2xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100">
+              <p className="text-sm font-semibold text-slate-900">Completar perfil empresa</p>
+              <p className="mt-1 text-sm text-slate-600">Refuerza credibilidad, segmentación y cobertura operativa.</p>
             </a>
-            <a href="/company/billing" className="inline-flex rounded-xl border border-amber-300 bg-white px-4 py-2.5 text-sm font-semibold text-amber-900 hover:bg-amber-100 transition">
-              Ver detalle de límites
+            <a href="/company/team" className="rounded-2xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100">
+              <p className="text-sm font-semibold text-slate-900">Gestionar equipo y permisos</p>
+              <p className="mt-1 text-sm text-slate-600">Controla plazas activas e invitaciones.</p>
+            </a>
+            <a href="/company/settings" className="rounded-2xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100">
+              <p className="text-sm font-semibold text-slate-900">Ajustes operativos</p>
+              <p className="mt-1 text-sm text-slate-600">Configura el área empresa y mantén contexto operativo a mano.</p>
             </a>
           </div>
-        </section>
-      ) : null}
-
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
-        <ActionCard
-          title="Perfil de empresa"
-          subtitle="Actualiza datos fiscales, operativos y de contratación para aumentar credibilidad y segmentación."
-          ctaLabel="Editar perfil"
-          ctaHref="/company/profile"
-          secondaryLabel="Ajustes"
-          secondaryHref="/company/settings"
-        />
-        <ActionCard
-          title="Cola operativa"
-          subtitle="Prioriza solicitudes pendientes y consulta el estado de cada verificación desde una única vista."
-          ctaLabel="Ir a solicitudes"
-          ctaHref="/company/requests"
-          secondaryLabel="Ver equipo"
-          secondaryHref="/company/team"
-        />
-        <ActionCard
-          title="Reutilización"
-          subtitle="Reutiliza verificaciones previas para reducir tiempos de validación en nuevos procesos."
-          ctaLabel="Abrir reutilización"
-          ctaHref="/company/reuse"
-          secondaryLabel="Centro de ayuda"
-          secondaryHref="/company/help"
-        />
-        <ActionCard
-          title="Suscripción y límites"
-          subtitle="Controla el plan activo, capacidad operativa y opciones de mejora para escalar evaluación."
-          ctaLabel="Gestionar suscripción"
-          ctaHref="/company/billing"
-          secondaryLabel="Ver planes"
-          secondaryHref="/company/upgrade"
-        />
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-slate-900">Actividad reciente</h2>
-        {kpis ? (
-          shouldShowCompanyNoActivityState(kpis) ? (
-            <p className="mt-3 text-sm text-slate-600">
-              Aún no hay actividad de verificación. Empieza revisando solicitudes o compartiendo token de candidato para iniciar validaciones.
-            </p>
-          ) : (
-            <ul className="mt-3 space-y-2 text-sm text-slate-600">
-              <li>• Reutilizaciones en 30 días: <span className="font-medium text-slate-900">{kpis.reuse_events_30d}</span></li>
-              <li>• Reutilizaciones acumuladas: <span className="font-medium text-slate-900">{kpis.reuse_events_total}</span></li>
-              <li>• Solicitudes pendientes para hoy: <span className="font-medium text-slate-900">{kpis.pending_requests}</span></li>
-            </ul>
-          )
-        ) : (
-          <p className="mt-3 text-sm text-slate-600">
-            Cuando empieces a recibir solicitudes y revisar candidatos, aquí verás el resumen de actividad de tu equipo.
-          </p>
-        )}
+        </article>
       </section>
     </div>
   );

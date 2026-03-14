@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { setCompanyVerificationStatus } from "../../actions";
 
 export default function DecisionPanel(props: {
@@ -9,25 +10,32 @@ export default function DecisionPanel(props: {
 }) {
   const { verificationRequestId, currentStatus } = props;
 
+  const router = useRouter();
   const [note, setNote] = useState("");
   const [isPending, startTransition] = useTransition();
+  const [status, setStatus] = useState(currentStatus);
+  const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const disabled =
-    isPending || currentStatus === "verified" || currentStatus === "rejected";
+    isPending || status === "verified" || status === "rejected";
 
   function act(nextStatus: "verified" | "rejected") {
     setError(null);
+    setSuccess(null);
     startTransition(async () => {
       try {
-        await setCompanyVerificationStatus({
+        const result = await setCompanyVerificationStatus({
           verificationRequestId,
           nextStatus,
           note: note.trim() || undefined,
         });
+        setStatus(nextStatus);
+        setSuccess(result?.message || (nextStatus === "verified" ? "Experiencia confirmada." : "Experiencia rechazada."));
         setNote("");
+        router.refresh();
       } catch (e: any) {
-        setError(e?.message ?? "Error");
+        setError(e?.message ?? "No se pudo registrar la decisión. Inténtalo de nuevo.");
       }
     });
   }
@@ -42,7 +50,7 @@ export default function DecisionPanel(props: {
           </p>
         </div>
         <div className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700">
-          Estado actual: <span className="font-semibold text-slate-900">{currentStatus}</span>
+          Estado actual: <span className="font-semibold capitalize text-slate-900">{status.replaceAll("_", " ")}</span>
         </div>
       </div>
 
@@ -60,7 +68,13 @@ export default function DecisionPanel(props: {
 
       {error ? (
         <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
-          {error || "No se pudo registrar la decisión."}
+          {error}
+        </div>
+      ) : null}
+
+      {success ? (
+        <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+          {success}
         </div>
       ) : null}
 
@@ -70,7 +84,7 @@ export default function DecisionPanel(props: {
           disabled={disabled}
           className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Confirmar experiencia
+          {status === "verified" ? "Experiencia confirmada" : "Confirmar experiencia"}
         </button>
 
         <button
@@ -78,9 +92,14 @@ export default function DecisionPanel(props: {
           disabled={disabled}
           className="rounded-lg border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 transition hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Rechazar experiencia
+          {status === "rejected" ? "Experiencia rechazada" : "Rechazar experiencia"}
         </button>
       </div>
+      {status === "verified" || status === "rejected" ? (
+        <p className="mt-3 text-xs font-medium text-slate-600">
+          Esta solicitud ya está resuelta. Si vuelves al listado, verás el estado actualizado.
+        </p>
+      ) : null}
       <p className="mt-3 text-xs text-slate-500">
         Verificar experiencias recibidas es gratuito para empresas.
       </p>

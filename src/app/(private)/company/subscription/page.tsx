@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import CompanyPlanActions from "./CompanyPlanActions";
 
 export const dynamic = "force-dynamic";
 
@@ -203,7 +204,7 @@ export default async function CompanySubscriptionPage() {
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Suscripción de empresa</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Estado real del plan según la fuente operativa interna de la app (`public.subscriptions`).
+          Estado real del plan, capacidad operativa y camino claro para ampliar o gestionar la suscripción.
         </p>
       </section>
 
@@ -254,7 +255,7 @@ export default async function CompanySubscriptionPage() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <Link href="/company/upgrade" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black transition">
-              Mejorar plan
+              Ver y contratar planes
             </Link>
             <Link href="/company/profile" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">
               Revisar perfil empresa
@@ -284,10 +285,24 @@ export default async function CompanySubscriptionPage() {
             <ul className="mt-2 space-y-1">
               <li>• Fuente plan/estado: `public.subscriptions`.</li>
               <li>• Verificación empresa: suscripción activa o estado documental.</li>
-              <li>• Upgrade: flujo operativo en <span className="font-semibold">/company/upgrade</span>.</li>
+              <li>• Upgrade y cobro: checkout real desde <span className="font-semibold">/company/upgrade</span> cuando Stripe está configurado.</li>
             </ul>
           </div>
         </aside>
+      </section>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Contratar o gestionar plan</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Compara el siguiente plan útil para tu operación y abre checkout o portal de pago según corresponda.
+            </p>
+          </div>
+        </div>
+        <div className="mt-5">
+          <CompanyPlanActions currentPlanLabel={label} currentPlanCode={plan} hasActiveSubscription={active} />
+        </div>
       </section>
     </div>
   );

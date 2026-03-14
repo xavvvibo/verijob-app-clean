@@ -25,9 +25,9 @@ async function resolveCompanyName(supabase: any, companyId: string): Promise<str
       .maybeSingle();
 
     const companyName =
-      companyData?.name ||
       companyData?.trade_name ||
       companyData?.display_name ||
+      companyData?.name ||
       companyData?.legal_name ||
       null;
 
@@ -42,9 +42,9 @@ async function resolveCompanyName(supabase: any, companyId: string): Promise<str
       .maybeSingle();
 
     const profileName =
-      profileData?.name ||
       profileData?.trade_name ||
       profileData?.display_name ||
+      profileData?.name ||
       profileData?.legal_name ||
       null;
 
@@ -101,6 +101,14 @@ function isDocsSchemaError(error: any) {
   const code = String(error?.code || "");
   const msg = String(error?.message || "").toLowerCase();
   return code === "42P01" || code === "PGRST205" || code === "42703" || (msg.includes("column") && msg.includes("does not exist"));
+}
+
+function requestDisplayStatus(statusRaw: unknown) {
+  const value = String(statusRaw || "").toLowerCase();
+  if (value === "verified") return "verified";
+  if (value === "rejected" || value === "revoked") return "rejected";
+  if (value === "pending_company" || value === "reviewing") return "pending";
+  return "other";
 }
 
 async function resolveCompanyVerificationStatus(
@@ -218,7 +226,7 @@ export async function GET() {
         .maybeSingle(),
       supabase
         .from("verification_requests")
-        .select("id,status,requested_at,created_at,resolved_at,requested_by")
+        .select("id,status,requested_at,created_at,resolved_at,requested_by,employment_record_id")
         .eq("company_id", activeCompanyId),
       supabase
         .from("verification_reuse_events")
@@ -235,6 +243,70 @@ export async function GET() {
     const fallbackKpis = computeCompanyKpiFallback({ requests, reuseEvents });
     const kpisFromRpc = (data as any)?.kpis && typeof (data as any).kpis === "object" ? (data as any).kpis : {};
     const mergedKpis = mergeCompanyKpis(kpisFromRpc, fallbackKpis);
+    const verificationActivity = requests.reduce(
+      (acc: { pending: number; verified: number; rejected: number }, row: any) => {
+        const bucket = requestDisplayStatus(row?.status);
+        if (bucket === "pending") acc.pending += 1;
+        if (bucket === "verified") acc.verified += 1;
+        if (bucket === "rejected") acc.rejected += 1;
+        return acc;
+      },
+      { pending: 0, verified: 0, rejected: 0 }
+    );
+
+    const recentBase = [...requests]
+      .sort((a: any, b: any) => {
+        const ta = Date.parse(String(a?.requested_at || a?.created_at || 0));
+        const tb = Date.parse(String(b?.requested_at || b?.created_at || 0));
+        return tb - ta;
+      })
+      .slice(0, 5);
+
+    const candidateIds = Array.from(
+      new Set(recentBase.map((row: any) => String(row?.requested_by || "")).filter(Boolean))
+    );
+    const employmentRecordIds = Array.from(
+      new Set(recentBase.map((row: any) => String(row?.employment_record_id || "")).filter(Boolean))
+    );
+
+    const [candidateProfilesRes, employmentRecordsRes] = await Promise.all([
+      candidateIds.length
+        ? supabase.from("profiles").select("id,full_name").in("id", candidateIds)
+        : Promise.resolve({ data: [], error: null } as any),
+      employmentRecordIds.length
+        ? supabase
+            .from("employment_records")
+            .select("id,position,company_name_freeform,start_date,end_date")
+            .in("id", employmentRecordIds)
+        : Promise.resolve({ data: [], error: null } as any),
+    ]);
+
+    const candidateNameById = new Map(
+      (Array.isArray(candidateProfilesRes.data) ? candidateProfilesRes.data : []).map((row: any) => [
+        String(row.id),
+        String(row.full_name || "").trim() || "Candidato",
+      ])
+    );
+    const employmentById = new Map(
+      (Array.isArray(employmentRecordsRes.data) ? employmentRecordsRes.data : []).map((row: any) => [
+        String(row.id),
+        row,
+      ])
+    );
+
+    const recentRequests = recentBase.map((row: any) => {
+      const employment = employmentById.get(String(row?.employment_record_id || "")) as any;
+      return {
+        id: String(row?.id || ""),
+        candidate_name: candidateNameById.get(String(row?.requested_by || "")) || "Candidato",
+        status: requestDisplayStatus(row?.status),
+        requested_at: row?.requested_at || row?.created_at || null,
+        position: String(employment?.position || "").trim() || "Experiencia sin puesto",
+        company_name: String(employment?.company_name_freeform || "").trim() || companyName || "Empresa",
+        period_start: employment?.start_date || null,
+        period_end: employment?.end_date || null,
+      };
+    });
 
     const { data: profileData } = await supabase
       .from("company_profiles")
@@ -265,6 +337,8 @@ export async function GET() {
       profile_completeness_score: Number(profileData?.profile_completeness_score ?? computeProfileCompleteness(profileData)),
       current_period_end: currentPeriodEnd,
       kpis: mergedKpis,
+      verification_activity: verificationActivity,
+      recent_requests: recentRequests,
       route_version: ROUTE_VERSION,
     };
 

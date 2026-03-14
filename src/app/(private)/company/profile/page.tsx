@@ -157,6 +157,33 @@ function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...props} className={`w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 ${props.className || ""}`} />;
 }
 
+function ToggleChip({
+  label,
+  active,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={`rounded-full border px-3 py-2 text-sm font-medium transition ${
+        active
+          ? "border-slate-900 bg-slate-900 text-white"
+          : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+      } disabled:cursor-not-allowed disabled:opacity-60`}
+    >
+      {label}
+    </button>
+  );
+}
+
 function parseCsvArray(value: string) {
   return value
     .split(/[\n,]/g)
@@ -248,6 +275,17 @@ export default function CompanyProfilePage() {
 
   function updateField(key: string, value: any) {
     setProfile((prev) => ({ ...(prev || {}), [key]: value }));
+  }
+
+  function toggleArrayField(key: string, value: string) {
+    setProfile((prev) => {
+      const current = Array.isArray(prev?.[key]) ? prev[key] : [];
+      const exists = current.includes(value);
+      return {
+        ...(prev || {}),
+        [key]: exists ? current.filter((item: string) => item !== value) : [...current, value],
+      };
+    });
   }
 
   async function saveProfile() {
@@ -553,14 +591,32 @@ export default function CompanyProfilePage() {
             <span className="mt-1 block text-xs text-slate-500">Puedes escribir texto natural separado por comas o saltos de linea.</span>
           </Field>
           <Field label="Tipos de contrato">
-            <select multiple className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm h-28" value={profile.common_contract_types || []} onChange={(e) => updateField("common_contract_types", Array.from(e.target.selectedOptions).map((o) => o.value))} disabled={!canEdit}>
-              {CONTRACT_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
-            </select>
+            <div className="flex flex-wrap gap-2">
+              {CONTRACT_TYPES.map((x) => (
+                <ToggleChip
+                  key={x}
+                  label={x}
+                  active={Array.isArray(profile.common_contract_types) && profile.common_contract_types.includes(x)}
+                  disabled={!canEdit}
+                  onClick={() => toggleArrayField("common_contract_types", x)}
+                />
+              ))}
+            </div>
+            <span className="mt-1 block text-xs text-slate-500">Puedes seleccionar varias modalidades a la vez.</span>
           </Field>
           <Field label="Tipos de jornada">
-            <select multiple className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm h-28" value={profile.common_workday_types || []} onChange={(e) => updateField("common_workday_types", Array.from(e.target.selectedOptions).map((o) => o.value))} disabled={!canEdit}>
-              {WORKDAY_TYPES.map((x) => <option key={x} value={x}>{x}</option>)}
-            </select>
+            <div className="flex flex-wrap gap-2">
+              {WORKDAY_TYPES.map((x) => (
+                <ToggleChip
+                  key={x}
+                  label={x}
+                  active={Array.isArray(profile.common_workday_types) && profile.common_workday_types.includes(x)}
+                  disabled={!canEdit}
+                  onClick={() => toggleArrayField("common_workday_types", x)}
+                />
+              ))}
+            </div>
+            <span className="mt-1 block text-xs text-slate-500">Marca todas las jornadas que uses en contratación real.</span>
           </Field>
           <Field label="Idiomas requeridos">
             <TextArea

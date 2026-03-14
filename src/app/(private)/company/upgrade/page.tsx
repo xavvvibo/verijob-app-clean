@@ -81,6 +81,17 @@ export default async function UpgradePage({
           </article>
         ))}
       </section>
+
+      <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Contratación</h2>
+        <p className="mt-2 text-sm text-slate-600">
+          Si Stripe está configurado en esta base, puedes abrir checkout directamente desde aquí. Si no, el sistema te indicará el bloqueo real.
+        </p>
+        <div className="mt-5">
+          <CompanyPlanActions currentPlanLabel="" currentPlanCode="" hasActiveSubscription={false} />
+        </div>
+      </section>
     </main>
   );
 }
+import CompanyPlanActions from "../subscription/CompanyPlanActions";

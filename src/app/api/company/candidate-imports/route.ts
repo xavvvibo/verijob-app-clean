@@ -64,6 +64,13 @@ function formatImportStatus(row: any) {
   return "uploaded";
 }
 
+function normalizeCompanyStage(value: unknown) {
+  const stage = String(value || "").toLowerCase();
+  if (stage === "saved") return "saved";
+  if (stage === "preselected") return "preselected";
+  return "none";
+}
+
 async function resolveContext() {
   const supabase = await createRouteHandlerClient();
   const admin = createServiceRoleClient();
@@ -189,6 +196,7 @@ async function readInvitesSnapshot(admin: any, companyId: string) {
     const linkedProfile = (linkedUserId ? profilesById.get(linkedUserId) : null) as any;
     const stats = linkedUserId ? verificationStats.get(linkedUserId) || { total: 0, approved: 0 } : { total: 0, approved: 0 };
     const importMeta = row?.extracted_payload_json?._verijob_import_meta || {};
+    const companyState = row?.extracted_payload_json?._verijob_company_state || {};
     const normalized = {
       ...row,
       candidate_already_exists: Boolean(importMeta?.candidate_already_exists),
@@ -198,6 +206,15 @@ async function readInvitesSnapshot(admin: any, companyId: string) {
       trust_score: linkedUserId ? trustById.get(linkedUserId) ?? null : null,
       total_verifications: stats.total,
       approved_verifications: stats.approved,
+      company_stage: normalizeCompanyStage(companyState?.stage),
+      company_stage_updated_at: companyState?.updated_at || null,
+      last_activity_at:
+        row?.accepted_at ||
+        row?.emailed_at ||
+        companyState?.updated_at ||
+        row?.updated_at ||
+        row?.created_at ||
+        null,
     };
     return {
       ...normalized,
@@ -458,6 +475,102 @@ export async function POST(request: Request) {
         status: emailDeliveryStatus,
         error: emailRes.error || null,
       },
+    });
+  } catch (error: any) {
+    return json(500, { error: "unhandled_exception", details: String(error?.message || error) });
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    const ctx = await resolveContext();
+    if ((ctx as any).error) return (ctx as any).error;
+    const { companyId, membershipRole, admin } = ctx as any;
+
+    if (!["admin", "reviewer"].includes(membershipRole)) {
+      return json(403, { error: "forbidden", user_message: "No tienes permisos para actualizar esta base de candidatos." });
+    }
+
+    const body = await request.json().catch(() => ({}));
+    const inviteId = normalizeText(body?.invite_id);
+    const action = normalizeText(body?.action).toLowerCase();
+    const nextStage = normalizeCompanyStage(body?.stage);
+
+    if (!inviteId) {
+      return json(400, { error: "invite_id_required", user_message: "Falta el candidato que quieres actualizar." });
+    }
+    if (action !== "set_stage") {
+      return json(400, { error: "unsupported_action", user_message: "La acción solicitada no está soportada." });
+    }
+
+    const { data: inviteRow, error: inviteErr } = await admin
+      .from("company_candidate_import_invites")
+      .select("id,company_id,extracted_payload_json")
+      .eq("id", inviteId)
+      .eq("company_id", companyId)
+      .maybeSingle();
+
+    if (inviteErr) {
+      if (isRelationMissingError(inviteErr, "company_candidate_import_invites")) {
+        return json(409, {
+          error: "company_candidate_import_invites_missing_migration",
+          user_message: "La base actual aún no tiene activada la base de candidatos importados.",
+          migration_files: ["scripts/sql/f36_company_candidate_cv_import_flow.sql"],
+        });
+      }
+      return json(400, { error: "company_candidate_import_invite_read_failed", details: inviteErr.message });
+    }
+
+    if (!inviteRow?.id) {
+      return json(404, { error: "import_invite_not_found", user_message: "No se encontró ese candidato importado." });
+    }
+
+    const currentPayload =
+      inviteRow?.extracted_payload_json && typeof inviteRow.extracted_payload_json === "object"
+        ? inviteRow.extracted_payload_json
+        : {};
+    const nowIso = new Date().toISOString();
+    const nextPayload = {
+      ...currentPayload,
+      _verijob_company_state: {
+        stage: nextStage,
+        updated_at: nowIso,
+      },
+    };
+
+    const { data: updatedRow, error: updateErr } = await admin
+      .from("company_candidate_import_invites")
+      .update({
+        extracted_payload_json: nextPayload,
+        updated_at: nowIso,
+      })
+      .eq("id", inviteId)
+      .eq("company_id", companyId)
+      .select("*")
+      .single();
+
+    if (updateErr) {
+      return json(400, {
+        error: "company_candidate_import_invite_update_failed",
+        details: updateErr.message,
+        user_message: "No se pudo actualizar el estado interno del candidato.",
+      });
+    }
+
+    return json(200, {
+      ok: true,
+      invite: {
+        ...updatedRow,
+        company_stage: nextStage,
+        last_activity_at: nowIso,
+        display_status: formatImportStatus(updatedRow),
+      },
+      user_message:
+        nextStage === "preselected"
+          ? "Candidato marcado como preseleccionado."
+          : nextStage === "saved"
+            ? "Candidato guardado en tu base interna."
+            : "Estado interno eliminado.",
     });
   } catch (error: any) {
     return json(500, { error: "unhandled_exception", details: String(error?.message || error) });

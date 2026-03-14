@@ -89,7 +89,7 @@ export async function setCompanyVerificationStatus(input: SetCompanyVerification
   const companyNameSnapshot =
     typeof companyStatus === "string" ? null : companyStatus.companyName || null;
 
-  const { error } = await supabase
+  const { data: updatedRequest, error } = await supabase
     .from("verification_requests")
     .update({
       status: nextStatus,
@@ -101,7 +101,9 @@ export async function setCompanyVerificationStatus(input: SetCompanyVerification
       company_verification_status_snapshot: companyVerificationStatusSnapshot,
       snapshot_at: resolvedAt,
     })
-    .eq("id", verificationRequestId);
+    .eq("id", verificationRequestId)
+    .select("id,status,resolved_at,resolution_notes")
+    .maybeSingle();
 
   if (error) throw new Error(error.message);
 
@@ -133,7 +135,13 @@ export async function setCompanyVerificationStatus(input: SetCompanyVerification
     }
   }
 
-  return { ok: true };
+  return {
+    ok: true,
+    request: updatedRequest || null,
+    status: nextStatus,
+    resolved_at: resolvedAt,
+    message: nextStatus === "verified" ? "Experiencia confirmada." : "Experiencia rechazada.",
+  };
 }
 
 /**
