@@ -1,6 +1,7 @@
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 import { headers } from "next/headers";
+import ProfileViewCheckoutButtons from "./ProfileViewCheckoutButtons";
 
 type Ctx = {
   params: Promise<{ token: string }>;
@@ -151,16 +152,8 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
               <SnapshotField label="Empresa / email" value={String(preview?.verification_breakdown?.email_or_company ?? 0)} />
               <SnapshotField label="Documento" value={String(preview?.verification_breakdown?.documental ?? 0)} />
             </div>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <a className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black" href={`/api/stripe/checkout?plan_key=company_single_cv&return_path=${encodeURIComponent(returnPath)}`}>
-                Comprar 1 visualización
-              </a>
-              <a className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50" href={`/api/stripe/checkout?plan_key=company_pack_5&return_path=${encodeURIComponent(returnPath)}`}>
-                Comprar pack de 5 visualizaciones
-              </a>
-              <a className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50" href={upgradeUrl}>
-                Mejorar plan empresa
-              </a>
+            <div className="mt-6">
+              <ProfileViewCheckoutButtons returnPath={returnPath} upgradeUrl={upgradeUrl} />
             </div>
           </section>
         </main>
@@ -294,9 +287,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
                 <a className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black" href={`/company/candidate/${encodeURIComponent(token)}?view=full`}>
                   Ver perfil completo (-1 visualización)
                 </a>
-                <a className="inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50" href={`/api/stripe/checkout?plan_key=company_pack_5&return_path=${encodeURIComponent(returnPath)}`}>
-                  Comprar pack de 5
-                </a>
+                <ProfileViewCheckoutButtons returnPath={returnPath} upgradeUrl="/company/upgrade" compact />
                 <a className="inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50" href="/company/candidates">
                   Volver a candidatos
                 </a>

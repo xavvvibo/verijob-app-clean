@@ -382,6 +382,7 @@ export default function CompanyDashboard() {
         }
         return rows;
       })
+      .sort((a, b) => Date.parse(String(b.timestamp || 0)) - Date.parse(String(a.timestamp || 0)))
       .slice(0, 8);
   }, [imports]);
 
