@@ -102,6 +102,8 @@ type NotificationItem = {
   detail: string;
   href: string;
   cta: string;
+  timestamp: string | null;
+  type: "onboarding" | "experiences" | "verification" | "evidences";
 };
 
 function formatDate(value?: string | null) {
@@ -171,6 +173,17 @@ export default function CompanyDashboard() {
   const [teamData, setTeamData] = useState<TeamPayload | null>(null);
   const [candidateData, setCandidateData] = useState<CandidatesPayload | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("vj_company_candidate_notifications_read");
+      const parsed = raw ? JSON.parse(raw) : [];
+      setReadNotificationIds(Array.isArray(parsed) ? parsed.filter((item) => typeof item === "string") : []);
+    } catch {
+      setReadNotificationIds([]);
+    }
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -315,6 +328,20 @@ export default function CompanyDashboard() {
             detail: "El perfil ya está disponible para revisar en snapshot antes de consumir una visualización completa.",
             href,
             cta: "Revisar candidato",
+            timestamp: item.last_activity_at || item.created_at || null,
+            type: "onboarding",
+          });
+        }
+        if (item.display_status === "profile_created") {
+          rows.push({
+            id: `${item.id}-experiences`,
+            tone: "border-slate-200 bg-slate-50 text-slate-900",
+            title: `${label} ya tiene experiencias cargadas`,
+            detail: "Puedes revisar la nueva versión del perfil y decidir si merece abrir el perfil completo.",
+            href,
+            cta: "Ver snapshot",
+            timestamp: item.last_activity_at || item.created_at || null,
+            type: "experiences",
           });
         }
         if (item.display_status === "verifying") {
@@ -325,6 +352,8 @@ export default function CompanyDashboard() {
             detail: "Ya hay actividad de validación sobre el perfil y conviene revisar su progreso.",
             href,
             cta: "Ver progreso",
+            timestamp: item.last_activity_at || item.created_at || null,
+            type: "verification",
           });
         }
         if (Number(item.total_verifications || 0) > 0 && Number(item.total_verifications || 0) === Number(item.approved_verifications || 0)) {
@@ -335,12 +364,42 @@ export default function CompanyDashboard() {
             detail: `${Number(item.approved_verifications || 0)} validaciones aprobadas disponibles para decisión.`,
             href,
             cta: "Abrir perfil",
+            timestamp: item.last_activity_at || item.created_at || null,
+            type: "verification",
+          });
+        }
+        if (item.display_status === "verifying" || (Number(item.total_verifications || 0) > 0 && Number(item.approved_verifications || 0) === 0)) {
+          rows.push({
+            id: `${item.id}-evidences`,
+            tone: "border-amber-200 bg-amber-50 text-amber-900",
+            title: `${label} ha subido evidencias o documentación`,
+            detail: "El perfil ya tiene material adicional para apoyar la validación.",
+            href,
+            cta: "Revisar snapshot",
+            timestamp: item.last_activity_at || item.created_at || null,
+            type: "evidences",
           });
         }
         return rows;
       })
-      .slice(0, 4);
+      .slice(0, 8);
   }, [imports]);
+
+  const visibleNotifications = useMemo(
+    () => notifications.filter((item) => !readNotificationIds.includes(item.id)).slice(0, 4),
+    [notifications, readNotificationIds]
+  );
+
+  function markNotificationRead(id: string) {
+    setReadNotificationIds((prev) => {
+      if (prev.includes(id)) return prev;
+      const next = [...prev, id].slice(-50);
+      try {
+        window.localStorage.setItem("vj_company_candidate_notifications_read", JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -548,21 +607,36 @@ export default function CompanyDashboard() {
           <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir candidatos</a>
         </div>
         <div className="mt-4 space-y-3">
-          {notifications.length === 0 ? (
+          {visibleNotifications.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
               Todavía no hay notificaciones internas. Guarda o preselecciona candidatos para recibir avisos cuando completen onboarding o avancen en verificaciones.
             </div>
           ) : (
-            notifications.map((item) => (
+            visibleNotifications.map((item) => (
               <article key={item.id} className={`rounded-2xl border p-4 ${item.tone}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold">{item.title}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold">{item.title}</p>
+                      <span className="rounded-full border border-white/70 bg-white/70 px-2 py-0.5 text-[11px] font-semibold">
+                        {item.type === "onboarding" ? "Onboarding" : item.type === "experiences" ? "Experiencias" : item.type === "verification" ? "Verificación" : "Evidencias"}
+                      </span>
+                    </div>
                     <p className="mt-1 text-sm opacity-90">{item.detail}</p>
+                    <p className="mt-2 text-xs opacity-75">Última actividad {formatDate(item.timestamp)}</p>
                   </div>
-                  <a href={item.href} className="inline-flex rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100">
-                    {item.cta}
-                  </a>
+                  <div className="flex flex-wrap gap-2">
+                    <a href={item.href} className="inline-flex rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100">
+                      {item.cta}
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => markNotificationRead(item.id)}
+                      className="inline-flex rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-white"
+                    >
+                      Marcar leída
+                    </button>
+                  </div>
                 </div>
               </article>
             ))

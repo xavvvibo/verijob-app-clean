@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 
 type Ctx = {
   params: Promise<{ token: string }>;
-  searchParams?: Promise<{ view?: string }>;
+  searchParams?: Promise<{ view?: string; checkout?: string }>;
 };
 
 type Availability = {
@@ -54,6 +54,12 @@ type PreviewSnapshot = {
   trust_score?: number | null;
   onboarding_completion?: number | null;
   onboarding_status?: string | null;
+  verification_breakdown?: {
+    email_or_company?: number | null;
+    documental?: number | null;
+  } | null;
+  profile_state?: string | null;
+  last_activity_at?: string | null;
 };
 
 async function fetchCompanyProfile(token: string, view: "preview" | "full") {
@@ -82,8 +88,10 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
   const { token } = await params;
   const query = (await searchParams) || {};
   const requestedView = query.view === "full" ? "full" : "preview";
+  const checkoutState = query.checkout === "success" ? "success" : query.checkout === "cancel" ? "cancel" : null;
   const { ok, status, body } = await fetchCompanyProfile(token, requestedView);
   const preview: PreviewSnapshot = body?.preview ?? {};
+  const returnPath = `/company/candidate/${encodeURIComponent(token)}`;
 
   if (!ok) {
     const upgradeUrl = body?.upgrade_url ?? "/company/upgrade";
@@ -103,6 +111,9 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
               <SnapshotField label="Idiomas detectados" value={String(Array.isArray(preview?.languages_detected) ? preview.languages_detected.length : 0)} />
               <SnapshotField label="Trust score" value={preview?.trust_score != null ? String(preview.trust_score) : "—"} />
             </div>
+            <p className="mt-4 text-sm text-amber-900">
+              Estado actual: {mapProfileState(preview?.profile_state)} · última actividad {formatDateTime(preview?.last_activity_at)}.
+            </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <a className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100" href={`/company/candidate/${encodeURIComponent(token)}`}>
                 Volver al snapshot
@@ -123,23 +134,32 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
             <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Límite de visualizaciones</p>
             <h1 className="mt-2 text-2xl font-semibold text-rose-950">Has alcanzado el límite de visualizaciones</h1>
             <p className="mt-3 text-sm leading-6 text-rose-900">
-              Puedes seguir revisando el snapshot del candidato sin coste. Para abrir el perfil completo necesitas una visualización disponible.
+              Puedes seguir revisando el snapshot del candidato sin coste. Para abrir el perfil completo necesitas una visualización disponible. Cada apertura completa consume 1 visualización.
             </p>
+            <div className="mt-4 rounded-2xl border border-rose-200 bg-white p-4 text-sm text-rose-900">
+              <p className="font-semibold">Visualizaciones disponibles</p>
+              <p className="mt-1">{body?.credits_remaining != null ? String(body.credits_remaining) : "0"} disponibles ahora mismo.</p>
+              <p className="mt-1 text-rose-800">Después de comprar volverás a este snapshot y podrás decidir cuándo abrir el perfil completo.</p>
+            </div>
             <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <SnapshotField label="Experiencias detectadas" value={String(preview?.experiences_detected ?? "—")} />
               <SnapshotField label="Verificaciones" value={String(preview?.total_verifications ?? "—")} />
               <SnapshotField label="Idiomas detectados" value={String(Array.isArray(preview?.languages_detected) ? preview.languages_detected.length : 0)} />
               <SnapshotField label="Trust score" value={preview?.trust_score != null ? String(preview.trust_score) : "—"} />
             </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <SnapshotField label="Empresa / email" value={String(preview?.verification_breakdown?.email_or_company ?? 0)} />
+              <SnapshotField label="Documento" value={String(preview?.verification_breakdown?.documental ?? 0)} />
+            </div>
             <div className="mt-6 flex flex-wrap gap-3">
-              <a className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black" href="/api/stripe/checkout?plan_key=company_single_cv">
-                Comprar pack de visualizaciones
+              <a className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black" href={`/api/stripe/checkout?plan_key=company_single_cv&return_path=${encodeURIComponent(returnPath)}`}>
+                Comprar 1 visualización
               </a>
-              <a className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50" href="/api/stripe/checkout?plan_key=company_pack_5">
+              <a className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50" href={`/api/stripe/checkout?plan_key=company_pack_5&return_path=${encodeURIComponent(returnPath)}`}>
                 Comprar pack de 5 visualizaciones
               </a>
               <a className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50" href={upgradeUrl}>
-                Actualizar plan empresa
+                Mejorar plan empresa
               </a>
             </div>
           </section>
@@ -180,12 +200,25 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
     return (
       <main className="max-w-5xl p-6">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          {checkoutState === "success" ? (
+            <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+              Compra completada. Ya puedes abrir el perfil completo cuando lo necesites. El consumo se hará solo al pulsar el botón de apertura completa.
+            </div>
+          ) : null}
+          {checkoutState === "cancel" ? (
+            <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              La compra no se completó. Puedes seguir evaluando el snapshot y decidir después si compras visualizaciones o mejoras tu plan.
+            </div>
+          ) : null}
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Candidate Snapshot</p>
               <h1 className="mt-2 text-2xl font-semibold text-slate-900">Vista previa del candidato</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
                 Resumen sin datos personales para decidir si merece la pena abrir el perfil completo. Esta vista no consume visualizaciones.
+              </p>
+              <p className="mt-2 text-sm text-slate-600">
+                Abrir el perfil completo consume 1 visualización y no se descuenta en esta vista previa.
               </p>
             </div>
             <a
@@ -222,6 +255,9 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
                 <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${preview?.onboarding_status === "candidate_onboarding_in_progress" ? "border-amber-300 bg-amber-50 text-amber-800" : "border-emerald-300 bg-emerald-50 text-emerald-800"}`}>
                   {preview?.onboarding_status === "candidate_onboarding_in_progress" ? "Perfil aún completándose" : "Perfil listo para revisar"}
                 </span>
+                <span className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                  {mapProfileState(preview?.profile_state)}
+                </span>
               </div>
               <div className="mt-4">
                 <div className="mb-1 flex items-center justify-between text-sm text-slate-600">
@@ -232,6 +268,13 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
                   <div className="h-full rounded-full bg-slate-900" style={{ width: `${Math.max(0, Math.min(100, Number(preview?.onboarding_completion ?? 0)))}%` }} />
                 </div>
               </div>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <SnapshotField label="Empresa / email" value={String(preview?.verification_breakdown?.email_or_company ?? 0)} />
+                <SnapshotField label="Documento" value={String(preview?.verification_breakdown?.documental ?? 0)} />
+              </div>
+              <p className="mt-4 text-sm text-slate-600">
+                Última actividad: {formatDateTime(preview?.last_activity_at)}.
+              </p>
             </article>
 
             <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
@@ -250,6 +293,9 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
               <div className="mt-5 flex flex-wrap gap-3">
                 <a className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black" href={`/company/candidate/${encodeURIComponent(token)}?view=full`}>
                   Ver perfil completo (-1 visualización)
+                </a>
+                <a className="inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50" href={`/api/stripe/checkout?plan_key=company_pack_5&return_path=${encodeURIComponent(returnPath)}`}>
+                  Comprar pack de 5
                 </a>
                 <a className="inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50" href="/company/candidates">
                   Volver a candidatos
@@ -495,6 +541,26 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
       </div>
     </main>
   );
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "sin actividad reciente";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "sin actividad reciente";
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function mapProfileState(value?: string | null) {
+  const state = String(value || "").toLowerCase();
+  if (state === "en_construccion") return "En construcción";
+  if (state === "actualizado_recientemente") return "Actualizado recientemente";
+  return "Listo para ver";
 }
 
 function SnapshotField({ label, value }: { label: string; value: string }) {

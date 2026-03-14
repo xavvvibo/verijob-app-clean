@@ -120,6 +120,11 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       .limit(1)
       .maybeSingle(),
   ]);
+  const lastActivityAt =
+    (linkedInviteRes.data as any)?.updated_at ||
+    (linkedInviteRes.data as any)?.accepted_at ||
+    (candidateProfile as any)?.raw_cv_json?.company_cv_import?.imported_at ||
+    null;
 
   await service
     .from("candidate_public_links")
@@ -219,6 +224,16 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       })
     )
   );
+  const verificationBreakdown = {
+    email_or_company: verificationRows.filter((row: any) => {
+      const method = String(row?.verification_channel || "").toLowerCase();
+      return method === "email" || !!row?.company_confirmed || isVerifiedStatus(row?.status);
+    }).length,
+    documental: verificationRows.filter((row: any) => {
+      const method = String(row?.verification_channel || "").toLowerCase();
+      return method === "documentary" || Number(row?.evidence_count ?? row?.evidences_count ?? 0) > 0;
+    }).length,
+  };
   const completionSignals = [
     Number(Boolean((profile as any)?.full_name)),
     Number(Boolean((profile as any)?.title)),
@@ -236,15 +251,24 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     importStatus === "uploaded" ||
     importStatus === "accepted" ||
     (Boolean((candidateProfile as any)?.raw_cv_json?.company_cv_import) && onboardingCompletion < 70);
+  const profileState =
+    companyImportInProgress
+      ? "en_construccion"
+      : lastActivityAt && Date.now() - Date.parse(String(lastActivityAt)) < 7 * 24 * 60 * 60 * 1000
+        ? "actualizado_recientemente"
+        : "listo_para_ver";
   const snapshot = {
     experiences_detected: experienceCount,
     total_verifications: totalVerifications,
     approved_verifications: verifiedRows.length,
     verification_types: verificationTypes,
+    verification_breakdown: verificationBreakdown,
     languages_detected: languagesDetected,
     trust_score: trustScore,
     onboarding_completion: onboardingCompletion,
     onboarding_status: companyImportInProgress ? "candidate_onboarding_in_progress" : "ready",
+    profile_state: profileState,
+    last_activity_at: lastActivityAt,
   };
 
   if (mode === "preview") {

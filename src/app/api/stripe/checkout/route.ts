@@ -48,8 +48,25 @@ async function createCheckoutSession(req: Request) {
     return NextResponse.json({ error: "unauthorized", details: authErr?.message ?? null }, { status: 401 });
   }
 
-  const body = await req.json().catch(() => ({}));
-  const planRaw = body?.plan_key ?? body?.plan ?? body?.price_key ?? null;
+  const url = new URL(req.url);
+  const body =
+    req.method === "POST"
+      ? await req.json().catch(() => ({}))
+      : {};
+  const planRaw =
+    body?.plan_key ??
+    body?.plan ??
+    body?.price_key ??
+    url.searchParams.get("plan_key") ??
+    url.searchParams.get("plan") ??
+    url.searchParams.get("price_key") ??
+    null;
+  const returnPathRaw =
+    body?.return_path ??
+    body?.returnPath ??
+    url.searchParams.get("return_path") ??
+    url.searchParams.get("returnTo") ??
+    null;
 
   let selection: { planKey: string; priceId: string; mode: "subscription" | "payment" };
   try {
@@ -66,8 +83,16 @@ async function createCheckoutSession(req: Request) {
 
   const origin = getOrigin(req);
   const isCompanyPlan = String(selection.planKey || "").startsWith("company_");
-  const successUrl = `${origin}${isCompanyPlan ? "/company/subscription?checkout=success" : "/candidate/subscription?checkout=success"}`;
-  const cancelUrl = `${origin}${isCompanyPlan ? "/company/subscription?checkout=cancel" : "/candidate/subscription?checkout=cancel"}`;
+  const safeReturnPath =
+    typeof returnPathRaw === "string" && returnPathRaw.startsWith("/") && !returnPathRaw.startsWith("//")
+      ? returnPathRaw
+      : null;
+  const defaultSuccess = isCompanyPlan ? "/company/subscription?checkout=success" : "/candidate/subscription?checkout=success";
+  const defaultCancel = isCompanyPlan ? "/company/subscription?checkout=cancel" : "/candidate/subscription?checkout=cancel";
+  const successPath = safeReturnPath ? `${safeReturnPath}${safeReturnPath.includes("?") ? "&" : "?"}checkout=success` : defaultSuccess;
+  const cancelPath = safeReturnPath ? `${safeReturnPath}${safeReturnPath.includes("?") ? "&" : "?"}checkout=cancel` : defaultCancel;
+  const successUrl = `${origin}${successPath}`;
+  const cancelUrl = `${origin}${cancelPath}`;
 
   const session = await stripe.checkout.sessions.create({
     mode: selection.mode,
@@ -81,6 +106,7 @@ async function createCheckoutSession(req: Request) {
       company_id: "",
       plan_key: selection.planKey,
       price_id: selection.priceId,
+      return_path: safeReturnPath || "",
     },
   });
 
