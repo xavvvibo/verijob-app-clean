@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { companyVerificationMethodTone } from "@/lib/company/verification-method";
 
 type Profile = Record<string, any>;
 type CompanyVerificationDocument = {
@@ -209,6 +210,20 @@ function checklistStatusClass(value: ProfileCompletionItem["status"]) {
   return "border-amber-200 bg-amber-50 text-amber-800";
 }
 
+function buildDocumentsMetaFromResponse(data: any): DocumentsMeta {
+  if (!data?.status && !data?.warning && !data?.migration_files?.length) return null;
+  return {
+    code: data?.error || data?.warning || data?.status || null,
+    title:
+      data?.title ||
+      (String(data?.status || data?.warning || "").includes("schema_drift")
+        ? "Módulo documental pendiente de sincronizar"
+        : "Módulo documental no disponible"),
+    message: data?.message || data?.user_message || null,
+    migration_files: Array.isArray(data?.migration_files) ? data.migration_files : [],
+  };
+}
+
 export const dynamic = "force-dynamic";
 
 export default function CompanyProfilePage() {
@@ -354,23 +369,25 @@ export default function CompanyProfilePage() {
       return;
     }
 
-    if (data?.status === "documents_table_missing" || data?.status === "documents_schema_drift") {
-      setDocumentsMeta({
-        code: data?.error || data?.status || null,
-        title: "Módulo documental no disponible",
-        message: data?.message || data?.user_message || "El módulo documental aún no está activo.",
-        migration_files: Array.isArray(data?.migration_files) ? data.migration_files : [],
-      });
-      setError(data?.message || data?.user_message || "El módulo documental aún no está activo.");
+    if (!data?.ok) {
+      setError(data?.user_message || "No se pudo registrar el documento de verificación.");
       return;
     }
 
-    if (data?.document) {
-      setDocuments((prev) => [data.document, ...prev]);
-    }
+    const nextDocuments = Array.isArray(data?.documents)
+      ? data.documents
+      : data?.document
+        ? [data.document, ...documents]
+        : documents;
+    setDocuments(nextDocuments);
+    setDocumentsMeta(buildDocumentsMetaFromResponse(data));
     setReviewStatus("pending_review");
     setDocFile(null);
-    setMessage("Documento subido. Estado actualizado a pendiente de revisión.");
+    const refreshed = await loadProfileFresh();
+    setMessage(data?.user_message || "Documento subido correctamente.");
+    if (!refreshed && nextDocuments.length === 0) {
+      setError("El documento se subió, pero no se pudo refrescar el histórico de forma automática.");
+    }
   }
 
   async function importDetectedData(documentId: string) {
@@ -426,18 +443,29 @@ export default function CompanyProfilePage() {
   }
 
   async function loadProfileFresh() {
-    const res = await fetch("/api/company/profile", { cache: "no-store" });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) return;
-    setProfile(data.profile || {});
-    setMembershipRole(String(data.membership_role || "reviewer"));
-    setDocuments(Array.isArray(data.verification_documents) ? data.verification_documents : []);
-    setReviewStatus(String(data?.profile?.company_verification_review_status || "unverified"));
-    setDocumentsMeta(data?.verification_documents_meta || null);
-    setCommonRolesText(formatListInput(data?.profile?.common_roles_hired));
-    setLanguagesText(formatListInput(data?.profile?.common_languages_required));
-    setZonesText(formatListInput(data?.profile?.hiring_zones));
-    setCompletion(data?.profile_completion || null);
+    const [profileRes, docsRes] = await Promise.all([
+      fetch("/api/company/profile", { cache: "no-store" }),
+      fetch("/api/company/profile/documents", { cache: "no-store" }),
+    ]);
+    const [profileData, docsData] = await Promise.all([
+      profileRes.json().catch(() => ({})),
+      docsRes.json().catch(() => ({})),
+    ]);
+    if (!profileRes.ok) return false;
+    const docsFromProfile = Array.isArray(profileData.verification_documents) ? profileData.verification_documents : [];
+    const docsFromEndpoint = docsRes.ok && Array.isArray(docsData.documents) ? docsData.documents : [];
+    const documentsMetaFromProfile = profileData?.verification_documents_meta || null;
+    const documentsMetaFromDocs = buildDocumentsMetaFromResponse(docsData);
+    setProfile(profileData.profile || {});
+    setMembershipRole(String(profileData.membership_role || "reviewer"));
+    setDocuments(docsFromProfile.length > 0 || !docsRes.ok ? docsFromProfile : docsFromEndpoint);
+    setReviewStatus(String(profileData?.profile?.company_verification_review_status || "unverified"));
+    setDocumentsMeta(documentsMetaFromProfile || documentsMetaFromDocs);
+    setCommonRolesText(formatListInput(profileData?.profile?.common_roles_hired));
+    setLanguagesText(formatListInput(profileData?.profile?.common_languages_required));
+    setZonesText(formatListInput(profileData?.profile?.hiring_zones));
+    setCompletion(profileData?.profile_completion || null);
+    return true;
   }
 
   if (loading) return <p className="text-sm text-slate-600">Cargando perfil de empresa…</p>;
@@ -456,6 +484,12 @@ export default function CompanyProfilePage() {
             <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(reviewStatus)}`}>
               {statusLabel(reviewStatus)}
             </div>
+            <div className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${companyVerificationMethodTone(profile?.company_verification_method || "none")}`}>
+              {profile?.company_verification_method_label || "Empresa no verificada"}
+            </div>
+            {profile?.company_verification_method_detail ? (
+              <p className="mt-2 text-sm text-slate-600">{String(profile.company_verification_method_detail)}</p>
+            ) : null}
           </div>
           <div className="min-w-[260px] rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs uppercase tracking-wide text-slate-500">Perfil listo para operacion</p>

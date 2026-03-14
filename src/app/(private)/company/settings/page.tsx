@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+import { companyVerificationMethodTone } from "@/lib/company/verification-method";
 
 type Settings = {
   show_risk_panel: boolean;
@@ -19,6 +20,9 @@ type CompanyProfileSummary = {
   display_name?: string | null;
   contact_email?: string | null;
   company_verification_review_status?: string | null;
+  company_verification_method?: "domain" | "documents" | "both" | "none";
+  company_verification_method_label?: string | null;
+  company_verification_method_detail?: string | null;
 };
 
 type CompanyAccount = {
@@ -136,6 +140,9 @@ export default function CompanySettingsPage() {
           display_name: profileData?.profile?.display_name || null,
           contact_email: profileData?.profile?.contact_email || null,
           company_verification_review_status: profileData?.profile?.company_verification_review_status || null,
+          company_verification_method: profileData?.profile?.company_verification_method || "none",
+          company_verification_method_label: profileData?.profile?.company_verification_method_label || null,
+          company_verification_method_detail: profileData?.profile?.company_verification_method_detail || null,
         });
       }
 
@@ -286,6 +293,14 @@ export default function CompanySettingsPage() {
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500">Verificación empresa</p>
               <p className="mt-1 font-semibold text-slate-900">{verificationLabel(profileSummary?.company_verification_review_status)}</p>
+              <div className="mt-2">
+                <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${companyVerificationMethodTone(profileSummary?.company_verification_method || "none")}`}>
+                  {profileSummary?.company_verification_method_label || "Empresa no verificada"}
+                </span>
+              </div>
+              {profileSummary?.company_verification_method_detail ? (
+                <p className="mt-2 text-xs text-slate-500">{profileSummary.company_verification_method_detail}</p>
+              ) : null}
             </div>
           </div>
         </aside>

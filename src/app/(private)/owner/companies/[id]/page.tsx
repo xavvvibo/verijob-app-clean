@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+import { companyVerificationMethodTone, deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 
@@ -36,17 +37,17 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
   const admin = createServiceRoleClient();
   const companyRes = await admin
     .from("companies")
-    .select("id,name,trade_name,legal_name,status,created_at,updated_at")
+    .select("id,name,status,created_at,updated_at")
     .eq("id", id)
     .maybeSingle();
 
   if (companyRes.error || !companyRes.data) notFound();
   const company = companyRes.data as any;
 
-  const [profileRes, membersRes, requestsRes] = await Promise.all([
+  const [profileRes, membersRes, requestsRes, docsRes] = await Promise.all([
     admin
       .from("company_profiles")
-      .select("company_id,company_verification_status,profile_completeness_score")
+      .select("company_id,trade_name,legal_name,contact_email,website_url,company_verification_status,profile_completeness_score")
       .eq("company_id", id)
       .maybeSingle(),
     admin
@@ -58,6 +59,12 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
       .select("id,status,requested_at,created_at,updated_at,resolved_at,requested_by,verification_channel")
       .eq("company_id", id)
       .order("requested_at", { ascending: false })
+      .limit(20),
+    admin
+      .from("company_verification_documents")
+      .select("review_status,lifecycle_status")
+      .eq("company_id", id)
+      .order("created_at", { ascending: false })
       .limit(20),
   ]);
 
@@ -96,7 +103,17 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
 
   const completion = Number((profileRes.data as any)?.profile_completeness_score || 0);
   const verificationStatus = String((profileRes.data as any)?.company_verification_status || company.status || "");
-  const companyDisplayName = resolveCompanyDisplayName(company, "Tu empresa");
+  const approvedDocs = !docsRes.error && Array.isArray(docsRes.data)
+    ? docsRes.data
+        .filter((doc: any) => String(doc?.lifecycle_status || "active").toLowerCase() !== "deleted")
+        .some((doc: any) => String(doc?.review_status || "").toLowerCase() === "approved")
+    : false;
+  const verificationMethod = deriveCompanyVerificationMethod({
+    contactEmail: (profileRes.data as any)?.contact_email,
+    websiteUrl: (profileRes.data as any)?.website_url,
+    hasApprovedDocuments: approvedDocs,
+  });
+  const companyDisplayName = resolveCompanyDisplayName({ ...(company || {}), ...((profileRes.data as any) || {}) }, "Tu empresa");
 
   return (
     <div className="space-y-5">
@@ -112,7 +129,7 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
         </div>
 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <Card label="Estado" value={verificationLabel(verificationStatus)} />
+          <Card label="Estado" value={verificationLabel(verificationStatus)} note={verificationMethod.label} />
           <Card label="Perfil empresa" value={`${completion}%`} note={completion >= 80 ? "Completo" : completion >= 40 ? "Parcial" : "Incompleto"} />
           <Card label="Miembros" value={String(members.length)} />
           <Card label="Solicitudes" value={String(requests.length)} note={`${pendingRequests} pendientes`} />
@@ -121,6 +138,11 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
           <Card label="Última actividad" value={fmtDate(lastActivity)} />
           <Card label="Company ID" value={company.id} mono />
         </div>
+        {verificationMethod.detail ? (
+          <div className={`mt-4 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${companyVerificationMethodTone(verificationMethod.method)}`}>
+            {verificationMethod.detail}
+          </div>
+        ) : null}
 
         <div className="mt-4 flex flex-wrap gap-2 text-sm">
           <Link href={`/owner/verifications?company=${encodeURIComponent(companyDisplayName)}`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 font-semibold text-slate-700">

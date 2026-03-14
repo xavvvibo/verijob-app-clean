@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+import { companyVerificationMethodTone, deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 
@@ -70,14 +71,14 @@ export default async function OwnerCompaniesPage({
   let companies: any[] = [];
   const companiesWithStatus = await supabase
     .from("companies")
-    .select("id,name,trade_name,legal_name,created_at,updated_at,status")
+    .select("id,name,created_at,updated_at,status")
     .order("created_at", { ascending: false })
     .limit(250);
 
   if (companiesWithStatus.error) {
     const fallbackCompanies = await supabase
       .from("companies")
-      .select("id,name,trade_name,legal_name,created_at,updated_at")
+      .select("id,name,created_at,updated_at")
       .order("created_at", { ascending: false })
       .limit(250);
     companies = Array.isArray(fallbackCompanies.data) ? fallbackCompanies.data : [];
@@ -88,7 +89,7 @@ export default async function OwnerCompaniesPage({
   const rows = Array.isArray(companies) ? companies : [];
   const companyIds = rows.map((r: any) => r.id).filter(Boolean);
 
-  const [membershipsRes, requestsRes, profilesRes] = await Promise.all([
+  const [membershipsRes, requestsRes, profilesRes, docsRes] = await Promise.all([
     companyIds.length
       ? supabase.from("company_members").select("company_id,user_id,role").in("company_id", companyIds)
       : Promise.resolve({ data: [] as any[] } as any),
@@ -98,7 +99,13 @@ export default async function OwnerCompaniesPage({
     companyIds.length
       ? supabase
           .from("company_profiles")
-          .select("company_id,company_verification_status,profile_completeness_score")
+          .select("company_id,trade_name,legal_name,contact_email,website_url,company_verification_status,profile_completeness_score")
+          .in("company_id", companyIds)
+      : Promise.resolve({ data: [] as any[] } as any),
+    companyIds.length
+      ? supabase
+          .from("company_verification_documents")
+          .select("company_id,review_status,lifecycle_status")
           .in("company_id", companyIds)
       : Promise.resolve({ data: [] as any[] } as any),
   ]);
@@ -106,6 +113,7 @@ export default async function OwnerCompaniesPage({
   const memberships = Array.isArray(membershipsRes.data) ? membershipsRes.data : [];
   const requests = Array.isArray(requestsRes.data) ? requestsRes.data : [];
   const profiles = Array.isArray(profilesRes.data) ? profilesRes.data : [];
+  const docs = Array.isArray(docsRes.data) ? docsRes.data : [];
 
   const membersByCompany = new Map<string, number>();
   for (const m of memberships as any[]) {
@@ -136,6 +144,11 @@ export default async function OwnerCompaniesPage({
   for (const p of profiles as any[]) {
     profileByCompany.set(String(p.company_id || ""), p);
   }
+  const docsByCompany = new Map<string, any[]>();
+  for (const doc of docs as any[]) {
+    const key = String(doc.company_id || "");
+    docsByCompany.set(key, [...(docsByCompany.get(key) || []), doc]);
+  }
 
   const normalized = rows.map((row: any) => {
     const id = String(row.id || "");
@@ -146,11 +159,20 @@ export default async function OwnerCompaniesPage({
     const pending = pendingByCompany.get(id) || 0;
     const lastActivity = lastActivityByCompany.get(id) || row.updated_at || row.created_at || null;
     const activityState = reqCount > 0 ? "active" : "inactive";
+    const approvedDocs = (docsByCompany.get(id) || [])
+      .filter((doc: any) => String(doc?.lifecycle_status || "active").toLowerCase() !== "deleted")
+      .some((doc: any) => String(doc?.review_status || "").toLowerCase() === "approved");
+    const verificationMethod = deriveCompanyVerificationMethod({
+      contactEmail: profile?.contact_email,
+      websiteUrl: profile?.website_url,
+      hasApprovedDocuments: approvedDocs,
+    });
     return {
       row,
       id,
-      displayName: resolveCompanyDisplayName(row, "Tu empresa"),
+      displayName: resolveCompanyDisplayName({ ...(row || {}), ...(profile || {}) }, "Tu empresa"),
       status,
+      verificationMethod,
       completion,
       reqCount,
       pending,
@@ -282,7 +304,20 @@ export default async function OwnerCompaniesPage({
                         </Link>
                       </div>
                     </td>
-                    <td className="px-3 py-3"><Badge label={companyStatusLabel(entry.status)} /></td>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-col gap-2">
+                        <Badge label={companyStatusLabel(entry.status)} />
+                        <span className={`inline-flex w-fit rounded-full border px-2.5 py-1 text-xs font-semibold ${companyVerificationMethodTone(entry.verificationMethod.method)}`}>
+                          {entry.verificationMethod.method === "both"
+                            ? "Dominio + docs"
+                            : entry.verificationMethod.method === "domain"
+                              ? "Dominio"
+                              : entry.verificationMethod.method === "documents"
+                                ? "Documentos"
+                                : "Sin verificar"}
+                        </span>
+                      </div>
+                    </td>
                     <td className="px-3 py-3">{entry.members}</td>
                     <td className="px-3 py-3">{entry.reqCount}</td>
                     <td className="px-3 py-3">{entry.pending}</td>

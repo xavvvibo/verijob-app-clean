@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { effectivePlanDisplay, readEffectiveSubscriptionStates } from "@/lib/billing/effectiveSubscription";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
@@ -240,7 +241,6 @@ export async function GET(req: Request) {
       employmentRes,
       verificationRes,
       evidenceRes,
-      subscriptionsRes,
       companiesRes,
       candidateProfilesRes,
     ] = await Promise.all([
@@ -255,13 +255,6 @@ export async function GET(req: Request) {
         : Promise.resolve({ data: [] as any[] } as any),
       userIds.length
         ? admin.from("evidences").select("uploaded_by,created_at").in("uploaded_by", userIds)
-        : Promise.resolve({ data: [] as any[] } as any),
-      userIds.length
-        ? admin
-            .from("subscriptions")
-            .select("user_id,plan,status,current_period_end,created_at")
-            .in("user_id", userIds)
-            .order("created_at", { ascending: false })
         : Promise.resolve({ data: [] as any[] } as any),
       companyIds.length
         ? admin.from("companies").select("id,name,trade_name,legal_name").in("id", companyIds)
@@ -308,12 +301,7 @@ export async function GET(req: Request) {
       trustByUser.set(uid, Number((cp as any)?.trust_score || 0));
     }
 
-    const subscriptionsByUser = new Map<string, any>();
-    for (const sub of Array.isArray(subscriptionsRes.data) ? subscriptionsRes.data : []) {
-      const uid = String((sub as any)?.user_id || "");
-      if (!uid || subscriptionsByUser.has(uid)) continue;
-      subscriptionsByUser.set(uid, sub);
-    }
+    const effectiveSubscriptionsByUser = await readEffectiveSubscriptionStates(admin, userIds);
 
     const lastActivityByUser = new Map<string, string>();
     const registerActivity = (uid: string, rawDate: unknown) => {
@@ -339,7 +327,18 @@ export async function GET(req: Request) {
 
     const users = rows.map((row) => {
       const id = String(row.id);
-      const sub = subscriptionsByUser.get(id) || null;
+      const effectiveSubscription = effectiveSubscriptionsByUser.get(id) || null;
+      const effectivePlan = effectivePlanDisplay(
+        effectiveSubscription || {
+          plan: "free",
+          status: "free",
+          current_period_end: null,
+          metadata: {},
+          source: "none",
+          subscription: null,
+          override: null,
+        }
+      );
       const companyId = String(row.active_company_id || "") || null;
       return {
         id,
@@ -356,9 +355,11 @@ export async function GET(req: Request) {
         verifications_count: verificationsByUser.get(id) || 0,
         verifications_verified_count: verifiedByUser.get(id) || 0,
         evidences_count: evidencesByUser.get(id) || 0,
-        plan: sub?.plan ? String(sub.plan) : null,
-        subscription_status: sub?.status ? String(sub.status) : null,
-        subscription_current_period_end: sub?.current_period_end ? String(sub.current_period_end) : null,
+        plan: effectiveSubscription?.plan ? String(effectiveSubscription.plan) : "free",
+        plan_label: effectivePlan.planLabel,
+        plan_source: effectiveSubscription?.source || "none",
+        subscription_status: effectiveSubscription?.status ? String(effectiveSubscription.status) : "free",
+        subscription_current_period_end: effectiveSubscription?.current_period_end ? String(effectiveSubscription.current_period_end) : null,
         trust_score: trustByUser.has(id) ? Number(trustByUser.get(id) || 0) : null,
         last_activity_at: lastActivityByUser.get(id) || null,
       };

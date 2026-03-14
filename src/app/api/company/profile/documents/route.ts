@@ -62,6 +62,50 @@ function docsMigrationPayload(code: "company_verification_documents_missing_migr
   };
 }
 
+async function readCompanyVerificationDocuments(admin: any, companyId: string) {
+  let docsRes = await admin
+    .from("company_verification_documents")
+    .select(DOC_SELECT)
+    .eq("company_id", companyId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  let warningCode: "company_verification_documents_missing_migration" | "company_verification_documents_schema_drift" | null = null;
+  if (docsRes.error) {
+    if (isRelationMissingError(docsRes.error, "company_verification_documents")) {
+      warningCode = "company_verification_documents_missing_migration";
+      return {
+        documents: [],
+        warningCode,
+        error: null,
+      };
+    }
+    if (isDocsSchemaDriftError(docsRes.error)) {
+      warningCode = "company_verification_documents_schema_drift";
+      docsRes = await admin
+        .from("company_verification_documents")
+        .select("id,company_id,document_type,storage_bucket,storage_path,original_filename,mime_type,size_bytes,status,review_status,rejected_reason,review_notes,reviewed_at,created_at,updated_at")
+        .eq("company_id", companyId)
+        .order("created_at", { ascending: false })
+        .limit(50);
+    }
+  }
+
+  if (docsRes.error) {
+    return {
+      documents: [],
+      warningCode,
+      error: docsRes.error,
+    };
+  }
+
+  return {
+    documents: Array.isArray(docsRes.data) ? docsRes.data : [],
+    warningCode,
+    error: null,
+  };
+}
+
 function safeFilename(name: string) {
   const base = name.split("/").pop()?.split("\\").pop() ?? "document";
   const cleaned = base.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 140);
@@ -205,36 +249,24 @@ export async function GET() {
     if ((ctx as any).error) return (ctx as any).error;
     const { companyId, admin } = ctx as any;
 
-    let docsRes = await admin
-      .from("company_verification_documents")
-      .select(DOC_SELECT)
-      .eq("company_id", companyId)
-      .order("created_at", { ascending: false })
-      .limit(50);
+    const docsState = await readCompanyVerificationDocuments(admin, companyId);
 
-    if (docsRes.error) {
-      if (isRelationMissingError(docsRes.error, "company_verification_documents")) {
-        return json(200, {
-          documents: [],
-          warning: "company_verification_documents_missing_migration",
-          ...docsMigrationPayload("company_verification_documents_missing_migration"),
-        });
-      }
-      if (isDocsSchemaDriftError(docsRes.error)) {
-        docsRes = await admin
-          .from("company_verification_documents")
-          .select("id,company_id,document_type,storage_bucket,storage_path,original_filename,mime_type,size_bytes,review_status,rejected_reason,review_notes,reviewed_at,created_at")
-          .eq("company_id", companyId)
-          .order("created_at", { ascending: false })
-          .limit(50);
-      }
+    if (docsState.error) {
+      return json(400, { error: "company_verification_documents_read_failed", details: docsState.error.message });
     }
 
-    if (docsRes.error) {
-      return json(400, { error: "company_verification_documents_read_failed", details: docsRes.error.message });
+    if (docsState.warningCode === "company_verification_documents_missing_migration") {
+      return json(200, {
+        documents: [],
+        warning: "company_verification_documents_missing_migration",
+        ...docsMigrationPayload("company_verification_documents_missing_migration"),
+      });
     }
 
-    return json(200, { documents: Array.isArray(docsRes.data) ? docsRes.data : [] });
+    return json(200, {
+      documents: docsState.documents,
+      ...(docsState.warningCode ? { warning: docsState.warningCode, ...docsMigrationPayload(docsState.warningCode) } : {}),
+    });
   } catch (e: any) {
     return json(500, {
       error: "unhandled_exception",
@@ -323,7 +355,13 @@ export async function POST(request: Request) {
 
     if (docsInsert.error) {
       if (isRelationMissingError(docsInsert.error, "company_verification_documents")) {
-        return json(200, { documents: [], ...docsMigrationPayload("company_verification_documents_missing_migration") });
+        await admin.storage.from(BUCKET).remove([storagePath]).catch(() => {});
+        return json(503, {
+          error: "company_verification_documents_missing_migration",
+          user_message: "No se pudo registrar el documento porque el módulo documental aún no está activo en esta base.",
+          documents: [],
+          ...docsMigrationPayload("company_verification_documents_missing_migration"),
+        });
       }
       if (isDocsSchemaDriftError(docsInsert.error)) {
         const legacyInsertPayload = {
@@ -349,10 +387,15 @@ export async function POST(request: Request) {
     }
 
     if (docsInsert.error) {
-      return json(400, { error: "company_verification_documents_insert_failed", details: docsInsert.error.message });
+      await admin.storage.from(BUCKET).remove([storagePath]).catch(() => {});
+      return json(400, {
+        error: "company_verification_documents_insert_failed",
+        user_message: "El archivo se recibió, pero no se pudo registrar el documento de verificación.",
+        details: docsInsert.error.message,
+      });
     }
 
-    await admin
+    const profileUpdateRes = await admin
       .from("company_profiles")
       .upsert(
         {
@@ -368,7 +411,30 @@ export async function POST(request: Request) {
         { onConflict: "company_id" },
       );
 
-    return json(200, { ok: true, document: docsInsert.data });
+    const docsState = await readCompanyVerificationDocuments(admin, companyId);
+    if (docsState.error) {
+      return json(200, {
+        ok: true,
+        document: docsInsert.data,
+        user_message: "Documento subido correctamente, pero no se pudo refrescar el histórico automáticamente.",
+        documents: [docsInsert.data].filter(Boolean),
+        profile_update_warning: profileUpdateRes.error ? "company_profile_document_sync_failed" : null,
+      });
+    }
+
+    return json(200, {
+      ok: true,
+      document: docsInsert.data,
+      documents: docsState.documents,
+      user_message: "Documento subido correctamente.",
+      ...(docsState.warningCode ? { warning: docsState.warningCode, ...docsMigrationPayload(docsState.warningCode) } : {}),
+      ...(profileUpdateRes.error
+        ? {
+            profile_update_warning: "company_profile_document_sync_failed",
+            profile_update_message: "El documento quedó registrado, pero no se pudo actualizar la ficha auxiliar del perfil empresa.",
+          }
+        : {}),
+    });
   } catch (e: any) {
     return json(500, {
       error: "unhandled_exception",

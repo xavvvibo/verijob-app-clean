@@ -18,6 +18,8 @@ type Row = {
   verifications_verified_count: number;
   evidences_count: number;
   plan: string | null;
+  plan_label?: string | null;
+  plan_source?: "subscription" | "override" | "none";
   subscription_status: string | null;
   subscription_current_period_end: string | null;
   trust_score: number | null;
@@ -326,8 +328,12 @@ export default function OwnerUsersPage() {
                     </span>
                   </td>
                   <td className="border-b border-slate-100 px-3 py-2">
-                    <div className="font-medium text-slate-900">{r.plan || "free"}</div>
-                    <div className="text-xs text-slate-500">{r.subscription_status || "sin suscripción activa"}</div>
+                    <div className="font-medium text-slate-900">{r.plan_label || r.plan || "Free"}</div>
+                    <div className="text-xs text-slate-500">
+                      {r.plan_source === "override"
+                        ? "override manual owner activo"
+                        : r.subscription_status || "sin suscripción activa"}
+                    </div>
                   </td>
                   <td className="border-b border-slate-100 px-3 py-2">
                     <div className="truncate text-xs text-slate-700" title={r.active_company_name || "Sin empresa activa"}>

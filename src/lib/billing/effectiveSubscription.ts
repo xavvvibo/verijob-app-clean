@@ -23,28 +23,8 @@ function isActiveOverride(row: any, nowIso: string) {
   return true;
 }
 
-export async function readEffectiveSubscriptionState(admin: any, userId: string): Promise<EffectiveSubscriptionState> {
-  const nowIso = new Date().toISOString();
-  const [subscriptionRes, overridesRes] = await Promise.all([
-    admin
-      .from("subscriptions")
-      .select("id,plan,status,current_period_end,cancel_at_period_end,metadata,created_at,updated_at,stripe_customer_id,stripe_subscription_id")
-      .eq("user_id", userId)
-      .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    admin
-      .from("plan_overrides")
-      .select("id,plan_key,source_type,source_id,starts_at,expires_at,is_active,metadata,created_at")
-      .eq("user_id", userId)
-      .eq("is_active", true)
-      .order("created_at", { ascending: false })
-      .limit(10),
-  ]);
-
-  const subscription = subscriptionRes.data || null;
-  const override =
-    (Array.isArray(overridesRes.data) ? overridesRes.data : []).find((row: any) => isActiveOverride(row, nowIso)) || null;
+function buildEffectiveState(nowIso: string, subscription: any | null, overrideRows: any[] | null | undefined): EffectiveSubscriptionState {
+  const override = (Array.isArray(overrideRows) ? overrideRows : []).find((row: any) => isActiveOverride(row, nowIso)) || null;
 
   if (override) {
     const overrideMetadata = {
@@ -88,6 +68,69 @@ export async function readEffectiveSubscriptionState(admin: any, userId: string)
     subscription: null,
     override: null,
   };
+}
+
+export async function readEffectiveSubscriptionState(admin: any, userId: string): Promise<EffectiveSubscriptionState> {
+  const nowIso = new Date().toISOString();
+  const [subscriptionRes, overridesRes] = await Promise.all([
+    admin
+      .from("subscriptions")
+      .select("id,plan,status,current_period_end,cancel_at_period_end,metadata,created_at,updated_at,stripe_customer_id,stripe_subscription_id")
+      .eq("user_id", userId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    admin
+      .from("plan_overrides")
+      .select("id,plan_key,source_type,source_id,starts_at,expires_at,is_active,metadata,created_at")
+      .eq("user_id", userId)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(10),
+  ]);
+
+  return buildEffectiveState(nowIso, subscriptionRes.data || null, overridesRes.data || []);
+}
+
+export async function readEffectiveSubscriptionStates(admin: any, userIds: string[]) {
+  const nowIso = new Date().toISOString();
+  const ids = Array.from(new Set(userIds.filter(Boolean)));
+  const out = new Map<string, EffectiveSubscriptionState>();
+  if (ids.length === 0) return out;
+
+  const [subscriptionsRes, overridesRes] = await Promise.all([
+    admin
+      .from("subscriptions")
+      .select("id,user_id,plan,status,current_period_end,cancel_at_period_end,metadata,created_at,updated_at,stripe_customer_id,stripe_subscription_id")
+      .in("user_id", ids)
+      .order("updated_at", { ascending: false }),
+    admin
+      .from("plan_overrides")
+      .select("id,user_id,plan_key,source_type,source_id,starts_at,expires_at,is_active,metadata,created_at")
+      .in("user_id", ids)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const subscriptionsByUser = new Map<string, any>();
+  for (const subscription of Array.isArray(subscriptionsRes.data) ? subscriptionsRes.data : []) {
+    const userId = String(subscription?.user_id || "");
+    if (!userId || subscriptionsByUser.has(userId)) continue;
+    subscriptionsByUser.set(userId, subscription);
+  }
+
+  const overridesByUser = new Map<string, any[]>();
+  for (const override of Array.isArray(overridesRes.data) ? overridesRes.data : []) {
+    const userId = String(override?.user_id || "");
+    if (!userId) continue;
+    overridesByUser.set(userId, [...(overridesByUser.get(userId) || []), override]);
+  }
+
+  for (const userId of ids) {
+    out.set(userId, buildEffectiveState(nowIso, subscriptionsByUser.get(userId) || null, overridesByUser.get(userId) || []));
+  }
+
+  return out;
 }
 
 export function effectivePlanDisplay(state: EffectiveSubscriptionState) {

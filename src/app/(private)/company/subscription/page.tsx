@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
+import { companyVerificationMethodTone, deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import CompanyPlanActions from "./CompanyPlanActions";
@@ -157,7 +158,7 @@ export default async function CompanySubscriptionPage() {
       .maybeSingle(),
     admin
       .from("company_profiles")
-      .select("company_verification_status,profile_completeness_score")
+      .select("company_verification_status,profile_completeness_score,contact_email,website_url")
       .eq("company_id", companyId)
       .maybeSingle(),
     admin
@@ -196,6 +197,16 @@ export default async function CompanySubscriptionPage() {
     }
   }
   const completeness = Number(companyProfileRes.data?.profile_completeness_score || 0);
+  const approvedDocs = !docsRes.error && Array.isArray(docsRes.data)
+    ? docsRes.data
+        .filter((d: any) => String(d?.lifecycle_status || "active").toLowerCase() !== "deleted")
+        .some((d: any) => String(d?.review_status || "").toLowerCase() === "approved")
+    : false;
+  const verificationMethod = deriveCompanyVerificationMethod({
+    contactEmail: companyProfileRes.data?.contact_email,
+    websiteUrl: companyProfileRes.data?.website_url,
+    hasApprovedDocuments: approvedDocs,
+  });
 
   const ownerOverride = effectiveSubscription.metadata && typeof effectiveSubscription.metadata === "object" ? (effectiveSubscription.metadata as any)?.owner_override : null;
   const isManualOverride = Boolean(ownerOverride?.type) || effectiveSubscription.source === "override";
@@ -227,12 +238,21 @@ export default async function CompanySubscriptionPage() {
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-slate-500">Renovación / fin de periodo</dt>
+              <dt className="text-slate-500">{status === "trialing" ? "Trial activo hasta" : "Próxima renovación"}</dt>
               <dd className="font-semibold text-slate-900">{renewalText}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-slate-500">Cancelación programada</dt>
               <dd className="font-semibold text-slate-900">{sub?.cancel_at_period_end ? "Sí" : "No"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-slate-500">Método de verificación</dt>
+              <dd className="text-right">
+                <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${companyVerificationMethodTone(verificationMethod.method)}`}>
+                  {verificationMethod.label}
+                </span>
+                {verificationMethod.detail ? <div className="mt-1 text-xs text-slate-500">{verificationMethod.detail}</div> : null}
+              </dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-slate-500">Verificación de empresa</dt>
@@ -251,7 +271,7 @@ export default async function CompanySubscriptionPage() {
           {isManualOverride ? (
             <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
               Plan aplicado mediante override interno owner.
-              {ownerOverride?.reason ? ` Motivo: ${ownerOverride.reason}` : ""}
+              {ownerOverride?.reason ? ` Nota administrativa: ${ownerOverride.reason}` : ""}
             </div>
           ) : null}
 

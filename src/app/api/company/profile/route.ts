@@ -6,6 +6,7 @@ import {
   buildCompanyProfileCompletionModel,
   resolveCompanyDisplayName,
 } from "@/lib/company/company-profile";
+import { deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
 
 const ROUTE_VERSION = "company-profile-v1";
@@ -466,7 +467,7 @@ export async function GET() {
 
     let verificationDocuments: CompanyVerificationDocumentRow[] = [];
     let verificationDocumentsWarningCode: string | null = null;
-    const docsRes = await admin
+    let docsRes = await admin
       .from("company_verification_documents")
       .select(
         "id,company_id,document_type,storage_bucket,storage_path,original_filename,mime_type,size_bytes,review_status,rejected_reason,review_notes,reviewed_at,lifecycle_status,deleted_at,extracted_json,extracted_at,import_status,imported_at,imported_by,import_notes,created_at",
@@ -489,7 +490,21 @@ export async function GET() {
       verificationDocumentsWarningCode = isRelationMissingError(docsRes.error, "company_verification_documents")
         ? "company_verification_documents_missing_migration"
         : "company_verification_documents_schema_drift";
-      docsReadFailed = true;
+      if (verificationDocumentsWarningCode === "company_verification_documents_schema_drift") {
+        const legacyDocsRes = await admin
+          .from("company_verification_documents")
+          .select("id,company_id,document_type,storage_bucket,storage_path,original_filename,mime_type,size_bytes,status,review_status,rejected_reason,review_notes,reviewed_at,created_at")
+          .eq("company_id", companyId)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (!legacyDocsRes.error) {
+          verificationDocuments = Array.isArray(legacyDocsRes.data) ? (legacyDocsRes.data as any) : [];
+        } else {
+          docsReadFailed = true;
+        }
+      } else {
+        docsReadFailed = true;
+      }
     } else {
       verificationDocuments = Array.isArray(docsRes.data) ? (docsRes.data as any) : [];
     }
@@ -521,12 +536,21 @@ export async function GET() {
     );
     const latestRejected = activeDocuments.find((d) => normalizeDocumentReviewStatus(d.review_status) === "rejected") || null;
     const latestReviewed = activeDocuments.find((d) => d.reviewed_at) || null;
+    const verificationMethod = deriveCompanyVerificationMethod({
+      contactEmail: baseProfile.contact_email,
+      websiteUrl: baseProfile.website_url,
+      hasApprovedDocuments: activeDocuments.some((d) => normalizeDocumentReviewStatus(d.review_status) === "approved"),
+    });
 
     return NextResponse.json({
       profile: {
         ...baseProfile,
         display_name: resolveCompanyDisplayName(baseProfile),
         company_verification_status: effectiveVerificationStatus,
+        company_verification_method: verificationMethod.method,
+        company_verification_method_label: verificationMethod.label,
+        company_verification_method_detail: verificationMethod.detail,
+        company_verified_domain: verificationMethod.domain,
         profile_completeness_score: completion.score,
         company_verification_review_status: reviewStatus,
         verification_last_reviewed_at: latestReviewed?.reviewed_at || null,
@@ -655,6 +679,13 @@ export async function POST(request: Request) {
     if (error) {
       return NextResponse.json({ error: "company_profiles_upsert_failed", details: error.message, route_version: ROUTE_VERSION }, { status: 400 });
     }
+    const verificationMethod = deriveCompanyVerificationMethod({
+      contactEmail: (data || patch as any)?.contact_email,
+      websiteUrl: (data || patch as any)?.website_url,
+      hasApprovedDocuments: docsForStatus
+        .filter((d) => String((d as any)?.lifecycle_status || "active").toLowerCase() !== "deleted")
+        .some((d) => String((d as any)?.review_status || "").toLowerCase() === "approved"),
+    });
 
     return NextResponse.json({
       ok: true,
@@ -662,6 +693,10 @@ export async function POST(request: Request) {
         ...(data || patch),
         display_name: resolveCompanyDisplayName((data || patch) as any),
         company_verification_status: effectiveVerificationStatus,
+        company_verification_method: verificationMethod.method,
+        company_verification_method_label: verificationMethod.label,
+        company_verification_method_detail: verificationMethod.detail,
+        company_verified_domain: verificationMethod.domain,
         profile_completeness_score: computedScore,
       },
       profile_completion: completion,

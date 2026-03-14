@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+import { companyVerificationMethodTone } from "@/lib/company/verification-method";
 
 type Kpis = {
   pending_requests: number;
@@ -26,6 +27,10 @@ type DashboardPayload = {
   plan_label?: string;
   subscription_status?: string;
   company_verification_status?: string;
+  company_verification_method?: "domain" | "documents" | "both" | "none";
+  company_verification_method_label?: string;
+  company_verification_method_detail?: string | null;
+  current_period_end?: string | null;
   profile_completeness_score?: number;
   kpis?: Kpis | null;
   verification_activity?: {
@@ -243,6 +248,8 @@ export default function CompanyDashboard() {
   );
   const planLabel = dashboard?.plan_label || teamData?.plan?.label || "Free";
   const verificationStatus = dashboard?.company_verification_status || "unverified";
+  const verificationMethod = dashboard?.company_verification_method || "none";
+  const verificationMethodLabel = dashboard?.company_verification_method_label || "Empresa no verificada";
   const profileCompletion = Number(profileData?.profile_completion?.score ?? dashboard?.profile_completeness_score ?? 0);
   const checklist = Array.isArray(profileData?.profile_completion?.checklist)
     ? profileData?.profile_completion?.checklist?.slice(0, 4)
@@ -434,8 +441,17 @@ export default function CompanyDashboard() {
             <div className="mt-4 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">Plan {planLabel}</span>
               <span className={`rounded-full border px-3 py-1 font-semibold ${verificationStatusClass(verificationStatus)}`}>{verificationStatusLabel(verificationStatus)}</span>
+              <span className={`rounded-full border px-3 py-1 font-semibold ${companyVerificationMethodTone(verificationMethod)}`}>{verificationMethodLabel}</span>
+              {dashboard?.current_period_end ? (
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
+                  {dashboard?.subscription_status === "trialing" ? "Trial activo hasta" : "Próxima renovación"} {formatDate(dashboard.current_period_end)}
+                </span>
+              ) : null}
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">Perfil {profileCompletion}% listo</span>
             </div>
+            {dashboard?.company_verification_method_detail ? (
+              <p className="mt-2 text-sm text-slate-600">{dashboard.company_verification_method_detail}</p>
+            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             <a href="/company/requests" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black transition">Revisar solicitudes</a>

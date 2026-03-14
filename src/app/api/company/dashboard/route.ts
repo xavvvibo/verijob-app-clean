@@ -8,6 +8,7 @@ import {
   buildCompanyProfileCompletionModel,
   resolveCompanyDisplayName,
 } from "@/lib/company/company-profile";
+import { deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
 
 const ROUTE_VERSION = "company-dashboard-kpis-v2-clean-2026-03-05";
@@ -266,6 +267,12 @@ export async function GET() {
       .eq("company_id", activeCompanyId)
       .maybeSingle();
     const companyName = await resolveCompanyName(supabase, activeCompanyId);
+    const companyDocsRes = await supabase
+      .from("company_verification_documents")
+      .select("review_status,lifecycle_status")
+      .eq("company_id", activeCompanyId)
+      .order("created_at", { ascending: false })
+      .limit(20);
     const activeDocumentsCountRes = await supabase
       .from("company_verification_documents")
       .select("id", { count: "exact", head: true })
@@ -305,6 +312,16 @@ export async function GET() {
       activeCompanyId,
       subscriptionStatus
     );
+    const approvedDocs = !companyDocsRes.error && Array.isArray(companyDocsRes.data)
+      ? companyDocsRes.data
+          .filter((row: any) => String(row?.lifecycle_status || "active").toLowerCase() !== "deleted")
+          .some((row: any) => String(row?.review_status || "").toLowerCase() === "approved")
+      : false;
+    const verificationMethod = deriveCompanyVerificationMethod({
+      contactEmail: profileData?.contact_email,
+      websiteUrl: profileData?.website_url,
+      hasApprovedDocuments: approvedDocs,
+    });
 
     // No debug fields: keep only what UI needs
     const payload = {
@@ -315,6 +332,10 @@ export async function GET() {
       plan_label: normalizePlanLabel(subscriptionPlan),
       subscription_status: subscriptionStatus,
       company_verification_status: companyVerificationStatus,
+      company_verification_method: verificationMethod.method,
+      company_verification_method_label: verificationMethod.label,
+      company_verification_method_detail: verificationMethod.detail,
+      company_verified_domain: verificationMethod.domain,
       profile_completeness_score: completion.score,
       current_period_end: currentPeriodEnd,
       kpis: mergedKpis,
