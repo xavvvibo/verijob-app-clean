@@ -64,6 +64,25 @@ function asText(v: unknown, max = 300) {
   return String(v || "").trim().slice(0, max);
 }
 
+function formatLanguageEntry(item: any) {
+  const language = asText(item?.language || item?.title, 120);
+  const level = asText(item?.level, 40);
+  if (!language) return null;
+  return level ? `${language} — ${level}` : language;
+}
+
+function formatAchievementEntry(item: any) {
+  const category = asText(item?.category, 40).toLowerCase();
+  if (category === "idioma") return null;
+  const title = asText(item?.title, 140) || "Logro";
+  const issuer = asText(item?.issuer, 120);
+  const date = asText(item?.date, 40);
+  const description = asText(item?.description, 220);
+  const parts = [title, issuer, date].filter(Boolean);
+  const summary = parts.join(" · ");
+  return description ? `${summary} — ${description}` : summary;
+}
+
 function toPublicName(fullNameRaw: unknown) {
   const fullName = String(fullNameRaw || "").trim();
   if (!fullName) return "Candidato verificado";
@@ -333,9 +352,17 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const rawAchievements = asArray(candidateProfile?.achievements).length
     ? asArray(candidateProfile?.achievements)
     : asArray(candidateProfile?.other_achievements);
-  const achievementItems = rawAchievements
-    .map((item: any) => asText(item, 140))
+  const achievementLanguages = rawAchievements
+    .filter((item: any) => asText(item?.category, 40).toLowerCase() === "idioma")
+    .map((item: any) => formatLanguageEntry(item))
     .filter(Boolean);
+  const achievementItems = rawAchievements
+    .map((item: any) => formatAchievementEntry(item))
+    .filter(Boolean);
+  const publicLanguages = normalizePublicLanguages([
+    ...achievementLanguages,
+    ...normalizePublicLanguages((profile as any)?.languages),
+  ]);
 
   const derivedRecommendations = rows
     .filter((r: any) => isVerifiedStatus(r?.status))
@@ -374,7 +401,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     public_name: publicName,
     title: profileTitle,
     location: profileLocation,
-    languages: internalPreviewAllowed ? normalizePublicLanguages((profile as any)?.languages) : [],
+    languages: internalPreviewAllowed ? publicLanguages : [],
     summary: internalPreviewAllowed ? profileSummary : null,
     trust_score: trustScore,
     experiences_total: rows.length,
@@ -430,7 +457,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       },
       headline: profileTitle,
       location: profileLocation,
-      languages: internalPreviewAllowed ? normalizePublicLanguages((profile as any)?.languages) : [],
+      languages: internalPreviewAllowed ? publicLanguages : [],
       education: internalPreviewAllowed ? educationItems : [],
       experiences: internalPreviewAllowed ? experiencesEnriched : [],
       verifications: {

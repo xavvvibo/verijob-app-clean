@@ -634,8 +634,8 @@ export default function CandidateOverview() {
 
         <div className="mt-4 grid gap-4">
           <SummaryCard
-            title="Idiomas y otros logros"
-            summary={achievementsCount > 0 ? `${achievementsCount} logros o certificaciones registrados.` : "Añade certificaciones y logros para reforzar tu perfil profesional."}
+            title="Idiomas, certificaciones y logros"
+            summary={achievementsCount > 0 ? `${achievementsCount} señales adicionales registradas.` : "Añade idiomas, certificaciones y logros para reforzar tu perfil profesional."}
             href="/candidate/achievements"
             cta="Gestionar"
           />
