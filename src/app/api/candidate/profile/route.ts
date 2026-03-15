@@ -9,14 +9,27 @@ type AchievementCategory = "certificacion" | "premio" | "idioma" | "otro";
 
 type AchievementItem = {
   title: string;
+  language: string | null;
+  level: string | null;
+  certificate_title: string | null;
   issuer: string | null;
   date: string | null;
   description: string | null;
   category: AchievementCategory;
 };
 
+function formatLanguageLabel(item: Partial<AchievementItem>) {
+  const language = normalizeText(item.language || item.title);
+  const level = normalizeText(item.level);
+  if (!language) return null;
+  return level ? `${language} — ${level}` : language;
+}
+
 function normalizeAchievement(raw: any): AchievementItem | null {
   const title = normalizeText(raw?.title);
+  const language = normalizeText(raw?.language) || null;
+  const level = normalizeText(raw?.level) || null;
+  const certificateTitle = normalizeText(raw?.certificate_title) || null;
   const issuer = normalizeText(raw?.issuer) || null;
   const date = normalizeText(raw?.date) || null;
   const description = normalizeText(raw?.description) || null;
@@ -25,9 +38,13 @@ function normalizeAchievement(raw: any): AchievementItem | null {
     rawCategory === "idioma" || rawCategory === "premio" || rawCategory === "certificacion"
       ? (rawCategory as AchievementCategory)
       : "otro";
-  if (!title && !issuer && !date && !description) return null;
+  const normalizedTitle = category === "idioma" ? title || language || "" : title;
+  if (!normalizedTitle && !language && !issuer && !date && !description && !certificateTitle) return null;
   return {
-    title,
+    title: normalizedTitle,
+    language,
+    level,
+    certificate_title: certificateTitle,
     issuer,
     date,
     description,
@@ -38,8 +55,9 @@ function normalizeAchievement(raw: any): AchievementItem | null {
 function dedupeAchievements(items: AchievementItem[]) {
   const seen = new Set<string>();
   return items.filter((item) => {
-    const key = `${item.category}|${normalizeText(item.title).toLowerCase()}|${normalizeText(item.issuer).toLowerCase()}|${normalizeText(item.date).toLowerCase()}`;
-    if (!item.title && !item.issuer && !item.date && !item.description) return false;
+    const primary = item.category === "idioma" ? normalizeText(item.language || item.title) : normalizeText(item.title);
+    const key = `${item.category}|${primary.toLowerCase()}|${normalizeText(item.level).toLowerCase()}|${normalizeText(item.issuer).toLowerCase()}|${normalizeText(item.date).toLowerCase()}`;
+    if (!primary && !item.issuer && !item.date && !item.description) return false;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -55,15 +73,18 @@ function buildAchievementsCatalog(profile: any, candidateProfile: any) {
     : [];
   const profileLanguages = Array.isArray(profile?.languages)
     ? profile.languages
-        .map((item: any) => normalizeText(item))
-        .filter(Boolean)
-        .map((title: string) => ({
-          title,
-          issuer: null,
-          date: null,
-          description: null,
-          category: "idioma" as AchievementCategory,
-        }))
+      .map((item: any) => normalizeText(item))
+      .filter(Boolean)
+      .map((title: string) => ({
+        title,
+        language: title,
+        level: null,
+        certificate_title: null,
+        issuer: null,
+        date: null,
+        description: null,
+        category: "idioma" as AchievementCategory,
+      }))
     : [];
 
   const merged = dedupeAchievements([...profileLanguages, ...achievements, ...certificationsLegacy] as AchievementItem[]);
@@ -113,7 +134,7 @@ export async function GET() {
   return NextResponse.json({
     profile: {
       ...(candidateProfile || {}),
-      languages: achievementsCatalog.languages.map((item) => item.title),
+      languages: achievementsCatalog.languages.map((item) => formatLanguageLabel(item) || item.title).filter(Boolean),
       achievements: achievementsCatalog.all,
       achievements_catalog: achievementsCatalog,
     },
@@ -146,7 +167,7 @@ export async function PUT(req: Request) {
   const certifications = normalizedAchievements.filter((item) => item.category === "certificacion");
   const languages = normalizedAchievements
     .filter((item) => item.category === "idioma")
-    .map((item) => item.title)
+    .map((item) => normalizeText(item.language || item.title))
     .filter(Boolean);
 
   const payload = {
@@ -189,7 +210,7 @@ export async function PUT(req: Request) {
     ok: true,
     profile: {
       ...(nextCandidateProfile || {}),
-      languages: achievementsCatalog.languages.map((item) => item.title),
+      languages: achievementsCatalog.languages.map((item) => formatLanguageLabel(item) || item.title).filter(Boolean),
       achievements: achievementsCatalog.all,
       achievements_catalog: achievementsCatalog,
     },

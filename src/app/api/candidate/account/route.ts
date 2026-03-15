@@ -228,12 +228,20 @@ export async function POST(request: Request) {
       result = await resetCandidateAccountForQa({
         admin,
         userId: user.id,
+        userEmail: user.email || "",
       });
     } catch (error: any) {
       return json(500, {
         error: "candidate_reset_failed",
         details: String(error?.message || error),
         user_message: "No se pudo resetear la cuenta candidata de prueba. Revisa dependencias históricas pendientes o intenta de nuevo.",
+      });
+    }
+
+    if (!result?.ok) {
+      return json(result?.error === "candidate_reset_forbidden" ? 403 : 400, {
+        error: result?.error || "candidate_reset_failed",
+        user_message: result?.user_message || "No se pudo resetear la cuenta candidata de prueba.",
       });
     }
 
@@ -249,8 +257,8 @@ export async function POST(request: Request) {
         has_identity: false,
       },
       cleaned: result.cleaned,
-      user_message:
-        "La cuenta candidata de prueba ha quedado reseteada. Ya puedes rehacer onboarding, perfil, verificaciones y pricing desde cero.",
+      validation: result.validation,
+      user_message: "Cuenta candidata de prueba reseteada correctamente.",
     });
   }
 

@@ -338,7 +338,7 @@ export default function CandidateSettings() {
     });
     if (result?.ok) {
       window.setTimeout(() => {
-        window.location.href = "/onboarding?qa_reset=1";
+        window.location.href = "/candidate/onboarding?qa_reset=1";
       }, 900);
     }
   }
@@ -578,8 +578,8 @@ export default function CandidateSettings() {
                 <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
                   <h3 className="text-sm font-semibold text-sky-950">Reset cuenta candidata de prueba</h3>
                   <p className="mt-2 text-sm text-sky-900">
-                    Esta opción limpia tu estado operativo para rehacer QA manual desde cero: perfil, experiencias, evidencias, verificaciones,
-                    enlaces públicos, onboarding y estado visible del plan.
+                    Esta opción limpia tu workspace candidato de prueba para rehacer QA manual desde cero: perfil, experiencias, formación,
+                    idiomas, logros, CV importado, foto, evidencias, verificaciones, enlaces públicos, onboarding y estado visible del plan.
                   </p>
                   <p className="mt-2 text-sm text-sky-900">
                     No elimina el usuario de Auth ni pretende destruir trazas mínimas técnicas que puedan quedar fuera del workspace operativo.

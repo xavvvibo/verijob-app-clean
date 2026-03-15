@@ -1,5 +1,23 @@
 type SupabaseLike = any;
 
+const QA_CANDIDATE_RESET_EMAIL = "xavvvibo@gmail.com";
+const CANDIDATE_AVATAR_BUCKET = process.env.SUPABASE_AVATAR_BUCKET || "candidate-avatars";
+
+function extractPathFromSupabasePublicUrl(urlRaw: unknown, bucket: string) {
+  const url = String(urlRaw || "").trim();
+  if (!url) return null;
+  const marker = `/storage/v1/object/public/${bucket}/`;
+  const idx = url.indexOf(marker);
+  if (idx < 0) return null;
+  const rawPath = url.slice(idx + marker.length);
+  if (!rawPath) return null;
+  try {
+    return decodeURIComponent(rawPath);
+  } catch {
+    return rawPath;
+  }
+}
+
 function isMissingRelationError(error: any, relation: string) {
   const code = String(error?.code || "");
   const message = String(error?.message || "").toLowerCase();
@@ -32,6 +50,16 @@ async function bestEffortDelete(builderPromise: Promise<any>, relationName: stri
     throw result.error;
   }
   return result;
+}
+
+async function bestEffortStorageRemove(admin: SupabaseLike, bucket: string, paths: string[]) {
+  const clean = Array.from(new Set(paths.map((p) => String(p || "").trim()).filter(Boolean)));
+  if (!clean.length) return 0;
+  const { error } = await admin.storage.from(bucket).remove(clean);
+  if (error && !String(error?.message || "").toLowerCase().includes("not found")) {
+    throw error;
+  }
+  return clean.length;
 }
 
 async function deactivatePlanOverridesForQa(admin: SupabaseLike, userId: string, nowIso: string) {
@@ -84,11 +112,38 @@ async function resetLatestSubscriptionToFree(admin: SupabaseLike, userId: string
 export async function resetCandidateAccountForQa(args: {
   admin: SupabaseLike;
   userId: string;
+  userEmail: string;
 }) {
-  const { admin, userId } = args;
+  const { admin, userId, userEmail } = args;
+  if (String(userEmail || "").trim().toLowerCase() !== QA_CANDIDATE_RESET_EMAIL) {
+    return {
+      ok: false as const,
+      error: "candidate_reset_forbidden",
+      user_message: "Este reset de cuenta candidata de prueba no está disponible para este usuario.",
+    };
+  }
+
   const nowIso = new Date().toISOString();
   const profileColumns = await getTableColumns(admin, "profiles");
   const candidateProfileColumns = await getTableColumns(admin, "candidate_profiles");
+  const [hasCvUploads, hasCvParseJobs, hasVerificationPublicLinks, hasExperiences] = await Promise.all([
+    tableExists(admin, "cv_uploads"),
+    tableExists(admin, "cv_parse_jobs"),
+    tableExists(admin, "verification_public_links"),
+    tableExists(admin, "experiences"),
+  ]);
+
+  const { data: profileRow, error: profileReadErr } = await admin
+    .from("profiles")
+    .select("avatar_url")
+    .eq("id", userId)
+    .maybeSingle();
+  if (profileReadErr && !isMissingRelationError(profileReadErr, "profiles")) throw profileReadErr;
+
+  const avatarPath = extractPathFromSupabasePublicUrl((profileRow as any)?.avatar_url, CANDIDATE_AVATAR_BUCKET);
+
+  const evidenceStoragePaths: string[] = [];
+  const cvStorageByBucket = new Map<string, string[]>();
 
   const { data: employmentRows, error: employmentErr } = await admin
     .from("employment_records")
@@ -115,6 +170,15 @@ export async function resetCandidateAccountForQa(args: {
   const verificationIds = Array.from(verificationIdSet);
 
   if (await tableExists(admin, "evidences")) {
+    const { data: evidenceRows, error: evidenceReadErr } = await admin
+      .from("evidences")
+      .select("storage_path")
+      .eq("uploaded_by", userId);
+    if (evidenceReadErr && !isMissingRelationError(evidenceReadErr, "evidences")) throw evidenceReadErr;
+    for (const row of Array.isArray(evidenceRows) ? evidenceRows : []) {
+      const path = String((row as any)?.storage_path || "").trim();
+      if (path) evidenceStoragePaths.push(path);
+    }
     if (verificationIds.length) {
       await bestEffortDelete(admin.from("evidences").delete().in("verification_request_id", verificationIds), "evidences");
     }
@@ -125,8 +189,41 @@ export async function resetCandidateAccountForQa(args: {
     await bestEffortDelete(admin.from("candidate_public_links").delete().eq("candidate_id", userId), "candidate_public_links");
   }
 
+  if (hasVerificationPublicLinks && verificationIds.length) {
+    await bestEffortDelete(admin.from("verification_public_links").delete().in("verification_id", verificationIds), "verification_public_links");
+  }
+
   if (await tableExists(admin, "profile_view_consumptions")) {
     await bestEffortDelete(admin.from("profile_view_consumptions").delete().eq("candidate_id", userId), "profile_view_consumptions");
+  }
+
+  if (hasCvUploads) {
+    const { data: cvUploads, error: cvUploadsErr } = await admin
+      .from("cv_uploads")
+      .select("id,storage_bucket,storage_path")
+      .eq("user_id", userId);
+    if (cvUploadsErr && !isMissingRelationError(cvUploadsErr, "cv_uploads")) throw cvUploadsErr;
+    const cvUploadIds = (Array.isArray(cvUploads) ? cvUploads : [])
+      .map((row: any) => String(row?.id || ""))
+      .filter(Boolean);
+    for (const row of Array.isArray(cvUploads) ? cvUploads : []) {
+      const bucket = String((row as any)?.storage_bucket || "candidate-cv").trim();
+      const storagePath = String((row as any)?.storage_path || "").trim();
+      if (!storagePath) continue;
+      const bucketPaths = cvStorageByBucket.get(bucket) || [];
+      bucketPaths.push(storagePath);
+      cvStorageByBucket.set(bucket, bucketPaths);
+    }
+    if (hasCvParseJobs && cvUploadIds.length) {
+      await bestEffortDelete(admin.from("cv_parse_jobs").delete().in("cv_upload_id", cvUploadIds), "cv_parse_jobs");
+    } else if (hasCvParseJobs) {
+      await bestEffortDelete(admin.from("cv_parse_jobs").delete().eq("user_id", userId), "cv_parse_jobs");
+    }
+    if (cvUploadIds.length) {
+      await bestEffortDelete(admin.from("cv_uploads").delete().in("id", cvUploadIds), "cv_uploads");
+    }
+  } else if (hasCvParseJobs) {
+    await bestEffortDelete(admin.from("cv_parse_jobs").delete().eq("user_id", userId), "cv_parse_jobs");
   }
 
   if (verificationIds.length) {
@@ -135,10 +232,57 @@ export async function resetCandidateAccountForQa(args: {
   if (employmentIds.length) {
     await bestEffortDelete(admin.from("employment_records").delete().in("id", employmentIds), "employment_records");
   }
+  await bestEffortDelete(admin.from("profile_experiences").delete().eq("user_id", userId), "profile_experiences");
+  if (hasExperiences) {
+    await bestEffortDelete(admin.from("experiences").delete().eq("user_id", userId), "experiences");
+  }
 
   if (candidateProfileColumns.size) {
-    const { error: candidateProfileDeleteErr } = await admin.from("candidate_profiles").delete().eq("user_id", userId);
-    if (candidateProfileDeleteErr && !isMissingRelationError(candidateProfileDeleteErr, "candidate_profiles")) throw candidateProfileDeleteErr;
+    const candidatePatch: Record<string, any> = {};
+    const nullFields = [
+      "summary",
+      "work_zones",
+      "job_search_status",
+      "availability_start",
+      "preferred_workday",
+      "raw_cv_json",
+      "trust_score",
+      "trust_score_breakdown",
+      "other_achievements",
+      "headline",
+      "location",
+      "phone",
+      "portfolio_url",
+      "linkedin_url",
+      "website_url",
+    ];
+    const emptyArrayFields = [
+      "education",
+      "achievements",
+      "certifications",
+      "preferred_roles",
+      "availability_schedule",
+    ];
+    const falseFields = [
+      "allow_company_email_contact",
+      "allow_company_phone_contact",
+      "show_trust_score",
+      "show_verification_counts",
+      "show_verified_timeline",
+    ];
+    for (const field of nullFields) {
+      if (candidateProfileColumns.has(field)) candidatePatch[field] = null;
+    }
+    for (const field of emptyArrayFields) {
+      if (candidateProfileColumns.has(field)) candidatePatch[field] = [];
+    }
+    for (const field of falseFields) {
+      if (candidateProfileColumns.has(field)) candidatePatch[field] = false;
+    }
+    if (candidateProfileColumns.has("updated_at")) candidatePatch.updated_at = nowIso;
+
+    const { error: candidateProfileUpdateErr } = await admin.from("candidate_profiles").update(candidatePatch).eq("user_id", userId);
+    if (candidateProfileUpdateErr && !isMissingRelationError(candidateProfileUpdateErr, "candidate_profiles")) throw candidateProfileUpdateErr;
   }
 
   await deactivatePlanOverridesForQa(admin, userId, nowIso);
@@ -148,20 +292,66 @@ export async function resetCandidateAccountForQa(args: {
     onboarding_completed: false,
     active_company_id: null,
   };
+  if (profileColumns.has("onboarding_step")) profilePatch.onboarding_step = "cv";
   if (profileColumns.has("lifecycle_status")) profilePatch.lifecycle_status = "active";
   if (profileColumns.has("deleted_at")) profilePatch.deleted_at = null;
   if (profileColumns.has("deletion_requested_at")) profilePatch.deletion_requested_at = null;
   if (profileColumns.has("deletion_mode")) profilePatch.deletion_mode = null;
   if (profileColumns.has("full_name")) profilePatch.full_name = null;
+  if (profileColumns.has("phone")) profilePatch.phone = null;
   if (profileColumns.has("title")) profilePatch.title = null;
   if (profileColumns.has("location")) profilePatch.location = null;
+  if (profileColumns.has("address_line1")) profilePatch.address_line1 = null;
+  if (profileColumns.has("address_line2")) profilePatch.address_line2 = null;
+  if (profileColumns.has("city")) profilePatch.city = null;
+  if (profileColumns.has("region")) profilePatch.region = null;
+  if (profileColumns.has("postal_code")) profilePatch.postal_code = null;
+  if (profileColumns.has("country")) profilePatch.country = null;
   if (profileColumns.has("identity_type")) profilePatch.identity_type = null;
   if (profileColumns.has("identity_masked")) profilePatch.identity_masked = null;
   if (profileColumns.has("identity_hash")) profilePatch.identity_hash = null;
+  if (profileColumns.has("avatar_url")) profilePatch.avatar_url = null;
   if (profileColumns.has("languages")) profilePatch.languages = [];
+  if (profileColumns.has("cv_consistency_score")) profilePatch.cv_consistency_score = 0;
+  if (profileColumns.has("profile_visibility")) profilePatch.profile_visibility = "private";
+  if (profileColumns.has("show_personal")) profilePatch.show_personal = true;
+  if (profileColumns.has("show_experience")) profilePatch.show_experience = true;
+  if (profileColumns.has("show_education")) profilePatch.show_education = true;
+  if (profileColumns.has("show_achievements")) profilePatch.show_achievements = true;
 
   const { error: profileUpdateErr } = await admin.from("profiles").update(profilePatch).eq("id", userId);
   if (profileUpdateErr) throw profileUpdateErr;
+
+  if (avatarPath) {
+    await bestEffortStorageRemove(admin, CANDIDATE_AVATAR_BUCKET, [avatarPath]);
+  }
+  if (evidenceStoragePaths.length) {
+    await bestEffortStorageRemove(admin, "evidence", evidenceStoragePaths);
+  }
+  for (const [bucket, paths] of cvStorageByBucket.entries()) {
+    await bestEffortStorageRemove(admin, bucket, paths);
+  }
+
+  const trustResult = await import("@/server/trustScore/calculateTrustScore").then((mod) =>
+    mod.recalculateAndPersistCandidateTrustScore(userId),
+  );
+
+  const [postProfileRes, postCandidateProfileRes, postExperiencesRes, postEvidencesRes] = await Promise.all([
+    admin.from("profiles").select("avatar_url,onboarding_completed").eq("id", userId).maybeSingle(),
+    admin
+      .from("candidate_profiles")
+      .select("education,achievements,certifications,trust_score")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    admin.from("profile_experiences").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    admin.from("evidences").select("id", { count: "exact", head: true }).eq("uploaded_by", userId),
+  ]);
+
+  const postCandidateProfile = postCandidateProfileRes.data || {};
+  const educationCount = Array.isArray((postCandidateProfile as any)?.education) ? (postCandidateProfile as any).education.length : 0;
+  const achievementsRaw = Array.isArray((postCandidateProfile as any)?.achievements) ? (postCandidateProfile as any).achievements : [];
+  const certificationsRaw = Array.isArray((postCandidateProfile as any)?.certifications) ? (postCandidateProfile as any).certifications : [];
+  const achievementsCount = achievementsRaw.length + certificationsRaw.length;
 
   try {
     await admin.auth.admin.updateUserById(userId, { ban_duration: "none" });
@@ -170,11 +360,26 @@ export async function resetCandidateAccountForQa(args: {
   return {
     ok: true as const,
     cleaned: {
+      avatar_deleted: Boolean(avatarPath),
+      cv_uploads_deleted: Array.from(cvStorageByBucket.values()).reduce((acc, rows) => acc + rows.length, 0),
+      evidences_deleted: evidenceStoragePaths.length,
+      profile_experiences_deleted: true,
       employment_records_deleted: employmentIds.length,
       verification_requests_deleted: verificationIds.length,
-      candidate_profile_deleted: Boolean(candidateProfileColumns.size),
+      candidate_profile_cleared: Boolean(candidateProfileColumns.size),
       public_links_deleted: true,
       subscription_reset: subscriptionReset,
+      trust_score_recalculated: true,
+      trust_score: trustResult.score,
+    },
+    validation: {
+      experience_count: Number(postExperiencesRes.count || 0),
+      education_count: educationCount,
+      achievements_count: achievementsCount,
+      avatar_url: (postProfileRes.data as any)?.avatar_url || null,
+      evidences_count: Number(postEvidencesRes.count || 0),
+      onboarding_completed: Boolean((postProfileRes.data as any)?.onboarding_completed),
+      trust_score: Number((postCandidateProfile as any)?.trust_score ?? trustResult.score ?? 0),
     },
   };
 }
