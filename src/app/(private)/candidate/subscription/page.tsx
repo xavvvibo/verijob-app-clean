@@ -7,6 +7,7 @@ import { getCandidatePlanCapabilities, normalizeCandidateCommercialPlan } from "
 export const dynamic = "force-dynamic";
 
 type CandidateCheckoutPlan =
+  | "candidate_starter_monthly"
   | "candidate_pro_monthly"
   | "candidate_proplus_monthly"
   | "candidate_proplus_yearly";
@@ -247,7 +248,15 @@ export default function CandidateSubscriptionPage() {
   }
 
   const upgrades = useMemo<PlanOption[]>(() => {
-    if (currentTier === "free" || currentTier === "starter") {
+    if (currentTier === "free") {
+      return [
+        { label: "Elegir Starter", planKey: "candidate_starter_monthly" },
+        { label: "Mejorar a Pro", planKey: "candidate_pro_monthly" },
+        { label: "Pro+ mensual", planKey: "candidate_proplus_monthly" },
+        { label: "Pro+ anual", planKey: "candidate_proplus_yearly" },
+      ];
+    }
+    if (currentTier === "starter") {
       return [
         { label: "Mejorar a Pro", planKey: "candidate_pro_monthly" },
         { label: "Pro+ mensual", planKey: "candidate_proplus_monthly" },

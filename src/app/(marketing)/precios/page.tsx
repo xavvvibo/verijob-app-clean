@@ -3,6 +3,7 @@
 import { useState } from "react";
 
 type CheckoutPlanKey =
+  | "candidate_starter_monthly"
   | "candidate_pro_monthly"
   | "candidate_proplus_monthly"
   | "candidate_proplus_yearly";
@@ -56,9 +57,14 @@ export default function Precios() {
       monthly: { label: "0 €" },
     },
     {
+      name: "Starter",
+      summary: "Todo lo de Free, más hasta 2 verificaciones laborales y 2 académicas activas. Sin QR y sin descarga de CV verificado.",
+      monthly: { label: "2,99 €/mes", planKey: "candidate_starter_monthly" },
+    },
+    {
       name: "Pro",
       badge: "Más popular",
-      summary: "Todo lo de Free, más comparte tu perfil también por QR. Incluye hasta 3 verificaciones laborales y 3 académicas activas.",
+      summary: "Todo lo de Starter, más comparte tu perfil también por QR. Incluye hasta 3 verificaciones laborales y 3 académicas activas.",
       monthly: { label: "4,99 €/mes", planKey: "candidate_pro_monthly" },
     },
     {
@@ -109,7 +115,7 @@ export default function Precios() {
 
       <section className="mt-10">
         <h2 className="text-2xl font-semibold">Candidatos</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
+        <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {candidatePlans.map((plan) => {
             const featured = plan.badge === "Más popular";
             return (
@@ -126,6 +132,27 @@ export default function Precios() {
                   ) : null}
                 </div>
                 <p className="mt-2 text-sm text-slate-600">{plan.summary}</p>
+                <ul className="mt-4 space-y-2 text-sm text-slate-600">
+                  <li>Compartir por link: <span className="font-semibold text-slate-900">Sí</span></li>
+                  <li>
+                    Compartir por QR: <span className="font-semibold text-slate-900">{plan.name === "Pro" || plan.name === "Pro+" ? "Sí" : "No"}</span>
+                  </li>
+                  <li>
+                    Verificaciones activas:{" "}
+                    <span className="font-semibold text-slate-900">
+                      {plan.name === "Free"
+                        ? "1 laboral + 1 académica"
+                        : plan.name === "Starter"
+                          ? "2 laborales + 2 académicas"
+                          : plan.name === "Pro"
+                            ? "3 laborales + 3 académicas"
+                            : "Ilimitadas"}
+                    </span>
+                  </li>
+                  <li>
+                    Descarga CV verificado: <span className="font-semibold text-slate-900">{plan.name === "Pro+" ? "Sí" : "No"}</span>
+                  </li>
+                </ul>
 
                 <div className="mt-4 space-y-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
                   <div className="flex items-center justify-between gap-3">
@@ -152,7 +179,7 @@ export default function Precios() {
                     href="/signup"
                     className="mt-4 inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
                   >
-                    Comenzar gratis
+                    Empezar gratis
                   </a>
                 ) : (
                   <div className="mt-4 flex flex-wrap gap-2">
@@ -162,7 +189,13 @@ export default function Precios() {
                       disabled={loadingPlan !== null || !plan.monthly.planKey}
                       className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
                     >
-                      {loadingPlan === plan.monthly.planKey ? "Procesando…" : plan.name === "Pro" ? "Mejorar a Pro" : "Mejorar a Pro+"}
+                      {loadingPlan === plan.monthly.planKey
+                        ? "Procesando…"
+                        : plan.name === "Starter"
+                          ? "Elegir Starter"
+                          : plan.name === "Pro"
+                            ? "Mejorar a Pro"
+                            : "Mejorar a Pro+"}
                     </button>
                     {plan.yearly?.planKey ? (
                       <button
