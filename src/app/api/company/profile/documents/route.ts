@@ -8,7 +8,7 @@ import {
   resolveCompanyDocumentReviewPriority,
 } from "@/lib/company/document-verification";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
-import { readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
+import { readEffectiveCompanySubscriptionState } from "@/lib/billing/effectiveSubscription";
 
 export const dynamic = "force-dynamic";
 
@@ -274,7 +274,10 @@ export async function GET() {
       .select("tax_id,legal_name,trade_name,contact_email,website_url,verification_document_type,verification_document_uploaded_at")
       .eq("company_id", companyId)
       .maybeSingle();
-    const effectiveSubscription = await readEffectiveSubscriptionState(admin, user.id);
+    const effectiveSubscription = await readEffectiveCompanySubscriptionState(admin, {
+      userId: user.id,
+      companyId,
+    });
     const finalizedDocs = await finalizeCompanyDocumentsIfDue({
       admin,
       docs: docsState.documents,
@@ -357,7 +360,10 @@ export async function POST(request: Request) {
     }
 
     const nowIso = new Date().toISOString();
-    const effectiveSubscription = await readEffectiveSubscriptionState(admin, user.id);
+    const effectiveSubscription = await readEffectiveCompanySubscriptionState(admin, {
+      userId: user.id,
+      companyId,
+    });
     const reviewPriority = resolveCompanyDocumentReviewPriority(effectiveSubscription.plan);
     const extracted = bestEffortExtractCompanyData(bytes);
     const insertPayload = {

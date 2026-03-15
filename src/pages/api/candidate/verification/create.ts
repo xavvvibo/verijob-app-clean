@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { createClient } from "@supabase/supabase-js";
 import { createPagesRouteClient } from "@/utils/supabase/pages";
 import { buildExternalExperienceVerificationEmail } from "@/lib/email/templates/externalExperienceVerification";
+import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -349,6 +350,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       email_sent: false,
     });
   }
+
+  await trackEventAdmin({
+    event_name: "verification_created",
+    user_id: user.id,
+    entity_type: "verification_request",
+    entity_id: String(data?.id || ""),
+    metadata: {
+      channel: "email",
+      deduped: false,
+      employment_record_id: resolvedEmployment.id,
+    },
+  });
 
   return res.status(200).json({
     ok: true,

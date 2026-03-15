@@ -136,9 +136,10 @@ export default async function OwnerMonetizationPage() {
   const activeCreditGrants = creditGrants.filter((row: any) => row.is_active !== false).length;
   const activeManualGrants = manualGrants.filter((row: any) => String(row.status || "").toLowerCase() === "active").length;
   const totalPromoRedemptions = Number(summary?.total_promo_redemptions ?? promoRedemptions.length);
+  const summarySourceAvailable = !summaryRes.error;
   const creditSourceAvailable = !creditGrantsRes.error;
-  const consumptionSourceAvailable = !consumptionsRes.error && !summaryRes.error;
-  const purchaseSourceAvailable = !purchasesRes.error && !summaryRes.error;
+  const consumptionSourceAvailable = summarySourceAvailable || !consumptionsRes.error;
+  const purchaseSourceAvailable = summarySourceAvailable || !purchasesRes.error;
   const hasOverspendWarning = totalCreditsConsumed > totalCreditsGranted;
   const hasConsumptionWithoutPurchaseWarning = totalCreditsConsumed > 0 && purchases.length === 0;
   const acquisition = await loadVerificationCompanyAcquisition(supabase, { filter: "all" });
@@ -324,7 +325,9 @@ export default async function OwnerMonetizationPage() {
               {hasOverspendWarning || hasConsumptionWithoutPurchaseWarning ? "Revisión recomendada" : "Coherencia básica OK"}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              La conciliación es fiable para compras y consumos nuevos. Los datos legacy anteriores a este log pueden no estar completos.
+              {summarySourceAvailable
+                ? "La conciliación usa la vista resumen y tablas auditadas. Los datos legacy anteriores a este log pueden no estar completos."
+                : "La vista resumen no está disponible; esta lectura usa fallback directo a tablas auditadas y puede ser menos completa para datos legacy."}
             </p>
           </article>
         </div>

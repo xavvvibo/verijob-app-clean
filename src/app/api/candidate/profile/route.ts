@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { buildCandidateProfileCompletionModel } from "@/lib/candidate/profile-completion";
 
 function normalizeText(value: unknown) {
   return String(value || "").trim();
@@ -98,9 +99,11 @@ function buildAchievementsCatalog(profile: any, candidateProfile: any) {
 }
 
 async function readProfileAndCandidateProfile(supabase: any, userId: string) {
-  const [profileRes, candidateProfileRes] = await Promise.all([
+  const [profileRes, candidateProfileRes, experienceCountRes, evidenceCountRes] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
     supabase.from("candidate_profiles").select("*").eq("user_id", userId).maybeSingle(),
+    supabase.from("profile_experiences").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    supabase.from("evidences").select("id", { count: "exact", head: true }).eq("uploaded_by", userId),
   ]);
 
   if (profileRes.error) {
@@ -109,10 +112,20 @@ async function readProfileAndCandidateProfile(supabase: any, userId: string) {
   if (candidateProfileRes.error) {
     return { error: NextResponse.json({ error: candidateProfileRes.error.message }, { status: 400 }) };
   }
+  if (experienceCountRes.error) {
+    return { error: NextResponse.json({ error: experienceCountRes.error.message }, { status: 400 }) };
+  }
+  if (evidenceCountRes.error) {
+    return { error: NextResponse.json({ error: evidenceCountRes.error.message }, { status: 400 }) };
+  }
 
   return {
     profile: profileRes.data || null,
     candidateProfile: candidateProfileRes.data || null,
+    counts: {
+      experience_count: Number(experienceCountRes.count || 0),
+      evidence_count: Number(evidenceCountRes.count || 0),
+    },
   };
 }
 
@@ -138,8 +151,15 @@ export async function GET() {
 
   const read = await readProfileAndCandidateProfile(supabase, user.id);
   if ((read as any).error) return (read as any).error;
-  const { profile, candidateProfile } = read as any;
+  const { profile, candidateProfile, counts } = read as any;
   const achievementsCatalog = buildAchievementsCatalog(profile, candidateProfile);
+  const profileCompletion = buildCandidateProfileCompletionModel({
+    profile,
+    candidateProfile,
+    experienceCount: Number(counts?.experience_count || 0),
+    evidenceCount: Number(counts?.evidence_count || 0),
+    achievementsCount: achievementsCatalog.all.length,
+  });
 
   return NextResponse.json({
     profile: {
@@ -148,6 +168,8 @@ export async function GET() {
       achievements: achievementsCatalog.all,
       achievements_catalog: achievementsCatalog,
     },
+    profile_completion: profileCompletion,
+    counts,
   });
 }
 
@@ -164,7 +186,7 @@ export async function PUT(req: Request) {
   const body = await req.json().catch(() => ({}));
   const read = await readProfileAndCandidateProfile(supabase, user.id);
   if ((read as any).error) return (read as any).error;
-  const { profile, candidateProfile } = read as any;
+  const { profile, candidateProfile, counts } = read as any;
 
   const achievementsInput = Array.isArray(body?.achievements)
     ? body.achievements
@@ -226,6 +248,13 @@ export async function PUT(req: Request) {
   }
 
   const achievementsCatalog = buildAchievementsCatalog({ ...(profile || {}), languages }, nextCandidateProfile);
+  const profileCompletion = buildCandidateProfileCompletionModel({
+    profile: { ...(profile || {}), languages },
+    candidateProfile: nextCandidateProfile,
+    experienceCount: Number(counts?.experience_count || 0),
+    evidenceCount: Number(counts?.evidence_count || 0),
+    achievementsCount: achievementsCatalog.all.length,
+  });
   return NextResponse.json({
     ok: true,
     profile: {
@@ -234,5 +263,7 @@ export async function PUT(req: Request) {
       achievements: achievementsCatalog.all,
       achievements_catalog: achievementsCatalog,
     },
+    profile_completion: profileCompletion,
+    counts,
   });
 }

@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
-import { effectivePlanDisplay, readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
+import {
+  effectivePlanDisplay,
+  readEffectiveCompanySubscriptionState,
+  readEffectiveSubscriptionState,
+} from "@/lib/billing/effectiveSubscription";
 import { getCandidatePlanCapabilities, getCompanyPlanCapabilities } from "@/lib/billing/planCapabilities";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
@@ -143,7 +147,13 @@ export default async function OwnerUserDetailPage({ params }: any) {
     deletion_reason: profileUser?.deletion_reason ? String(profileUser.deletion_reason) : null,
   };
   const latestSub = Array.isArray(subscriptionsRes.data) && subscriptionsRes.data.length > 0 ? subscriptionsRes.data[0] : null;
-  const effectiveSubscription = await readEffectiveSubscriptionState(admin, targetUserId);
+  const effectiveSubscription =
+    String(user.role || "").toLowerCase() === "company" && user.active_company_id
+      ? await readEffectiveCompanySubscriptionState(admin, {
+          userId: targetUserId,
+          companyId: String(user.active_company_id),
+        })
+      : await readEffectiveSubscriptionState(admin, targetUserId);
   const effectivePlan = effectivePlanDisplay(effectiveSubscription);
 
   let activeCompanyName: string | null = null;

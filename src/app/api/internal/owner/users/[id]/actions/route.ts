@@ -6,7 +6,10 @@ import {
   managedPlanLabel,
   normalizeManagedSubscriptionPlanKey,
 } from "@/lib/billing/managedPlans";
-import { readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
+import {
+  readEffectiveCompanySubscriptionState,
+  readEffectiveSubscriptionState,
+} from "@/lib/billing/effectiveSubscription";
 import { buildSubscriptionLifecycleEmail } from "@/lib/email/templates/subscriptionLifecycle";
 import { sendTransactionalEmail } from "@/server/email/sendTransactionalEmail";
 
@@ -118,6 +121,36 @@ function getAppUrl() {
   return String(process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es").replace(/\/+$/, "");
 }
 
+async function readLatestSubscriptionForTarget(args: {
+  admin: any;
+  targetUserId: string;
+  activeCompanyId?: string | null;
+  subscriptionsColumns?: Set<string>;
+}) {
+  const subscriptionsColumns =
+    args.subscriptionsColumns || (await getTableColumns(args.admin, "subscriptions"));
+  const hasCompanyId = subscriptionsColumns.has("company_id");
+  if (hasCompanyId && args.activeCompanyId) {
+    const { data } = await args.admin
+      .from("subscriptions")
+      .select("id,plan,status,current_period_end,metadata,company_id")
+      .eq("company_id", args.activeCompanyId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data) return data;
+  }
+
+  const { data } = await args.admin
+    .from("subscriptions")
+    .select("id,plan,status,current_period_end,metadata")
+    .eq("user_id", args.targetUserId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data || null;
+}
+
 async function sendOwnerSubscriptionEmail(args: {
   kind: "owner_plan_updated" | "trial_extended";
   toEmail: string | null;
@@ -220,9 +253,16 @@ export async function POST(req: Request, ctx: any) {
     .maybeSingle();
 
   const role = String(targetProfile?.role || "").toLowerCase();
+  const activeCompanyId = String(targetProfile?.active_company_id || "").trim() || null;
 
   if (actionType === ACTION_CHANGE_PLAN || actionType === ACTION_CANCEL_SUBSCRIPTION) {
-    const effectiveBefore = await readEffectiveSubscriptionState(owner.admin, targetUserId);
+    const isCompanyTarget = role === "company" && activeCompanyId;
+    const effectiveBefore = isCompanyTarget
+      ? await readEffectiveCompanySubscriptionState(owner.admin, {
+          userId: targetUserId,
+          companyId: activeCompanyId,
+        })
+      : await readEffectiveSubscriptionState(owner.admin, targetUserId);
     const targetPlan =
       actionType === ACTION_CANCEL_SUBSCRIPTION
         ? "free"
@@ -246,14 +286,6 @@ export async function POST(req: Request, ctx: any) {
       return json(400, { error: "invalid_target_plan_for_role" });
     }
 
-    const { data: latestSub } = await owner.admin
-      .from("subscriptions")
-      .select("id,plan,status,current_period_end,metadata")
-      .eq("user_id", targetUserId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
     await owner.admin
       .from("plan_overrides")
       .update({
@@ -268,6 +300,12 @@ export async function POST(req: Request, ctx: any) {
       .eq("is_active", true);
 
     const columns = await getTableColumns(owner.admin, "subscriptions");
+    const latestSub = await readLatestSubscriptionForTarget({
+      admin: owner.admin,
+      targetUserId,
+      activeCompanyId,
+      subscriptionsColumns: columns,
+    });
     const metadata = {
       ...(asObject((latestSub as any)?.metadata)),
       owner_override: {
@@ -292,6 +330,9 @@ export async function POST(req: Request, ctx: any) {
     if (columns.has("current_period_end")) {
       updatePayload.current_period_end = targetPlan === "free" ? new Date().toISOString() : (latestSub as any)?.current_period_end || null;
     }
+    if (columns.has("company_id") && activeCompanyId && inferredRole === "company") {
+      updatePayload.company_id = activeCompanyId;
+    }
 
     let resultRow: any = null;
     if ((latestSub as any)?.id) {
@@ -308,6 +349,28 @@ export async function POST(req: Request, ctx: any) {
       resultRow = updated;
     } else {
       if (targetPlan !== "free") {
+        if (inferredRole === "company" && activeCompanyId) {
+          const insertPayload: Record<string, any> = {
+            user_id: targetUserId,
+            plan: targetPlan,
+            status: "active",
+            metadata,
+          };
+          if (columns.has("company_id")) insertPayload.company_id = activeCompanyId;
+          if (columns.has("amount")) insertPayload.amount = estimatedAmount ?? 0;
+          if (columns.has("currency")) insertPayload.currency = "eur";
+          if (columns.has("current_period_end")) insertPayload.current_period_end = null;
+          const { data: inserted, error: insertErr } = await owner.admin
+            .from("subscriptions")
+            .insert(insertPayload)
+            .select("id,plan,status,current_period_end,metadata")
+            .single();
+          if (insertErr) {
+            const classified = classifyPlanPersistenceError(insertErr);
+            return json(400, classified);
+          }
+          resultRow = inserted;
+        } else {
         const { data: overrideRow, error: overrideErr } = await owner.admin
           .from("plan_overrides")
           .insert({
@@ -337,6 +400,7 @@ export async function POST(req: Request, ctx: any) {
           metadata: overrideRow.metadata,
           source: "override",
         };
+        }
       } else {
         resultRow = {
           id: null,
@@ -396,13 +460,12 @@ export async function POST(req: Request, ctx: any) {
     }
     if (mode === "date" && !untilIso) return json(400, { error: "invalid_trial_date" });
 
-    const { data: latestSub } = await owner.admin
-      .from("subscriptions")
-      .select("id,plan,status,current_period_end,metadata")
-      .eq("user_id", targetUserId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+    const latestSub = await readLatestSubscriptionForTarget({
+      admin: owner.admin,
+      targetUserId,
+      activeCompanyId,
+      subscriptionsColumns: columns,
+    });
 
     const baseTs = (() => {
       const current = Date.parse(String((latestSub as any)?.current_period_end || ""));
@@ -445,6 +508,9 @@ export async function POST(req: Request, ctx: any) {
         status: "trialing",
         metadata,
       };
+      if (columns.has("company_id") && activeCompanyId && role === "company") {
+        insertPayload.company_id = activeCompanyId;
+      }
       if (columns.has("current_period_end")) insertPayload.current_period_end = nextPeriodEnd;
       if (columns.has("amount")) insertPayload.amount = 0;
       if (columns.has("currency")) insertPayload.currency = "eur";

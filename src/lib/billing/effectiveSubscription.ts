@@ -70,6 +70,16 @@ function buildEffectiveState(nowIso: string, subscription: any | null, overrideR
   };
 }
 
+async function getTableColumns(admin: any, tableName: string) {
+  const { data, error } = await admin
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", tableName);
+  if (error || !Array.isArray(data)) return new Set<string>();
+  return new Set(data.map((row: any) => String(row?.column_name || "")));
+}
+
 export async function readEffectiveSubscriptionState(admin: any, userId: string): Promise<EffectiveSubscriptionState> {
   const nowIso = new Date().toISOString();
   const [subscriptionRes, overridesRes] = await Promise.all([
@@ -90,6 +100,61 @@ export async function readEffectiveSubscriptionState(admin: any, userId: string)
   ]);
 
   return buildEffectiveState(nowIso, subscriptionRes.data || null, overridesRes.data || []);
+}
+
+export async function readEffectiveCompanySubscriptionState(admin: any, args: {
+  userId: string;
+  companyId: string;
+}): Promise<EffectiveSubscriptionState> {
+  const nowIso = new Date().toISOString();
+  const [subscriptionColumns, overrideColumns] = await Promise.all([
+    getTableColumns(admin, "subscriptions"),
+    getTableColumns(admin, "plan_overrides"),
+  ]);
+
+  const hasCompanyIdOnSubscriptions = subscriptionColumns.has("company_id");
+  const hasCompanyIdOnOverrides = overrideColumns.has("company_id");
+
+  const [subscriptionRes, overridesRes] = await Promise.all([
+    hasCompanyIdOnSubscriptions
+      ? admin
+          .from("subscriptions")
+          .select("id,user_id,company_id,plan,status,current_period_end,cancel_at_period_end,metadata,created_at,updated_at,stripe_customer_id,stripe_subscription_id")
+          .eq("company_id", args.companyId)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : admin
+          .from("subscriptions")
+          .select("id,user_id,plan,status,current_period_end,cancel_at_period_end,metadata,created_at,updated_at,stripe_customer_id,stripe_subscription_id")
+          .eq("user_id", args.userId)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+    hasCompanyIdOnOverrides
+      ? admin
+          .from("plan_overrides")
+          .select("id,company_id,plan_key,source_type,source_id,starts_at,expires_at,is_active,metadata,created_at")
+          .eq("company_id", args.companyId)
+          .eq("is_active", true)
+          .order("created_at", { ascending: false })
+          .limit(10)
+      : Promise.resolve({ data: [], error: null } as any),
+  ]);
+
+  let subscription = subscriptionRes.data || null;
+  if (!subscription && hasCompanyIdOnSubscriptions) {
+    const legacyFallback = await admin
+      .from("subscriptions")
+      .select("id,user_id,plan,status,current_period_end,cancel_at_period_end,metadata,created_at,updated_at,stripe_customer_id,stripe_subscription_id")
+      .eq("user_id", args.userId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    subscription = legacyFallback.data || null;
+  }
+
+  return buildEffectiveState(nowIso, subscription, overridesRes.data || []);
 }
 
 export async function readEffectiveSubscriptionStates(admin: any, userIds: string[]) {

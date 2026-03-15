@@ -16,7 +16,7 @@ import {
 import { deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
 import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
-import { readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
+import { readEffectiveCompanySubscriptionState } from "@/lib/billing/effectiveSubscription";
 
 const ROUTE_VERSION = "company-dashboard-kpis-v2-clean-2026-03-05";
 
@@ -128,20 +128,13 @@ export async function GET() {
       );
     }
 
-    const [{ data, error: rpcErr }, memberRes, subRes, requestsRes, reuseRes, purchasesRes] = await Promise.all([
+    const [{ data, error: rpcErr }, memberRes, requestsRes, reuseRes, purchasesRes] = await Promise.all([
       supabase.rpc("company_dashboard_kpis_v2"),
       supabase
         .from("company_members")
         .select("role")
         .eq("company_id", activeCompanyId)
         .eq("user_id", user.id)
-        .maybeSingle(),
-      supabase
-        .from("subscriptions")
-        .select("plan,status,current_period_end")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
         .maybeSingle(),
       supabase
         .from("verification_requests")
@@ -155,7 +148,6 @@ export async function GET() {
         .from("stripe_oneoff_purchases")
         .select("id,product_key,credits_granted,amount,currency,created_at")
         .eq("company_id", activeCompanyId)
-        .eq("buyer_user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(5),
     ]);
@@ -264,10 +256,13 @@ export async function GET() {
       };
     });
     const membershipRole = memberRes?.data?.role ? String(memberRes.data.role) : null;
-    const effectiveSubscription = await readEffectiveSubscriptionState(service, user.id);
-    const subscriptionPlan = String(effectiveSubscription.plan || subRes?.data?.plan || "company_free");
-    const subscriptionStatus = effectiveSubscription.status || (subRes?.data?.status ? String(subRes.data.status) : "free");
-    const currentPeriodEnd = subRes?.data?.current_period_end || null;
+    const effectiveSubscription = await readEffectiveCompanySubscriptionState(service, {
+      userId: user.id,
+      companyId: activeCompanyId,
+    });
+    const subscriptionPlan = String(effectiveSubscription.plan || "company_free");
+    const subscriptionStatus = effectiveSubscription.status || "free";
+    const currentPeriodEnd = effectiveSubscription.current_period_end || null;
     const finalizedCompanyDocs = !companyDocsRes.error && Array.isArray(companyDocsRes.data)
       ? await finalizeCompanyDocumentsIfDue({
           admin: service,

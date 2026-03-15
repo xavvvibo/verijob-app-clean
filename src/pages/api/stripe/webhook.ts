@@ -33,6 +33,16 @@ function resolveAppUrl() {
   return String(process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es").replace(/\/+$/, "");
 }
 
+async function getTableColumns(supabase: any, tableName: string) {
+  const { data, error } = await supabase
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", tableName);
+  if (error || !Array.isArray(data)) return new Set<string>();
+  return new Set(data.map((row: any) => String(row?.column_name || "")));
+}
+
 function planLabel(raw: unknown) {
   const plan = String(raw || "free").toLowerCase();
   if (!plan || plan === "free") return "Free";
@@ -118,6 +128,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
       { auth: { persistSession: false } }
     );
+    const subscriptionsColumns = await getTableColumns(supabase, "subscriptions");
+    const subscriptionsHasCompanyId = subscriptionsColumns.has("company_id");
 
     async function resolveUserEmail(userId: string): Promise<string | null> {
       const authRes = await supabase.auth.admin.getUserById(userId);
@@ -230,6 +242,46 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return null;
     }
 
+    async function resolveCompanyIdForSubscription(subscription: Stripe.Subscription, userId: string | null): Promise<string | null> {
+      const fromMetadata = String((subscription.metadata as any)?.company_id || "").trim();
+      if (fromMetadata) return fromMetadata;
+
+      try {
+        const sessions = await stripe.checkout.sessions.list({
+          subscription: subscription.id,
+          limit: 1,
+        });
+        const s = sessions?.data?.[0];
+        const fromSessionMeta = String((s?.metadata as any)?.company_id || "").trim();
+        if (fromSessionMeta) return fromSessionMeta;
+      } catch {
+        // no-op
+      }
+
+      if (subscriptionsHasCompanyId) {
+        const { data: existingBySubscription } = await supabase
+          .from("subscriptions")
+          .select("company_id")
+          .eq("stripe_subscription_id", subscription.id)
+          .limit(1)
+          .maybeSingle();
+        const fromDb = String((existingBySubscription as any)?.company_id || "").trim();
+        if (fromDb) return fromDb;
+      }
+
+      if (userId) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("active_company_id")
+          .eq("id", userId)
+          .maybeSingle();
+        const fromProfile = String((profile as any)?.active_company_id || "").trim();
+        if (fromProfile) return fromProfile;
+      }
+
+      return null;
+    }
+
     async function resolveCompanyIdForSession(session: Stripe.Checkout.Session, userId: string): Promise<string | null> {
       const fromMeta = String((session.metadata as any)?.company_id || "").trim();
       if (fromMeta) return fromMeta;
@@ -312,36 +364,36 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     async function persistSubscriptionRow(row: Record<string, any>) {
+      const nextRow = subscriptionsHasCompanyId ? row : Object.fromEntries(Object.entries(row).filter(([key]) => key !== "company_id"));
+      const primaryConflict =
+        subscriptionsHasCompanyId && String((nextRow as any)?.company_id || "").trim()
+          ? "company_id"
+          : "stripe_subscription_id";
+
       const primary = await supabase
         .from("subscriptions")
-        .upsert(row, { onConflict: "stripe_subscription_id" });
+        .upsert(nextRow, { onConflict: primaryConflict });
 
       if (!primary.error) return;
 
       const fallback = await supabase
         .from("subscriptions")
-        .upsert(row, { onConflict: "user_id" });
+        .upsert(nextRow, { onConflict: "user_id" });
 
       if (fallback.error) {
         throw new Error(
-          `Supabase upsert failed (stripe_subscription_id=${primary.error.message}; user_id=${fallback.error.message})`
+          `Supabase upsert failed (${primaryConflict}=${primary.error.message}; user_id=${fallback.error.message})`
         );
       }
     }
 
     async function upsertSubscription(args: {
       userId?: string | null;
+      companyId?: string | null;
       checkoutSessionId?: string | null;
       subscriptionId: string;
       sourceEvent: string;
     }): Promise<{ userId: string; planKey: string | null; previousPlanKey: string | null; periodEndIso: string | null; cancelAtPeriodEnd: boolean }> {
-      const { data: previousByStripe } = await supabase
-        .from("subscriptions")
-        .select("plan")
-        .eq("stripe_subscription_id", args.subscriptionId)
-        .limit(1)
-        .maybeSingle();
-
       const subscription = await stripe.subscriptions.retrieve(args.subscriptionId, {
         expand: ["items.data.price"],
       });
@@ -350,7 +402,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       if (!userId) {
         throw new Error(`user_id_unresolved_for_subscription_${subscription.id}`);
       }
-
       const cpe: unknown = (subscription as any)?.current_period_end;
       const periodEnd = typeof cpe === "number" ? new Date(cpe * 1000) : null;
 
@@ -360,9 +411,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           ? subscription.items.data[0].price.id
           : (subscription.items?.data?.[0]?.price as any)?.id ?? null;
       const resolved = resolvePlanFromPriceId(priceId);
+      const metadataPlanKey = String((subscription.metadata as any)?.plan_key || "").trim() || null;
+      const resolvedPlanKey = resolved?.planKey ?? metadataPlanKey;
+      const companyId =
+        String(args.companyId || "").trim() ||
+        (isCompanyPlan(resolvedPlanKey)
+          ? (await resolveCompanyIdForSubscription(subscription, userId))
+          : null);
+      const previousQuery = subscriptionsHasCompanyId && companyId
+        ? supabase
+            .from("subscriptions")
+            .select("plan")
+            .eq("company_id", companyId)
+            .limit(1)
+            .maybeSingle()
+        : supabase
+            .from("subscriptions")
+            .select("plan")
+            .eq("stripe_subscription_id", args.subscriptionId)
+            .limit(1)
+            .maybeSingle();
+      const { data: previousByStripe } = await previousQuery;
 
       await persistSubscriptionRow({
         user_id: userId,
+        company_id: companyId,
         stripe_customer_id: (subscription.customer as string) ?? null,
         stripe_subscription_id: subscription.id,
         plan: resolved?.planKey ?? priceId,
@@ -417,12 +490,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         });
       }
 
-      if (userId && subscriptionId) {
-        const subCtx = await upsertSubscription({
-          userId,
-          checkoutSessionId: session.id,
-          subscriptionId,
-          sourceEvent: event.type,
+        if (userId && subscriptionId) {
+          const subCtx = await upsertSubscription({
+            userId,
+            companyId: String((session.metadata as any)?.company_id || "").trim() || null,
+            checkoutSessionId: session.id,
+            subscriptionId,
+            sourceEvent: event.type,
         });
         await sendSubscriptionEmail({
           kind: "plan_updated",

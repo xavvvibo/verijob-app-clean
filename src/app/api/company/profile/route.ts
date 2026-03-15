@@ -13,7 +13,7 @@ import {
 } from "@/lib/company/document-verification";
 import { deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
-import { readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
+import { readEffectiveCompanySubscriptionState } from "@/lib/billing/effectiveSubscription";
 
 const ROUTE_VERSION = "company-profile-v1";
 
@@ -443,7 +443,10 @@ export async function GET() {
       verificationDocuments = Array.isArray(docsRes.data) ? (docsRes.data as any) : [];
     }
 
-    const effectiveSubscription = await readEffectiveSubscriptionState(admin, user.id);
+    const effectiveSubscription = await readEffectiveCompanySubscriptionState(admin, {
+      userId: user.id,
+      companyId,
+    });
     verificationDocuments = await finalizeCompanyDocumentsIfDue({
       admin,
       docs: verificationDocuments,
@@ -610,7 +613,10 @@ export async function POST(request: Request) {
     patch.profile_completeness_score = computedScore;
     patch.updated_at = new Date().toISOString();
 
-    const effectiveSubscription = await readEffectiveSubscriptionState(admin, user.id);
+    const effectiveSubscription = await readEffectiveCompanySubscriptionState(admin, {
+      userId: user.id,
+      companyId,
+    });
     const documentVerification = deriveCompanyDocumentVerificationState({
       docs: docsForStatus,
       legacyHasDocument: Boolean(patch.verification_document_type || patch.verification_document_uploaded_at),

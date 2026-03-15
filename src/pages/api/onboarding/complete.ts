@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createPagesRouteClient } from "@/utils/supabase/pages";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
 
 function json(res: NextApiResponse, status: number, body: any) {
   res.setHeader("Cache-Control", "no-store");
@@ -76,6 +77,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         details: error.message,
       });
     }
+
+    await trackEventAdmin({
+      event_name: "onboarding_completed",
+      user_id: au.user.id,
+      entity_type: "profile",
+      entity_id: au.user.id,
+      metadata: {
+        role: "candidate",
+      },
+    });
 
     return json(res, 200, { ok: true, route: "/pages/api/onboarding/complete" });
   } catch (e: any) {

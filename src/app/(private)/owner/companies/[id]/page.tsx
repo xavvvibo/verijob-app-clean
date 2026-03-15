@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { companyVerificationMethodTone, deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
+import { effectivePlanDisplay, readEffectiveCompanySubscriptionState } from "@/lib/billing/effectiveSubscription";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 
@@ -72,22 +73,29 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
   const requests = Array.isArray(requestsRes.data) ? requestsRes.data : [];
   const memberIds = members.map((row: any) => String(row.user_id || "")).filter(Boolean);
 
-  const [profilesRes, subscriptionsRes] = await Promise.all([
+  const [profilesRes, companyAdminRes] = await Promise.all([
     memberIds.length
       ? admin.from("profiles").select("id,full_name,email,last_activity_at").in("id", memberIds)
       : Promise.resolve({ data: [] } as any),
-    memberIds.length
-      ? admin
-          .from("subscriptions")
-          .select("id,user_id,plan,status,created_at,current_period_end")
-          .in("user_id", memberIds)
-          .order("created_at", { ascending: false })
-      : Promise.resolve({ data: [] } as any),
+    members.length
+      ? admin.from("company_members").select("user_id,role").eq("company_id", id).limit(1).maybeSingle()
+      : Promise.resolve({ data: null } as any),
   ]);
 
   const profilesById = new Map((Array.isArray(profilesRes.data) ? profilesRes.data : []).map((row: any) => [String(row.id), row]));
-  const subs = Array.isArray(subscriptionsRes.data) ? subscriptionsRes.data : [];
-  const companyPlan = subs.find((row: any) => String(row.plan || "").toLowerCase().startsWith("company_")) || null;
+  const companyAdminUserId = String((companyAdminRes.data as any)?.user_id || "").trim() || memberIds[0] || null;
+  const effectiveSubscription = companyAdminUserId
+    ? await readEffectiveCompanySubscriptionState(admin, {
+        userId: companyAdminUserId,
+        companyId: String(id),
+      })
+    : null;
+  const companyPlan = effectiveSubscription
+    ? {
+        plan: effectivePlanDisplay(effectiveSubscription).planLabel,
+        status: effectiveSubscription.status,
+      }
+    : null;
 
   const pendingRequests = requests.filter((row: any) => {
     const status = String(row.status || "").toLowerCase();

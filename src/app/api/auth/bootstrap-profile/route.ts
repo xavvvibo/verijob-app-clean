@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -127,6 +128,18 @@ export async function POST(req: Request) {
       .single();
     if (upsertErr) return json(400, { error: "profiles_upsert_failed", details: upsertErr.message });
 
+    await trackEventAdmin({
+      event_name: "signup",
+      user_id: user.id,
+      company_id: companyId,
+      entity_type: "profile",
+      entity_id: user.id,
+      metadata: {
+        role: nextRole,
+        account_type: accountType,
+      },
+    });
+
     return json(200, {
       ok: true,
       profile: upsertedProfile,
@@ -136,4 +149,3 @@ export async function POST(req: Request) {
     return json(500, { error: "unhandled_exception", details: e?.message || String(e) });
   }
 }
-

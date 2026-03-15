@@ -29,8 +29,8 @@ export default async function VerifyExperiencePage({ params }: PageProps) {
   const hasCompanySession = Boolean(user && profile?.role === "company");
   const primaryCtaHref = hasCompanySession ? "/company" : "/signup?mode=company";
   const primaryCtaLabel = hasCompanySession ? "Ir a mi panel empresa" : "Crear cuenta empresa Free";
-  const secondaryCtaHref = hasCompanySession ? "/company/upgrade" : "/pricing";
-  const secondaryCtaLabel = "Ver ventajas del plan Pro";
+  const secondaryCtaHref = hasCompanySession ? "/company/upgrade" : "/precios";
+  const secondaryCtaLabel = "Ver planes de empresa";
 
   const { data: rows, error } = await admin
     .from("verification_requests")
@@ -183,10 +183,10 @@ export default async function VerifyExperiencePage({ params }: PageProps) {
               Crear cuenta empresa Free
             </a>
             <a
-              href="/pricing"
+              href="/precios"
               className="inline-flex items-center justify-center rounded-xl border border-blue-200 bg-white px-4 py-2.5 text-sm font-semibold text-blue-800 hover:bg-blue-50"
             >
-              Conocer ventajas del plan Pro
+              Ver planes de empresa
             </a>
           </div>
         </section>

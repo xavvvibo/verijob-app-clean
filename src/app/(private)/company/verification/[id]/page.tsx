@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { readEffectiveCompanySubscriptionState } from "@/lib/billing/effectiveSubscription";
 import DecisionPanel from "./DecisionPanel";
 
 export const dynamic = "force-dynamic";
@@ -51,15 +52,8 @@ function verificationStatusClass(statusRaw: unknown) {
 }
 
 async function resolveCompanyVerificationStatus(supabase: any, companyId: string, userId: string) {
-  const subRes = await supabase
-    .from("subscriptions")
-    .select("status")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const subscriptionStatus = String(subRes.data?.status || "").toLowerCase();
+  const effectiveSubscription = await readEffectiveCompanySubscriptionState(supabase, { userId, companyId });
+  const subscriptionStatus = String(effectiveSubscription.status || "").toLowerCase();
   if (subscriptionStatus === "active" || subscriptionStatus === "trialing") return "registered_in_verijob";
 
   const companyRes = await supabase

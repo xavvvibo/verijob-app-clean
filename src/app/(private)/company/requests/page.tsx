@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { readEffectiveCompanySubscriptionState } from "@/lib/billing/effectiveSubscription";
 
 type VerificationRequestRow = {
   id: string;
@@ -104,21 +105,16 @@ export default async function CompanyRequestsPage({
   if (!profile?.onboarding_completed) redirect("/onboarding/company?blocked=1&source=company");
   if (!profile?.active_company_id) redirect("/company");
 
-  const [{ data: allData }, { data: subData }] = await Promise.all([
-    supabase
-      .from("verification_requests")
-      .select("id,requested_by,status,requested_at,created_at,resolved_at,company_name_target,employment_record_id,employment_records(position,company_name_freeform,start_date,end_date)")
-      .eq("company_id", profile.active_company_id),
-    supabase
-      .from("subscriptions")
-      .select("plan,status")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
+  const { data: allData } = await supabase
+    .from("verification_requests")
+    .select("id,requested_by,status,requested_at,created_at,resolved_at,company_name_target,employment_record_id,employment_records(position,company_name_freeform,start_date,end_date)")
+    .eq("company_id", profile.active_company_id);
 
-  const planActive = ["active", "trialing"].includes(String(subData?.status || "").toLowerCase());
+  const effectiveSubscription = await readEffectiveCompanySubscriptionState(supabase, {
+    userId: user.id,
+    companyId: String(profile.active_company_id),
+  });
+  const planActive = ["active", "trialing"].includes(String(effectiveSubscription.status || "").toLowerCase());
   const baseRows = (allData || []) as VerificationRequestRow[];
   const verificationIds = baseRows.map((row) => row.id);
   const candidateIds = Array.from(new Set(baseRows.map((row) => row.requested_by).filter(Boolean))) as string[];

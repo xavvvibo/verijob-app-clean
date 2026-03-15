@@ -7,14 +7,12 @@ export async function resolveCompanyProfileAccessCredits(args: {
     args.service
       .from("credit_grants")
       .select("credits,metadata,is_active")
-      .eq("user_id", args.userId)
       .eq("is_active", true)
       .order("created_at", { ascending: false }),
     args.service
       .from("profile_view_consumptions")
       .select("credits_spent")
       .eq("company_id", args.companyId)
-      .eq("viewer_user_id", args.userId),
   ]);
 
   const grants = Array.isArray(grantsRes.data) ? grantsRes.data : [];
@@ -22,7 +20,7 @@ export async function resolveCompanyProfileAccessCredits(args: {
 
   const granted = grants.reduce((acc: number, row: any) => {
     const metadataCompanyId = String(row?.metadata?.company_id || "").trim();
-    if (metadataCompanyId && metadataCompanyId !== args.companyId) return acc;
+    if (!metadataCompanyId || metadataCompanyId !== args.companyId) return acc;
     return acc + Number(row?.credits || 0);
   }, 0);
 

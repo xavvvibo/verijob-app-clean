@@ -4,6 +4,7 @@ import { createClient } from "@/utils/supabase/server";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
+import { readEffectiveCompanySubscriptionState } from "@/lib/billing/effectiveSubscription";
 
 type SetCompanyVerificationStatusInput = {
   verificationRequestId: string;
@@ -19,15 +20,8 @@ async function requireUser() {
 }
 
 async function resolveCompanyVerificationStatus(supabase: any, companyId: string, userId: string) {
-  const { data: sub } = await supabase
-    .from("subscriptions")
-    .select("status")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const subscriptionStatus = String(sub?.status || "").toLowerCase();
+  const effectiveSubscription = await readEffectiveCompanySubscriptionState(supabase, { userId, companyId });
+  const subscriptionStatus = String(effectiveSubscription.status || "").toLowerCase();
   if (subscriptionStatus === "active" || subscriptionStatus === "trialing") return "registered_in_verijob";
 
   const { data: companyProfile } = await supabase

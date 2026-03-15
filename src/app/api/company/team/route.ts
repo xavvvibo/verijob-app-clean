@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
+import { readEffectiveCompanySubscriptionState } from "@/lib/billing/effectiveSubscription";
 
 export const dynamic = "force-dynamic";
 
@@ -90,25 +91,19 @@ async function resolveContext() {
 }
 
 async function readTeamSnapshot(admin: any, companyId: string, userId: string) {
-  const [{ data: members }, { data: sub }, invitationsRes] = await Promise.all([
+  const [{ data: members }, invitationsRes, effectiveSubscription] = await Promise.all([
     admin
       .from("company_members")
       .select("id,user_id,role,created_at")
       .eq("company_id", companyId)
       .order("created_at", { ascending: true }),
     admin
-      .from("subscriptions")
-      .select("plan,status")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    admin
       .from("company_team_invitations")
       .select("id,email,role,status,invited_at,accepted_at,revoked_at,invite_token")
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
       .limit(50),
+    readEffectiveCompanySubscriptionState(admin, { userId, companyId }),
   ]);
 
   let invitationMeta: any = {
@@ -161,10 +156,10 @@ async function readTeamSnapshot(admin: any, companyId: string, userId: string) {
     invitations,
     invitations_meta: invitationMeta,
     plan: {
-      code: String(sub?.plan || "company_free"),
-      label: planLabel(sub?.plan || "company_free"),
-      status: String(sub?.status || "inactive"),
-      seats_limit: seatLimitForPlan(sub?.plan || "company_free"),
+      code: String(effectiveSubscription.plan || "company_free"),
+      label: planLabel(effectiveSubscription.plan || "company_free"),
+      status: String(effectiveSubscription.status || "inactive"),
+      seats_limit: seatLimitForPlan(effectiveSubscription.plan || "company_free"),
       seats_used: normalizedMembers.length,
       pending_invitations: invitations.filter((row: any) => String(row.status || "") === "pending").length,
     },

@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/service";
+import {
+  readEffectiveCompanySubscriptionState,
+  readEffectiveSubscriptionState,
+} from "@/lib/billing/effectiveSubscription";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -39,6 +44,7 @@ export async function POST(req: Request) {
     const stripe = getStripe();
     const appUrl = getAppUrl(req);
     const supabase = await createRouteHandlerClient();
+    const admin = createServiceRoleClient();
 
     const {
       data: { user },
@@ -49,16 +55,22 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "unauthorized", details: authErr?.message ?? null }, { status: 401 });
     }
 
-    const { data: sub, error: subErr } = await supabase
-      .from("subscriptions")
-      .select("stripe_customer_id,plan")
-      .eq("user_id", user.id)
-      .eq("status", "active")
+    const { data: profile, error: profileErr } = await admin
+      .from("profiles")
+      .select("role,active_company_id")
+      .eq("id", user.id)
       .maybeSingle();
-
-    if (subErr) {
-      return NextResponse.json({ error: "subscriptions_read_failed", details: subErr.message }, { status: 400 });
+    if (profileErr) {
+      return NextResponse.json({ error: "profiles_read_failed", details: profileErr.message }, { status: 400 });
     }
+
+    const role = String((profile as any)?.role || "").toLowerCase();
+    const activeCompanyId = String((profile as any)?.active_company_id || "").trim();
+    const effective =
+      role === "company" && activeCompanyId
+        ? await readEffectiveCompanySubscriptionState(admin, { userId: user.id, companyId: activeCompanyId })
+        : await readEffectiveSubscriptionState(admin, user.id);
+    const sub = effective.subscription;
 
     if (!sub?.stripe_customer_id) {
       return NextResponse.json({ error: "no_active_subscription" }, { status: 400 });

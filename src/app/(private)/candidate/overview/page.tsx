@@ -15,6 +15,20 @@ type ProfileLite = {
 
 type CandidateProfilePayload = Record<string, any> | null;
 
+type ProfileCompletionItem = {
+  id: string;
+  label: string;
+  status: "completed" | "pending";
+  completed: boolean;
+};
+
+type ProfileCompletionPayload = {
+  score?: number | null;
+  completed?: number | null;
+  total?: number | null;
+  checklist?: ProfileCompletionItem[] | null;
+} | null;
+
 type VerificationRow = {
   status: string | null;
   company_confirmed: boolean | null;
@@ -334,6 +348,7 @@ export default function CandidateOverview() {
 
   const [profile, setProfile] = useState<ProfileLite | null>(null);
   const [candidateProfile, setCandidateProfile] = useState<CandidateProfilePayload>(null);
+  const [profileCompletion, setProfileCompletion] = useState<ProfileCompletionPayload>(null);
   const [verifications, setVerifications] = useState<VerificationRow[]>([]);
   const [trustScore, setTrustScore] = useState<number | null>(null);
   const [trustBreakdown, setTrustBreakdown] = useState<TrustBreakdown>({});
@@ -354,7 +369,7 @@ export default function CandidateOverview() {
 
         const userId = au.user.id;
 
-        const [profileRes, verificationsRes, profileApiRes, trustRes, experienceRes] = await Promise.all([
+        const [profileRes, verificationsRes, profileApiRes, trustRes] = await Promise.all([
           supabase
             .from("profiles")
             .select("full_name, title, location, avatar_url")
@@ -366,7 +381,6 @@ export default function CandidateOverview() {
             .eq("candidate_id", userId),
           fetch("/api/candidate/profile", { credentials: "include" }).then((r) => r.json().catch(() => ({}))),
           fetch("/api/candidate/trust-score", { credentials: "include" }).then((r) => r.json().catch(() => ({}))),
-          supabase.from("profile_experiences").select("id", { count: "exact", head: true }).eq("user_id", userId),
         ]);
 
         if (profileRes.error) throw profileRes.error;
@@ -377,9 +391,10 @@ export default function CandidateOverview() {
         setProfile((profileRes.data || null) as ProfileLite | null);
         setVerifications((verificationsRes.data || []) as VerificationRow[]);
         setCandidateProfile(profileApiRes?.profile ?? null);
+        setProfileCompletion((profileApiRes?.profile_completion || null) as ProfileCompletionPayload);
         setTrustScore(typeof trustRes?.trust_score === "number" ? trustRes.trust_score : null);
         setTrustBreakdown((trustRes?.breakdown || {}) as TrustBreakdown);
-        setExperienceCount(Number(experienceRes.count || 0));
+        setExperienceCount(Number(profileApiRes?.counts?.experience_count || 0));
         setError(null);
       } catch (e: any) {
         if (!alive) return;
@@ -430,23 +445,13 @@ export default function CandidateOverview() {
     }, 0);
   }, [candidateProfile]);
 
-  const profileCompletion = useMemo(() => {
-    const checks = [
-      Boolean(profile?.full_name),
-      experienceCount > 0,
-      educationCount > 0,
-      achievementsCount > 0,
-      metrics.evidences > 0,
-    ];
-    const done = checks.filter(Boolean).length;
-    return Math.round((done / checks.length) * 100);
-  }, [profile?.full_name, experienceCount, educationCount, achievementsCount, metrics.evidences]);
+  const profileCompletionScore = Number(profileCompletion?.score || 0);
 
   const profileStage = useMemo(() => {
-    if (profileCompletion >= 85) return "Perfil sólido";
-    if (profileCompletion >= 55) return "Perfil en progreso";
+    if (profileCompletionScore >= 85) return "Perfil sólido";
+    if (profileCompletionScore >= 55) return "Perfil en progreso";
     return "Perfil inicial";
-  }, [profileCompletion]);
+  }, [profileCompletionScore]);
 
   const availabilityText = useMemo(() => {
     const raw = String(candidateProfile?.job_search_status || "").toLowerCase();
@@ -521,7 +526,7 @@ export default function CandidateOverview() {
                 <div className="mt-4 flex flex-wrap gap-2">
                   <TrustLevelBadge score={metrics.score} />
                   <VerificationBadge tone="trust_visible">Trust Score visible para empresas registradas</VerificationBadge>
-                  <VerificationBadge tone={profileCompletion >= 55 ? "company_verified" : "in_progress"}>
+                  <VerificationBadge tone={profileCompletionScore >= 55 ? "company_verified" : "in_progress"}>
                     {profileStage}
                   </VerificationBadge>
                   <VerificationBadge tone="business">{availabilityText}</VerificationBadge>
@@ -553,7 +558,7 @@ export default function CandidateOverview() {
 
       <section className="grid gap-4 md:grid-cols-5">
         <Kpi label="Trust Score" value={`${metrics.score}%`} />
-        <Kpi label="Progreso del perfil" value={`${profileCompletion}%`} />
+        <Kpi label="Progreso del perfil" value={`${profileCompletionScore}%`} />
         <Kpi label="Verificaciones" value={metrics.total} />
         <Kpi label="Aprobadas" value={metrics.verified} />
         <Kpi label="Evidencias" value={metrics.evidences} />

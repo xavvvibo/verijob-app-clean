@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
+import { readEffectiveCompanySubscriptionState } from "@/lib/billing/effectiveSubscription";
 import { getCompanyPlanCapabilities } from "@/lib/billing/planCapabilities";
 import { deriveCompanyDocumentVerificationState, finalizeCompanyDocumentsIfDue } from "@/lib/company/document-verification";
 import { companyVerificationMethodTone, deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
@@ -194,12 +194,14 @@ export default async function CompanySubscriptionPage({
       .from("stripe_oneoff_purchases")
       .select("id,product_key,credits_granted,amount,currency,created_at")
       .eq("company_id", companyId)
-      .eq("buyer_user_id", auth.user.id)
       .order("created_at", { ascending: false })
       .limit(5),
   ]);
 
-  const effectiveSubscription = await readEffectiveSubscriptionState(admin, auth.user.id);
+  const effectiveSubscription = await readEffectiveCompanySubscriptionState(admin, {
+    userId: auth.user.id,
+    companyId,
+  });
   const accessCredits = await resolveCompanyProfileAccessCredits({
     service: admin,
     userId: auth.user.id,

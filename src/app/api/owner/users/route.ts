@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { effectivePlanDisplay, readEffectiveSubscriptionStates } from "@/lib/billing/effectiveSubscription";
+import {
+  effectivePlanDisplay,
+  readEffectiveCompanySubscriptionState,
+  readEffectiveSubscriptionStates,
+} from "@/lib/billing/effectiveSubscription";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
@@ -306,6 +310,19 @@ export async function GET(req: Request) {
     }
 
     const effectiveSubscriptionsByUser = await readEffectiveSubscriptionStates(admin, userIds);
+    const companyScopedSubscriptions = new Map<string, Awaited<ReturnType<typeof readEffectiveCompanySubscriptionState>>>();
+    await Promise.all(
+      rows.map(async (row) => {
+        const role = String(row.role || "").toLowerCase();
+        const companyId = String(row.active_company_id || "").trim();
+        if (role !== "company" || !companyId) return;
+        const state = await readEffectiveCompanySubscriptionState(admin, {
+          userId: String(row.id),
+          companyId,
+        });
+        companyScopedSubscriptions.set(String(row.id), state);
+      })
+    );
 
     const lastActivityByUser = new Map<string, string>();
     const registerActivity = (uid: string, rawDate: unknown) => {
@@ -331,7 +348,10 @@ export async function GET(req: Request) {
 
     const users = rows.map((row) => {
       const id = String(row.id);
-      const effectiveSubscription = effectiveSubscriptionsByUser.get(id) || null;
+      const effectiveSubscription =
+        companyScopedSubscriptions.get(id) ||
+        effectiveSubscriptionsByUser.get(id) ||
+        null;
       const effectivePlan = effectivePlanDisplay(
         effectiveSubscription || {
           plan: "free",

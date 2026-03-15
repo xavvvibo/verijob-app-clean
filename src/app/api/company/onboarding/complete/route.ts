@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,17 @@ export async function POST() {
         },
         { onConflict: "company_id" },
       );
+
+    await trackEventAdmin({
+      event_name: "onboarding_completed",
+      user_id: user.id,
+      company_id: companyId,
+      entity_type: "company_profile",
+      entity_id: companyId,
+      metadata: {
+        role: "company",
+      },
+    });
 
     return json(200, { ok: true, onboarding_completed: true });
   } catch (e: any) {
