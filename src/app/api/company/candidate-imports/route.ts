@@ -9,6 +9,7 @@ import {
   extractStructuredCvFromBuffer,
   sha256Hex,
 } from "@/lib/company-candidate-import";
+import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
 import { resolveCompanyCandidateAccessMap } from "@/lib/company/profile-access";
 import { sendTransactionalEmail } from "@/lib/email/sendTransactionalEmail";
 import { buildCompanyCandidateImportInviteEmail } from "@/lib/email/templates/companyCandidateImportInvite";
@@ -72,6 +73,20 @@ function normalizeCompanyStage(value: unknown) {
   if (stage === "saved") return "saved";
   if (stage === "preselected") return "preselected";
   return "none";
+}
+
+function yearsFromExperiences(experiences: any[] | null | undefined) {
+  const rows = Array.isArray(experiences) ? experiences : [];
+  const dates = rows
+    .flatMap((item: any) => [item?.start_date || null, item?.end_date || null])
+    .filter(Boolean)
+    .map((value: any) => Date.parse(String(value)));
+  const valid = dates.filter((value) => Number.isFinite(value));
+  if (!valid.length) return null;
+  const min = Math.min(...valid);
+  const max = Math.max(...valid, Date.now());
+  const years = Math.max(0, Math.round(((max - min) / (365.25 * 24 * 60 * 60 * 1000)) * 10) / 10);
+  return years > 0 ? Math.round(years) : null;
 }
 
 async function resolveContext() {
@@ -156,10 +171,10 @@ async function readInvitesSnapshot(admin: any, companyId: string) {
   const baseInvites = Array.isArray(invitesRes.data) ? invitesRes.data : [];
   const linkedUserIds = baseInvites.map((row: any) => String(row?.linked_user_id || "")).filter(Boolean);
   const [linkedProfilesRes, verificationSummaryRes, linkedCandidateProfilesRes, linkedPublicLinksRes] = linkedUserIds.length
-    ? await Promise.all([
-        admin.from("profiles").select("id,full_name,email").in("id", linkedUserIds),
+      ? await Promise.all([
+        admin.from("profiles").select("id,full_name,email,location").in("id", linkedUserIds),
         admin.from("verification_summary").select("user_id,status").in("user_id", linkedUserIds),
-        admin.from("candidate_profiles").select("user_id,trust_score").in("user_id", linkedUserIds),
+        admin.from("candidate_profiles").select("user_id,trust_score,preferred_roles,work_zones,raw_cv_json").in("user_id", linkedUserIds),
         admin
           .from("candidate_public_links")
           .select("candidate_id,public_token,is_active,created_at")
@@ -212,6 +227,18 @@ async function readInvitesSnapshot(admin: any, companyId: string) {
     const access = linkedUserId ? accessByCandidateId.get(linkedUserId) : null;
     const importMeta = row?.extracted_payload_json?._verijob_import_meta || {};
     const companyState = row?.extracted_payload_json?._verijob_company_state || {};
+    const extractedPayload = row?.extracted_payload_json && typeof row.extracted_payload_json === "object" ? row.extracted_payload_json : {};
+    const linkedCandidateProfile = linkedUserId ? (Array.isArray(linkedCandidateProfilesRes.data) ? linkedCandidateProfilesRes.data.find((item: any) => String(item?.user_id || "") === linkedUserId) : null) : null;
+    const importedPayload = linkedCandidateProfile?.raw_cv_json?.company_cv_import?.extracted_payload || extractedPayload;
+    const preferredRoles = Array.isArray(linkedCandidateProfile?.preferred_roles) ? linkedCandidateProfile.preferred_roles : [];
+    const partialSector =
+      String(preferredRoles?.[0] || extractedPayload?.headline || row?.target_role || "").trim() || null;
+    const partialLocation =
+      normalizeText(linkedProfile?.location) ||
+      normalizeText(linkedCandidateProfile?.work_zones) ||
+      normalizeText(importedPayload?.experiences?.[0]?.location) ||
+      null;
+    const partialYearsExperience = yearsFromExperiences(importedPayload?.experiences);
     const normalized = {
       ...row,
       candidate_already_exists: Boolean(importMeta?.candidate_already_exists),
@@ -227,6 +254,9 @@ async function readInvitesSnapshot(admin: any, companyId: string) {
       access_granted_at: access?.access_granted_at || null,
       access_expires_at: access?.access_expires_at || null,
       access_source: access?.source || null,
+      partial_sector: partialSector,
+      partial_years_experience: partialYearsExperience,
+      partial_location: partialLocation,
       last_activity_at:
         row?.accepted_at ||
         row?.emailed_at ||
@@ -258,10 +288,17 @@ export async function GET() {
     if ((ctx as any).error) return (ctx as any).error;
     const { companyId, membershipRole, companyName, admin } = ctx as any;
     const snapshot = await readInvitesSnapshot(admin, companyId);
+    const profileAccessCredits = await resolveCompanyProfileAccessCredits({
+      service: admin,
+      userId: String((ctx as any).user.id),
+      companyId,
+    });
+
     return json(200, {
       company_id: companyId,
       company_name: companyName,
       membership_role: membershipRole,
+      available_profile_accesses: profileAccessCredits.available,
       imports: snapshot.invites,
       imports_meta: snapshot.meta,
     });

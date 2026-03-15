@@ -108,12 +108,15 @@ export default async function OwnerVerificationsPage({
   const employmentIds = Array.from(new Set(rows.map((r: any) => r.employment_record_id).filter(Boolean)));
   const verificationIds = rows.map((r: any) => r.id).filter(Boolean);
 
-  const [profilesRes, companiesRes, employmentRes, evidencesRes] = await Promise.all([
+  const [profilesRes, companiesRes, companyProfilesRes, employmentRes, evidencesRes] = await Promise.all([
     userIds.length
       ? supabase.from("profiles").select("id,full_name,email").in("id", userIds)
       : Promise.resolve({ data: [] } as any),
     companyIds.length
-      ? supabase.from("companies").select("id,name,trade_name,legal_name").in("id", companyIds)
+      ? supabase.from("companies").select("id,name").in("id", companyIds)
+      : Promise.resolve({ data: [] } as any),
+    companyIds.length
+      ? supabase.from("company_profiles").select("company_id,trade_name,legal_name,company_name").in("company_id", companyIds)
       : Promise.resolve({ data: [] } as any),
     employmentIds.length
       ? supabase.from("employment_records").select("id,position,company_name_freeform,start_date,end_date").in("id", employmentIds)
@@ -125,6 +128,7 @@ export default async function OwnerVerificationsPage({
 
   const profiles = new Map((Array.isArray(profilesRes.data) ? profilesRes.data : []).map((p: any) => [String(p.id), p]));
   const companies = new Map((Array.isArray(companiesRes.data) ? companiesRes.data : []).map((c: any) => [String(c.id), c]));
+  const companyProfiles = new Map((Array.isArray(companyProfilesRes.data) ? companyProfilesRes.data : []).map((p: any) => [String(p.company_id), p]));
   const employmentById = new Map((Array.isArray(employmentRes.data) ? employmentRes.data : []).map((e: any) => [String(e.id), e]));
   const evidencesByVerification = new Map<string, number>();
   for (const evidence of Array.isArray(evidencesRes.data) ? evidencesRes.data : []) {
@@ -139,15 +143,17 @@ export default async function OwnerVerificationsPage({
     const requestedAt = row.requested_at ? new Date(row.requested_at).getTime() : null;
     const profile = profiles.get(String(row.requested_by || "")) as any;
     const company = companies.get(String(row.company_id || "")) as any;
+    const companyProfile = companyProfiles.get(String(row.company_id || "")) as any;
     const employment = employmentById.get(String(row.employment_record_id || "")) as any;
     const requestContext = row?.request_context && typeof row.request_context === "object" ? row.request_context : {};
     const roleTitle = String((requestContext as any)?.role_title || "").trim();
     const companyNameFromContext = String((requestContext as any)?.company_name || "").trim();
     const candidateName = String(profile?.full_name || profile?.email || "").trim();
     const companyName = resolveCompanyDisplayName(
-      company
+      company || companyProfile
         ? {
             ...(company || {}),
+            ...(companyProfile || {}),
             company_name: row.company_name_target || companyNameFromContext || employment?.company_name_freeform || null,
           }
         : row.company_name_target || companyNameFromContext || employment?.company_name_freeform || null,
@@ -293,7 +299,7 @@ export default async function OwnerVerificationsPage({
           <select name="method" defaultValue={methodFilter} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
             <option value="all">Método: todos</option>
             {methods.map((method) => (
-              <option key={method} value={method}>{method}</option>
+              <option key={method} value={method}>{methodLabel(method)}</option>
             ))}
           </select>
           <select name="range" defaultValue={rangeFilter} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
@@ -309,6 +315,18 @@ export default async function OwnerVerificationsPage({
             </Link>
           </div>
         </form>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Link href="/owner/verifications?status=pending_company" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+            Pendientes empresa
+          </Link>
+          <Link href="/owner/verifications?status=reviewing" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+            En revisión
+          </Link>
+          <Link href="/owner/verifications?status=verified&range=30d" className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+            Aprobadas 30 días
+          </Link>
+        </div>
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

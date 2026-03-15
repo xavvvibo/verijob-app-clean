@@ -20,8 +20,16 @@ function eur(n: number) {
 }
 
 function planLabel(raw: unknown) {
-  const v = String(raw || "").trim();
-  return v || "free";
+  const v = String(raw || "").trim().toLowerCase();
+  if (!v || v === "free") return "Free";
+  if (v === "candidate_pro_monthly") return "Candidate Pro mensual";
+  if (v === "candidate_pro_yearly") return "Candidate Pro anual";
+  if (v === "company_access_monthly") return "Company Access mensual";
+  if (v === "company_access_yearly") return "Company Access anual";
+  if (v === "company_scale_monthly") return "Company Scale mensual";
+  if (v === "company_scale_yearly") return "Company Scale anual";
+  if (v === "company_enterprise") return "Company Enterprise";
+  return String(raw || "").trim() || "Free";
 }
 
 function productLabel(raw: unknown) {

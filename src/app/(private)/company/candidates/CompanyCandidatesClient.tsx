@@ -1,29 +1,29 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import CandidateQuickView from "@/components/company/CandidateQuickView";
+import ProfileUnlockAction from "@/components/company/ProfileUnlockAction";
+import {
+  computeCandidateQuickFit,
+  isCandidateVerified,
+  resolveCandidateApproxLocation,
+  resolveCandidateAvailableVerifications,
+  resolveCandidatePartialName,
+  resolveCandidatePipelineBucket,
+  resolveCandidateProfileReadiness,
+  resolveCandidateSector,
+  resolveCandidateTrustBand,
+  resolveCandidateYearsExperience,
+  type CompanyCandidateWorkspaceRow,
+} from "@/lib/company/candidate-fit";
 
-type ImportRow = {
+type ImportRow = CompanyCandidateWorkspaceRow & {
   id: string;
   candidate_email: string;
-  candidate_name_raw?: string | null;
-  linked_profile_name?: string | null;
-  target_role?: string | null;
-  created_at?: string | null;
-  display_status?: string | null;
   parse_status?: string | null;
-  trust_score?: number | null;
-  total_verifications?: number | null;
-  approved_verifications?: number | null;
   invite_token?: string | null;
-  candidate_public_token?: string | null;
-  linked_user_id?: string | null;
-  candidate_already_exists?: boolean | null;
-  company_stage?: "none" | "saved" | "preselected" | string | null;
-  last_activity_at?: string | null;
-  access_status?: "active" | "expired" | "never" | string | null;
   access_granted_at?: string | null;
-  access_expires_at?: string | null;
   access_source?: string | null;
 };
 
@@ -73,9 +73,9 @@ function statusMeta(status: string | null | undefined) {
 
 function accessMeta(status: string | null | undefined) {
   const key = String(status || "").toLowerCase();
-  if (key === "active") return { label: "Acceso activo", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" };
+  if (key === "active") return { label: "Perfil desbloqueado", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" };
   if (key === "expired") return { label: "Acceso expirado", tone: "border-amber-200 bg-amber-50 text-amber-800" };
-  return { label: "Sin acceso", tone: "border-slate-200 bg-slate-100 text-slate-700" };
+  return { label: "Perfil parcial disponible", tone: "border-slate-200 bg-slate-100 text-slate-700" };
 }
 
 function actionButtonClass({
@@ -101,6 +101,7 @@ function actionButtonClass({
 
 export default function CompanyCandidatesClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [token, setToken] = useState("");
   const [imports, setImports] = useState<ImportRow[]>([]);
   const [importsMeta, setImportsMeta] = useState<ImportsMeta>({ available: true, migration_files: [] });
@@ -109,6 +110,15 @@ export default function CompanyCandidatesClient() {
   const [actionId, setActionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [quickViewRow, setQuickViewRow] = useState<ImportRow | null>(null);
+  const [availableProfileAccesses, setAvailableProfileAccesses] = useState(0);
+  const [search, setSearch] = useState(searchParams.get("q") || "");
+  const [pipelineFilter, setPipelineFilter] = useState(searchParams.get("pipeline") || "all");
+  const [savedFilter, setSavedFilter] = useState(searchParams.get("saved") || "all");
+  const [trustFilter, setTrustFilter] = useState(searchParams.get("trust") || "all");
+  const [verificationFilter, setVerificationFilter] = useState(searchParams.get("verified") || "all");
+  const [profileFilter, setProfileFilter] = useState(searchParams.get("profile") || "all");
+  const [sort, setSort] = useState(searchParams.get("sort") || "recent");
   const [form, setForm] = useState({
     candidate_email: "",
     candidate_name: "",
@@ -118,6 +128,39 @@ export default function CompanyCandidatesClient() {
   const [file, setFile] = useState<File | null>(null);
 
   const tokenDisabled = useMemo(() => token.trim().length === 0, [token]);
+  const filteredImports = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    const rows = imports.filter((row) => {
+      if (query) {
+        const haystack = [resolveCandidatePartialName(row), row.candidate_email, row.target_role].join(" ").toLowerCase();
+        if (!haystack.includes(query)) return false;
+      }
+      if (pipelineFilter !== "all" && resolveCandidatePipelineBucket(row) !== pipelineFilter) return false;
+      if (savedFilter === "saved" && String(row.company_stage || "none").toLowerCase() !== "saved") return false;
+      if (savedFilter === "preselected" && String(row.company_stage || "none").toLowerCase() !== "preselected") return false;
+      if (trustFilter !== "all" && resolveCandidateTrustBand(row) !== trustFilter) return false;
+      if (verificationFilter === "verified" && !isCandidateVerified(row)) return false;
+      if (verificationFilter === "unverified" && isCandidateVerified(row)) return false;
+      if (profileFilter !== "all" && resolveCandidateProfileReadiness(row) !== profileFilter) return false;
+      return true;
+    });
+
+    rows.sort((a, b) => {
+      if (sort === "trust") return Number(b.trust_score || 0) - Number(a.trust_score || 0);
+      if (sort === "verified") return Number(b.approved_verifications || 0) - Number(a.approved_verifications || 0);
+      return Date.parse(String(b.last_activity_at || b.created_at || 0)) - Date.parse(String(a.last_activity_at || a.created_at || 0));
+    });
+    return rows;
+  }, [imports, pipelineFilter, profileFilter, savedFilter, search, sort, trustFilter, verificationFilter]);
+
+  const pipelineCounts = useMemo(
+    () => ({
+      review: imports.filter((row) => resolveCandidatePipelineBucket(row) === "review").length,
+      validation: imports.filter((row) => resolveCandidatePipelineBucket(row) === "validation").length,
+      decision: imports.filter((row) => resolveCandidatePipelineBucket(row) === "decision").length,
+    }),
+    [imports]
+  );
 
   async function loadImports() {
     setLoading(true);
@@ -129,6 +172,7 @@ export default function CompanyCandidatesClient() {
         throw new Error(data?.user_message || data?.details || data?.error || "No se pudo cargar la base de candidatos.");
       }
       setImports(Array.isArray(data?.imports) ? data.imports : []);
+      setAvailableProfileAccesses(Number(data?.available_profile_accesses || 0));
       setImportsMeta(data?.imports_meta || { available: true, migration_files: [] });
     } catch (e: any) {
       setError(e?.message || "No se pudo cargar la base de candidatos.");
@@ -221,6 +265,15 @@ export default function CompanyCandidatesClient() {
               }
             : row
         )
+      );
+      setQuickViewRow((prev) =>
+        prev && prev.id === inviteId
+          ? {
+              ...prev,
+              company_stage: stage,
+              last_activity_at: data?.invite?.last_activity_at || new Date().toISOString(),
+            }
+          : prev
       );
     } catch (e: any) {
       setError(e?.message || "No se pudo actualizar el estado del candidato.");
@@ -381,71 +434,196 @@ export default function CompanyCandidatesClient() {
           <div>
             <h2 className="text-base font-semibold text-slate-900">Base de candidatos importados e invitados</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Sigue el estado del flujo desde la subida del CV hasta la creación del perfil y la verificación.
+              Base RRHH ligera para detectar encaje rápido, mover pipeline y decidir cuándo merece la pena acceder al perfil completo.
             </p>
+            <p className="mt-2 text-sm font-semibold text-slate-900">
+              Accesos a perfiles disponibles: {availableProfileAccesses}
+            </p>
+            {availableProfileAccesses <= 0 ? (
+              <p className="mt-1 text-sm text-rose-700">No tienes accesos disponibles para ver perfiles completos.</p>
+            ) : null}
           </div>
-          <button
-            type="button"
-            onClick={() => void loadImports()}
-            className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50"
-          >
-            Actualizar
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <a
+              href="/company/subscription"
+              className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+            >
+              Comprar accesos
+            </a>
+            <button
+              type="button"
+              onClick={() => void loadImports()}
+              className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+            >
+              Actualizar
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <button
+              type="button"
+              onClick={() => setPipelineFilter("review")}
+              className={`rounded-2xl border p-4 text-left ${pipelineFilter === "review" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50 text-slate-900"}`}
+            >
+              <div className="text-xs uppercase tracking-wide">Por revisar</div>
+              <div className="mt-2 text-2xl font-semibold">{pipelineCounts.review}</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPipelineFilter("validation")}
+              className={`rounded-2xl border p-4 text-left ${pipelineFilter === "validation" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50 text-slate-900"}`}
+            >
+              <div className="text-xs uppercase tracking-wide">En validación</div>
+              <div className="mt-2 text-2xl font-semibold">{pipelineCounts.validation}</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPipelineFilter("decision")}
+              className={`rounded-2xl border p-4 text-left ${pipelineFilter === "decision" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-50 text-slate-900"}`}
+            >
+              <div className="text-xs uppercase tracking-wide">Listos para decisión</div>
+              <div className="mt-2 text-2xl font-semibold">{pipelineCounts.decision}</div>
+            </button>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Buscar</span>
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Nombre, email o puesto"
+                  className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                />
+              </label>
+              <label className="block">
+                <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ordenar por</span>
+                <select
+                  value={sort}
+                  onChange={(e) => setSort(e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                >
+                  <option value="recent">Más reciente</option>
+                  <option value="trust">Mayor trust</option>
+                  <option value="verified">Más verificado</option>
+                </select>
+              </label>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {[
+                { label: "Todo pipeline", active: pipelineFilter === "all", onClick: () => setPipelineFilter("all") },
+                { label: "Guardados", active: savedFilter === "saved", onClick: () => setSavedFilter("saved") },
+                { label: "Preseleccionados", active: savedFilter === "preselected", onClick: () => setSavedFilter("preselected") },
+                { label: "Trust alto", active: trustFilter === "high", onClick: () => setTrustFilter("high") },
+                { label: "Trust medio", active: trustFilter === "medium", onClick: () => setTrustFilter("medium") },
+                { label: "Trust bajo", active: trustFilter === "low", onClick: () => setTrustFilter("low") },
+                { label: "Verificados", active: verificationFilter === "verified", onClick: () => setVerificationFilter("verified") },
+                { label: "No verificados", active: verificationFilter === "unverified", onClick: () => setVerificationFilter("unverified") },
+                { label: "Perfil listo", active: profileFilter === "complete", onClick: () => setProfileFilter("complete") },
+                { label: "Perfil incompleto", active: profileFilter === "incomplete", onClick: () => setProfileFilter("incomplete") },
+              ].map((chip) => (
+                <button
+                  key={chip.label}
+                  type="button"
+                  onClick={chip.onClick}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                    chip.active ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-700"
+                  }`}
+                >
+                  {chip.label}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => {
+                  setPipelineFilter("all");
+                  setSavedFilter("all");
+                  setTrustFilter("all");
+                  setVerificationFilter("all");
+                  setProfileFilter("all");
+                  setSearch("");
+                  setSort("recent");
+                }}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700"
+              >
+                Limpiar filtros
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="mt-5 overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200 text-sm">
             <thead>
               <tr className="text-left text-xs uppercase tracking-[0.12em] text-slate-500">
-                <th className="py-3 pr-4">Nombre</th>
-                <th className="py-3 pr-4">Email</th>
-                <th className="py-3 pr-4">Puesto</th>
-                <th className="py-3 pr-4">Estado</th>
+                <th className="py-3 pr-4">Candidato</th>
+                <th className="py-3 pr-4">Sector</th>
+                <th className="py-3 pr-4">Experiencia</th>
+                <th className="py-3 pr-4">Ubicación</th>
+                <th className="py-3 pr-4">Trust</th>
+                <th className="py-3 pr-4">Verificaciones</th>
                 <th className="py-3 pr-4">Acceso</th>
-                <th className="py-3 pr-4">Última actividad</th>
                 <th className="py-3 pr-4">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-500">
+                  <td colSpan={8} className="py-8 text-center text-slate-500">
                     Cargando candidatos…
                   </td>
                 </tr>
-              ) : imports.length === 0 ? (
+              ) : filteredImports.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-500">
-                    Todavía no hay candidatos importados desde CV externo.
+                  <td colSpan={8} className="py-8 text-center text-slate-500">
+                    {imports.length === 0
+                      ? "Todavía no hay candidatos importados desde CV externo."
+                      : "No hay candidatos que encajen con estos filtros ahora mismo."}
                   </td>
                 </tr>
               ) : (
-                imports.map((row) => {
+                filteredImports.map((row) => {
                   const status = statusMeta(row.display_status);
                   const access = accessMeta(row.access_status);
+                  const fit = computeCandidateQuickFit(row);
                   const canOpenSnapshot = Boolean(row.linked_user_id && row.candidate_public_token);
                   const canOpenInvitation = Boolean(row.invite_token);
-                  const accessActionLabel =
-                    row.access_status === "active"
-                      ? "Ver CV completo"
-                      : row.access_status === "expired"
-                        ? "Volver a desbloquear"
-                        : "Desbloquear perfil";
                   return (
                     <tr key={row.id}>
                       <td className="py-4 pr-4 align-top">
-                        <div className="font-semibold text-slate-900">{row.linked_profile_name || row.candidate_name_raw || "Candidato importado"}</div>
-                        {row.trust_score != null ? <div className="mt-1 text-xs text-slate-500">Trust score: {row.trust_score}</div> : null}
+                        <button
+                          type="button"
+                          onClick={() => setQuickViewRow(row)}
+                          className="font-semibold text-slate-900 underline-offset-2 hover:underline"
+                        >
+                          {resolveCandidatePartialName(row)}
+                        </button>
+                        <div className="mt-1">
+                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${fit.tone}`} title={fit.reasons.join(" · ")}>
+                            {fit.label}
+                          </span>
+                        </div>
+                        <div className="mt-1 text-xs text-slate-500">{fit.summary}</div>
                         {row.candidate_already_exists ? (
                           <div className="mt-1 text-xs text-violet-700">Ya existía en VERIJOB antes de esta importación.</div>
                         ) : null}
                       </td>
-                      <td className="py-4 pr-4 align-top text-slate-700">{row.candidate_email}</td>
-                      <td className="py-4 pr-4 align-top text-slate-700">{row.target_role || "No indicado"}</td>
+                      <td className="py-4 pr-4 align-top text-slate-700">{resolveCandidateSector(row)}</td>
+                      <td className="py-4 pr-4 align-top text-slate-700">{resolveCandidateYearsExperience(row)}</td>
+                      <td className="py-4 pr-4 align-top text-slate-700">{resolveCandidateApproxLocation(row)}</td>
+                      <td className="py-4 pr-4 align-top text-slate-700">{row.trust_score ?? "—"}</td>
+                      <td className="py-4 pr-4 align-top text-slate-700">{resolveCandidateAvailableVerifications(row)}</td>
                       <td className="py-4 pr-4 align-top">
-                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${status.tone}`}>
-                          {status.label}
+                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${access.tone}`}>
+                          {access.label}
                         </span>
+                        <div className="mt-2">
+                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${status.tone}`}>
+                            {status.label}
+                          </span>
+                        </div>
                         {row.company_stage && row.company_stage !== "none" ? (
                           <div className="mt-2">
                             <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
@@ -457,16 +635,6 @@ export default function CompanyCandidatesClient() {
                             </span>
                           </div>
                         ) : null}
-                        {row.total_verifications ? (
-                          <div className="mt-1 text-xs text-slate-500">
-                            {row.approved_verifications || 0} aprobadas de {row.total_verifications}
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="py-4 pr-4 align-top">
-                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${access.tone}`}>
-                          {access.label}
-                        </span>
                         {row.access_status === "active" && row.access_expires_at ? (
                           <div className="mt-1 text-xs text-slate-500">Disponible hasta {formatDate(row.access_expires_at)}</div>
                         ) : null}
@@ -474,41 +642,34 @@ export default function CompanyCandidatesClient() {
                           <div className="mt-1 text-xs text-slate-500">Caducó el {formatDate(row.access_expires_at)}</div>
                         ) : null}
                         {row.access_status === "never" ? (
-                          <div className="mt-1 text-xs text-slate-500">Todavía no has desbloqueado el perfil completo de este candidato.</div>
+                          <div className="mt-1 text-xs text-slate-500">El candidato sigue en perfil parcial. Desbloquéalo para ver el perfil completo.</div>
                         ) : null}
                       </td>
-                      <td className="py-4 pr-4 align-top text-slate-700">{formatDate(row.last_activity_at || row.created_at)}</td>
                       <td className="py-4 pr-4 align-top">
                         <div className="flex flex-wrap gap-2">
                           {canOpenSnapshot ? (
-                            <a
-                              href={`/company/candidate/${encodeURIComponent(row.candidate_public_token)}`}
-                              className={actionButtonClass({})}
-                            >
+                            <a href={`/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}`} className={actionButtonClass({})}>
                               Ver resumen
                             </a>
                           ) : (
                             <span className={actionButtonClass({ disabled: true })}>Ver resumen</span>
                           )}
                           {canOpenInvitation ? (
-                            <a
-                              href={`/company-candidate-import/${encodeURIComponent(String(row.invite_token))}`}
-                              className={actionButtonClass({})}
-                            >
+                            <a href={`/company-candidate-import/${encodeURIComponent(String(row.invite_token))}`} className={actionButtonClass({})}>
                               Ver invitación
                             </a>
                           ) : (
                             <span className={actionButtonClass({ disabled: true })}>Ver invitación</span>
                           )}
                           {canOpenSnapshot ? (
-                            <a
-                              href={`/company/candidate/${encodeURIComponent(row.candidate_public_token)}?view=full`}
-                              className={actionButtonClass({ primary: true })}
-                            >
-                              {accessActionLabel}
-                            </a>
+                            <ProfileUnlockAction
+                              href={`/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}?view=full`}
+                              availableAccesses={availableProfileAccesses}
+                              alreadyUnlocked={row.access_status === "active"}
+                              primaryLabel="Acceder al perfil"
+                            />
                           ) : (
-                            <span className={actionButtonClass({ primary: true, disabled: true })}>Desbloquear perfil</span>
+                            <span className={actionButtonClass({ primary: true, disabled: true })}>Acceder al perfil</span>
                           )}
                           <button
                             type="button"
@@ -534,16 +695,10 @@ export default function CompanyCandidatesClient() {
                                 ? "Quitar preselección"
                                 : "Preseleccionar"}
                           </button>
-                          <span
-                            className={actionButtonClass({ disabled: true })}
-                            title="La acción de archivado todavía no está disponible en este flujo."
-                          >
+                          <span className={actionButtonClass({ disabled: true })} title="La acción de archivado todavía no está disponible en este flujo.">
                             Archivar
                           </span>
-                          <span
-                            className={actionButtonClass({ danger: true, disabled: true })}
-                            title="La eliminación todavía no está disponible en este flujo."
-                          >
+                          <span className={actionButtonClass({ danger: true, disabled: true })} title="La eliminación todavía no está disponible en este flujo.">
                             Eliminar
                           </span>
                         </div>
@@ -556,6 +711,15 @@ export default function CompanyCandidatesClient() {
           </table>
         </div>
       </section>
+
+      <CandidateQuickView
+        row={quickViewRow}
+        open={Boolean(quickViewRow)}
+        onClose={() => setQuickViewRow(null)}
+        onSetStage={updateCompanyStage}
+        actionLoading={actionId}
+        availableProfileAccesses={availableProfileAccesses}
+      />
     </div>
   );
 }

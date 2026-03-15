@@ -58,6 +58,17 @@ function fmtDate(value: string | null) {
   }).format(d);
 }
 
+function fmtDateShort(value: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(d);
+}
+
 function roleBadge(role: string | null) {
   const r = String(role || "").toLowerCase();
   if (r === "owner" || r === "admin") return "border-purple-200 bg-purple-50 text-purple-700";
@@ -175,6 +186,27 @@ export default function OwnerUsersPage() {
             <div className="text-xs text-slate-500">Archivados</div>
             <div className="text-xl font-semibold text-slate-900">{kpis.archived}</div>
           </div>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link
+            href="/owner/overview"
+            className="inline-flex h-10 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Ver overview owner
+          </Link>
+          <Link
+            href="/owner/verifications?status=reviewing"
+            className="inline-flex h-10 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Revisar verificaciones
+          </Link>
+          <Link
+            href="/owner/monetization"
+            className="inline-flex h-10 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Ver monetización
+          </Link>
         </div>
       </section>
 
@@ -334,13 +366,27 @@ export default function OwnerUsersPage() {
                         ? "override manual owner activo"
                         : r.subscription_status || "sin suscripción activa"}
                     </div>
+                    {r.subscription_current_period_end ? (
+                      <div className="text-xs text-slate-500">
+                        Renovación: {fmtDateShort(r.subscription_current_period_end)}
+                      </div>
+                    ) : null}
                   </td>
                   <td className="border-b border-slate-100 px-3 py-2">
                     <div className="truncate text-xs text-slate-700" title={r.active_company_name || "Sin empresa activa"}>
                       {r.active_company_name || "Sin empresa activa"}
                     </div>
                   </td>
-                  <td className="border-b border-slate-100 px-3 py-2 text-xs text-slate-700">{fmtDate(r.last_activity_at)}</td>
+                  <td className="border-b border-slate-100 px-3 py-2 text-xs text-slate-700">
+                    <div>{fmtDate(r.last_activity_at)}</div>
+                    <div className="mt-1 text-slate-500">
+                      {r.onboarding_completed === false
+                        ? "Onboarding pendiente"
+                        : String(r.lifecycle_status || "active").toLowerCase() === "deleted"
+                          ? "Cuenta archivada"
+                          : "Operativo"}
+                    </div>
+                  </td>
                   <td className="border-b border-slate-100 px-3 py-2 text-xs text-slate-700">
                     Exp {r.experiences_count} · Verif {r.verifications_count} · Ev {r.evidences_count}
                     {typeof r.trust_score === "number" ? ` · Trust ${r.trust_score}` : ""}

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 import {
   computeCompanyKpiFallback,
   mergeCompanyKpis,
@@ -10,6 +11,7 @@ import {
 } from "@/lib/company/company-profile";
 import { deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
+import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
 
 const ROUTE_VERSION = "company-dashboard-kpis-v2-clean-2026-03-05";
 
@@ -115,6 +117,7 @@ async function resolveCompanyVerificationStatus(
 export async function GET() {
   try {
     const supabase = await createClient();
+    const service = createServiceRoleClient();
 
     const { data: { user }, error: uErr } = await supabase.auth.getUser();
     if (uErr) return NextResponse.json({ error: "auth_getUser_failed", details: uErr.message, route_version: ROUTE_VERSION }, { status: 400 });
@@ -324,6 +327,12 @@ export async function GET() {
     });
 
     // No debug fields: keep only what UI needs
+    const accessCredits = await resolveCompanyProfileAccessCredits({
+      service,
+      userId: user.id,
+      companyId: activeCompanyId,
+    });
+
     const payload = {
       company_id: (data as any)?.company_id || activeCompanyId,
       company_name: companyName || "Tu empresa",
@@ -338,6 +347,7 @@ export async function GET() {
       company_verified_domain: verificationMethod.domain,
       profile_completeness_score: completion.score,
       current_period_end: currentPeriodEnd,
+      available_profile_accesses: accessCredits.available,
       kpis: mergedKpis,
       verification_activity: verificationActivity,
       recent_requests: recentRequests,

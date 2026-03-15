@@ -8,6 +8,7 @@ import {
   deriveCompanyCandidateAccess,
   resolveCompanyCandidateAccess,
 } from "@/lib/company/profile-access";
+import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
 
 type Params = { token: string };
 
@@ -60,6 +61,19 @@ function toPublicName(fullNameRaw: unknown) {
   const first = parts[0];
   const secondInitial = parts[1]?.charAt(0)?.toUpperCase();
   return secondInitial ? `${first} ${secondInitial}.` : first;
+}
+
+function yearsFromVerificationRows(rows: any[]) {
+  const dates = rows
+    .flatMap((row: any) => [row?.start_date || null, row?.end_date || null])
+    .filter(Boolean)
+    .map((value: any) => Date.parse(String(value)));
+  const valid = dates.filter((value) => Number.isFinite(value));
+  if (!valid.length) return null;
+  const min = Math.min(...valid);
+  const max = Math.max(...valid, Date.now());
+  const years = Math.max(0, Math.round(((max - min) / (365.25 * 24 * 60 * 60 * 1000)) * 10) / 10);
+  return years > 0 ? Math.round(years) : null;
 }
 
 async function resolveConsumptionSource(args: {
@@ -296,6 +310,12 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
         ? "actualizado_recientemente"
         : "listo_para_ver";
   const snapshot = {
+    public_name: toPublicName((profile as any)?.full_name),
+    sector:
+      String((Array.isArray((candidateProfile as any)?.preferred_roles) ? (candidateProfile as any)?.preferred_roles?.[0] : "") || "").trim() ||
+      null,
+    years_experience: yearsFromVerificationRows(verificationRows),
+    approximate_location: String((profile as any)?.location || (candidateProfile as any)?.work_zones || "").trim() || null,
     experiences_detected: experienceCount,
     total_verifications: totalVerifications,
     approved_verifications: verifiedRows.length,
@@ -310,6 +330,13 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   };
 
   const companyId = String((requesterProfile as any)?.active_company_id || "").trim();
+  const profileAccessCredits = companyId
+    ? await resolveCompanyProfileAccessCredits({
+        service,
+        userId: au.user.id,
+        companyId,
+      })
+    : { available: 0 };
   const access = companyId
     ? await resolveCompanyCandidateAccess({
         service,
@@ -328,7 +355,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
         allowed: true,
         consumed: false,
         requires_overage: false,
-        credits_remaining: null,
+        credits_remaining: profileAccessCredits.available,
       },
     });
   }
@@ -375,7 +402,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       return json(402, {
         error: "No credits",
         reason: gate?.reason ?? "no_credits",
-        credits_remaining: gate?.credits_remaining ?? null,
+        credits_remaining: gate?.credits_remaining ?? profileAccessCredits.available,
         upgrade_url: "/company/upgrade",
         preview: snapshot,
         access,
@@ -417,7 +444,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       ...gate,
       allowed: true,
       consumed: false,
-      credits_remaining: null,
+      credits_remaining: profileAccessCredits.available,
     };
   }
 
@@ -476,7 +503,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       consumed: !!gate?.consumed,
       requires_overage: !!gate?.requires_overage, // Enterprise sin créditos -> true
       overage_price: gate?.overage_price ?? null,
-      credits_remaining: gate?.credits_remaining ?? null,
+      credits_remaining: gate?.credits_remaining ?? profileAccessCredits.available,
       period_start: gate?.period_start ?? null,
     },
   });

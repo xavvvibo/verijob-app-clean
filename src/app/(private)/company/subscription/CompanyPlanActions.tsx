@@ -38,14 +38,14 @@ const PLANS: PlanCard[] = [
 
 const VIEW_PACKS = [
   {
-    label: "1 visualización",
+    label: "1 acceso",
     planKey: "company_single_cv",
-    summary: "Para abrir un perfil completo puntual sin cambiar de plan.",
+    summary: "Para acceder a un perfil completo puntual sin cambiar de plan.",
   },
   {
-    label: "Pack de 5 visualizaciones",
+    label: "Pack de 5 accesos",
     planKey: "company_pack_5",
-    summary: "Para procesos activos con varios candidatos ya en snapshot.",
+    summary: "Para procesos activos con varios candidatos ya en resumen parcial.",
   },
 ];
 
@@ -170,7 +170,7 @@ export default function CompanyPlanActions({
                       : "bg-slate-900 text-white hover:bg-black"
                   } disabled:cursor-not-allowed disabled:opacity-60`}
                 >
-                  {loadingPlan === plan.planKey ? "Abriendo checkout…" : isCurrent ? "Plan actual" : "Contratar este plan"}
+                  {loadingPlan === plan.planKey ? "Abriendo checkout…" : isCurrent ? "Plan actual" : "Mejorar a este plan"}
                 </button>
               </div>
             </article>
@@ -179,9 +179,9 @@ export default function CompanyPlanActions({
       </div>
 
       <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-        <h3 className="text-base font-semibold text-slate-900">Visualizaciones puntuales de perfil</h3>
+        <h3 className="text-base font-semibold text-slate-900">Accesos puntuales a perfiles</h3>
         <p className="mt-2 text-sm text-slate-600">
-          Si no necesitas cambiar de plan, puedes comprar visualizaciones puntuales para abrir perfiles completos desde los snapshots de candidatos.
+          Si no necesitas cambiar de plan, puedes comprar accesos puntuales para abrir perfiles completos desde los resúmenes parciales.
         </p>
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           {VIEW_PACKS.map((pack) => (
@@ -191,9 +191,9 @@ export default function CompanyPlanActions({
               <button
                 type="button"
                 disabled={loadingPlan === pack.planKey}
-                onClick={() => startCheckout(pack.planKey)}
-                className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
-              >
+              onClick={() => startCheckout(pack.planKey)}
+              className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
+            >
                 {loadingPlan === pack.planKey ? "Abriendo checkout…" : `Comprar ${pack.label.toLowerCase()}`}
               </button>
             </article>

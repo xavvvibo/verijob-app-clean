@@ -7,7 +7,7 @@ const FAQS = [
   },
   {
     q: "¿Cómo desbloqueo un candidato completo?",
-    a: "Desde Candidatos abre el snapshot y, si te interesa, desbloquea el perfil completo. El acceso queda activo temporalmente para tu empresa.",
+    a: "Desde Candidatos abre el resumen parcial y, si te interesa, accede al perfil completo consumiendo 1 acceso.",
   },
   {
     q: "¿Cómo accedo a un candidato completo?",

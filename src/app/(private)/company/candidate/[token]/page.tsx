@@ -2,6 +2,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 import { headers } from "next/headers";
 import ProfileViewCheckoutButtons from "./ProfileViewCheckoutButtons";
+import ProfileUnlockAction from "@/components/company/ProfileUnlockAction";
 
 type Ctx = {
   params: Promise<{ token: string }>;
@@ -47,6 +48,10 @@ type TimelineRow = {
 };
 
 type PreviewSnapshot = {
+  public_name?: string | null;
+  sector?: string | null;
+  years_experience?: number | null;
+  approximate_location?: string | null;
   experiences_detected?: number | null;
   total_verifications?: number | null;
   approved_verifications?: number | null;
@@ -72,9 +77,9 @@ type AccessState = {
 
 function mapAccessStatus(raw: unknown) {
   const value = String(raw || "").toLowerCase();
-  if (value === "active") return "Acceso activo";
+  if (value === "active") return "Perfil desbloqueado por tu empresa";
   if (value === "expired") return "Acceso expirado";
-  return "Sin acceso activo";
+  return "Perfil parcial disponible";
 }
 
 async function fetchCompanyProfile(token: string, view: "preview" | "full") {
@@ -119,7 +124,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Perfil aún en preparación</p>
             <h1 className="mt-2 text-2xl font-semibold text-amber-950">Este candidato aún está completando su perfil verificable</h1>
             <p className="mt-3 text-sm leading-6 text-amber-900">
-              Recibirás una notificación cuando esté disponible. De momento puedes revisar el snapshot actual sin consumir una visualización ni desbloquear el perfil completo.
+              Recibirás una notificación cuando esté disponible. De momento puedes revisar el resumen parcial actual sin consumir un acceso ni desbloquear el perfil completo.
             </p>
             <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <SnapshotField label="Experiencias detectadas" value={String(preview?.experiences_detected ?? "—")} />
@@ -132,7 +137,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <a className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100" href={`/company/candidate/${encodeURIComponent(token)}`}>
-                Volver al snapshot
+                Volver al resumen
               </a>
               <a className="rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100" href="/company/candidates">
                 Ver base RRHH
@@ -147,25 +152,21 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
       return (
         <main className="max-w-4xl p-6">
           <section className="rounded-3xl border border-rose-200 bg-rose-50 p-6 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Límite de visualizaciones</p>
-            <h1 className="mt-2 text-2xl font-semibold text-rose-950">Has alcanzado el límite de visualizaciones</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">Sin accesos disponibles</p>
+            <h1 className="mt-2 text-2xl font-semibold text-rose-950">No tienes accesos disponibles para ver perfiles completos</h1>
             <p className="mt-3 text-sm leading-6 text-rose-900">
-              Puedes seguir revisando el snapshot del candidato sin coste. Para abrir el perfil completo necesitas una visualización disponible. Cada apertura completa consume 1 visualización y activa acceso temporal para tu empresa.
+              Puedes seguir revisando el resumen parcial del candidato sin coste. Para acceder al perfil completo necesitas un acceso disponible. Cada acceso desbloquea el perfil completo para tu empresa.
             </p>
             <div className="mt-4 rounded-2xl border border-rose-200 bg-white p-4 text-sm text-rose-900">
-              <p className="font-semibold">Visualizaciones disponibles</p>
+              <p className="font-semibold">Accesos a perfiles disponibles</p>
               <p className="mt-1">{body?.credits_remaining != null ? String(body.credits_remaining) : "0"} disponibles ahora mismo.</p>
-              <p className="mt-1 text-rose-800">Después de comprar volverás a este snapshot y podrás decidir cuándo desbloquear el perfil completo.</p>
+              <p className="mt-1 text-rose-800">Después de comprar podrás volver aquí y acceder al perfil completo.</p>
             </div>
             <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              <SnapshotField label="Experiencias detectadas" value={String(preview?.experiences_detected ?? "—")} />
-              <SnapshotField label="Verificaciones" value={String(preview?.total_verifications ?? "—")} />
-              <SnapshotField label="Idiomas detectados" value={String(Array.isArray(preview?.languages_detected) ? preview.languages_detected.length : 0)} />
-              <SnapshotField label="Trust score" value={preview?.trust_score != null ? String(preview.trust_score) : "—"} />
-            </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <SnapshotField label="Empresa / email" value={String(preview?.verification_breakdown?.email_or_company ?? 0)} />
-              <SnapshotField label="Documento" value={String(preview?.verification_breakdown?.documental ?? 0)} />
+              <SnapshotField label="Nombre" value={String(preview?.public_name || "Candidato")} />
+              <SnapshotField label="Sector" value={String(preview?.sector || "Sector no especificado")} />
+              <SnapshotField label="Experiencia" value={preview?.years_experience != null ? `${preview.years_experience} años` : "Experiencia no especificada"} />
+              <SnapshotField label="Ubicación" value={String(preview?.approximate_location || "Ubicación no especificada")} />
             </div>
             <div className="mt-6">
               <ProfileViewCheckoutButtons returnPath={returnPath} upgradeUrl={upgradeUrl} />
@@ -203,8 +204,6 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
   }
 
   if (body?.view_mode === "preview") {
-    const previewLanguages = Array.isArray(preview?.languages_detected) ? preview.languages_detected.slice(0, 6) : [];
-    const verificationTypes = Array.isArray(preview?.verification_types) ? preview.verification_types : [];
     return (
       <main className="max-w-5xl p-6">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -215,101 +214,80 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
           ) : null}
           {checkoutState === "cancel" ? (
             <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-              La compra no se completó. Puedes seguir evaluando el snapshot y decidir después si compras visualizaciones o mejoras tu plan.
+              La compra no se completó. Puedes seguir evaluando el resumen parcial y decidir después si compras accesos.
             </div>
           ) : null}
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Snapshot del candidato</p>
-              <h1 className="mt-2 text-2xl font-semibold text-slate-900">Vista previa del candidato</h1>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Perfil parcial</p>
+              <h1 className="mt-2 text-2xl font-semibold text-slate-900">Resumen parcial del candidato</h1>
               <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
-                Resumen sin datos personales para decidir si merece la pena desbloquear el perfil completo. Esta vista no consume visualizaciones.
+                Vista parcial para decidir si merece la pena acceder al perfil completo. Esta vista no consume accesos.
               </p>
               <p className="mt-2 text-sm text-slate-600">
-                Abrir el perfil completo consume 1 visualización, activa acceso temporal para tu empresa y no se descuenta en esta vista previa.
+                Acceder al perfil completo consumirá 1 acceso. El perfil quedará desbloqueado permanentemente para tu empresa.
               </p>
               <p className="mt-2 text-sm text-slate-600">
                 {access?.access_status === "active" && access?.access_expires_at
-                  ? `Acceso activo hasta ${formatDateTime(access.access_expires_at)}.`
+                  ? `Perfil desbloqueado por tu empresa desde ${formatDateTime(access.access_expires_at)}.`
                   : access?.access_status === "expired" && access?.access_expires_at
                     ? `El acceso anterior expiró el ${formatDateTime(access.access_expires_at)}.`
                     : "Tu empresa todavía no ha desbloqueado este perfil completo."}
               </p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">
+                Accesos a perfiles disponibles: {body?.credits_remaining != null ? String(body.credits_remaining) : "0"}
+              </p>
+              {Number(body?.credits_remaining ?? 0) <= 0 && access?.access_status !== "active" ? (
+                <p className="mt-1 text-sm text-rose-700">No tienes accesos disponibles para ver perfiles completos.</p>
+              ) : null}
             </div>
-            <a
-              href={`/company/candidate/${encodeURIComponent(token)}?view=full`}
-              className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
-            >
-              Ver perfil completo (-1 visualización)
-            </a>
+            <div className="flex flex-wrap gap-3">
+              <ProfileUnlockAction
+                href={`/company/candidate/${encodeURIComponent(token)}?view=full`}
+                availableAccesses={Number(body?.credits_remaining ?? 0)}
+                alreadyUnlocked={access?.access_status === "active"}
+              />
+              {access?.access_status !== "active" ? (
+                <ProfileViewCheckoutButtons returnPath={returnPath} upgradeUrl="/company/subscription" compact />
+              ) : null}
+            </div>
           </div>
 
           <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <SnapshotField label="Experiencias detectadas" value={String(preview?.experiences_detected ?? "—")} />
-            <SnapshotField label="Verificaciones" value={String(preview?.total_verifications ?? "—")} />
-            <SnapshotField label="Aprobadas" value={String(preview?.approved_verifications ?? "—")} />
-            <SnapshotField label="Idiomas detectados" value={String(previewLanguages.length)} />
+            <SnapshotField label="Nombre" value={String(preview?.public_name || "Candidato")} />
+            <SnapshotField label="Sector" value={String(preview?.sector || "Sector no especificado")} />
+            <SnapshotField label="Experiencia" value={preview?.years_experience != null ? `${preview.years_experience} años` : "Experiencia no especificada"} />
+            <SnapshotField label="Ubicación" value={String(preview?.approximate_location || "Ubicación no especificada")} />
             <SnapshotField label="Trust score" value={preview?.trust_score != null ? String(preview.trust_score) : "Pendiente"} />
           </div>
 
           <div className="mt-6 grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
             <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <h2 className="text-sm font-semibold text-slate-900">Señales visibles antes de abrir perfil</h2>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {verificationTypes.length ? (
-                  verificationTypes.map((item) => (
-                    <span key={item} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                      Verificación {item}
-                    </span>
-                  ))
-                ) : (
-                  <span className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                    Sin verificaciones todavía
-                  </span>
-                )}
-                <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${preview?.onboarding_status === "candidate_onboarding_in_progress" ? "border-amber-300 bg-amber-50 text-amber-800" : "border-emerald-300 bg-emerald-50 text-emerald-800"}`}>
-                  {preview?.onboarding_status === "candidate_onboarding_in_progress" ? "Perfil aún completándose" : "Perfil listo para revisar"}
-                </span>
-                <span className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                  {mapProfileState(preview?.profile_state)}
-                </span>
-              </div>
-              <div className="mt-4">
-                <div className="mb-1 flex items-center justify-between text-sm text-slate-600">
-                  <span>Progreso de onboarding</span>
-                  <span className="font-semibold text-slate-900">{Number(preview?.onboarding_completion ?? 0)}%</span>
-                </div>
-                <div className="h-2 rounded-full bg-slate-200">
-                  <div className="h-full rounded-full bg-slate-900" style={{ width: `${Math.max(0, Math.min(100, Number(preview?.onboarding_completion ?? 0)))}%` }} />
-                </div>
-              </div>
+              <h2 className="text-sm font-semibold text-slate-900">Señales visibles antes de desbloquear</h2>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <SnapshotField label="Empresa / email" value={String(preview?.verification_breakdown?.email_or_company ?? 0)} />
-                <SnapshotField label="Documento" value={String(preview?.verification_breakdown?.documental ?? 0)} />
+                <SnapshotField label="Verificaciones disponibles" value={String(preview?.total_verifications ?? 0)} />
+                <SnapshotField label="Estado del perfil" value={mapProfileState(preview?.profile_state)} />
               </div>
-              <p className="mt-4 text-sm text-slate-600">
-                Última actividad: {formatDateTime(preview?.last_activity_at)}.
+              <p className="mt-4 text-sm text-slate-600">Última actividad: {formatDateTime(preview?.last_activity_at)}.</p>
+              <p className="mt-2 text-sm text-slate-600">
+                Este resumen parcial no muestra historial laboral, empresas previas, contacto ni documentos del candidato.
               </p>
             </article>
 
             <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-              <h2 className="text-sm font-semibold text-slate-900">Idiomas detectados</h2>
-              {previewLanguages.length ? (
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {previewLanguages.map((item) => (
-                    <span key={item} className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                      {item}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-4 text-sm text-slate-600">Todavía no hay idiomas detectados en el snapshot.</p>
-              )}
+              <h2 className="text-sm font-semibold text-slate-900">Siguiente paso</h2>
+              <p className="mt-4 text-sm text-slate-600">
+                Si este candidato encaja, accede al perfil completo. Consumirá 1 acceso y quedará desbloqueado de forma permanente para tu empresa.
+              </p>
               <div className="mt-5 flex flex-wrap gap-3">
-                <a className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black" href={`/company/candidate/${encodeURIComponent(token)}?view=full`}>
-                  Ver perfil completo (-1 visualización)
-                </a>
-                <ProfileViewCheckoutButtons returnPath={returnPath} upgradeUrl="/company/upgrade" compact />
+                <ProfileUnlockAction
+                  href={`/company/candidate/${encodeURIComponent(token)}?view=full`}
+                  availableAccesses={Number(body?.credits_remaining ?? 0)}
+                  alreadyUnlocked={access?.access_status === "active"}
+                />
+                {access?.access_status !== "active" ? (
+                  <ProfileViewCheckoutButtons returnPath={returnPath} upgradeUrl="/company/subscription" compact />
+                ) : null}
                 <a className="inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50" href="/company/candidates">
                   Volver a candidatos
                 </a>

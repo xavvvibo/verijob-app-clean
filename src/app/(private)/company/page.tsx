@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import CandidateQuickView from "@/components/company/CandidateQuickView";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+import { computeCandidateQuickFit, resolveCandidateDisplayName, resolveCandidatePipelineBucket, type CompanyCandidateWorkspaceRow } from "@/lib/company/candidate-fit";
 import { companyVerificationMethodTone } from "@/lib/company/verification-method";
 
 type Kpis = {
@@ -26,6 +28,7 @@ type DashboardPayload = {
   company_name?: string;
   plan_label?: string;
   subscription_status?: string;
+  available_profile_accesses?: number;
   company_verification_status?: string;
   company_verification_method?: "domain" | "documents" | "both" | "none";
   company_verification_method_label?: string;
@@ -67,26 +70,16 @@ type TeamPayload = {
   } | null;
 };
 
-type CandidateImportRow = {
+type CandidateImportRow = CompanyCandidateWorkspaceRow & {
   id: string;
-  candidate_name_raw?: string | null;
-  linked_profile_name?: string | null;
   candidate_email?: string | null;
-  target_role?: string | null;
-  display_status?: string | null;
-  candidate_public_token?: string | null;
-  company_stage?: "none" | "saved" | "preselected" | string | null;
-  created_at?: string | null;
-  last_activity_at?: string | null;
-  total_verifications?: number | null;
-  approved_verifications?: number | null;
-  access_status?: "active" | "expired" | "never" | string | null;
-  access_expires_at?: string | null;
+  invite_token?: string | null;
 };
 
 type CandidatesPayload = {
   imports?: CandidateImportRow[] | null;
   imports_meta?: { available?: boolean } | null;
+  available_profile_accesses?: number;
 };
 
 type PriorityItem = {
@@ -179,6 +172,7 @@ export default function CompanyDashboard() {
   const [candidateData, setCandidateData] = useState<CandidatesPayload | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
+  const [quickViewRow, setQuickViewRow] = useState<CandidateImportRow | null>(null);
 
   useEffect(() => {
     try {
@@ -259,6 +253,7 @@ export default function CompanyDashboard() {
   const imports = Array.isArray(candidateData?.imports) ? candidateData.imports : [];
   const importsAvailable = candidateData?.imports_meta?.available !== false;
   const verificationActivity = dashboard?.verification_activity || { pending: 0, verified: 0, rejected: 0 };
+  const availableProfileAccesses = Number(candidateData?.available_profile_accesses ?? dashboard?.available_profile_accesses ?? 0);
   const verificationTotal = Math.max(1, Number(verificationActivity.pending || 0) + Number(verificationActivity.verified || 0) + Number(verificationActivity.rejected || 0));
   const seatsLimit = Number(teamData?.plan?.seats_limit || 0);
   const seatsUsed = Number(teamData?.plan?.seats_used || 0);
@@ -295,9 +290,10 @@ export default function CompanyDashboard() {
       .filter((item) => item.display_status === "acceptance_pending" || item.display_status === "existing_candidate" || item.display_status === "profile_created")
       .slice(0, 4)
       .forEach((item, index) => {
+        const fit = computeCandidateQuickFit(item);
         items.push({
           id: `imp-${item.id}`,
-          title: item.linked_profile_name || item.candidate_name_raw || item.candidate_email || "Candidato importado",
+          title: resolveCandidateDisplayName(item),
           detail:
             item.display_status === "acceptance_pending"
               ? "CV importado pendiente de aceptación del candidato."
@@ -311,7 +307,7 @@ export default function CompanyDashboard() {
               ? "border-blue-200 bg-blue-50 text-blue-900"
               : "border-violet-200 bg-violet-50 text-violet-900",
           priority: 80 - index,
-          meta: `Última actividad ${formatDate(item.last_activity_at || item.created_at)}`,
+          meta: `${fit.label} · Última actividad ${formatDate(item.last_activity_at || item.created_at)}`,
         });
       });
 
@@ -351,7 +347,7 @@ export default function CompanyDashboard() {
             id: `${item.id}-onboarding`,
             tone: "border-indigo-200 bg-indigo-50 text-indigo-900",
             title: `${label} ha terminado el onboarding inicial`,
-            detail: "El perfil ya está disponible para revisar en snapshot antes de consumir una visualización completa.",
+            detail: "El perfil ya está disponible para revisar en resumen parcial antes de acceder al perfil completo.",
             href,
             cta: "Revisar candidato",
             timestamp: item.last_activity_at || item.created_at || null,
@@ -365,7 +361,7 @@ export default function CompanyDashboard() {
             title: `${label} ya tiene experiencias cargadas`,
             detail: "Puedes revisar la nueva versión del perfil y decidir si merece abrir el perfil completo.",
             href,
-            cta: "Ver snapshot",
+            cta: "Ver resumen",
             timestamp: item.last_activity_at || item.created_at || null,
             type: "experiences",
           });
@@ -401,7 +397,7 @@ export default function CompanyDashboard() {
             title: `${label} ha subido evidencias o documentación`,
             detail: "El perfil ya tiene material adicional para apoyar la validación.",
             href,
-            cta: "Revisar snapshot",
+            cta: "Revisar resumen",
             timestamp: item.last_activity_at || item.created_at || null,
             type: "evidences",
           });
@@ -415,6 +411,14 @@ export default function CompanyDashboard() {
   const visibleNotifications = useMemo(
     () => notifications.filter((item) => !readNotificationIds.includes(item.id)).slice(0, 4),
     [notifications, readNotificationIds]
+  );
+  const activeAccessCount = useMemo(
+    () => imports.filter((item) => String(item.access_status || "").toLowerCase() === "active").length,
+    [imports]
+  );
+  const expiredAccessCount = useMemo(
+    () => imports.filter((item) => String(item.access_status || "").toLowerCase() === "expired").length,
+    [imports]
   );
 
   function markNotificationRead(id: string) {
@@ -456,7 +460,7 @@ export default function CompanyDashboard() {
           <div className="flex flex-wrap gap-2">
             <a href="/company/requests" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black transition">Revisar solicitudes</a>
             <a href="/company/candidates" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">Abrir base RRHH</a>
-            <a href="/company/subscription" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">Plan y capacidad</a>
+            <a href="/company/subscription" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">Plan, capacidad y accesos</a>
           </div>
         </div>
         {errorMessage ? <p className="mt-4 text-sm text-rose-600">{errorMessage}</p> : null}
@@ -554,21 +558,21 @@ export default function CompanyDashboard() {
           </div>
 
           <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <a href="/company/candidates?pipeline=review" className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <p className="text-xs uppercase tracking-wide text-amber-800">Por revisar</p>
               <p className="mt-2 text-3xl font-semibold text-amber-900">{pipeline.byReview}</p>
               <p className="mt-1 text-sm text-amber-900/80">Solicitudes pendientes e importaciones esperando siguiente paso.</p>
-            </div>
-            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+            </a>
+            <a href="/company/candidates?pipeline=validation" className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
               <p className="text-xs uppercase tracking-wide text-blue-800">En validación</p>
               <p className="mt-2 text-3xl font-semibold text-blue-900">{pipeline.validating}</p>
               <p className="mt-1 text-sm text-blue-900/80">Perfiles ya moviéndose en revisión o validación documental.</p>
-            </div>
-            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+            </a>
+            <a href="/company/candidates?pipeline=decision" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
               <p className="text-xs uppercase tracking-wide text-emerald-800">Listos para decisión</p>
               <p className="mt-2 text-3xl font-semibold text-emerald-900">{pipeline.ready}</p>
               <p className="mt-1 text-sm text-emerald-900/80">Perfiles que ya merece la pena abrir y decidir.</p>
-            </div>
+            </a>
           </div>
 
           <div className="mt-5 grid gap-3 md:grid-cols-3">
@@ -612,6 +616,18 @@ export default function CompanyDashboard() {
 
           <div className="mt-4 space-y-3">
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-sm font-semibold text-slate-900">Accesos a perfiles disponibles</p>
+              <p className="mt-1 text-sm text-slate-600">
+                {availableProfileAccesses} disponibles ahora mismo.
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                {activeAccessCount} perfiles completos activos · {expiredAccessCount} accesos caducados listos para renovar.
+              </p>
+              {availableProfileAccesses <= 0 ? (
+                <p className="mt-2 text-sm text-rose-700">No tienes accesos disponibles para ver perfiles completos.</p>
+              ) : null}
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-sm font-semibold text-slate-900">Qué te está limitando hoy</p>
               <p className="mt-1 text-sm text-slate-600">
                 {seatsLimit <= 1
@@ -626,8 +642,8 @@ export default function CompanyDashboard() {
               <p className="mt-1 text-sm">
                 Más capacidad de equipo, más ritmo operativo y un panel empresa que puede crecer contigo sin fricciones.
               </p>
-              <a href="/company/upgrade" className="mt-3 inline-flex rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800">
-                Ver y contratar planes
+              <a href="/company/subscription" className="mt-3 inline-flex rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800">
+                Comprar accesos
               </a>
             </div>
           </div>
@@ -703,18 +719,31 @@ export default function CompanyDashboard() {
               ) : (
                 rrhhRows.map((item) => {
                   const badge = importBadge(item.display_status);
+                  const fit = computeCandidateQuickFit(item);
+                  const pipeline = resolveCandidatePipelineBucket(item);
                   return (
                     <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
-                          <p className="text-sm font-semibold text-slate-900">
-                            {item.linked_profile_name || item.candidate_name_raw || item.candidate_email || "Candidato"}
-                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setQuickViewRow(item)}
+                            className="text-left text-sm font-semibold text-slate-900 underline-offset-2 hover:underline"
+                          >
+                            {resolveCandidateDisplayName(item)}
+                          </button>
                           <p className="mt-1 text-sm text-slate-600">{item.target_role || "Sin puesto definido"}</p>
                           <p className="mt-1 text-xs text-slate-500">Última actividad {formatDate(item.last_activity_at || item.created_at)}</p>
+                          <p className="mt-1 text-xs text-slate-500">{fit.summary}</p>
                         </div>
                         <div className="flex items-center gap-2">
+                          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${fit.tone}`} title={fit.reasons.join(" · ")}>
+                            {fit.label}
+                          </span>
                           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${badge.tone}`}>{badge.label}</span>
+                          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                            {pipeline === "decision" ? "Decisión" : pipeline === "validation" ? "Validación" : "Revisión"}
+                          </span>
                           {item.company_stage && item.company_stage !== "none" ? (
                             <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${
                               item.company_stage === "preselected"
@@ -724,6 +753,13 @@ export default function CompanyDashboard() {
                               {item.company_stage === "preselected" ? "Preseleccionado" : "Guardado"}
                             </span>
                           ) : null}
+                          <button
+                            type="button"
+                            onClick={() => setQuickViewRow(item)}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
+                          >
+                            Vista rápida
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -753,6 +789,12 @@ export default function CompanyDashboard() {
           </div>
         </article>
       </section>
+      <CandidateQuickView
+        row={quickViewRow}
+        open={Boolean(quickViewRow)}
+        onClose={() => setQuickViewRow(null)}
+        availableProfileAccesses={availableProfileAccesses}
+      />
     </div>
   );
 }

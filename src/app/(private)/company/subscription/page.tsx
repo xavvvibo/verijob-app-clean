@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
 import { companyVerificationMethodTone, deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
+import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import CompanyPlanActions from "./CompanyPlanActions";
@@ -175,6 +176,11 @@ export default async function CompanySubscriptionPage() {
   ]);
 
   const effectiveSubscription = await readEffectiveSubscriptionState(admin, auth.user.id);
+  const accessCredits = await resolveCompanyProfileAccessCredits({
+    service: admin,
+    userId: auth.user.id,
+    companyId,
+  });
   const sub = effectiveSubscription.subscription || subscriptionRes.data;
   const plan = String(effectiveSubscription.plan || sub?.plan || "company_free");
   const status = normalizeSubscriptionStatus(effectiveSubscription.status || sub?.status || "free");
@@ -242,6 +248,10 @@ export default async function CompanySubscriptionPage() {
               <dd className="font-semibold text-slate-900">{renewalText}</dd>
             </div>
             <div className="flex justify-between gap-4">
+              <dt className="text-slate-500">Accesos a perfiles disponibles</dt>
+              <dd className="font-semibold text-slate-900">{accessCredits.available}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
               <dt className="text-slate-500">Cancelación programada</dt>
               <dd className="font-semibold text-slate-900">{sub?.cancel_at_period_end ? "Sí" : "No"}</dd>
             </div>
@@ -277,7 +287,7 @@ export default async function CompanySubscriptionPage() {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <Link href="/company/upgrade" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black transition">
-              Ver y contratar planes
+              Mejorar plan o comprar accesos
             </Link>
             <Link href="/company/profile" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">
               Revisar perfil empresa

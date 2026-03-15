@@ -176,16 +176,20 @@ export async function GET(req: Request) {
 
     let companyMatchIds = new Set<string>();
     if (q) {
-      const { data: companyMatches } = await admin
-        .from("companies")
-        .select("id")
-        .or(`name.ilike.%${q}%,trade_name.ilike.%${q}%,legal_name.ilike.%${q}%`)
-        .limit(100);
+      const [companyMatchesRes, companyProfileMatchesRes] = await Promise.all([
+        admin.from("companies").select("id").ilike("name", `%${q}%`).limit(100),
+        admin
+          .from("company_profiles")
+          .select("company_id")
+          .or(`trade_name.ilike.%${q}%,legal_name.ilike.%${q}%,company_name.ilike.%${q}%`)
+          .limit(100),
+      ]);
 
       companyMatchIds = new Set(
-        (companyMatches || [])
-          .map((c: any) => String(c?.id || ""))
-          .filter((id: string) => isUuid(id))
+        [
+          ...(companyMatchesRes.data || []).map((c: any) => String(c?.id || "")),
+          ...(companyProfileMatchesRes.data || []).map((c: any) => String(c?.company_id || "")),
+        ].filter((id: string) => isUuid(id))
       );
     }
 

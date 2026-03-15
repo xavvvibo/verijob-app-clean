@@ -55,7 +55,7 @@ export default function ProfileViewCheckoutButtons({
           disabled={loadingKey !== null}
           className={`${buttonBase} bg-slate-900 text-white hover:bg-black disabled:opacity-60`}
         >
-          {loadingKey === "company_single_cv" ? "Abriendo checkout…" : "Comprar 1 visualización"}
+          {loadingKey === "company_single_cv" ? "Abriendo checkout…" : "Comprar 1 acceso"}
         </button>
         <button
           type="button"
@@ -63,13 +63,13 @@ export default function ProfileViewCheckoutButtons({
           disabled={loadingKey !== null}
           className={`${buttonBase} border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 disabled:opacity-60`}
         >
-          {loadingKey === "company_pack_5" ? "Abriendo checkout…" : "Comprar pack de 5 visualizaciones"}
+          {loadingKey === "company_pack_5" ? "Abriendo checkout…" : "Comprar pack de 5"}
         </button>
         <a
           className={`${buttonBase} border border-slate-300 bg-white text-slate-900 hover:bg-slate-50 inline-flex items-center`}
           href={upgradeUrl}
         >
-          Mejorar plan empresa
+          Comprar accesos
         </a>
       </div>
       {message ? (
