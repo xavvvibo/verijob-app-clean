@@ -125,7 +125,7 @@ export default function CandidateEducationPage() {
             onClick={add}
             className="inline-flex rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
           >
-            Añadir formación
+            Añadir estudios
           </button>
         </div>
 

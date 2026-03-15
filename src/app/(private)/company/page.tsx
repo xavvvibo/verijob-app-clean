@@ -31,6 +31,14 @@ type DashboardPayload = {
   subscription_status?: string;
   available_profile_accesses?: number;
   company_verification_status?: string;
+  company_document_verification_status?: string;
+  company_document_verification_label?: string;
+  company_document_verification_detail?: string | null;
+  company_document_last_submitted_at?: string | null;
+  company_document_last_reviewed_at?: string | null;
+  company_document_review_eta_at?: string | null;
+  company_document_review_eta_label?: string | null;
+  company_document_review_priority_label?: string | null;
   company_verification_method?: "domain" | "documents" | "both" | "none";
   company_verification_method_label?: string;
   company_verification_method_detail?: string | null;
@@ -118,15 +126,18 @@ function formatDate(value?: string | null) {
 
 function verificationStatusLabel(statusRaw: unknown) {
   const status = String(statusRaw || "").toLowerCase();
-  if (status === "verified_paid") return "Empresa verificada por plan";
-  if (status === "verified_document") return "Empresa verificada por documentación";
-  return "Empresa pendiente de verificación";
+  if (status === "verified") return "Verificada documentalmente";
+  if (status === "uploaded") return "Documento recibido";
+  if (status === "under_review") return "En revisión";
+  if (status === "rejected") return "Requiere corrección";
+  return "Sin documento";
 }
 
 function verificationStatusClass(statusRaw: unknown) {
   const status = String(statusRaw || "").toLowerCase();
-  if (status === "verified_paid") return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  if (status === "verified_document") return "border-blue-200 bg-blue-50 text-blue-800";
+  if (status === "verified") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "uploaded" || status === "under_review") return "border-indigo-200 bg-indigo-50 text-indigo-800";
+  if (status === "rejected") return "border-rose-200 bg-rose-50 text-rose-800";
   return "border-amber-200 bg-amber-50 text-amber-800";
 }
 
@@ -275,9 +286,11 @@ export default function CompanyDashboard() {
     "Tu empresa"
   );
   const planLabel = dashboard?.plan_label || teamData?.plan?.label || "Free";
-  const verificationStatus = dashboard?.company_verification_status || "unverified";
+  const verificationStatus = dashboard?.company_document_verification_status || dashboard?.company_verification_status || "none";
+  const verificationStatusLabelText = dashboard?.company_document_verification_label || verificationStatusLabel(verificationStatus);
+  const verificationStatusDetail = dashboard?.company_document_verification_detail || null;
   const verificationMethod = dashboard?.company_verification_method || "none";
-  const verificationMethodLabel = dashboard?.company_verification_method_label || "Empresa no verificada";
+  const verificationMethodLabel = dashboard?.company_verification_method_label || "Sin señal adicional confirmada";
   const profileCompletion = Number(profileData?.profile_completion?.score ?? dashboard?.profile_completeness_score ?? 0);
   const checklist = Array.isArray(profileData?.profile_completion?.checklist)
     ? profileData?.profile_completion?.checklist?.slice(0, 4)
@@ -483,7 +496,7 @@ export default function CompanyDashboard() {
             </p>
             <div className="mt-4 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">Plan {planLabel}</span>
-              <span className={`rounded-full border px-3 py-1 font-semibold ${verificationStatusClass(verificationStatus)}`}>{verificationStatusLabel(verificationStatus)}</span>
+              <span className={`rounded-full border px-3 py-1 font-semibold ${verificationStatusClass(verificationStatus)}`}>{verificationStatusLabelText}</span>
               <span className={`rounded-full border px-3 py-1 font-semibold ${companyVerificationMethodTone(verificationMethod)}`}>{verificationMethodLabel}</span>
               {dashboard?.current_period_end ? (
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
@@ -492,8 +505,15 @@ export default function CompanyDashboard() {
               ) : null}
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">Perfil {profileCompletion}% listo</span>
             </div>
+            {verificationStatusDetail ? <p className="mt-2 text-sm text-slate-600">{verificationStatusDetail}</p> : null}
+            {dashboard?.company_document_review_eta_label && (verificationStatus === "uploaded" || verificationStatus === "under_review") ? (
+              <p className="mt-1 text-sm text-slate-600">
+                Tiempo estimado de revisión: {dashboard.company_document_review_eta_label}
+                {dashboard.company_document_review_priority_label ? ` · ${dashboard.company_document_review_priority_label}` : ""}
+              </p>
+            ) : null}
             {dashboard?.company_verification_method_detail ? (
-              <p className="mt-2 text-sm text-slate-600">{dashboard.company_verification_method_detail}</p>
+              <p className="mt-1 text-sm text-slate-500">Señales adicionales: {dashboard.company_verification_method_detail}</p>
             ) : null}
           </div>
           <div className="flex flex-wrap gap-2">

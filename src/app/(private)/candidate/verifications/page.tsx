@@ -20,7 +20,7 @@ function companySignalLabel(status: string | null | undefined) {
   const raw = String(status || "").toLowerCase();
   if (raw === "registered_in_verijob") return "Empresa registrada en VERIJOB";
   if (raw === "verified_document") return "Empresa verificadora validada documentalmente";
-  if (raw === "verified_paid") return "Empresa verificada (suscripción activa)";
+  if (raw === "verified_paid") return "Empresa con plan activo";
   if (raw === "unverified_external") return "Verificación por email corporativo";
   return "Sin señal adicional";
 }

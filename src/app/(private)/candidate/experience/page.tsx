@@ -20,7 +20,7 @@ export default async function CandidateExperiencePage() {
     .select("id, role, full_name, onboarding_completed")
     .eq("id", au.user.id)
     .single();
-  if (!profile || !profile.onboarding_completed) redirect("/onboarding");
+  if (!profile) redirect("/onboarding");
 
   const { data: rows } = await supabase
     .from("profile_experiences")

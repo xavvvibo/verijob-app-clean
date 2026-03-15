@@ -57,31 +57,31 @@ export function deriveCompanyVerificationMethod(input: {
   if (method === "both") {
     return {
       method,
-      label: "Verificada por dominio y documentación",
-      detail: contactDomain ? `Dominio verificado: ${contactDomain}` : "Dominio corporativo y documentación validados",
+      label: "Señales por dominio y documentación",
+      detail: contactDomain ? `Dominio corporativo detectado: ${contactDomain}` : "Hay señales por dominio corporativo y documentación aprobada",
       domain: contactDomain,
     };
   }
   if (method === "domain") {
     return {
       method,
-      label: "Verificada por dominio corporativo",
-      detail: contactDomain ? `Dominio verificado: ${contactDomain}` : null,
+      label: "Señal por dominio corporativo",
+      detail: contactDomain ? `Dominio corporativo detectado: ${contactDomain}` : null,
       domain: contactDomain,
     };
   }
   if (method === "documents") {
     return {
       method,
-      label: "Verificada por documentación",
-      detail: "La empresa ya tiene documentación validada",
+      label: "Señal documental disponible",
+      detail: "Existe al menos un documento aprobado en la ficha de empresa",
       domain: null,
     };
   }
   return {
     method,
-    label: "Empresa no verificada",
-    detail: "Aún no hay señales suficientes de dominio o documentación validada",
+    label: "Sin señal adicional confirmada",
+    detail: "Todavía no hay señales de dominio corporativo o documentación aprobada",
     domain: null,
   };
 }

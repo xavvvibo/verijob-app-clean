@@ -71,23 +71,18 @@ const COMPANY_DOCUMENT_TYPES = [
 
 function statusLabel(statusRaw: unknown) {
   const status = String(statusRaw || "").toLowerCase();
-  if (status === "verified") return "Verificada";
-  if (status === "pending_review") return "Pendiente de revisión";
-  if (status === "rejected") return "Rechazada";
-  if (status === "unverified") return "No verificada";
-  if (status === "verified_paid") return "Empresa verificada por suscripción";
-  if (status === "verified_document") return "Empresa verificada por documentación";
-  return "Empresa no verificada";
+  if (status === "verified") return "Verificada documentalmente";
+  if (status === "uploaded") return "Documento recibido";
+  if (status === "under_review") return "En revisión";
+  if (status === "rejected") return "Requiere corrección";
+  return "Sin documento";
 }
 
 function statusClass(statusRaw: unknown) {
   const status = String(statusRaw || "").toLowerCase();
   if (status === "verified") return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  if (status === "pending_review") return "border-indigo-200 bg-indigo-50 text-indigo-800";
+  if (status === "uploaded" || status === "under_review") return "border-indigo-200 bg-indigo-50 text-indigo-800";
   if (status === "rejected") return "border-rose-200 bg-rose-50 text-rose-800";
-  if (status === "unverified") return "border-amber-200 bg-amber-50 text-amber-800";
-  if (status === "verified_paid") return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  if (status === "verified_document") return "border-blue-200 bg-blue-50 text-blue-800";
   return "border-amber-200 bg-amber-50 text-amber-800";
 }
 
@@ -100,9 +95,9 @@ function docStatusLabel(raw: unknown) {
   const v = String(raw || "").toLowerCase();
   if (v === "approved") return "Aprobada";
   if (v === "rejected") return "Rechazada";
-  if (v === "pending_review") return "Pendiente de revisión";
-  if (v === "uploaded") return "Documento subido";
-  return "Pendiente de revisión";
+  if (v === "pending_review") return "En revisión";
+  if (v === "uploaded") return "Documento recibido";
+  return "En revisión";
 }
 
 function docStatusClass(raw: unknown) {
@@ -198,8 +193,8 @@ function globalDocumentarySummary(input: {
   }
   if (pendingDocumentsCount > 0) {
     return {
-      title: "Tu documentación sigue en revisión manual",
-      detail: "Hemos recibido tus documentos. El equipo de revisión todavía tiene una tarea pendiente antes de validar la empresa.",
+      title: "Tu documentación está en revisión",
+      detail: "Hemos recibido tus documentos. La revisión documental sigue abierta hasta confirmar la validez de la empresa.",
       tone: "border-indigo-200 bg-indigo-50 text-indigo-900",
     };
   }
@@ -219,7 +214,7 @@ function globalDocumentarySummary(input: {
   }
   return {
     title: "Todavía no has iniciado la verificación documental",
-    detail: "Sube un documento oficial para que podamos revisar la información de tu empresa.",
+    detail: "Sube un documento oficial para iniciar la revisión documental de tu empresa.",
     tone: "border-slate-200 bg-slate-50 text-slate-900",
   };
 }
@@ -352,7 +347,7 @@ export default function CompanyProfilePage() {
       setProfile(data.profile || {});
       setMembershipRole(String(data.membership_role || "reviewer"));
       setDocuments(Array.isArray(data.verification_documents) ? data.verification_documents : []);
-      setReviewStatus(String(data?.profile?.company_verification_review_status || "unverified"));
+      setReviewStatus(String(data?.profile?.company_document_verification_status || data?.profile?.company_verification_review_status || "none"));
       setDocumentsMeta(data?.verification_documents_meta || null);
       setCommonRolesText(formatListInput(data?.profile?.common_roles_hired));
       setLanguagesText(formatListInput(data?.profile?.common_languages_required));
@@ -454,7 +449,7 @@ export default function CompanyProfilePage() {
     }
 
     setProfile(data.profile || profile);
-    setReviewStatus(String(data?.profile?.company_verification_review_status || reviewStatus));
+    setReviewStatus(String(data?.profile?.company_document_verification_status || data?.profile?.company_verification_review_status || reviewStatus));
     if (Array.isArray(data?.verification_documents)) {
       setDocuments(data.verification_documents);
     }
@@ -504,10 +499,10 @@ export default function CompanyProfilePage() {
         : documents;
     setDocuments(nextDocuments);
     setDocumentsMeta(buildDocumentsMetaFromResponse(data));
-    setReviewStatus("pending_review");
+    setReviewStatus(String(data?.documentary_status || "under_review"));
     setDocFile(null);
     const refreshed = await loadProfileFresh();
-    setMessage(data?.user_message || "Documento subido correctamente.");
+    setMessage(data?.user_message || "Documento subido correctamente. Estamos revisándolo.");
     if (!refreshed && nextDocuments.length === 0) {
       setError("El documento se subió, pero no se pudo refrescar el histórico de forma automática.");
     }
@@ -582,7 +577,7 @@ export default function CompanyProfilePage() {
     setProfile(profileData.profile || {});
     setMembershipRole(String(profileData.membership_role || "reviewer"));
     setDocuments(docsFromProfile.length > 0 || !docsRes.ok ? docsFromProfile : docsFromEndpoint);
-    setReviewStatus(String(profileData?.profile?.company_verification_review_status || "unverified"));
+    setReviewStatus(String(profileData?.profile?.company_document_verification_status || profileData?.profile?.company_verification_review_status || "none"));
     setDocumentsMeta(documentsMetaFromProfile || documentsMetaFromDocs);
     setCommonRolesText(formatListInput(profileData?.profile?.common_roles_hired));
     setLanguagesText(formatListInput(profileData?.profile?.common_languages_required));
@@ -607,11 +602,20 @@ export default function CompanyProfilePage() {
             <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(reviewStatus)}`}>
               {statusLabel(reviewStatus)}
             </div>
+            {profile?.company_document_verification_detail ? (
+              <p className="mt-2 text-sm text-slate-600">{String(profile.company_document_verification_detail)}</p>
+            ) : null}
+            {profile?.company_document_review_eta_label && (reviewStatus === "uploaded" || reviewStatus === "under_review") ? (
+              <p className="mt-2 text-sm text-slate-600">
+                Tiempo estimado de revisión: {String(profile.company_document_review_eta_label)}
+                {profile?.company_document_review_priority_label ? ` · ${String(profile.company_document_review_priority_label)}` : ""}
+              </p>
+            ) : null}
             <div className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${companyVerificationMethodTone(profile?.company_verification_method || "none")}`}>
-              {profile?.company_verification_method_label || "Empresa no verificada"}
+              {profile?.company_verification_method_label || "Sin señal adicional confirmada"}
             </div>
             {profile?.company_verification_method_detail ? (
-              <p className="mt-2 text-sm text-slate-600">{String(profile.company_verification_method_detail)}</p>
+              <p className="mt-2 text-sm text-slate-500">Señales adicionales: {String(profile.company_verification_method_detail)}</p>
             ) : null}
           </div>
           <div className="min-w-[260px] rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -808,6 +812,20 @@ export default function CompanyProfilePage() {
           </p>
           <p className="mt-3 text-sm font-semibold">{documentarySummary.title}</p>
           <p className="mt-1 text-xs text-slate-600">{documentarySummary.detail}</p>
+          {profile?.company_document_latest_document_type ? (
+            <p className="mt-2 text-xs text-slate-600">
+              Documento recibido: {docTypeLabel(profile.company_document_latest_document_type)}
+              {profile?.company_document_last_submitted_at
+                ? ` · enviado el ${new Date(String(profile.company_document_last_submitted_at)).toLocaleDateString("es-ES")}`
+                : ""}
+            </p>
+          ) : null}
+          {profile?.company_document_review_eta_label && (reviewStatus === "uploaded" || reviewStatus === "under_review") ? (
+            <p className="mt-2 text-xs text-slate-600">
+              Tiempo estimado de revisión según tu plan: {String(profile.company_document_review_eta_label)}
+              {profile?.company_document_review_priority_label ? ` · ${String(profile.company_document_review_priority_label)}` : ""}
+            </p>
+          ) : null}
           <div className="mt-3 grid gap-2 md:grid-cols-3">
             <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 text-xs text-slate-700">
               <div className="font-semibold text-slate-900">Documentos activos</div>
@@ -823,16 +841,16 @@ export default function CompanyProfilePage() {
             </div>
           </div>
           <p className="mt-3 text-xs text-slate-600">
-            La revisión documental es manual. Incorporar datos al perfil te ayuda a completar la ficha, pero no valida por sí solo la empresa.
+            La revisión documental no es instantánea. Incorporar datos al perfil te ayuda a completar la ficha, pero no valida por sí solo la empresa.
           </p>
-          {profile?.verification_rejection_reason ? (
+          {profile?.company_document_rejection_reason || profile?.verification_rejection_reason ? (
             <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-              Motivo de rechazo: {profile.verification_rejection_reason}
+              Motivo de corrección: {profile.company_document_rejection_reason || profile.verification_rejection_reason}
             </p>
           ) : null}
-          {profile?.verification_last_reviewed_at ? (
+          {(profile?.company_document_last_reviewed_at || profile?.verification_last_reviewed_at) ? (
             <p className="mt-2 text-xs text-slate-500">
-              Última revisión: {new Date(String(profile.verification_last_reviewed_at)).toLocaleDateString("es-ES")}
+              Última revisión: {new Date(String(profile.company_document_last_reviewed_at || profile.verification_last_reviewed_at)).toLocaleDateString("es-ES")}
             </p>
           ) : null}
           <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">

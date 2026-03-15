@@ -38,14 +38,14 @@ function fmtDate(v?: string | null) {
 
 function verificationStatusLabel(statusRaw: unknown) {
   const status = String(statusRaw || "").toLowerCase();
-  if (status === "verified_paid") return "Empresa verificada (suscripción activa)";
+  if (status === "registered_in_verijob") return "Empresa registrada en VERIJOB";
   if (status === "verified_document") return "Empresa verificada por documentación";
-  return "Empresa no verificada";
+  return "Sin verificación documental";
 }
 
 function verificationStatusClass(statusRaw: unknown) {
   const status = String(statusRaw || "").toLowerCase();
-  if (status === "verified_paid") return "bg-emerald-100 text-emerald-800";
+  if (status === "registered_in_verijob") return "bg-slate-100 text-slate-800";
   if (status === "verified_document") return "bg-blue-100 text-blue-800";
   return "bg-amber-100 text-amber-800";
 }
@@ -60,7 +60,7 @@ async function resolveCompanyVerificationStatus(supabase: any, companyId: string
     .maybeSingle();
 
   const subscriptionStatus = String(subRes.data?.status || "").toLowerCase();
-  if (subscriptionStatus === "active" || subscriptionStatus === "trialing") return "verified_paid";
+  if (subscriptionStatus === "active" || subscriptionStatus === "trialing") return "registered_in_verijob";
 
   const companyRes = await supabase
     .from("companies")

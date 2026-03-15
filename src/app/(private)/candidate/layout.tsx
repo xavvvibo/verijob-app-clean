@@ -29,7 +29,5 @@ export default async function CandidateLayout({ children }: { children: React.Re
     redirect("/dashboard?forbidden=1&from=candidate");
   }
 
-  if (!profile?.onboarding_completed) redirect("/onboarding?blocked=1&source=candidate");
-
   return <>{children}</>;
 }

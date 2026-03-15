@@ -2,7 +2,13 @@ import { randomUUID } from "crypto";
 import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import {
+  deriveCompanyDocumentVerificationState,
+  finalizeCompanyDocumentsIfDue,
+  resolveCompanyDocumentReviewPriority,
+} from "@/lib/company/document-verification";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
+import { readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
 
 export const dynamic = "force-dynamic";
 
@@ -247,7 +253,7 @@ export async function GET() {
   try {
     const ctx = await resolveContext();
     if ((ctx as any).error) return (ctx as any).error;
-    const { companyId, admin } = ctx as any;
+    const { companyId, admin, user } = ctx as any;
 
     const docsState = await readCompanyVerificationDocuments(admin, companyId);
 
@@ -263,8 +269,32 @@ export async function GET() {
       });
     }
 
+    const { data: companyProfile } = await admin
+      .from("company_profiles")
+      .select("tax_id,legal_name,trade_name,contact_email,website_url,verification_document_type,verification_document_uploaded_at")
+      .eq("company_id", companyId)
+      .maybeSingle();
+    const effectiveSubscription = await readEffectiveSubscriptionState(admin, user.id);
+    const finalizedDocs = await finalizeCompanyDocumentsIfDue({
+      admin,
+      docs: docsState.documents,
+      companyProfile: companyProfile || {},
+      planRaw: effectiveSubscription.plan,
+    });
+    const documentaryState = deriveCompanyDocumentVerificationState({
+      docs: finalizedDocs,
+      legacyHasDocument: Boolean(companyProfile?.verification_document_type || companyProfile?.verification_document_uploaded_at),
+      planRaw: effectiveSubscription.plan,
+    });
+
     return json(200, {
-      documents: docsState.documents,
+      documents: finalizedDocs,
+      documentary_status: documentaryState.status,
+      documentary_label: documentaryState.label,
+      documentary_detail: documentaryState.detail,
+      review_eta_at: documentaryState.review_eta_at,
+      review_eta_label: documentaryState.review_eta_label,
+      review_priority_label: documentaryState.priority_label,
       ...(docsState.warningCode ? { warning: docsState.warningCode, ...docsMigrationPayload(docsState.warningCode) } : {}),
     });
   } catch (e: any) {
@@ -327,6 +357,8 @@ export async function POST(request: Request) {
     }
 
     const nowIso = new Date().toISOString();
+    const effectiveSubscription = await readEffectiveSubscriptionState(admin, user.id);
+    const reviewPriority = resolveCompanyDocumentReviewPriority(effectiveSubscription.plan);
     const extracted = bestEffortExtractCompanyData(bytes);
     const insertPayload = {
       company_id: companyId,
@@ -416,17 +448,43 @@ export async function POST(request: Request) {
       return json(200, {
         ok: true,
         document: docsInsert.data,
-        user_message: "Documento subido correctamente, pero no se pudo refrescar el histórico automáticamente.",
+        user_message: "Documento subido correctamente. Ya está en revisión, pero no se pudo refrescar el histórico automáticamente.",
         documents: [docsInsert.data].filter(Boolean),
         profile_update_warning: profileUpdateRes.error ? "company_profile_document_sync_failed" : null,
+        documentary_status: "under_review",
+        review_eta_label: reviewPriority.etaLabel,
+        review_priority_label: reviewPriority.label,
       });
     }
+
+    const { data: companyProfile } = await admin
+      .from("company_profiles")
+      .select("tax_id,legal_name,trade_name,contact_email,website_url,verification_document_type,verification_document_uploaded_at")
+      .eq("company_id", companyId)
+      .maybeSingle();
+    const finalizedDocs = await finalizeCompanyDocumentsIfDue({
+      admin,
+      docs: docsState.documents,
+      companyProfile: companyProfile || {},
+      planRaw: effectiveSubscription.plan,
+    });
+    const documentaryState = deriveCompanyDocumentVerificationState({
+      docs: finalizedDocs,
+      legacyHasDocument: true,
+      planRaw: effectiveSubscription.plan,
+    });
 
     return json(200, {
       ok: true,
       document: docsInsert.data,
-      documents: docsState.documents,
-      user_message: "Documento subido correctamente.",
+      documents: finalizedDocs,
+      user_message: "Documento subido correctamente. Estamos revisándolo.",
+      documentary_status: documentaryState.status,
+      documentary_label: documentaryState.label,
+      documentary_detail: documentaryState.detail,
+      review_eta_at: documentaryState.review_eta_at,
+      review_eta_label: documentaryState.review_eta_label,
+      review_priority_label: documentaryState.priority_label,
       ...(docsState.warningCode ? { warning: docsState.warningCode, ...docsMigrationPayload(docsState.warningCode) } : {}),
       ...(profileUpdateRes.error
         ? {

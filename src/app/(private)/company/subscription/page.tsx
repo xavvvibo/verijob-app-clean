@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
 import { getCompanyPlanCapabilities } from "@/lib/billing/planCapabilities";
+import { deriveCompanyDocumentVerificationState, finalizeCompanyDocumentsIfDue } from "@/lib/company/document-verification";
 import { companyVerificationMethodTone, deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
 import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
@@ -64,18 +65,17 @@ function subscriptionStatusClass(statusRaw: unknown) {
 
 function verificationStatusLabel(statusRaw: unknown) {
   const status = String(statusRaw || "").toLowerCase();
-  if (status === "verified_paid") return "Empresa verificada por suscripción";
-  if (status === "verified_document") return "Empresa verificada por documentación";
-  if (status === "pending_review") return "Empresa pendiente de revisión documental";
-  if (status === "rejected") return "Empresa rechazada en revisión documental";
-  return "Empresa no verificada";
+  if (status === "verified") return "Verificada documentalmente";
+  if (status === "uploaded") return "Documento recibido";
+  if (status === "under_review") return "En revisión";
+  if (status === "rejected") return "Requiere corrección";
+  return "Sin documento";
 }
 
 function verificationStatusClass(statusRaw: unknown) {
   const status = String(statusRaw || "").toLowerCase();
-  if (status === "verified_paid") return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  if (status === "verified_document") return "border-blue-200 bg-blue-50 text-blue-800";
-  if (status === "pending_review") return "border-indigo-200 bg-indigo-50 text-indigo-800";
+  if (status === "verified") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (status === "uploaded" || status === "under_review") return "border-indigo-200 bg-indigo-50 text-indigo-800";
   if (status === "rejected") return "border-rose-200 bg-rose-50 text-rose-800";
   return "border-amber-200 bg-amber-50 text-amber-800";
 }
@@ -87,12 +87,6 @@ function planFeatures(label: string) {
 function isSubscriptionActive(statusRaw: unknown) {
   const status = normalizeSubscriptionStatus(statusRaw);
   return status === "active" || status === "trialing";
-}
-
-function isDocsSchemaError(error: any) {
-  const code = String(error?.code || "");
-  const msg = String(error?.message || "").toLowerCase();
-  return code === "42P01" || code === "PGRST205" || code === "42703" || (msg.includes("column") && msg.includes("does not exist"));
 }
 
 async function resolveCompanyContext(admin: any, userId: string) {
@@ -153,7 +147,7 @@ export default async function CompanySubscriptionPage({
 
   const companyId = (ctx as any).companyId as string;
 
-  const [subscriptionRes, companyProfileRes, companyRes, docsRes] = await Promise.all([
+  const [subscriptionRes, companyProfileRes, docsRes] = await Promise.all([
     admin
       .from("subscriptions")
       .select("id,plan,status,current_period_end,cancel_at_period_end,metadata,created_at,updated_at")
@@ -163,13 +157,8 @@ export default async function CompanySubscriptionPage({
       .maybeSingle(),
     admin
       .from("company_profiles")
-      .select("company_verification_status,profile_completeness_score,contact_email,website_url")
+      .select("company_verification_status,profile_completeness_score,contact_email,website_url,verification_document_type,verification_document_uploaded_at")
       .eq("company_id", companyId)
-      .maybeSingle(),
-    admin
-      .from("companies")
-      .select("name,company_verification_status")
-      .eq("id", companyId)
       .maybeSingle(),
     admin
       .from("company_verification_documents")
@@ -193,26 +182,23 @@ export default async function CompanySubscriptionPage({
   const features = planFeatures(label);
   const active = isSubscriptionActive(status);
 
-  let companyVerificationStatus = active ? "verified_paid" : "unverified";
-  if (!active) {
-    if (!docsRes.error && Array.isArray(docsRes.data)) {
-      const activeDocs = docsRes.data.filter((d: any) => String(d?.lifecycle_status || "active").toLowerCase() !== "deleted");
-      const hasApproved = activeDocs.some((d: any) => String(d?.review_status || "").toLowerCase() === "approved");
-      companyVerificationStatus = hasApproved ? "verified_document" : "unverified";
-    } else if (isDocsSchemaError(docsRes.error)) {
-      companyVerificationStatus = String(
-        companyProfileRes.data?.company_verification_status ||
-          companyRes.data?.company_verification_status ||
-          "unverified",
-      );
-    }
-  }
+  const finalizedDocs = !docsRes.error && Array.isArray(docsRes.data)
+    ? await finalizeCompanyDocumentsIfDue({
+        admin,
+        docs: docsRes.data,
+        companyProfile: companyProfileRes.data || {},
+        planRaw: effectiveSubscription.plan,
+      })
+    : [];
+  const documentaryVerification = deriveCompanyDocumentVerificationState({
+    docs: finalizedDocs,
+    legacyHasDocument: Boolean(companyProfileRes.data?.verification_document_type || companyProfileRes.data?.verification_document_uploaded_at),
+    planRaw: effectiveSubscription.plan,
+  });
   const completeness = Number(companyProfileRes.data?.profile_completeness_score || 0);
-  const approvedDocs = !docsRes.error && Array.isArray(docsRes.data)
-    ? docsRes.data
-        .filter((d: any) => String(d?.lifecycle_status || "active").toLowerCase() !== "deleted")
-        .some((d: any) => String(d?.review_status || "").toLowerCase() === "approved")
-    : false;
+  const approvedDocs = finalizedDocs
+    .filter((d: any) => String(d?.lifecycle_status || "active").toLowerCase() !== "deleted")
+    .some((d: any) => String(d?.review_status || "").toLowerCase() === "approved");
   const verificationMethod = deriveCompanyVerificationMethod({
     contactEmail: companyProfileRes.data?.contact_email,
     websiteUrl: companyProfileRes.data?.website_url,
@@ -283,11 +269,18 @@ export default async function CompanySubscriptionPage({
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-slate-500">Verificación de empresa</dt>
+              <dt className="text-slate-500">Verificación documental</dt>
               <dd>
-                <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${verificationStatusClass(companyVerificationStatus)}`}>
-                  {verificationStatusLabel(companyVerificationStatus)}
+                <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${verificationStatusClass(documentaryVerification.status)}`}>
+                  {verificationStatusLabel(documentaryVerification.status)}
                 </span>
+                <div className="mt-1 text-xs text-slate-500">{documentaryVerification.detail}</div>
+                {documentaryVerification.review_eta_label && (documentaryVerification.status === "uploaded" || documentaryVerification.status === "under_review") ? (
+                  <div className="mt-1 text-xs text-slate-500">
+                    Tiempo estimado: {documentaryVerification.review_eta_label}
+                    {documentaryVerification.priority_label ? ` · ${documentaryVerification.priority_label}` : ""}
+                  </div>
+                ) : null}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
@@ -339,7 +332,7 @@ export default async function CompanySubscriptionPage({
             <p className="font-semibold text-slate-900">Coherencia de estado</p>
             <ul className="mt-2 space-y-1">
               <li>• Fuente plan/estado: suscripción real o override manual owner activo.</li>
-              <li>• Verificación empresa: suscripción activa o estado documental.</li>
+              <li>• Verificación empresa: revisión documental y señales adicionales, separadas de la suscripción.</li>
               <li>• Upgrade y cobro: checkout real desde <span className="font-semibold">/company/upgrade</span> cuando Stripe está configurado.</li>
             </ul>
           </div>

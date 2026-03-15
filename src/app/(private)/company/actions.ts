@@ -28,7 +28,7 @@ async function resolveCompanyVerificationStatus(supabase: any, companyId: string
     .maybeSingle();
 
   const subscriptionStatus = String(sub?.status || "").toLowerCase();
-  if (subscriptionStatus === "active" || subscriptionStatus === "trialing") return "verified_paid";
+  if (subscriptionStatus === "active" || subscriptionStatus === "trialing") return "registered_in_verijob";
 
   const { data: companyProfile } = await supabase
     .from("company_profiles")

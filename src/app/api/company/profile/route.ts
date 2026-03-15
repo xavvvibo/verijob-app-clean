@@ -6,8 +6,14 @@ import {
   buildCompanyProfileCompletionModel,
   resolveCompanyDisplayName,
 } from "@/lib/company/company-profile";
+import {
+  type CompanyDocumentRow,
+  deriveCompanyDocumentVerificationState,
+  finalizeCompanyDocumentsIfDue,
+} from "@/lib/company/document-verification";
 import { deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
+import { readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
 
 const ROUTE_VERSION = "company-profile-v1";
 
@@ -60,26 +66,17 @@ type CompanyProfileRow = {
   updated_at?: string | null;
 };
 
-type CompanyVerificationDocumentRow = {
-  id: string;
-  company_id: string;
-  document_type: string | null;
-  storage_bucket: string | null;
-  storage_path: string | null;
-  original_filename: string | null;
-  review_status: string | null;
-  rejected_reason: string | null;
-  review_notes: string | null;
-  reviewed_at: string | null;
-  lifecycle_status?: string | null;
-  deleted_at?: string | null;
-  extracted_json?: Record<string, any> | null;
+type CompanyVerificationDocumentRow = CompanyDocumentRow & {
+  company_id?: string | null;
+  storage_bucket?: string | null;
+  storage_path?: string | null;
+  original_filename?: string | null;
   extracted_at?: string | null;
   import_status?: string | null;
   imported_at?: string | null;
   imported_by?: string | null;
   import_notes?: string | null;
-  created_at: string | null;
+  deleted_at?: string | null;
 };
 
 const ARRAY_FIELDS = new Set([
@@ -154,42 +151,11 @@ function makeFallbackCompanyName(emailRaw: unknown) {
   return `Empresa ${local.slice(0, 40)}`;
 }
 
-function normalizeVerificationStatus(value: unknown) {
-  const v = String(value || "").toLowerCase();
-  if (v === "verified_document") return "verified_document";
-  if (v === "verified_paid") return "verified_paid";
-  return "unverified";
-}
-
 function normalizeDocumentReviewStatus(value: unknown) {
   const v = String(value || "").toLowerCase();
   if (v === "approved") return "approved";
   if (v === "rejected") return "rejected";
   return "pending_review";
-}
-
-function deriveCompanyVerificationReviewStatus(profileStatus: unknown, docs: CompanyVerificationDocumentRow[], legacyHasDocument: boolean) {
-  const baseStatus = normalizeVerificationStatus(profileStatus);
-  if (baseStatus === "verified_paid") return "verified";
-
-  const activeDocs = (Array.isArray(docs) ? docs : []).filter(
-    (d) => String(d?.lifecycle_status || "active").toLowerCase() !== "deleted"
-  );
-  if (activeDocs.length === 0) {
-    if (legacyHasDocument) return "pending_review";
-    return "unverified";
-  }
-
-  const hasPending = activeDocs.some((d) => normalizeDocumentReviewStatus(d.review_status) === "pending_review");
-  if (hasPending) return "pending_review";
-
-  const hasApproved = activeDocs.some((d) => normalizeDocumentReviewStatus(d.review_status) === "approved");
-  if (hasApproved) return "verified";
-
-  const hasRejected = activeDocs.some((d) => normalizeDocumentReviewStatus(d.review_status) === "rejected");
-  if (hasRejected) return "rejected";
-
-  return "unverified";
 }
 
 function isRelationMissingError(error: any, relationName: string) {
@@ -404,33 +370,6 @@ async function resolveContext(supabase: any, admin: any) {
   };
 }
 
-async function getEffectiveVerificationStatus(
-  supabase: any,
-  userId: string,
-  profileStatus: unknown,
-  docs: CompanyVerificationDocumentRow[],
-  docsReadFailed: boolean,
-) {
-  const { data: sub } = await supabase
-    .from("subscriptions")
-    .select("status")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const status = String(sub?.status || "").toLowerCase();
-  if (status === "active" || status === "trialing") return "verified_paid";
-  if (docsReadFailed) return normalizeVerificationStatus(profileStatus);
-
-  const activeDocs = (Array.isArray(docs) ? docs : []).filter(
-    (d) => String(d?.lifecycle_status || "active").toLowerCase() !== "deleted"
-  );
-  const hasApprovedDoc = activeDocs.some((d) => normalizeDocumentReviewStatus(d.review_status) === "approved");
-  if (hasApprovedDoc) return "verified_document";
-  return "unverified";
-}
-
 export async function GET() {
   try {
     const supabase = await createRouteHandlerClient();
@@ -476,7 +415,6 @@ export async function GET() {
       .order("created_at", { ascending: false })
       .limit(50);
 
-    let docsReadFailed = false;
     if (docsRes.error) {
       if (
         !isRelationMissingError(docsRes.error, "company_verification_documents") &&
@@ -499,15 +437,25 @@ export async function GET() {
           .limit(50);
         if (!legacyDocsRes.error) {
           verificationDocuments = Array.isArray(legacyDocsRes.data) ? (legacyDocsRes.data as any) : [];
-        } else {
-          docsReadFailed = true;
         }
-      } else {
-        docsReadFailed = true;
       }
     } else {
       verificationDocuments = Array.isArray(docsRes.data) ? (docsRes.data as any) : [];
     }
+
+    const effectiveSubscription = await readEffectiveSubscriptionState(admin, user.id);
+    verificationDocuments = await finalizeCompanyDocumentsIfDue({
+      admin,
+      docs: verificationDocuments,
+      companyProfile: {
+        tax_id: baseProfile.tax_id,
+        legal_name: baseProfile.legal_name,
+        trade_name: baseProfile.trade_name,
+        contact_email: baseProfile.contact_email,
+        website_url: baseProfile.website_url,
+      },
+      planRaw: effectiveSubscription.plan,
+    });
 
     const activeDocuments = verificationDocuments.filter(
       (d) => String(d?.lifecycle_status || "active").toLowerCase() !== "deleted",
@@ -522,18 +470,11 @@ export async function GET() {
       activeDocumentsCount: activeDocuments.length,
       memberCount: Number(membersCount || 0),
     });
-    const effectiveVerificationStatus = await getEffectiveVerificationStatus(
-      admin,
-      user.id,
-      baseProfile.company_verification_status,
-      verificationDocuments,
-      docsReadFailed,
-    );
-    const reviewStatus = deriveCompanyVerificationReviewStatus(
-      effectiveVerificationStatus,
-      verificationDocuments,
+    const documentVerification = deriveCompanyDocumentVerificationState({
+      docs: verificationDocuments,
       legacyHasDocument,
-    );
+      planRaw: effectiveSubscription.plan,
+    });
     const latestRejected = activeDocuments.find((d) => normalizeDocumentReviewStatus(d.review_status) === "rejected") || null;
     const latestReviewed = activeDocuments.find((d) => d.reviewed_at) || null;
     const verificationMethod = deriveCompanyVerificationMethod({
@@ -546,15 +487,25 @@ export async function GET() {
       profile: {
         ...baseProfile,
         display_name: resolveCompanyDisplayName(baseProfile),
-        company_verification_status: effectiveVerificationStatus,
+        company_verification_status: documentVerification.status,
         company_verification_method: verificationMethod.method,
         company_verification_method_label: verificationMethod.label,
         company_verification_method_detail: verificationMethod.detail,
         company_verified_domain: verificationMethod.domain,
         profile_completeness_score: completion.score,
-        company_verification_review_status: reviewStatus,
-        verification_last_reviewed_at: latestReviewed?.reviewed_at || null,
-        verification_rejection_reason: latestRejected?.rejected_reason || latestRejected?.review_notes || null,
+        company_verification_review_status: documentVerification.status,
+        company_document_verification_status: documentVerification.status,
+        company_document_verification_label: documentVerification.label,
+        company_document_verification_detail: documentVerification.detail,
+        company_document_last_submitted_at: documentVerification.submitted_at,
+        company_document_last_reviewed_at: documentVerification.reviewed_at,
+        company_document_review_eta_at: documentVerification.review_eta_at,
+        company_document_review_eta_label: documentVerification.review_eta_label,
+        company_document_review_priority_label: documentVerification.priority_label,
+        company_document_latest_document_type: documentVerification.latest_document_type,
+        company_document_rejection_reason: documentVerification.rejection_reason,
+        verification_last_reviewed_at: documentVerification.reviewed_at || latestReviewed?.reviewed_at || null,
+        verification_rejection_reason: documentVerification.rejection_reason || latestRejected?.rejected_reason || latestRejected?.review_notes || null,
       },
       verification_documents: verificationDocuments,
       verification_documents_active_count: activeDocuments.length,
@@ -630,7 +581,6 @@ export async function POST(request: Request) {
     };
 
     let docsForStatus: CompanyVerificationDocumentRow[] = [];
-    let docsReadFailed = true;
     const docsRes = await admin
       .from("company_verification_documents")
       .select("review_status,lifecycle_status")
@@ -639,7 +589,6 @@ export async function POST(request: Request) {
       .limit(30);
     if (!docsRes.error) {
       docsForStatus = Array.isArray(docsRes.data) ? (docsRes.data as any) : [];
-      docsReadFailed = false;
     } else if (!isRelationMissingError(docsRes.error, "company_verification_documents") && !isDocsSchemaDriftError(docsRes.error)) {
       return NextResponse.json(
         { error: "company_verification_documents_read_failed", details: docsRes.error.message, route_version: ROUTE_VERSION },
@@ -661,14 +610,13 @@ export async function POST(request: Request) {
     patch.profile_completeness_score = computedScore;
     patch.updated_at = new Date().toISOString();
 
-    const effectiveVerificationStatus = await getEffectiveVerificationStatus(
-      admin,
-      user.id,
-      patch.company_verification_status,
-      docsForStatus,
-      docsReadFailed,
-    );
-    patch.company_verification_status = effectiveVerificationStatus;
+    const effectiveSubscription = await readEffectiveSubscriptionState(admin, user.id);
+    const documentVerification = deriveCompanyDocumentVerificationState({
+      docs: docsForStatus,
+      legacyHasDocument: Boolean(patch.verification_document_type || patch.verification_document_uploaded_at),
+      planRaw: effectiveSubscription.plan,
+    });
+    patch.company_verification_status = documentVerification.status === "verified" ? "verified_document" : "unverified";
 
     const { data, error } = await admin
       .from("company_profiles")
@@ -692,12 +640,22 @@ export async function POST(request: Request) {
       profile: {
         ...(data || patch),
         display_name: resolveCompanyDisplayName((data || patch) as any),
-        company_verification_status: effectiveVerificationStatus,
+        company_verification_status: documentVerification.status,
         company_verification_method: verificationMethod.method,
         company_verification_method_label: verificationMethod.label,
         company_verification_method_detail: verificationMethod.detail,
         company_verified_domain: verificationMethod.domain,
         profile_completeness_score: computedScore,
+        company_document_verification_status: documentVerification.status,
+        company_document_verification_label: documentVerification.label,
+        company_document_verification_detail: documentVerification.detail,
+        company_document_last_submitted_at: documentVerification.submitted_at,
+        company_document_last_reviewed_at: documentVerification.reviewed_at,
+        company_document_review_eta_at: documentVerification.review_eta_at,
+        company_document_review_eta_label: documentVerification.review_eta_label,
+        company_document_review_priority_label: documentVerification.priority_label,
+        company_document_latest_document_type: documentVerification.latest_document_type,
+        company_document_rejection_reason: documentVerification.rejection_reason,
       },
       profile_completion: completion,
       route_version: ROUTE_VERSION,

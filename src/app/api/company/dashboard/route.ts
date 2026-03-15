@@ -9,9 +9,14 @@ import {
   buildCompanyProfileCompletionModel,
   resolveCompanyDisplayName,
 } from "@/lib/company/company-profile";
+import {
+  deriveCompanyDocumentVerificationState,
+  finalizeCompanyDocumentsIfDue,
+} from "@/lib/company/document-verification";
 import { deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
 import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
+import { readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
 
 const ROUTE_VERSION = "company-dashboard-kpis-v2-clean-2026-03-05";
 
@@ -44,13 +49,6 @@ async function resolveCompanyName(supabase: any, companyId: string): Promise<str
   return null;
 }
 
-function normalizeCompanyVerificationStatus(input: unknown) {
-  const value = String(input || "").toLowerCase();
-  if (value === "verified_document") return "verified_document";
-  if (value === "verified_paid") return "verified_paid";
-  return "unverified";
-}
-
 function isDocsSchemaError(error: any) {
   const code = String(error?.code || "");
   const msg = String(error?.message || "").toLowerCase();
@@ -63,55 +61,6 @@ function requestDisplayStatus(statusRaw: unknown) {
   if (value === "rejected" || value === "revoked") return "rejected";
   if (value === "pending_company" || value === "reviewing") return "pending";
   return "other";
-}
-
-async function resolveCompanyVerificationStatus(
-  supabase: any,
-  companyId: string,
-  subscriptionStatusRaw: unknown
-): Promise<"unverified" | "verified_document" | "verified_paid"> {
-  const subscriptionStatus = String(subscriptionStatusRaw || "").toLowerCase();
-  if (subscriptionStatus === "active" || subscriptionStatus === "trialing") {
-    return "verified_paid";
-  }
-
-  // Verified_document is only granted by approved active company documents.
-  const docsRes = await supabase
-    .from("company_verification_documents")
-    .select("review_status,lifecycle_status")
-    .eq("company_id", companyId)
-    .order("created_at", { ascending: false })
-    .limit(20);
-  if (!docsRes.error && Array.isArray(docsRes.data)) {
-    const activeDocs = docsRes.data.filter((d: any) => String(d?.lifecycle_status || "active").toLowerCase() !== "deleted");
-    const hasApproved = activeDocs.some((d: any) => String(d?.review_status || "").toLowerCase() === "approved");
-    if (hasApproved) return "verified_document";
-    return "unverified";
-  }
-
-  const companyRes = await supabase
-    .from("companies")
-    .select("company_verification_status")
-    .eq("id", companyId)
-    .maybeSingle();
-
-  if (!companyRes.error && companyRes.data?.company_verification_status) {
-    if (!isDocsSchemaError(docsRes.error)) return "unverified";
-    return normalizeCompanyVerificationStatus(companyRes.data.company_verification_status) as any;
-  }
-
-  const profileRes = await supabase
-    .from("company_profiles")
-    .select("company_verification_status")
-    .eq("company_id", companyId)
-    .maybeSingle();
-
-  if (!profileRes.error && profileRes.data?.company_verification_status) {
-    if (!isDocsSchemaError(docsRes.error)) return "unverified";
-    return normalizeCompanyVerificationStatus(profileRes.data.company_verification_status) as any;
-  }
-
-  return "unverified";
 }
 
 export async function GET() {
@@ -307,19 +256,26 @@ export async function GET() {
       };
     });
     const membershipRole = memberRes?.data?.role ? String(memberRes.data.role) : null;
-    const subscriptionPlan = subRes?.data?.plan ? String(subRes.data.plan) : null;
-    const subscriptionStatus = subRes?.data?.status ? String(subRes.data.status) : "free";
+    const effectiveSubscription = await readEffectiveSubscriptionState(service, user.id);
+    const subscriptionPlan = String(effectiveSubscription.plan || subRes?.data?.plan || "company_free");
+    const subscriptionStatus = effectiveSubscription.status || (subRes?.data?.status ? String(subRes.data.status) : "free");
     const currentPeriodEnd = subRes?.data?.current_period_end || null;
-    const companyVerificationStatus = await resolveCompanyVerificationStatus(
-      supabase,
-      activeCompanyId,
-      subscriptionStatus
-    );
-    const approvedDocs = !companyDocsRes.error && Array.isArray(companyDocsRes.data)
-      ? companyDocsRes.data
-          .filter((row: any) => String(row?.lifecycle_status || "active").toLowerCase() !== "deleted")
-          .some((row: any) => String(row?.review_status || "").toLowerCase() === "approved")
-      : false;
+    const finalizedCompanyDocs = !companyDocsRes.error && Array.isArray(companyDocsRes.data)
+      ? await finalizeCompanyDocumentsIfDue({
+          admin: service,
+          docs: companyDocsRes.data,
+          companyProfile: profileData || {},
+          planRaw: subscriptionPlan,
+        })
+      : [];
+    const documentaryState = deriveCompanyDocumentVerificationState({
+      docs: finalizedCompanyDocs,
+      legacyHasDocument: Boolean(profileData?.verification_document_type || profileData?.verification_document_uploaded_at),
+      planRaw: subscriptionPlan,
+    });
+    const approvedDocs = finalizedCompanyDocs
+      .filter((row: any) => String(row?.lifecycle_status || "active").toLowerCase() !== "deleted")
+      .some((row: any) => String(row?.review_status || "").toLowerCase() === "approved");
     const verificationMethod = deriveCompanyVerificationMethod({
       contactEmail: profileData?.contact_email,
       websiteUrl: profileData?.website_url,
@@ -340,7 +296,15 @@ export async function GET() {
       plan: subscriptionPlan || "company_free",
       plan_label: normalizePlanLabel(subscriptionPlan),
       subscription_status: subscriptionStatus,
-      company_verification_status: companyVerificationStatus,
+      company_verification_status: documentaryState.status,
+      company_document_verification_status: documentaryState.status,
+      company_document_verification_label: documentaryState.label,
+      company_document_verification_detail: documentaryState.detail,
+      company_document_last_submitted_at: documentaryState.submitted_at,
+      company_document_last_reviewed_at: documentaryState.reviewed_at,
+      company_document_review_eta_at: documentaryState.review_eta_at,
+      company_document_review_eta_label: documentaryState.review_eta_label,
+      company_document_review_priority_label: documentaryState.priority_label,
       company_verification_method: verificationMethod.method,
       company_verification_method_label: verificationMethod.label,
       company_verification_method_detail: verificationMethod.detail,

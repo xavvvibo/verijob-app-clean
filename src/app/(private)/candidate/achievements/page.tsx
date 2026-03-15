@@ -133,13 +133,29 @@ export default function CandidateAchievementsPage() {
       <section className="rounded-2xl border border-gray-200 bg-white p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-base font-semibold text-gray-900">Registros de idiomas y logros</h2>
-          <button
-            type="button"
-            onClick={add}
-            className="inline-flex rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
-          >
-            Añadir registro
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setItems((prev) => [...prev, { ...EMPTY_ITEM, category: "idioma" }])}
+              className="inline-flex rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+            >
+              Añadir idioma
+            </button>
+            <button
+              type="button"
+              onClick={() => setItems((prev) => [...prev, { ...EMPTY_ITEM, category: "certificacion" }])}
+              className="inline-flex rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+            >
+              Añadir certificación
+            </button>
+            <button
+              type="button"
+              onClick={add}
+              className="inline-flex rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+            >
+              Añadir logro
+            </button>
+          </div>
         </div>
 
         {loading ? <p className="mt-4 text-sm text-gray-600">Cargando…</p> : null}

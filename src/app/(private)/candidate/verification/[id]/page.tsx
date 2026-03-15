@@ -22,7 +22,7 @@ function mapStatus(statusRaw: unknown, revokedAt?: string | null) {
 function mapCompanyVerificationStatus(statusRaw: unknown) {
   const status = String(statusRaw || "").toLowerCase();
   if (status === "registered_in_verijob") return "Empresa registrada en VERIJOB";
-  if (status === "verified_paid") return "Empresa verificada (suscripción activa)";
+  if (status === "verified_paid") return "Empresa con plan activo";
   if (status === "verified_document") return "Empresa verificadora validada documentalmente";
   if (status === "unverified_external") return "Verificación por email corporativo";
   if (status === "unverified") return "Empresa no verificada";
