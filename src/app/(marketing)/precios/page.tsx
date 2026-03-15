@@ -3,7 +3,6 @@
 import { useState } from "react";
 
 type CheckoutPlanKey =
-  | "candidate_starter_monthly"
   | "candidate_pro_monthly"
   | "candidate_proplus_monthly"
   | "candidate_proplus_yearly";
@@ -53,25 +52,18 @@ export default function Precios() {
   const candidatePlans: CandidateCard[] = [
     {
       name: "Free",
-      summary: "Empieza tu perfil verificable con acceso base.",
+      summary: "Crea tu perfil verificable y compártelo por link. Incluye hasta 1 verificación laboral y 1 académica activas.",
       monthly: { label: "0 €" },
-    },
-    {
-      name: "Starter",
-      summary: "Perfil verificable básico con evidencias limitadas.",
-      monthly: { label: "2,99 €/mes", planKey: "candidate_starter_monthly" },
-      yearly: { label: "29,90 €/año", comingSoon: true },
     },
     {
       name: "Pro",
       badge: "Más popular",
-      summary: "Mayor capacidad verificable y señales de credibilidad reforzadas.",
+      summary: "Todo lo de Free, más comparte tu perfil también por QR. Incluye hasta 3 verificaciones laborales y 3 académicas activas.",
       monthly: { label: "4,99 €/mes", planKey: "candidate_pro_monthly" },
-      yearly: { label: "49,90 €/año", comingSoon: true },
     },
     {
       name: "Pro+",
-      summary: "Perfil profesional verificable completo con máxima capacidad.",
+      summary: "Todo lo de Pro, más verificaciones activas ilimitadas y descarga de CV verificado.",
       monthly: { label: "9,99 €/mes", planKey: "candidate_proplus_monthly" },
       yearly: { label: "99,90 €/año", planKey: "candidate_proplus_yearly", badge: "Mejor valor" },
     },
@@ -80,36 +72,31 @@ export default function Precios() {
   const companyPlans: CompanyCard[] = [
     {
       name: "Free",
-      summary: "Acceso inicial para explorar el flujo de evaluación.",
+      summary: "2 accesos a perfiles al mes y panel RRHH restringido.",
       monthly: "0 €",
-      cta: "Comenzar",
+      cta: "Empezar gratis",
     },
     {
       name: "Access",
-      summary: "Acceso base al perfil verificable completo.",
+      summary: "Todo lo de Free, más 15 accesos a perfiles al mes y panel RRHH operativo.",
       monthly: "49 €/mes",
       yearly: "490 €/año",
-      cta: "Solicitar Access",
+      cta: "Elegir Access",
     },
     {
       name: "Hiring",
       badge: "Más popular",
-      summary: "Para equipos con procesos de selección continuos.",
+      summary: "Todo lo de Access, más 50 accesos a perfiles al mes y funcionalidades de selección.",
       monthly: "99 €/mes",
       yearly: "990 €/año",
-      cta: "Solicitar Hiring",
+      cta: "Elegir Hiring",
     },
     {
       name: "Team",
-      summary: "Mayor capacidad operativa para equipos de reclutamiento.",
+      summary: "Todo lo de Hiring, más 100 accesos a perfiles al mes para equipos con mayor volumen.",
       monthly: "199 €/mes",
       yearly: "1.990 €/año",
-      cta: "Solicitar Team",
-    },
-    {
-      name: "Enterprise",
-      summary: "Modelo personalizado para organizaciones con necesidades avanzadas.",
-      cta: "Contactar",
+      cta: "Elegir Team",
     },
   ];
 
@@ -122,7 +109,7 @@ export default function Precios() {
 
       <section className="mt-10">
         <h2 className="text-2xl font-semibold">Candidatos</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-4">
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
           {candidatePlans.map((plan) => {
             const featured = plan.badge === "Más popular";
             return (
@@ -175,7 +162,7 @@ export default function Precios() {
                       disabled={loadingPlan !== null || !plan.monthly.planKey}
                       className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
                     >
-                      {loadingPlan === plan.monthly.planKey ? "Procesando…" : "Elegir mensual"}
+                      {loadingPlan === plan.monthly.planKey ? "Procesando…" : plan.name === "Pro" ? "Mejorar a Pro" : "Mejorar a Pro+"}
                     </button>
                     {plan.yearly?.planKey ? (
                       <button
@@ -204,7 +191,7 @@ export default function Precios() {
 
       <section className="mt-12">
         <h2 className="text-2xl font-semibold">Empresas</h2>
-        <div className="mt-4 grid gap-4 md:grid-cols-5">
+        <div className="mt-4 grid gap-4 md:grid-cols-4">
           {companyPlans.map((plan) => {
             const featured = plan.badge === "Más popular";
             const valueBadge = plan.name === "Team" && plan.yearly ? "Mejor valor" : undefined;
@@ -243,11 +230,7 @@ export default function Precios() {
                 </div>
                 <button
                   type="button"
-                  className={`mt-4 inline-flex rounded-xl px-4 py-2 text-sm font-semibold ${
-                    plan.name === "Enterprise"
-                      ? "border border-slate-200 bg-white text-slate-900 hover:bg-slate-50"
-                      : "bg-slate-900 text-white hover:bg-slate-800"
-                  }`}
+                  className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                 >
                   {plan.cta}
                 </button>
@@ -261,12 +244,12 @@ export default function Precios() {
         <h2 className="text-2xl font-semibold">Pago por uso</h2>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-lg font-semibold">Perfil individual</h3>
-            <p className="mt-2 text-sm text-slate-600">Desbloqueo puntual del perfil verificable de un candidato.</p>
+            <h3 className="text-lg font-semibold">Comprar 1 acceso</h3>
+            <p className="mt-2 text-sm text-slate-600">Para acceder al perfil completo de un candidato puntual sin cambiar de plan.</p>
           </article>
           <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-lg font-semibold">Pack 5 perfiles</h3>
-            <p className="mt-2 text-sm text-slate-600">Paquete para procesos con varias candidaturas simultáneas.</p>
+            <h3 className="text-lg font-semibold">Comprar pack de 5</h3>
+            <p className="mt-2 text-sm text-slate-600">Paquete para procesos con varias candidaturas ya visibles en resumen parcial.</p>
           </article>
         </div>
       </section>

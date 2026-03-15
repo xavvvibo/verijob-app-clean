@@ -29,6 +29,7 @@ export type PublicCandidateTeaser = {
   subscription_plan?: string | null;
   subscription_status?: string | null;
   qr_enabled?: boolean | null;
+  cv_download_enabled?: boolean | null;
   latest_verification_at?: string | null;
   featured_verified_experiences?: Array<{
     position?: string | null;
@@ -181,6 +182,7 @@ export function CandidatePublicProfileRenderer({
     ? `${typeof window !== "undefined" ? window.location.origin : "https://app.verijob.es"}/p/${token}`
     : null;
   const qrEnabled = Boolean(teaser?.qr_enabled);
+  const cvDownloadEnabled = Boolean(teaser?.cv_download_enabled);
   const qrImageUrl = token && qrEnabled ? `/api/public/candidate/${token}/qr.svg` : null;
 
   const trustProgress = Math.min(100, Math.max(0, trust));
@@ -351,7 +353,7 @@ export function CandidatePublicProfileRenderer({
                     >
                       Compartir perfil verificado
                     </button>
-                    {token ? (
+                    {token && cvDownloadEnabled ? (
                       <a
                         href={`/p/${encodeURIComponent(token)}?print=1`}
                         className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"

@@ -1,5 +1,6 @@
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import OwnerTooltip from "@/components/ui/OwnerTooltip";
+import { managedPlanLabel } from "@/lib/billing/managedPlans";
 
 export const dynamic = "force-dynamic";
 
@@ -20,22 +21,13 @@ function eur(n: number) {
 }
 
 function planLabel(raw: unknown) {
-  const v = String(raw || "").trim().toLowerCase();
-  if (!v || v === "free") return "Free";
-  if (v === "candidate_pro_monthly") return "Candidate Pro mensual";
-  if (v === "candidate_pro_yearly") return "Candidate Pro anual";
-  if (v === "company_access_monthly") return "Company Access mensual";
-  if (v === "company_access_yearly") return "Company Access anual";
-  if (v === "company_scale_monthly") return "Company Scale mensual";
-  if (v === "company_scale_yearly") return "Company Scale anual";
-  if (v === "company_enterprise") return "Company Enterprise";
-  return String(raw || "").trim() || "Free";
+  return managedPlanLabel(raw);
 }
 
 function productLabel(raw: unknown) {
   const v = String(raw || "").trim().toLowerCase();
-  if (v === "company_single_cv") return "1 visualización";
-  if (v === "company_pack_5") return "Pack 5 visualizaciones";
+  if (v === "company_single_cv") return "Comprar 1 acceso";
+  if (v === "company_pack_5") return "Comprar pack de 5";
   return v || "—";
 }
 
@@ -154,17 +146,17 @@ export default async function OwnerMonetizationPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Monetización</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Control ejecutivo de ingresos recurrentes y monetización puntual. Se separan claramente las suscripciones locales, las compras one-off persistidas y el consumo real de visualizaciones registrado.
+          Control ejecutivo de ingresos recurrentes y monetización puntual. Se separan claramente las suscripciones locales, las compras one-off persistidas y el consumo real de accesos a perfiles registrado.
         </p>
         <div className="mt-3 flex flex-wrap gap-2 text-xs">
           <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-700">Suscripción recurrente</span>
           <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 font-semibold text-emerald-800">Compras puntuales</span>
-          <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 font-semibold text-sky-800">Consumo de visualizaciones</span>
+          <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 font-semibold text-sky-800">Consumo de accesos a perfiles</span>
           <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-semibold text-amber-800">Stripe LIVE: reconciliación parcial</span>
         </div>
         <p className="mt-2 inline-flex items-center gap-2 text-xs text-slate-500">
           Definiciones de monetización
-          <OwnerTooltip text="MRR = suma de suscripciones activas o en prueba. Compras puntuales = ventas registradas al completar checkout. Consumo = aperturas completas de perfil que gastan crédito." />
+          <OwnerTooltip text="MRR = suma de suscripciones activas o en prueba. Compras puntuales = ventas registradas al completar checkout. Consumo = aperturas completas de perfil que gastan un acceso." />
         </p>
       </section>
 
@@ -262,14 +254,14 @@ export default async function OwnerMonetizationPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Consumo puntual y conciliación</h2>
         <p className="mt-1 text-sm text-slate-600">
-          Esta sección separa compras puntuales y visualizaciones consumidas. La trazabilidad ya permite auditar ingresos y gasto de créditos recientes.
+          Esta sección separa compras puntuales y accesos consumidos. La trazabilidad ya permite auditar ingresos y gasto de créditos recientes.
         </p>
 
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Última compra one-off</p>
             <p className="mt-1 text-sm font-semibold text-slate-900">{fmtDate(summary?.last_oneoff_purchase_at || purchases[0]?.created_at)}</p>
-            <p className="mt-1 text-xs text-slate-500">Incluye compras de visualización individual y packs de visualizaciones.</p>
+            <p className="mt-1 text-xs text-slate-500">Incluye compras de 1 acceso y packs de 5 accesos.</p>
           </article>
           <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estado de conciliación</p>
@@ -322,10 +314,10 @@ export default async function OwnerMonetizationPage() {
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-slate-900">Unlocks recientes</h2>
-        <p className="mt-1 text-sm text-slate-600">Consumo real de visualizaciones al abrir perfil completo.</p>
+        <p className="mt-1 text-sm text-slate-600">Consumo real de accesos al abrir perfil completo.</p>
         {consumptions.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
-            Todavía no hay visualizaciones consumidas registradas.
+            Todavía no hay accesos consumidos registrados.
           </div>
         ) : (
           <div className="mt-4 overflow-auto">

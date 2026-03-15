@@ -63,6 +63,8 @@ export default async function PublicCandidateProfilePage({
     );
   }
 
+  const canDownloadCv = Boolean(body?.teaser?.cv_download_enabled);
+
   return (
     <main className="min-h-screen bg-blue-50/40 px-5 py-10 sm:px-8 sm:py-14">
       <div className="mx-auto max-w-6xl">
@@ -70,7 +72,7 @@ export default async function PublicCandidateProfilePage({
           payload={{ ...body, token }}
           mode="public"
           companyAccess
-          renderMode={printMode ? "print" : "screen"}
+          renderMode={printMode && canDownloadCv ? "print" : "screen"}
         />
       </div>
     </main>

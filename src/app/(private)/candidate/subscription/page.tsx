@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { getCandidatePlanCapabilities, normalizeCandidateCommercialPlan } from "@/lib/billing/planCapabilities";
 
 export const dynamic = "force-dynamic";
 
 type CandidateCheckoutPlan =
-  | "candidate_starter_monthly"
   | "candidate_pro_monthly"
   | "candidate_proplus_monthly"
   | "candidate_proplus_yearly";
@@ -51,7 +51,7 @@ function normalizeTier(planRaw: unknown): CandidateTier {
 }
 
 function labelForTier(tier: CandidateTier): string {
-  if (tier === "starter") return "Starter";
+  if (tier === "starter") return "Starter legacy";
   if (tier === "pro") return "Pro";
   if (tier === "proplus_monthly") return "Pro+ mensual";
   if (tier === "proplus_yearly") return "Pro+ anual";
@@ -91,6 +91,8 @@ export default function CandidateSubscriptionPage() {
   const [checkoutSyncState, setCheckoutSyncState] = useState<"idle" | "success" | "syncing">("idle");
 
   const currentTier = useMemo(() => normalizeTier(subscription?.plan), [subscription?.plan]);
+  const planCapabilities = useMemo(() => getCandidatePlanCapabilities(subscription?.plan), [subscription?.plan]);
+  const commercialTier = useMemo(() => normalizeCandidateCommercialPlan(subscription?.plan), [subscription?.plan]);
   const subscriptionStatusLabel = useMemo(
     () => labelForSubscriptionStatus(subscription?.status),
     [subscription?.status]
@@ -245,17 +247,9 @@ export default function CandidateSubscriptionPage() {
   }
 
   const upgrades = useMemo<PlanOption[]>(() => {
-    if (currentTier === "free") {
+    if (currentTier === "free" || currentTier === "starter") {
       return [
-        { label: "Starter mensual", planKey: "candidate_starter_monthly" },
-        { label: "Pro mensual", planKey: "candidate_pro_monthly" },
-        { label: "Pro+ mensual", planKey: "candidate_proplus_monthly" },
-        { label: "Pro+ anual", planKey: "candidate_proplus_yearly" },
-      ];
-    }
-    if (currentTier === "starter") {
-      return [
-        { label: "Pro mensual", planKey: "candidate_pro_monthly" },
+        { label: "Mejorar a Pro", planKey: "candidate_pro_monthly" },
         { label: "Pro+ mensual", planKey: "candidate_proplus_monthly" },
         { label: "Pro+ anual", planKey: "candidate_proplus_yearly" },
       ];
@@ -276,11 +270,11 @@ export default function CandidateSubscriptionPage() {
     if (currentTier === "proplus_monthly" || currentTier === "proplus_yearly") {
       return [
         { label: "Cambiar a Pro", targetPlanKey: "candidate_pro_monthly" as const },
-        { label: "Cambiar a Starter", targetPlanKey: "candidate_starter_monthly" as const },
+        { label: "Cambiar a Free", targetPlanKey: "free" as const },
       ];
     }
     if (currentTier === "pro") {
-      return [{ label: "Cambiar a Starter", targetPlanKey: "candidate_starter_monthly" as const }];
+      return [{ label: "Cambiar a Free", targetPlanKey: "free" as const }];
     }
     if (currentTier === "starter") {
       return [{ label: "Cambiar a Free", targetPlanKey: "free" as const }];
@@ -304,7 +298,7 @@ export default function CandidateSubscriptionPage() {
           <dl className="mt-3 space-y-2 text-sm text-gray-700">
             <div className="flex items-center justify-between gap-3">
               <dt className="text-gray-500">Plan actual</dt>
-              <dd className="font-medium text-gray-900">{labelForTier(currentTier)}</dd>
+              <dd className="font-medium text-gray-900">{planCapabilities.label}</dd>
             </div>
             <div className="flex items-center justify-between gap-3">
               <dt className="text-gray-500">Estado de suscripción</dt>
@@ -327,6 +321,16 @@ export default function CandidateSubscriptionPage() {
               </dd>
             </div>
           </dl>
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <p className="font-semibold text-slate-900">Tu plan incluye</p>
+            <ul className="mt-3 space-y-2">
+              <li>Compartir por link: <span className="font-semibold text-slate-900">Sí</span></li>
+              <li>Compartir por QR: <span className="font-semibold text-slate-900">{planCapabilities.canShareByQr ? "Sí" : "No"}</span></li>
+              <li>Descarga de CV verificado: <span className="font-semibold text-slate-900">{planCapabilities.canDownloadVerifiedCv ? "Sí" : "No"}</span></li>
+              <li>Verificaciones activas: <span className="font-semibold text-slate-900">{planCapabilities.activeVerificationsLabel}</span></li>
+            </ul>
+            <p className="mt-3 text-xs text-slate-500">{planCapabilities.summary}</p>
+          </div>
         </section>
 
         <section className="rounded-2xl border border-gray-200 bg-white p-5">
@@ -413,7 +417,12 @@ export default function CandidateSubscriptionPage() {
 
       {!loadingSubscription && !subscription ? (
         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          Estás en plan <span className="font-semibold text-slate-900">Free</span>. Activa un plan de pago para desbloquear funciones avanzadas.
+          Estás en plan <span className="font-semibold text-slate-900">Free</span>. Mejora a Pro o Pro+ para habilitar QR, ampliar verificaciones activas y desbloquear funciones avanzadas.
+        </div>
+      ) : null}
+      {commercialTier === "legacy_starter" ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Tu cuenta mantiene un plan Starter legacy por compatibilidad. La oferta actual de candidato es Free, Pro y Pro+.
         </div>
       ) : null}
 

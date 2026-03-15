@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { effectivePlanDisplay, readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
+import { getCandidatePlanCapabilities, getCompanyPlanCapabilities } from "@/lib/billing/planCapabilities";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import OwnerUserActionsClient from "./OwnerUserActionsClient";
@@ -160,6 +161,8 @@ export default async function OwnerUserDetailPage({ params }: any) {
   const actions = Array.isArray(actionsRes.data) ? actionsRes.data : [];
   const trustScore = candidateProfileRes.data?.trust_score ?? null;
   const currentPlan = String(effectiveSubscription.plan || latestSub?.plan || "free");
+  const candidatePlan = getCandidatePlanCapabilities(currentPlan);
+  const companyPlan = getCompanyPlanCapabilities(currentPlan);
 
   const activityDates = [
     user.created_at,
@@ -218,6 +221,16 @@ export default async function OwnerUserDetailPage({ params }: any) {
                 ? "override manual owner activo"
                 : latestSub?.status || "sin suscripción activa"}
             </div>
+            {String(user.role || "").toLowerCase() === "candidate" ? (
+              <div className="mt-1 text-xs text-slate-500">
+                Verificaciones activas: {candidatePlan.activeVerificationsLabel} · QR: {candidatePlan.canShareByQr ? "sí" : "no"} · Descarga CV: {candidatePlan.canDownloadVerifiedCv ? "sí" : "no"}
+              </div>
+            ) : null}
+            {String(user.role || "").toLowerCase() === "company" ? (
+              <div className="mt-1 text-xs text-slate-500">
+                Accesos/mes: {companyPlan.accessesIncludedMonthly ?? "personalizado"} · Panel RRHH: {companyPlan.rrhhPanel} · Selección: {companyPlan.includesSelection ? "sí" : "no"}
+              </div>
+            ) : null}
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Onboarding / perfil</div>

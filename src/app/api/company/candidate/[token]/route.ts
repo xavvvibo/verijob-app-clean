@@ -4,6 +4,7 @@ import { createServiceRoleClient } from "@/utils/supabase/service";
 import { sanitizePublic } from "@/utils/sanitizePublic";
 import { resolveActiveCandidatePublicLink } from "@/lib/public/candidate-public-link";
 import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
+import { normalizeCompanyProfileAccessProductKey } from "@/lib/company/profile-access-products";
 import {
   deriveCompanyCandidateAccess,
   resolveCompanyCandidateAccess,
@@ -89,7 +90,7 @@ async function resolveConsumptionSource(args: {
     .limit(1)
     .maybeSingle();
 
-  const purchaseKey = String((latestPurchase.data as any)?.product_key || "").trim().toLowerCase();
+  const purchaseKey = normalizeCompanyProfileAccessProductKey((latestPurchase.data as any)?.product_key);
   if (purchaseKey === "company_single_cv") return "single_unlock";
   if (purchaseKey === "company_pack_5") return "pack_credit";
 
@@ -102,7 +103,7 @@ async function resolveConsumptionSource(args: {
     .maybeSingle();
 
   const sourceType = String((latestGrant.data as any)?.source_type || "").trim().toLowerCase();
-  const productKey = String((latestGrant.data as any)?.metadata?.product_key || "").trim().toLowerCase();
+  const productKey = normalizeCompanyProfileAccessProductKey((latestGrant.data as any)?.metadata?.product_key);
   if (productKey === "company_single_cv") return "single_unlock";
   if (productKey === "company_pack_5") return "pack_credit";
   if (sourceType.includes("promo")) return "promo";

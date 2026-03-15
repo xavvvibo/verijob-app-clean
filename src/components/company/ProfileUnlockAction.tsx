@@ -14,6 +14,7 @@ export default function ProfileUnlockAction({
   primaryLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   if (alreadyUnlocked) {
     return (
@@ -52,12 +53,18 @@ export default function ProfileUnlockAction({
               ) : null}
             </div>
             <div className="mt-5 flex flex-wrap gap-3">
-              <a
-                href={href}
-                className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+              <button
+                type="button"
+                onClick={() => {
+                  if (submitting) return;
+                  setSubmitting(true);
+                  window.location.href = href;
+                }}
+                disabled={submitting}
+                className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
               >
                 Acceder al perfil
-              </a>
+              </button>
               <button
                 type="button"
                 onClick={() => setOpen(false)}

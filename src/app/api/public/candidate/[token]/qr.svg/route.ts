@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import QRCode from "qrcode";
+import { getCandidatePlanCapabilities } from "@/lib/billing/planCapabilities";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { resolveActiveCandidatePublicLink } from "@/lib/public/candidate-public-link";
 
@@ -22,6 +23,17 @@ export async function GET(_req: Request, ctx: any) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
   const token = linkResolved.token;
+  const { data: latestSub } = await admin
+    .from("subscriptions")
+    .select("plan")
+    .eq("user_id", linkResolved.link.candidate_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const capabilities = getCandidatePlanCapabilities(latestSub?.plan || "free");
+  if (!capabilities.canShareByQr) {
+    return NextResponse.json({ error: "qr_not_available_for_plan" }, { status: 403 });
+  }
 
   const base = process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es";
   const url = `${base.replace(/\/$/, "")}/p/${token}`;

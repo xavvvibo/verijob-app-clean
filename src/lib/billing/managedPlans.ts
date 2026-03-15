@@ -29,18 +29,18 @@ export type ManagedPlanOption = {
 
 export const MANAGED_SUBSCRIPTION_PLANS: readonly ManagedPlanOption[] = [
   { key: "free", label: "Free", role: "all", amountCents: 0 },
-  { key: "candidate_starter_monthly", label: "Candidate Starter mensual", role: "candidate", amountCents: 299 },
-  { key: "candidate_starter_yearly", label: "Candidate Starter anual", role: "candidate", amountCents: 2990 },
-  { key: "candidate_pro_monthly", label: "Candidate Pro mensual", role: "candidate", amountCents: 499 },
-  { key: "candidate_pro_yearly", label: "Candidate Pro anual", role: "candidate", amountCents: 4990 },
-  { key: "candidate_proplus_monthly", label: "Candidate Pro+ mensual", role: "candidate", amountCents: 999 },
-  { key: "candidate_proplus_yearly", label: "Candidate Pro+ anual", role: "candidate", amountCents: 9990 },
-  { key: "company_access_monthly", label: "Company Access mensual", role: "company", amountCents: 4900 },
-  { key: "company_access_yearly", label: "Company Access anual", role: "company", amountCents: 49000 },
-  { key: "company_hiring_monthly", label: "Company Hiring mensual", role: "company", amountCents: 9900 },
-  { key: "company_hiring_yearly", label: "Company Hiring anual", role: "company", amountCents: 99000 },
-  { key: "company_team_monthly", label: "Company Team mensual", role: "company", amountCents: 19900 },
-  { key: "company_team_yearly", label: "Company Team anual", role: "company", amountCents: 199000 },
+  { key: "candidate_starter_monthly", label: "Starter legacy mensual", role: "candidate", amountCents: 299 },
+  { key: "candidate_starter_yearly", label: "Starter legacy anual", role: "candidate", amountCents: 2990 },
+  { key: "candidate_pro_monthly", label: "Pro mensual", role: "candidate", amountCents: 499 },
+  { key: "candidate_pro_yearly", label: "Pro anual", role: "candidate", amountCents: 4990 },
+  { key: "candidate_proplus_monthly", label: "Pro+ mensual", role: "candidate", amountCents: 999 },
+  { key: "candidate_proplus_yearly", label: "Pro+ anual", role: "candidate", amountCents: 9990 },
+  { key: "company_access_monthly", label: "Access mensual", role: "company", amountCents: 4900 },
+  { key: "company_access_yearly", label: "Access anual", role: "company", amountCents: 49000 },
+  { key: "company_hiring_monthly", label: "Hiring mensual", role: "company", amountCents: 9900 },
+  { key: "company_hiring_yearly", label: "Hiring anual", role: "company", amountCents: 99000 },
+  { key: "company_team_monthly", label: "Team mensual", role: "company", amountCents: 19900 },
+  { key: "company_team_yearly", label: "Team anual", role: "company", amountCents: 199000 },
 ] as const;
 
 const MANAGED_PLAN_MAP = new Map(MANAGED_SUBSCRIPTION_PLANS.map((plan) => [plan.key, plan]));

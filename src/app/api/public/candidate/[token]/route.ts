@@ -4,6 +4,7 @@ import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { normalizePublicLanguages } from "@/lib/public/profile-languages";
 import { resolveActiveCandidatePublicLink } from "@/lib/public/candidate-public-link";
 import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
+import { getCandidatePlanCapabilities } from "@/lib/billing/planCapabilities";
 
 type Params = { token: string };
 
@@ -367,6 +368,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const availability = asText(candidateProfile?.job_search_status, 80) || null;
   const workMode = asText(candidateProfile?.preferred_workday, 80) || null;
   const sector = asText(asArray(candidateProfile?.preferred_roles)?.[0], 120) || null;
+  const candidateCapabilities = getCandidatePlanCapabilities(latestSub?.plan || "free");
   const teaser = {
     full_name: internalPreviewAllowed ? profileFullName : publicName,
     public_name: publicName,
@@ -390,7 +392,8 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     lifecycle_status: lifecycleStatus,
     subscription_plan: latestSub?.plan || "free",
     subscription_status: normalizeSubscriptionStatus(latestSub?.status),
-    qr_enabled: true,
+    qr_enabled: candidateCapabilities.canShareByQr,
+    cv_download_enabled: candidateCapabilities.canDownloadVerifiedCv,
     latest_verification_at:
       verifiedRows
         .map((row: any) => row?.resolved_at || row?.created_at || null)

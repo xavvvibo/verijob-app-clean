@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   CandidatePublicProfileRenderer,
   type PublicCandidatePayload,
   type PublicProfilePreviewMode,
 } from "@/components/public/CandidatePublicProfileRenderer";
+import { getCandidatePlanCapabilities } from "@/lib/billing/planCapabilities";
 
 type SettingsPayload = {
   allow_company_email_contact?: boolean;
@@ -15,6 +17,12 @@ type SettingsPayload = {
 type CandidateProfile = {
   email?: string | null;
   phone?: string | null;
+};
+
+type SubscriptionStatePayload = {
+  subscription?: {
+    plan?: string | null;
+  } | null;
 };
 
 const PUBLIC_PROFILE_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es";
@@ -36,6 +44,7 @@ export default function CandidatePublicProfilePage() {
   const [previewPayload, setPreviewPayload] = useState<PublicCandidatePayload | null>(null);
   const [settings, setSettings] = useState<SettingsPayload>({});
   const [profile, setProfile] = useState<CandidateProfile>({});
+  const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
 
   const link = useMemo(() => {
     if (!token) return null;
@@ -45,6 +54,7 @@ export default function CandidatePublicProfilePage() {
     if (!token) return null;
     return `/api/public/candidate/${token}/qr.svg`;
   }, [token]);
+  const planCapabilities = useMemo(() => getCandidatePlanCapabilities(subscriptionPlan), [subscriptionPlan]);
 
   const fetchPreview = useCallback(async (publicToken: string) => {
     const res = await fetch(`/api/public/candidate/${publicToken}?scope=internal`, { cache: "no-store" });
@@ -85,13 +95,17 @@ export default function CandidatePublicProfilePage() {
     void generateOrRefreshLink();
 
     (async () => {
-      const [profileRes, settingsRes] = await Promise.all([
+      const [profileRes, settingsRes, subscriptionRes] = await Promise.all([
         fetch("/api/candidate/profile", { credentials: "include" }).then((r) => r.json().catch(() => ({}))),
         fetch("/api/candidate/settings", { credentials: "include" }).then((r) => r.json().catch(() => ({}))),
+        fetch("/api/account/subscription-state", { credentials: "include", cache: "no-store" }).then((r) =>
+          r.json().catch(() => ({})) as Promise<SubscriptionStatePayload>
+        ),
       ]);
 
       setProfile(profileRes?.profile || {});
       setSettings(settingsRes?.settings || {});
+      setSubscriptionPlan(subscriptionRes?.subscription?.plan || null);
     })();
   }, [generateOrRefreshLink]);
 
@@ -180,7 +194,7 @@ export default function CandidatePublicProfilePage() {
         <aside className="h-fit rounded-2xl border border-gray-200 bg-white p-6 xl:sticky xl:top-6">
           <h3 className="text-lg font-semibold text-gray-900">Comparte tu perfil</h3>
           <p className="mt-1 text-sm text-gray-600">
-            Este es tu enlace público y su código QR verificable.
+            Este es tu enlace público verificable. El QR está disponible con los planes Pro y Pro+.
           </p>
 
           <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
@@ -191,17 +205,25 @@ export default function CandidatePublicProfilePage() {
 
           <div className="mt-5 rounded-xl border border-gray-200 bg-slate-50 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">QR del perfil</div>
-            <p className="mt-1 text-xs text-gray-600">Escanea para validar este perfil.</p>
+            <p className="mt-1 text-xs text-gray-600">
+              {planCapabilities.canShareByQr ? "Escanea para validar este perfil." : "Tu plan actual no incluye QR compartible."}
+            </p>
             <div className="mt-3 flex min-h-[300px] items-center justify-center rounded-lg border border-gray-200 bg-white p-3">
-              {qrSvgUrl ? (
+              {qrSvgUrl && planCapabilities.canShareByQr ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={qrSvgUrl} alt="QR de perfil público" className="h-auto w-full max-w-[220px] object-contain" />
               ) : (
-                <span className="text-xs text-gray-500">Genera el enlace para ver el QR.</span>
+                <span className="text-center text-xs text-gray-500">
+                  {planCapabilities.canShareByQr
+                    ? "Genera el enlace para ver el QR."
+                    : "Mejora a Pro para compartir tu perfil también por QR."}
+                </span>
               )}
             </div>
             <p className="mt-2 text-[11px] text-gray-500">
-              Verificación segura mediante enlace único.
+              {planCapabilities.canShareByQr
+                ? "Verificación segura mediante enlace único."
+                : "El enlace público sigue disponible con tu plan actual."}
             </p>
           </div>
 
@@ -214,14 +236,23 @@ export default function CandidatePublicProfilePage() {
             >
               Copiar enlace
             </button>
-            <button
-              type="button"
-              onClick={downloadQr}
-              disabled={!qrSvgUrl}
-              className="inline-flex w-full justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-100 disabled:opacity-50"
-            >
-              Descargar QR
-            </button>
+            {planCapabilities.canShareByQr ? (
+              <button
+                type="button"
+                onClick={downloadQr}
+                disabled={!qrSvgUrl}
+                className="inline-flex w-full justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-100 disabled:opacity-50"
+              >
+                Descargar QR
+              </button>
+            ) : (
+              <Link
+                href="/candidate/subscription"
+                className="inline-flex w-full justify-center rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-900 hover:bg-blue-100"
+              >
+                Mejorar a Pro
+              </Link>
+            )}
             <button
               type="button"
               onClick={generateOrRefreshLink}
@@ -233,6 +264,12 @@ export default function CandidatePublicProfilePage() {
           </div>
 
           {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+            <p className="font-semibold text-slate-900">Tu plan actual: {planCapabilities.label}</p>
+            <p className="mt-1">Compartir por link: sí</p>
+            <p>Compartir por QR: {planCapabilities.canShareByQr ? "sí" : "no"}</p>
+            <p>Descarga de CV verificado: {planCapabilities.canDownloadVerifiedCv ? "sí" : "no"}</p>
+          </div>
         </aside>
       </section>
     </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { getCompanyPlanCapabilities } from "@/lib/billing/planCapabilities";
 
 type PlanCard = {
   label: string;
@@ -61,6 +62,7 @@ export default function CompanyPlanActions({
   const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
   const [loadingPortal, setLoadingPortal] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const currentCapabilities = getCompanyPlanCapabilities(currentPlanCode || currentPlanLabel);
 
   async function startCheckout(planKey: string) {
     setLoadingPlan(planKey);
@@ -132,6 +134,15 @@ export default function CompanyPlanActions({
         >
           Contactar con ventas
         </a>
+      </div>
+
+      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700">
+        <p className="font-semibold text-slate-900">Tu plan actual incluye</p>
+        <ul className="mt-3 space-y-2">
+          <li>Accesos incluidos al mes: <span className="font-semibold text-slate-900">{currentCapabilities.accessesIncludedMonthly ?? "Personalizado"}</span></li>
+          <li>Panel RRHH: <span className="font-semibold text-slate-900">{currentCapabilities.rrhhPanel}</span></li>
+          <li>Funcionalidades de selección: <span className="font-semibold text-slate-900">{currentCapabilities.includesSelection ? "Sí" : "No"}</span></li>
+        </ul>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

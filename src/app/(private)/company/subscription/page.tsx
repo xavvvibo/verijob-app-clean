@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { readEffectiveSubscriptionState } from "@/lib/billing/effectiveSubscription";
+import { getCompanyPlanCapabilities } from "@/lib/billing/planCapabilities";
 import { companyVerificationMethodTone, deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
 import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
@@ -79,11 +80,7 @@ function verificationStatusClass(statusRaw: unknown) {
 }
 
 function planFeatures(label: string) {
-  if (label === "Enterprise") return ["Capacidad avanzada de revisión", "Cobertura multi-equipo", "Acuerdos personalizados"];
-  if (label === "Team") return ["Mayor capacidad operativa", "Volumen ampliado de revisión", "Gestión de equipo extendida"];
-  if (label === "Hiring") return ["Más verificaciones simultáneas", "Mayor throughput en procesos", "Mejor ritmo de contratación"];
-  if (label === "Access") return ["Acceso ampliado a solicitudes", "Operación inicial de revisión", "Capacidad superior al plan Free"];
-  return ["Acceso base al panel empresa", "Gestión de solicitudes en modo limitado", "Base operativa para activar upgrade"];
+  return getCompanyPlanCapabilities(label).bullets;
 }
 
 function isSubscriptionActive(statusRaw: unknown) {
@@ -185,6 +182,7 @@ export default async function CompanySubscriptionPage() {
   const plan = String(effectiveSubscription.plan || sub?.plan || "company_free");
   const status = normalizeSubscriptionStatus(effectiveSubscription.status || sub?.status || "free");
   const label = planLabel(plan);
+  const companyPlan = getCompanyPlanCapabilities(plan);
   const features = planFeatures(label);
   const active = isSubscriptionActive(status);
 
@@ -252,6 +250,18 @@ export default async function CompanySubscriptionPage() {
               <dd className="font-semibold text-slate-900">{accessCredits.available}</dd>
             </div>
             <div className="flex justify-between gap-4">
+              <dt className="text-slate-500">Accesos incluidos por plan</dt>
+              <dd className="font-semibold text-slate-900">{companyPlan.accessesIncludedMonthly ?? "Personalizado"} / mes</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-slate-500">Panel RRHH</dt>
+              <dd className="font-semibold text-slate-900">{companyPlan.rrhhPanel}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
+              <dt className="text-slate-500">Selección</dt>
+              <dd className="font-semibold text-slate-900">{companyPlan.includesSelection ? "Incluida" : "No incluida"}</dd>
+            </div>
+            <div className="flex justify-between gap-4">
               <dt className="text-slate-500">Cancelación programada</dt>
               <dd className="font-semibold text-slate-900">{sub?.cancel_at_period_end ? "Sí" : "No"}</dd>
             </div>
@@ -311,6 +321,11 @@ export default async function CompanySubscriptionPage() {
               Tu empresa opera en modo Free o sin suscripción activa. Puedes mantener operación básica o activar upgrade.
             </div>
           ) : null}
+
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+            <p className="font-semibold text-slate-900">Tu plan incluye</p>
+            <p className="mt-2">{companyPlan.summary}</p>
+          </div>
 
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
             <p className="font-semibold text-slate-900">Coherencia de estado</p>

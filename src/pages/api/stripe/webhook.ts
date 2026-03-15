@@ -1,6 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
+import {
+  normalizeCompanyProfileAccessProductKey,
+  resolveCompanyProfileAccessCreditsGranted,
+} from "@/lib/company/profile-access-products";
 import { resolvePlanFromPriceId } from "@/utils/stripe/priceMapping";
 import { buildSubscriptionLifecycleEmail } from "@/lib/email/templates/subscriptionLifecycle";
 import { sendTransactionalEmail } from "@/server/email/sendTransactionalEmail";
@@ -46,19 +50,15 @@ function isCompanyPlan(raw: unknown) {
 }
 
 function normalizeOneoffProduct(args: { planKey?: string | null; priceId?: string | null }) {
-  const direct = String(args.planKey || "").trim().toLowerCase();
+  const direct = normalizeCompanyProfileAccessProductKey(args.planKey);
   const resolved = direct ? null : resolvePlanFromPriceId(args.priceId);
-  const effective = direct || String(resolved?.planKey || "").trim().toLowerCase();
-
-  if (effective === "company_single_profile" || effective === "company_single_cv") {
-    return { productKey: "company_single_cv" as const, creditsGranted: 1, resolvedPlanKey: effective || "company_single_profile" };
-  }
-
-  if (effective === "company_pack5_profiles" || effective === "company_pack_5") {
-    return { productKey: "company_pack_5" as const, creditsGranted: 5, resolvedPlanKey: effective || "company_pack5_profiles" };
-  }
-
-  return null;
+  const effective = direct || normalizeCompanyProfileAccessProductKey(resolved?.planKey);
+  if (!effective) return null;
+  return {
+    productKey: effective,
+    creditsGranted: resolveCompanyProfileAccessCreditsGranted(effective),
+    resolvedPlanKey: effective,
+  };
 }
 
 async function getRawBody(req: NextApiRequest): Promise<string> {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
+import { normalizeCompanyProfileAccessProductKey } from "@/lib/company/profile-access-products";
 import { resolvePriceForPlan } from "@/utils/stripe/priceMapping";
 
 export const dynamic = "force-dynamic";
@@ -36,9 +37,9 @@ function getOrigin(req: Request) {
 }
 
 function toOwnerProductKey(planKey: string | null) {
+  const canonical = normalizeCompanyProfileAccessProductKey(planKey);
+  if (canonical) return canonical;
   const normalized = String(planKey || "").trim().toLowerCase();
-  if (normalized === "company_single_profile") return "company_single_cv";
-  if (normalized === "company_pack5_profiles") return "company_pack_5";
   return normalized || null;
 }
 
