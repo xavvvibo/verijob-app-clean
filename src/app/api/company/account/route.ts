@@ -3,6 +3,7 @@ import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { buildIdentityRecord } from "@/lib/security/identity";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+import { resetCompanyWorkspaceForQa } from "@/lib/account/qa-reset";
 
 export const dynamic = "force-dynamic";
 
@@ -283,6 +284,7 @@ export async function POST(request: Request) {
     if (companyColumns.has("deleted_at")) patch.deleted_at = nowIso;
     const { error } = await admin.from("companies").update(patch).eq("id", companyId);
     if (error) return json(400, { error: "company_close_failed", details: error.message });
+    await admin.from("profiles").update({ active_company_id: null, onboarding_completed: false }).eq("id", user.id);
     return json(200, {
       ok: true,
       account: { company: { lifecycle_status: "deleted", deleted_at: nowIso } },
@@ -290,6 +292,56 @@ export async function POST(request: Request) {
     });
   }
 
+  if (action === "reset_company_for_qa") {
+    if (membershipRole !== "admin") return json(403, { error: "admin_role_required" });
+    if (String(body?.confirm_phrase || "").trim().toUpperCase() !== "RESET EMPRESA") {
+      return json(400, {
+        error: "invalid_confirmation_phrase",
+        user_message: "Escribe exactamente RESET EMPRESA para confirmar el reseteo de prueba.",
+      });
+    }
+
+    let result;
+    try {
+      result = await resetCompanyWorkspaceForQa({
+        admin,
+        userId: user.id,
+        companyId,
+      });
+    } catch (error: any) {
+      return json(500, {
+        error: "company_reset_failed",
+        details: String(error?.message || error),
+        user_message: "No se pudo resetear la empresa de prueba. Revisa dependencias históricas pendientes o intenta de nuevo.",
+      });
+    }
+    if (!result.ok) {
+      return json(409, {
+        error: result.error,
+        user_message: result.user_message,
+      });
+    }
+
+    return json(200, {
+      ok: true,
+      account: {
+        user: {
+          lifecycle_status: "active",
+          deletion_mode: null,
+          deletion_requested_at: null,
+          deleted_at: null,
+        },
+        company: {
+          lifecycle_status: "deleted",
+          deleted_at: nowIso,
+          deletion_requested_at: nowIso,
+        },
+      },
+      cleaned: result.cleaned,
+      user_message:
+        "La empresa de prueba ha quedado reseteada. Ya puedes rehacer onboarding, accesos y pruebas operativas desde cero con esta cuenta.",
+    });
+  }
+
   return json(400, { error: "unsupported_action" });
 }
-

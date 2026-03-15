@@ -1,0 +1,277 @@
+type SupabaseLike = any;
+
+function isMissingRelationError(error: any, relation: string) {
+  const code = String(error?.code || "");
+  const message = String(error?.message || "").toLowerCase();
+  return code === "42P01" || code === "PGRST205" || message.includes(relation.toLowerCase());
+}
+
+async function getTableColumns(admin: SupabaseLike, tableName: string) {
+  const { data, error } = await admin
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", tableName);
+  if (error || !Array.isArray(data)) return new Set<string>();
+  return new Set(data.map((row: any) => String(row?.column_name || "")));
+}
+
+async function tableExists(admin: SupabaseLike, tableName: string) {
+  const { data, error } = await admin
+    .from("information_schema.tables")
+    .select("table_name")
+    .eq("table_schema", "public")
+    .eq("table_name", tableName)
+    .maybeSingle();
+  return !error && Boolean(data?.table_name);
+}
+
+async function bestEffortDelete(builderPromise: Promise<any>, relationName: string) {
+  const result = await builderPromise;
+  if (result?.error && !isMissingRelationError(result.error, relationName)) {
+    throw result.error;
+  }
+  return result;
+}
+
+async function deactivatePlanOverridesForQa(admin: SupabaseLike, userId: string, nowIso: string) {
+  const payload = {
+    is_active: false,
+    metadata: {
+      qa_reset: true,
+      deactivated_at: nowIso,
+      source: "self_service_qa_reset",
+    },
+  };
+  const { error } = await admin.from("plan_overrides").update(payload).eq("user_id", userId).eq("is_active", true);
+  if (error && !isMissingRelationError(error, "plan_overrides")) throw error;
+}
+
+async function resetLatestSubscriptionToFree(admin: SupabaseLike, userId: string, nowIso: string) {
+  const columns = await getTableColumns(admin, "subscriptions");
+  if (!columns.size) return false;
+  const orderColumn = columns.has("updated_at") ? "updated_at" : columns.has("created_at") ? "created_at" : "id";
+
+  const { data: latestSub, error: subReadErr } = await admin
+    .from("subscriptions")
+    .select("id,metadata")
+    .eq("user_id", userId)
+    .order(orderColumn, { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (subReadErr && !isMissingRelationError(subReadErr, "subscriptions")) throw subReadErr;
+  if (!latestSub?.id) return false;
+
+  const patch: Record<string, any> = {
+    plan: "free",
+    status: "canceled",
+    metadata: {
+      ...(latestSub.metadata && typeof latestSub.metadata === "object" ? latestSub.metadata : {}),
+      qa_reset: {
+        at: nowIso,
+        source: "self_service_qa_reset",
+      },
+    },
+  };
+  if (columns.has("current_period_end")) patch.current_period_end = nowIso;
+  if (columns.has("cancel_at_period_end")) patch.cancel_at_period_end = false;
+
+  const { error: subUpdateErr } = await admin.from("subscriptions").update(patch).eq("id", latestSub.id);
+  if (subUpdateErr && !isMissingRelationError(subUpdateErr, "subscriptions")) throw subUpdateErr;
+  return true;
+}
+
+export async function resetCandidateAccountForQa(args: {
+  admin: SupabaseLike;
+  userId: string;
+}) {
+  const { admin, userId } = args;
+  const nowIso = new Date().toISOString();
+  const profileColumns = await getTableColumns(admin, "profiles");
+  const candidateProfileColumns = await getTableColumns(admin, "candidate_profiles");
+
+  const { data: employmentRows, error: employmentErr } = await admin
+    .from("employment_records")
+    .select("id")
+    .eq("candidate_id", userId);
+  if (employmentErr && !isMissingRelationError(employmentErr, "employment_records")) throw employmentErr;
+  const employmentIds = Array.from(new Set((Array.isArray(employmentRows) ? employmentRows : []).map((row: any) => String(row?.id || "")).filter(Boolean)));
+
+  const verificationIdSet = new Set<string>();
+  const verificationReadOps: Promise<any>[] = [
+    admin.from("verification_requests").select("id").eq("requested_by", userId),
+  ];
+  if (employmentIds.length) {
+    verificationReadOps.push(admin.from("verification_requests").select("id").in("employment_record_id", employmentIds));
+  }
+  for (const op of verificationReadOps) {
+    const { data, error } = await op;
+    if (error && !isMissingRelationError(error, "verification_requests")) throw error;
+    for (const row of Array.isArray(data) ? data : []) {
+      const id = String((row as any)?.id || "");
+      if (id) verificationIdSet.add(id);
+    }
+  }
+  const verificationIds = Array.from(verificationIdSet);
+
+  if (await tableExists(admin, "evidences")) {
+    if (verificationIds.length) {
+      await bestEffortDelete(admin.from("evidences").delete().in("verification_request_id", verificationIds), "evidences");
+    }
+    await bestEffortDelete(admin.from("evidences").delete().eq("uploaded_by", userId), "evidences");
+  }
+
+  if (await tableExists(admin, "candidate_public_links")) {
+    await bestEffortDelete(admin.from("candidate_public_links").delete().eq("candidate_id", userId), "candidate_public_links");
+  }
+
+  if (await tableExists(admin, "profile_view_consumptions")) {
+    await bestEffortDelete(admin.from("profile_view_consumptions").delete().eq("candidate_id", userId), "profile_view_consumptions");
+  }
+
+  if (verificationIds.length) {
+    await bestEffortDelete(admin.from("verification_requests").delete().in("id", verificationIds), "verification_requests");
+  }
+  if (employmentIds.length) {
+    await bestEffortDelete(admin.from("employment_records").delete().in("id", employmentIds), "employment_records");
+  }
+
+  if (candidateProfileColumns.size) {
+    const { error: candidateProfileDeleteErr } = await admin.from("candidate_profiles").delete().eq("user_id", userId);
+    if (candidateProfileDeleteErr && !isMissingRelationError(candidateProfileDeleteErr, "candidate_profiles")) throw candidateProfileDeleteErr;
+  }
+
+  await deactivatePlanOverridesForQa(admin, userId, nowIso);
+  const subscriptionReset = await resetLatestSubscriptionToFree(admin, userId, nowIso);
+
+  const profilePatch: Record<string, any> = {
+    onboarding_completed: false,
+    active_company_id: null,
+  };
+  if (profileColumns.has("lifecycle_status")) profilePatch.lifecycle_status = "active";
+  if (profileColumns.has("deleted_at")) profilePatch.deleted_at = null;
+  if (profileColumns.has("deletion_requested_at")) profilePatch.deletion_requested_at = null;
+  if (profileColumns.has("deletion_mode")) profilePatch.deletion_mode = null;
+  if (profileColumns.has("full_name")) profilePatch.full_name = null;
+  if (profileColumns.has("title")) profilePatch.title = null;
+  if (profileColumns.has("location")) profilePatch.location = null;
+  if (profileColumns.has("identity_type")) profilePatch.identity_type = null;
+  if (profileColumns.has("identity_masked")) profilePatch.identity_masked = null;
+  if (profileColumns.has("identity_hash")) profilePatch.identity_hash = null;
+  if (profileColumns.has("languages")) profilePatch.languages = [];
+
+  const { error: profileUpdateErr } = await admin.from("profiles").update(profilePatch).eq("id", userId);
+  if (profileUpdateErr) throw profileUpdateErr;
+
+  try {
+    await admin.auth.admin.updateUserById(userId, { ban_duration: "none" });
+  } catch {}
+
+  return {
+    ok: true as const,
+    cleaned: {
+      employment_records_deleted: employmentIds.length,
+      verification_requests_deleted: verificationIds.length,
+      candidate_profile_deleted: Boolean(candidateProfileColumns.size),
+      public_links_deleted: true,
+      subscription_reset: subscriptionReset,
+    },
+  };
+}
+
+export async function resetCompanyWorkspaceForQa(args: {
+  admin: SupabaseLike;
+  userId: string;
+  companyId: string;
+}) {
+  const { admin, userId, companyId } = args;
+  const nowIso = new Date().toISOString();
+  const [profileColumns, companyColumns] = await Promise.all([
+    getTableColumns(admin, "profiles"),
+    getTableColumns(admin, "companies"),
+  ]);
+
+  const { count: membersCount, error: membersCountErr } = await admin
+    .from("company_members")
+    .select("*", { count: "exact", head: true })
+    .eq("company_id", companyId);
+  if (membersCountErr && !isMissingRelationError(membersCountErr, "company_members")) throw membersCountErr;
+  if ((membersCount || 0) > 1) {
+    return {
+      ok: false as const,
+      error: "company_reset_multiple_members",
+      user_message: "No se puede resetear esta empresa porque todavía tiene más de una persona asociada.",
+    };
+  }
+
+  if (await tableExists(admin, "company_candidate_import_invites")) {
+    await bestEffortDelete(admin.from("company_candidate_import_invites").delete().eq("company_id", companyId), "company_candidate_import_invites");
+  }
+
+  if (await tableExists(admin, "company_verification_documents")) {
+    await bestEffortDelete(admin.from("company_verification_documents").delete().eq("company_id", companyId), "company_verification_documents");
+  }
+
+  if (await tableExists(admin, "company_profiles")) {
+    await bestEffortDelete(admin.from("company_profiles").delete().eq("company_id", companyId), "company_profiles");
+  }
+
+  if (await tableExists(admin, "profile_view_consumptions")) {
+    await bestEffortDelete(admin.from("profile_view_consumptions").delete().eq("company_id", companyId), "profile_view_consumptions");
+  }
+
+  if (await tableExists(admin, "credit_grants")) {
+    const { data: grants, error: grantsReadErr } = await admin
+      .from("credit_grants")
+      .select("id,metadata,user_id")
+      .eq("user_id", userId);
+    if (grantsReadErr && !isMissingRelationError(grantsReadErr, "credit_grants")) throw grantsReadErr;
+    const grantIds = (Array.isArray(grants) ? grants : [])
+      .filter((row: any) => String(row?.metadata?.company_id || "").trim() === companyId)
+      .map((row: any) => String(row?.id || ""))
+      .filter(Boolean);
+    if (grantIds.length) {
+      await bestEffortDelete(admin.from("credit_grants").delete().in("id", grantIds), "credit_grants");
+    }
+  }
+
+  await deactivatePlanOverridesForQa(admin, userId, nowIso);
+  const subscriptionReset = await resetLatestSubscriptionToFree(admin, userId, nowIso);
+
+  const profilePatch: Record<string, any> = {
+    active_company_id: null,
+    onboarding_completed: false,
+  };
+  if (profileColumns.has("lifecycle_status")) profilePatch.lifecycle_status = "active";
+  if (profileColumns.has("deleted_at")) profilePatch.deleted_at = null;
+  if (profileColumns.has("deletion_requested_at")) profilePatch.deletion_requested_at = null;
+  if (profileColumns.has("deletion_mode")) profilePatch.deletion_mode = null;
+  const { error: profileUpdateErr } = await admin.from("profiles").update(profilePatch).eq("id", userId);
+  if (profileUpdateErr) throw profileUpdateErr;
+
+  await bestEffortDelete(admin.from("company_members").delete().eq("company_id", companyId), "company_members");
+
+  const companyPatch: Record<string, any> = {};
+  if (companyColumns.has("lifecycle_status")) companyPatch.lifecycle_status = "deleted";
+  if (companyColumns.has("deletion_requested_at")) companyPatch.deletion_requested_at = nowIso;
+  if (companyColumns.has("deleted_at")) companyPatch.deleted_at = nowIso;
+  if (companyColumns.has("identity_type")) companyPatch.identity_type = null;
+  if (companyColumns.has("identity_masked")) companyPatch.identity_masked = null;
+  if (companyColumns.has("identity_hash")) companyPatch.identity_hash = null;
+  if (Object.keys(companyPatch).length) {
+    const { error: companyUpdateErr } = await admin.from("companies").update(companyPatch).eq("id", companyId);
+    if (companyUpdateErr && !isMissingRelationError(companyUpdateErr, "companies")) throw companyUpdateErr;
+  }
+
+  return {
+    ok: true as const,
+    cleaned: {
+      company_members_deleted: membersCount || 0,
+      company_profile_deleted: true,
+      company_documents_deleted: true,
+      candidate_import_invites_deleted: true,
+      profile_view_consumptions_deleted: true,
+      subscription_reset: subscriptionReset,
+    },
+  };
+}

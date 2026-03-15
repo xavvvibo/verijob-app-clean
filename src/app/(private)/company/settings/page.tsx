@@ -111,6 +111,7 @@ export default function CompanySettingsPage() {
   const [disableUserConfirmed, setDisableUserConfirmed] = useState(false);
   const [closeCompanyConfirmation, setCloseCompanyConfirmation] = useState("");
   const [deleteUserConfirmation, setDeleteUserConfirmation] = useState("");
+  const [resetCompanyConfirmation, setResetCompanyConfirmation] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -234,6 +235,17 @@ export default function CompanySettingsPage() {
     if (result?.ok) {
       window.setTimeout(() => {
         window.location.href = "/login?company_user_deleted=1";
+      }, 900);
+    }
+  }
+
+  async function resetCompanyForQa() {
+    const result = await runAccountAction("reset_company_for_qa", {
+      confirm_phrase: resetCompanyConfirmation,
+    });
+    if (result?.ok) {
+      window.setTimeout(() => {
+        window.location.href = "/onboarding/company?qa_reset=1";
       }, 900);
     }
   }
@@ -473,6 +485,34 @@ export default function CompanySettingsPage() {
                 className="mt-4 rounded-xl border border-rose-300 bg-white px-4 py-2 text-sm font-semibold text-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Cerrar empresa definitivamente
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
+              <h3 className="text-sm font-semibold text-sky-950">Reset empresa de prueba</h3>
+              <p className="mt-2 text-sm text-sky-900">
+                Esta opción está pensada para rehacer QA manual desde cero. Limpia el workspace operativo, la membresía activa, el onboarding,
+                los documentos de empresa, los accesos consumidos y el saldo operativo asociado a esta empresa de prueba.
+              </p>
+              <p className="mt-2 text-sm text-sky-900">
+                No borra la huella histórica mínima de la empresa cerrada ni destruye automáticamente verificaciones históricas ya emitidas.
+              </p>
+              <label className="mt-4 block">
+                <span className="text-sm font-semibold text-sky-950">Escribe RESET EMPRESA para confirmar</span>
+                <input
+                  type="text"
+                  value={resetCompanyConfirmation}
+                  onChange={(e) => setResetCompanyConfirmation(e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-sky-300 bg-white px-3 py-2.5 text-sm text-slate-900"
+                />
+              </label>
+              <button
+                type="button"
+                disabled={accountSaving || !account?.can_manage_company || resetCompanyConfirmation.trim().toUpperCase() !== "RESET EMPRESA"}
+                onClick={resetCompanyForQa}
+                className="mt-4 rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-sky-300"
+              >
+                Reset empresa de prueba
               </button>
             </div>
           </section>

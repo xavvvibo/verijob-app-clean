@@ -196,6 +196,7 @@ export default function CandidateSettings() {
   const [identityValue, setIdentityValue] = useState("");
   const [disableConfirmed, setDisableConfirmed] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [resetCandidateConfirmation, setResetCandidateConfirmation] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -327,6 +328,17 @@ export default function CandidateSettings() {
     if (result?.ok) {
       window.setTimeout(() => {
         window.location.href = "/login?account_deleted=1";
+      }, 900);
+    }
+  }
+
+  async function resetCandidateForQa() {
+    const result = await runAccountAction("reset_candidate_for_qa", {
+      confirm_phrase: resetCandidateConfirmation,
+    });
+    if (result?.ok) {
+      window.setTimeout(() => {
+        window.location.href = "/onboarding?qa_reset=1";
       }, 900);
     }
   }
@@ -562,6 +574,34 @@ export default function CandidateSettings() {
                     Eliminar perfil definitivamente
                   </button>
                 </div>
+
+                <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
+                  <h3 className="text-sm font-semibold text-sky-950">Reset cuenta candidata de prueba</h3>
+                  <p className="mt-2 text-sm text-sky-900">
+                    Esta opción limpia tu estado operativo para rehacer QA manual desde cero: perfil, experiencias, evidencias, verificaciones,
+                    enlaces públicos, onboarding y estado visible del plan.
+                  </p>
+                  <p className="mt-2 text-sm text-sky-900">
+                    No elimina el usuario de Auth ni pretende destruir trazas mínimas técnicas que puedan quedar fuera del workspace operativo.
+                  </p>
+                  <label className="mt-4 block">
+                    <span className="text-sm font-semibold text-sky-950">Escribe RESET CANDIDATO para confirmar</span>
+                    <input
+                      type="text"
+                      value={resetCandidateConfirmation}
+                      onChange={(e) => setResetCandidateConfirmation(e.target.value)}
+                      className="mt-2 w-full rounded-xl border border-sky-300 bg-white px-3 py-2.5 text-sm text-slate-900"
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    disabled={accountSaving || resetCandidateConfirmation.trim().toUpperCase() !== "RESET CANDIDATO"}
+                    onClick={resetCandidateForQa}
+                    className="mt-4 rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-sky-300"
+                  >
+                    Reset cuenta candidata de prueba
+                  </button>
+                </div>
               </section>
             </div>
           </section>
@@ -597,4 +637,3 @@ export default function CandidateSettings() {
     </div>
   );
 }
-

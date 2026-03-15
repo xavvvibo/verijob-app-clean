@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { buildIdentityRecord } from "@/lib/security/identity";
+import { resetCandidateAccountForQa } from "@/lib/account/qa-reset";
 
 export const dynamic = "force-dynamic";
 
@@ -214,6 +215,44 @@ export async function POST(request: Request) {
     });
   }
 
+  if (action === "reset_candidate_for_qa") {
+    if (String(body?.confirm_phrase || "").trim().toUpperCase() !== "RESET CANDIDATO") {
+      return json(400, {
+        error: "invalid_confirmation_phrase",
+        user_message: "Escribe exactamente RESET CANDIDATO para confirmar el reseteo de prueba.",
+      });
+    }
+
+    let result;
+    try {
+      result = await resetCandidateAccountForQa({
+        admin,
+        userId: user.id,
+      });
+    } catch (error: any) {
+      return json(500, {
+        error: "candidate_reset_failed",
+        details: String(error?.message || error),
+        user_message: "No se pudo resetear la cuenta candidata de prueba. Revisa dependencias históricas pendientes o intenta de nuevo.",
+      });
+    }
+
+    return json(200, {
+      ok: true,
+      account: {
+        lifecycle_status: "active",
+        deletion_mode: null,
+        deletion_requested_at: null,
+        deleted_at: null,
+        identity_type: null,
+        identity_masked: null,
+        has_identity: false,
+      },
+      cleaned: result.cleaned,
+      user_message:
+        "La cuenta candidata de prueba ha quedado reseteada. Ya puedes rehacer onboarding, perfil, verificaciones y pricing desde cero.",
+    });
+  }
+
   return json(400, { error: "unsupported_action" });
 }
-
