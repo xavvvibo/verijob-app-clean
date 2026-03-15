@@ -329,6 +329,10 @@ export default function OnboardingPage() {
                   <CvUploadAndParse />
                 </div>
 
+                <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-slate-700">
+                  Cuando termines de importar, revisa experiencia, formación e idiomas antes de cerrar el onboarding. Si prefieres, puedes seguir manualmente desde ahora mismo.
+                </div>
+
                 <div className="flex flex-col gap-3 sm:flex-row">
                   <button
                     type="button"
@@ -353,7 +357,7 @@ export default function OnboardingPage() {
             {currentStep === "experience" ? (
               <div className="mt-6 space-y-5">
                 <p className="text-sm text-slate-600">
-                  Abre la sección real de experiencia para añadir, editar y guardar tus empleos. El onboarding ya no te obliga a avanzar sin poder tocar datos.
+                  Abre la sección real de experiencia para añadir, editar y guardar tus empleos. Puedes volver aquí después sin perder el hilo del onboarding.
                 </p>
                 <Link
                   href="/candidate/experience"
@@ -378,7 +382,7 @@ export default function OnboardingPage() {
             {currentStep === "education" ? (
               <div className="mt-6 space-y-5">
                 <p className="text-sm text-slate-600">
-                  Añade tus estudios desde la ruta real de educación. Puedes guardar uno, varios o ninguno por ahora.
+                  Añade tus estudios desde la ruta real de educación. Puedes guardar uno, varios o ninguno por ahora y continuar sin bloquearte.
                 </p>
                 <Link
                   href="/candidate/education"
@@ -403,27 +407,30 @@ export default function OnboardingPage() {
             {currentStep === "achievements" ? (
               <div className="mt-6 space-y-5">
                 <p className="text-sm text-slate-600">
-                  Esta sección agrupa idiomas, certificaciones y otros logros. Puedes añadirlos todos desde la misma ruta real.
+                  Esta sección ya separa idiomas, certificaciones y otros logros. Entra y añade solo lo que tengas listo ahora.
                 </p>
                 <div className="grid gap-3">
                   <Link
-                    href="/candidate/achievements"
+                    href="/candidate/achievements?open=language"
                     className="inline-flex w-full items-center justify-center rounded-xl border px-4 py-3 text-sm font-medium text-slate-900"
                   >
                     Añadir idioma
                   </Link>
                   <Link
-                    href="/candidate/achievements"
+                    href="/candidate/achievements?open=certification"
                     className="inline-flex w-full items-center justify-center rounded-xl border px-4 py-3 text-sm font-medium text-slate-900"
                   >
                     Añadir certificación
                   </Link>
                   <Link
-                    href="/candidate/achievements"
+                    href="/candidate/achievements?open=achievement"
                     className="inline-flex w-full items-center justify-center rounded-xl border px-4 py-3 text-sm font-medium text-slate-900"
                   >
                     Añadir logro
                   </Link>
+                </div>
+                <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-slate-700">
+                  Los idiomas se mostrarán con formato laboral claro, por ejemplo <span className="font-semibold">English — C2</span>.
                 </div>
                 <button
                   type="button"

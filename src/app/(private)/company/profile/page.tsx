@@ -856,6 +856,31 @@ export default function CompanyProfilePage() {
           <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
             Verás por separado el estado del documento, los datos detectados para completar el perfil y la siguiente acción recomendada en cada caso.
           </div>
+          <div className="mt-3 grid gap-2 md:grid-cols-3">
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
+              <div className="font-semibold text-slate-900">1. Documento recibido</div>
+              <div className="mt-1">
+                {profile?.company_document_last_submitted_at
+                  ? `Registrado el ${new Date(String(profile.company_document_last_submitted_at)).toLocaleDateString("es-ES")}`
+                  : "Pendiente de primera subida"}
+              </div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
+              <div className="font-semibold text-slate-900">2. Revisión en curso</div>
+              <div className="mt-1">
+                {profile?.company_document_review_priority_label || "Cola estándar"}
+                {profile?.company_document_review_eta_label ? ` · ${String(profile.company_document_review_eta_label)}` : ""}
+              </div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
+              <div className="font-semibold text-slate-900">3. Resolución visible</div>
+              <div className="mt-1">
+                {(profile?.company_document_last_reviewed_at || profile?.verification_last_reviewed_at)
+                  ? `Actualizada el ${new Date(String(profile.company_document_last_reviewed_at || profile.verification_last_reviewed_at)).toLocaleDateString("es-ES")}`
+                  : "Se mostrará aquí cuando termine la revisión"}
+              </div>
+            </div>
+          </div>
         </div>
 
         {documentsMeta ? (

@@ -114,7 +114,7 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: "experience", label: "Experiencia" },
   { key: "education", label: "Formación" },
   { key: "recommendations", label: "Recomendaciones" },
-  { key: "languages", label: "Idiomas y logros" },
+  { key: "languages", label: "Idiomas y credenciales" },
 ];
 
 function getModeCapabilities(mode: PublicProfilePreviewMode) {
@@ -249,7 +249,7 @@ export function CandidatePublicProfileRenderer({
     if (hasExperiences) out.push({ key: "experience", label: "Experiencia" });
     if (hasEducation) out.push({ key: "education", label: "Formación" });
     if (hasRecommendations) out.push({ key: "recommendations", label: "Recomendaciones" });
-    if (hasLanguages || hasAchievements) out.push({ key: "languages", label: "Idiomas y logros" });
+    if (hasLanguages || hasAchievements) out.push({ key: "languages", label: "Idiomas y credenciales" });
     return out.length ? out : [{ key: "profile", label: "Perfil" }];
   }, [isOpenPublicView, isExternalCleanView, hasProfileCore, hasExperiences, hasEducation, hasRecommendations, hasLanguages, hasAchievements]);
 
@@ -438,6 +438,9 @@ export function CandidatePublicProfileRenderer({
                   value={String(isOpenPublicView && !showPublicTrustScoreNumber ? publicTrustLabel : trust)}
                 />
               </div>
+              <p className="mt-4 text-xs text-slate-500">
+                El trust score resume verificación acumulada, evidencias visibles y consistencia general del perfil.
+              </p>
               {!isOpenPublicView && featuredVerifiedExperiences.length ? (
                 <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
                   <div className="text-xs font-semibold uppercase tracking-wide text-blue-900">Experiencias confirmadas destacadas</div>
@@ -484,7 +487,7 @@ export function CandidatePublicProfileRenderer({
 
           <main className="space-y-4">
             {isPrintMode ? (
-              <Card title="Trust Score y verificación" subtitle="Resumen público de confianza del perfil.">
+                <Card title="Trust Score y verificación" subtitle="Resumen público de credibilidad y verificación del perfil.">
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   <Stat label="Trust Score" value={trust} />
                   <Stat label="Experiencias verificadas" value={verificationSummary.verified} />
@@ -501,7 +504,7 @@ export function CandidatePublicProfileRenderer({
                   subtitle={
                     isOpenPublicView
                       ? "Vista abierta con información protegida y orientada a empresa."
-                      : "Información principal del perfil verificable."
+                      : "Información principal del perfil verificable, priorizada para lectura rápida."
                   }
                 >
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -517,7 +520,7 @@ export function CandidatePublicProfileRenderer({
                 {(!isOpenPublicView && (experiences.length > 0 || internalPreview)) ? (
                   <Card
                     title="Historial verificable"
-                    subtitle="Línea temporal profesional con estado de verificación y señales de credibilidad."
+                    subtitle="Línea temporal profesional con verificación visible y sin exponer documentación sensible."
                   >
                     {experiences.length ? (
                       <ol className="relative ml-2 border-l border-slate-200 pl-4">
@@ -568,7 +571,7 @@ export function CandidatePublicProfileRenderer({
                 ) : null}
 
                 {(skills.length > 0 || internalPreview) ? (
-                  <Card title="Habilidades clave" subtitle="Competencias destacadas del perfil verificable.">
+                  <Card title="Habilidades clave" subtitle="Competencias destacadas que refuerzan la lectura laboral del perfil.">
                     {skills.length ? (
                       <div className="flex flex-wrap gap-2">
                         {skills.map((skill) => (
@@ -720,16 +723,17 @@ export function CandidatePublicProfileRenderer({
             ) : null}
 
             {showLanguagesTab ? (
-              <Card title="Idiomas y logros" subtitle="Competencias e hitos públicos del perfil.">
+              <Card title="Idiomas y credenciales" subtitle="Idiomas como señal laboral y logros/certificaciones visibles del perfil.">
                 <div className="grid gap-4 lg:grid-cols-2">
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
                     <h4 className="text-sm font-semibold text-slate-900">Idiomas</h4>
+                    <p className="mt-1 text-xs text-slate-500">Presentados como señal laboral directa con nivel visible.</p>
                     {publicLanguages.length ? (
-                      <div className="mt-3 flex flex-wrap gap-2">
+                      <div className="mt-3 space-y-2">
                         {publicLanguages.map((language) => (
-                          <span key={language} className="rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-semibold text-indigo-800">
+                          <div key={language} className="rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-900">
                             {language}
-                          </span>
+                          </div>
                         ))}
                       </div>
                     ) : internalPreview ? (
@@ -738,7 +742,8 @@ export function CandidatePublicProfileRenderer({
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-                    <h4 className="text-sm font-semibold text-slate-900">Logros y certificaciones</h4>
+                    <h4 className="text-sm font-semibold text-slate-900">Certificaciones y logros</h4>
+                    <p className="mt-1 text-xs text-slate-500">Credenciales complementarias que refuerzan el perfil sin mezclar idiomas.</p>
                     {achievements.length ? (
                       <ul className="mt-3 space-y-2">
                         {achievements.map((achievement, idx) => (

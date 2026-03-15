@@ -9,6 +9,7 @@ import {
   isCandidateVerified,
   resolveCandidateApproxLocation,
   resolveCandidateAvailableVerifications,
+  resolveCandidateOperationalStateMeta,
   resolveCandidatePartialName,
   resolveCandidatePipelineBucket,
   resolveCandidateProfileReadiness,
@@ -76,6 +77,14 @@ function accessMeta(status: string | null | undefined) {
   if (key === "active") return { label: "Perfil desbloqueado", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" };
   if (key === "expired") return { label: "Acceso expirado", tone: "border-amber-200 bg-amber-50 text-amber-800" };
   return { label: "Perfil parcial disponible", tone: "border-slate-200 bg-slate-100 text-slate-700" };
+}
+
+function trustHelper(raw: unknown) {
+  const score = Number(raw || 0);
+  if (!Number.isFinite(score) || score <= 0) return "Todavía faltan señales suficientes para evaluar mejor el perfil.";
+  if (score >= 70) return "Perfil con señales sólidas y buen nivel de validación.";
+  if (score >= 40) return "Perfil con base razonable, pero aún puede reforzarse.";
+  return "Perfil inicial; conviene revisar más señales antes de decidir.";
 }
 
 function actionButtonClass({
@@ -623,6 +632,7 @@ export default function CompanyCandidatesClient() {
                 filteredImports.map((row) => {
                   const status = statusMeta(row.display_status);
                   const access = accessMeta(row.access_status);
+                  const operational = resolveCandidateOperationalStateMeta(row);
                   const fit = computeCandidateQuickFit(row);
                   const canOpenSnapshot = Boolean(row.linked_user_id && row.candidate_public_token);
                   const canOpenInvitation = Boolean(row.invite_token);
@@ -642,6 +652,7 @@ export default function CompanyCandidatesClient() {
                           </span>
                         </div>
                         <div className="mt-1 text-xs text-slate-500">{fit.summary}</div>
+                        <div className="mt-1 text-xs text-slate-500">{operational.detail}</div>
                         {row.candidate_already_exists ? (
                           <div className="mt-1 text-xs text-violet-700">Ya existía en VERIJOB antes de esta importación.</div>
                         ) : null}
@@ -649,12 +660,20 @@ export default function CompanyCandidatesClient() {
                       <td className="py-4 pr-4 align-top text-slate-700">{resolveCandidateSector(row)}</td>
                       <td className="py-4 pr-4 align-top text-slate-700">{resolveCandidateYearsExperience(row)}</td>
                       <td className="py-4 pr-4 align-top text-slate-700">{resolveCandidateApproxLocation(row)}</td>
-                      <td className="py-4 pr-4 align-top text-slate-700">{row.trust_score ?? "—"}</td>
+                      <td className="py-4 pr-4 align-top text-slate-700">
+                        <div className="font-semibold text-slate-900">{row.trust_score ?? "—"}</div>
+                        <div className="mt-1 text-xs text-slate-500">{trustHelper(row.trust_score)}</div>
+                      </td>
                       <td className="py-4 pr-4 align-top text-slate-700">{resolveCandidateAvailableVerifications(row)}</td>
                       <td className="py-4 pr-4 align-top">
                         <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${access.tone}`}>
                           {access.label}
                         </span>
+                        <div className="mt-2">
+                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${operational.tone}`}>
+                            {operational.label}
+                          </span>
+                        </div>
                         <div className="mt-2">
                           <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${status.tone}`}>
                             {status.label}
@@ -673,6 +692,9 @@ export default function CompanyCandidatesClient() {
                         ) : null}
                         {row.access_status === "active" && row.access_expires_at ? (
                           <div className="mt-1 text-xs text-slate-500">Disponible hasta {formatDate(row.access_expires_at)}</div>
+                        ) : null}
+                        {row.access_status === "active" && row.access_granted_at ? (
+                          <div className="mt-1 text-xs text-slate-500">Desbloqueado el {formatDate(row.access_granted_at)}</div>
                         ) : null}
                         {row.access_status === "expired" && row.access_expires_at ? (
                           <div className="mt-1 text-xs text-slate-500">Caducó el {formatDate(row.access_expires_at)}</div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 type AchievementCategory = "certificacion" | "premio" | "idioma" | "otro";
 type EditorMode = "language" | "certification" | "achievement";
@@ -321,6 +322,7 @@ function EditorCard({
 }
 
 export default function CandidateAchievementsPage() {
+  const searchParams = useSearchParams();
   const [items, setItems] = useState<AchievementItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -334,6 +336,19 @@ export default function CandidateAchievementsPage() {
       setLoading(false);
     })();
   }, []);
+
+  useEffect(() => {
+    if (loading) return;
+    const open = String(searchParams.get("open") || "").toLowerCase();
+    if (!open) return;
+    if (open === "language" && items.some((item) => item.category === "idioma" && !item.language && !item.level && !item.description)) return;
+    if (open === "certification" && items.some((item) => item.category === "certificacion" && !item.title && !item.issuer && !item.description)) return;
+    if (open === "achievement" && items.some((item) => item.category !== "idioma" && item.category !== "certificacion" && !item.title && !item.description)) return;
+    if (open === "language") add("language");
+    if (open === "certification") add("certification");
+    if (open === "achievement") add("achievement");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, searchParams]);
 
   const languages = useMemo(() => items.filter((item) => item.category === "idioma"), [items]);
   const certifications = useMemo(() => items.filter((item) => item.category === "certificacion"), [items]);
@@ -396,6 +411,9 @@ export default function CandidateAchievementsPage() {
         <h1 className="text-2xl font-semibold text-gray-900">Idiomas, certificaciones y otros logros</h1>
         <p className="mt-2 text-sm text-gray-600">
           Separa idiomas, certificaciones y logros para que tu perfil se lea con claridad y valor profesional real.
+        </p>
+        <p className="mt-2 text-xs text-gray-500">
+          Los idiomas se presentan como señal laboral con nivel visible. Las certificaciones y los logros quedan separados para que el perfil no mezcle cosas distintas.
         </p>
       </header>
 

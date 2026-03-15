@@ -1,6 +1,7 @@
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import OwnerTooltip from "@/components/ui/OwnerTooltip";
 import { managedPlanLabel } from "@/lib/billing/managedPlans";
+import { loadVerificationCompanyAcquisition } from "@/lib/owner/verification-company-acquisition";
 
 export const dynamic = "force-dynamic";
 
@@ -140,6 +141,7 @@ export default async function OwnerMonetizationPage() {
   const purchaseSourceAvailable = !purchasesRes.error && !summaryRes.error;
   const hasOverspendWarning = totalCreditsConsumed > totalCreditsGranted;
   const hasConsumptionWithoutPurchaseWarning = totalCreditsConsumed > 0 && purchases.length === 0;
+  const acquisition = await loadVerificationCompanyAcquisition(supabase, { filter: "all" });
 
   return (
     <div className="space-y-5">
@@ -197,6 +199,59 @@ export default async function OwnerMonetizationPage() {
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">ARPU derivado</p>
           <p className="mt-1 text-2xl font-semibold text-slate-900">{eur(arpu)}</p>
         </article>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ingresos por suscripciones</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{eur(mrrFromAmount)}</p>
+          <p className="mt-1 text-xs text-slate-500">Foto actual del ingreso recurrente activo.</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ingresos por accesos</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{purchaseSourceAvailable ? eurFromCents(totalOneoffRevenue) : "No disp."}</p>
+          <p className="mt-1 text-xs text-slate-500">Compras de 1 acceso y packs de 5 registradas en checkout.</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Empresas impactadas</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{acquisition.summary.impactedCompanies}</p>
+          <p className="mt-1 text-xs text-slate-500">Embudo originado por solicitudes de verificación.</p>
+        </article>
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Conversión verificación → pago</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-900">{acquisition.summary.verificationToPaymentRate}%</p>
+          <p className="mt-1 text-xs text-slate-500">{acquisition.summary.convertedToPaid} empresas ya pasaron a plan de pago.</p>
+        </article>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-slate-900">Lectura comercial</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          El negocio ya combina dos motores claros: ingreso recurrente por suscripción e ingreso puntual por accesos a perfiles. La conversión desde verificaciones ayuda a leer cuánto crecimiento nuevo termina en cuentas registradas y de pago.
+        </p>
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Funnel verificación</p>
+            <p className="mt-1 text-sm font-semibold text-slate-900">
+              {acquisition.summary.impactedCompanies} impactadas · {acquisition.summary.registeredFromVerification} registradas
+            </p>
+            <p className="mt-1 text-xs text-slate-500">La verificación ya funciona como canal de captación empresa.</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Free y pago</p>
+            <p className="mt-1 text-sm font-semibold text-slate-900">
+              {acquisition.summary.convertedToFree} en free · {acquisition.summary.convertedToPaid} de pago
+            </p>
+            <p className="mt-1 text-xs text-slate-500">Permite distinguir activación operativa de monetización real.</p>
+          </article>
+          <article className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Siguiente paso</p>
+            <a href="/owner/company-acquisition" className="mt-1 inline-flex text-sm font-semibold text-slate-900 underline underline-offset-2">
+              Abrir empresas captadas por verificación
+            </a>
+            <p className="mt-1 text-xs text-slate-500">Desde ahí puedes seguir el embudo completo de registro y pago.</p>
+          </article>
+        </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">

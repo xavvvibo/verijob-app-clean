@@ -128,7 +128,7 @@ export async function GET() {
       );
     }
 
-    const [{ data, error: rpcErr }, memberRes, subRes, requestsRes, reuseRes] = await Promise.all([
+    const [{ data, error: rpcErr }, memberRes, subRes, requestsRes, reuseRes, purchasesRes] = await Promise.all([
       supabase.rpc("company_dashboard_kpis_v2"),
       supabase
         .from("company_members")
@@ -151,6 +151,13 @@ export async function GET() {
         .from("verification_reuse_events")
         .select("id,reused_at,verification_id")
         .eq("company_id", activeCompanyId),
+      supabase
+        .from("stripe_oneoff_purchases")
+        .select("id,product_key,credits_granted,amount,currency,created_at")
+        .eq("company_id", activeCompanyId)
+        .eq("buyer_user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(5),
     ]);
 
     if (rpcErr) return NextResponse.json({ error: "rpc_failed", details: rpcErr.message, route_version: ROUTE_VERSION }, { status: 400 });
@@ -159,6 +166,7 @@ export async function GET() {
 
     const requests = Array.isArray(requestsRes.data) ? requestsRes.data : [];
     const reuseEvents = Array.isArray(reuseRes.data) ? reuseRes.data : [];
+    const purchases = Array.isArray(purchasesRes.data) ? purchasesRes.data : [];
     const fallbackKpis = computeCompanyKpiFallback({ requests, reuseEvents });
     const kpisFromRpc = (data as any)?.kpis && typeof (data as any).kpis === "object" ? (data as any).kpis : {};
     const mergedKpis = mergeCompanyKpis(kpisFromRpc, fallbackKpis);
@@ -312,6 +320,14 @@ export async function GET() {
       profile_completeness_score: completion.score,
       current_period_end: currentPeriodEnd,
       available_profile_accesses: accessCredits.available,
+      recent_access_purchases: purchases.map((row: any) => ({
+        id: String(row?.id || ""),
+        product_key: String(row?.product_key || ""),
+        credits_granted: Number(row?.credits_granted || 0),
+        amount: Number(row?.amount || 0),
+        currency: String(row?.currency || "EUR"),
+        created_at: row?.created_at || null,
+      })),
       kpis: mergedKpis,
       verification_activity: verificationActivity,
       recent_requests: recentRequests,

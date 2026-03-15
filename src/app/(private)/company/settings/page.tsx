@@ -23,10 +23,22 @@ type CompanyProfileSummary = {
   company_document_verification_label?: string | null;
   company_document_verification_detail?: string | null;
   company_document_review_eta_label?: string | null;
+  company_document_review_priority_label?: string | null;
+  company_document_latest_document_type?: string | null;
+  company_document_last_submitted_at?: string | null;
+  company_document_last_reviewed_at?: string | null;
+  company_document_rejection_reason?: string | null;
   company_verification_method?: "domain" | "documents" | "both" | "none";
   company_verification_method_label?: string | null;
   company_verification_method_detail?: string | null;
 };
+
+function formatDate(value?: string | null) {
+  if (!value) return "No disponible";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "No disponible";
+  return d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
+}
 
 type CompanyAccount = {
   user: {
@@ -148,6 +160,11 @@ export default function CompanySettingsPage() {
           company_document_verification_label: profileData?.profile?.company_document_verification_label || null,
           company_document_verification_detail: profileData?.profile?.company_document_verification_detail || null,
           company_document_review_eta_label: profileData?.profile?.company_document_review_eta_label || null,
+          company_document_review_priority_label: profileData?.profile?.company_document_review_priority_label || null,
+          company_document_latest_document_type: profileData?.profile?.company_document_latest_document_type || null,
+          company_document_last_submitted_at: profileData?.profile?.company_document_last_submitted_at || null,
+          company_document_last_reviewed_at: profileData?.profile?.company_document_last_reviewed_at || null,
+          company_document_rejection_reason: profileData?.profile?.company_document_rejection_reason || null,
           company_verification_method: profileData?.profile?.company_verification_method || "none",
           company_verification_method_label: profileData?.profile?.company_verification_method_label || null,
           company_verification_method_detail: profileData?.profile?.company_verification_method_detail || null,
@@ -320,6 +337,25 @@ export default function CompanySettingsPage() {
               {profileSummary?.company_document_review_eta_label ? (
                 <p className="mt-2 text-xs text-slate-500">Tiempo estimado según plan: {profileSummary.company_document_review_eta_label}</p>
               ) : null}
+              {profileSummary?.company_document_latest_document_type ? (
+                <p className="mt-2 text-xs text-slate-500">Documento recibido: {profileSummary.company_document_latest_document_type}</p>
+              ) : null}
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs uppercase tracking-wide text-slate-500">Seguimiento de revisión</p>
+              <div className="mt-2 space-y-2 text-xs text-slate-600">
+                <p>Enviado: {formatDate(profileSummary?.company_document_last_submitted_at)}</p>
+                <p>
+                  Prioridad: {profileSummary?.company_document_review_priority_label || "Cola estándar"}
+                  {profileSummary?.company_document_review_eta_label ? ` · ${profileSummary.company_document_review_eta_label}` : ""}
+                </p>
+                <p>Última resolución: {formatDate(profileSummary?.company_document_last_reviewed_at)}</p>
+                {profileSummary?.company_document_rejection_reason ? (
+                  <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-rose-700">
+                    Motivo visible: {profileSummary.company_document_rejection_reason}
+                  </p>
+                ) : null}
+              </div>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500">Señales adicionales</p>

@@ -29,6 +29,30 @@ function formatDate(value?: string | null) {
   return d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
+function formatDateTime(value?: string | null) {
+  if (!value) return "No aplica";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "No aplica";
+  return d.toLocaleString("es-ES", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
+function purchaseLabel(productKeyRaw: unknown) {
+  const key = String(productKeyRaw || "").toLowerCase();
+  if (key === "company_single_cv") return "Comprar 1 acceso";
+  if (key === "company_pack_5") return "Comprar pack de 5";
+  return "Compra de accesos";
+}
+
+function eurFromCents(amountRaw: unknown, currencyRaw: unknown) {
+  const amount = Number(amountRaw || 0) / 100;
+  const currency = String(currencyRaw || "EUR").toUpperCase();
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(amount) ? amount : 0);
+}
+
 function normalizeSubscriptionStatus(raw: unknown) {
   const s = String(raw || "").toLowerCase();
   if (!s || s === "free") return "free";
@@ -147,7 +171,7 @@ export default async function CompanySubscriptionPage({
 
   const companyId = (ctx as any).companyId as string;
 
-  const [subscriptionRes, companyProfileRes, docsRes] = await Promise.all([
+  const [subscriptionRes, companyProfileRes, docsRes, purchasesRes] = await Promise.all([
     admin
       .from("subscriptions")
       .select("id,plan,status,current_period_end,cancel_at_period_end,metadata,created_at,updated_at")
@@ -166,6 +190,13 @@ export default async function CompanySubscriptionPage({
       .eq("company_id", companyId)
       .order("created_at", { ascending: false })
       .limit(20),
+    admin
+      .from("stripe_oneoff_purchases")
+      .select("id,product_key,credits_granted,amount,currency,created_at")
+      .eq("company_id", companyId)
+      .eq("buyer_user_id", auth.user.id)
+      .order("created_at", { ascending: false })
+      .limit(5),
   ]);
 
   const effectiveSubscription = await readEffectiveSubscriptionState(admin, auth.user.id);
@@ -208,6 +239,7 @@ export default async function CompanySubscriptionPage({
   const ownerOverride = effectiveSubscription.metadata && typeof effectiveSubscription.metadata === "object" ? (effectiveSubscription.metadata as any)?.owner_override : null;
   const isManualOverride = Boolean(ownerOverride?.type) || effectiveSubscription.source === "override";
   const renewalText = status === "free" ? "No aplica" : formatDate(effectiveSubscription.current_period_end || sub?.current_period_end || null);
+  const recentPurchases = Array.isArray(purchasesRes.data) ? purchasesRes.data : [];
 
   return (
     <div className="space-y-6">
@@ -351,6 +383,66 @@ export default async function CompanySubscriptionPage({
         <div className="mt-5">
           <CompanyPlanActions currentPlanLabel={label} currentPlanCode={plan} hasActiveSubscription={active} />
         </div>
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
+        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Historial de compras de accesos</h2>
+          <p className="mt-1 text-sm text-slate-600">Últimas compras puntuales registradas para esta empresa.</p>
+          <div className="mt-4 space-y-3">
+            {recentPurchases.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+                Todavía no hay compras puntuales registradas en este historial.
+              </div>
+            ) : (
+              recentPurchases.map((purchase: any) => (
+                <div key={purchase.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{purchaseLabel(purchase.product_key)}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        +{Number(purchase.credits_granted || 0)} acceso{Number(purchase.credits_granted || 0) === 1 ? "" : "s"} · {formatDateTime(purchase.created_at)}
+                      </p>
+                    </div>
+                    <span className="text-sm font-semibold text-slate-900">{eurFromCents(purchase.amount, purchase.currency)}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
+
+        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Seguimiento de verificación documental</h2>
+          <p className="mt-1 text-sm text-slate-600">Resumen corto del documento recibido, prioridad de revisión y último hito visible.</p>
+          <div className="mt-4 space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estado actual</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">{verificationStatusLabel(documentaryVerification.status)}</p>
+              <p className="mt-2 text-sm text-slate-600">{documentaryVerification.detail}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Último documento recibido</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">{documentaryVerification.latest_document_type || "Sin documento"}</p>
+              <p className="mt-2 text-xs text-slate-500">Enviado el {formatDateTime(documentaryVerification.submitted_at)}</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revisión y prioridad</p>
+              <p className="mt-1 text-sm font-semibold text-slate-900">
+                {documentaryVerification.review_eta_label || "Sin ETA"}
+                {documentaryVerification.priority_label ? ` · ${documentaryVerification.priority_label}` : ""}
+              </p>
+              <p className="mt-2 text-xs text-slate-500">
+                {documentaryVerification.reviewed_at
+                  ? `Última resolución: ${formatDateTime(documentaryVerification.reviewed_at)}`
+                  : "La revisión se resolverá cuando el documento complete su cola actual."}
+              </p>
+              {documentaryVerification.rejection_reason ? (
+                <p className="mt-2 text-xs text-rose-700">Motivo visible: {documentaryVerification.rejection_reason}</p>
+              ) : null}
+            </div>
+          </div>
+        </article>
       </section>
     </div>
   );

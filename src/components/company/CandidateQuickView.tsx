@@ -5,6 +5,7 @@ import {
   isCandidateVerified,
   resolveCandidateApproxLocation,
   resolveCandidateAvailableVerifications,
+  resolveCandidateOperationalStateMeta,
   resolveCandidatePartialName,
   resolveCandidatePipelineBucket,
   resolveCandidatePipelineLabel,
@@ -59,6 +60,7 @@ export default function CandidateQuickView({
   const fit = computeCandidateQuickFit(row);
   const displayName = resolveCandidatePartialName(row);
   const pipeline = resolveCandidatePipelineBucket(row);
+  const operational = resolveCandidateOperationalStateMeta(row);
   const profileReadiness = resolveCandidateProfileReadiness(row);
   const verified = isCandidateVerified(row);
   const stage = String(row.company_stage || "none").toLowerCase();
@@ -92,6 +94,9 @@ export default function CandidateQuickView({
               <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${fit.tone}`} title={fit.reasons.join(" · ")}>
                 {fit.label}
               </span>
+              <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${operational.tone}`}>
+                {operational.label}
+              </span>
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
                 {resolveCandidatePipelineLabel(pipeline)}
               </span>
@@ -102,6 +107,9 @@ export default function CandidateQuickView({
             <p className="mt-3 text-sm text-slate-700">{fit.summary}</p>
             <p className="mt-2 text-xs text-slate-500">
               El encaje rápido se apoya en trust score, verificaciones registradas, preparación del perfil y momento real del pipeline.
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              El trust score resume credibilidad del perfil con verificaciones, evidencias y consistencia general del candidato.
             </p>
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-sm font-semibold text-slate-900">Accesos a perfiles disponibles: {availableProfileAccesses}</p>
@@ -145,11 +153,13 @@ export default function CandidateQuickView({
             <article className="rounded-3xl border border-slate-200 bg-white p-5">
               <h3 className="text-base font-semibold text-slate-900">Resumen parcial del candidato</h3>
               <ul className="mt-3 space-y-2 text-sm text-slate-600">
+                <li>• Estado RRHH: {operational.label}</li>
                 <li>• Estado del pipeline: {resolveCandidatePipelineLabel(pipeline)}</li>
                 <li>• Perfil verificable: {profileReadiness === "complete" ? "sí" : "todavía no"}</li>
                 <li>• Estado verificado: {verified ? "con señales verificadas" : "sin validación aprobada todavía"}</li>
                 <li>• Verificaciones disponibles: {resolveCandidateAvailableVerifications(row)}</li>
                 <li>• Última actividad: {formatDate(row.last_activity_at || row.created_at)}</li>
+                {row.access_granted_at ? <li>• Perfil desbloqueado desde: {formatDate(row.access_granted_at)}</li> : null}
               </ul>
             </article>
             <article className="rounded-3xl border border-slate-200 bg-slate-50 p-5">

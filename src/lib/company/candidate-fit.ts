@@ -15,6 +15,8 @@ export type CompanyCandidateWorkspaceRow = {
   last_activity_at?: string | null;
   created_at?: string | null;
   access_status?: "active" | "expired" | "never" | string | null;
+  access_granted_at?: string | null;
+  access_source?: string | null;
   access_expires_at?: string | null;
   partial_sector?: string | null;
   partial_years_experience?: number | null;
@@ -25,6 +27,7 @@ export type CandidateQuickFitLevel = "high" | "medium" | "low";
 export type CandidatePipelineBucket = "review" | "validation" | "decision";
 export type CandidateTrustBand = "high" | "medium" | "low" | "none";
 export type CandidateProfileReadiness = "complete" | "incomplete";
+export type CandidateOperationalState = "new" | "reviewed" | "unlocked";
 
 export function resolveCandidateDisplayName(row: CompanyCandidateWorkspaceRow) {
   return row.linked_profile_name || row.candidate_name_raw || row.candidate_email || "Candidato";
@@ -94,6 +97,39 @@ export function resolveCandidateProfileReadiness(row: CompanyCandidateWorkspaceR
   return hasProfile && !["acceptance_pending", "processing", "uploaded", "parse_failed"].includes(status)
     ? "complete"
     : "incomplete";
+}
+
+export function resolveCandidateOperationalState(row: CompanyCandidateWorkspaceRow): CandidateOperationalState {
+  if (String(row.access_status || "").toLowerCase() === "active") return "unlocked";
+  const stage = String(row.company_stage || "").toLowerCase();
+  if (stage === "saved" || stage === "preselected") return "reviewed";
+  return "new";
+}
+
+export function resolveCandidateOperationalStateMeta(row: CompanyCandidateWorkspaceRow) {
+  const state = resolveCandidateOperationalState(row);
+  if (state === "unlocked") {
+    return {
+      state,
+      label: "Desbloqueado",
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+      detail: "El perfil completo ya está abierto para tu empresa.",
+    };
+  }
+  if (state === "reviewed") {
+    return {
+      state,
+      label: "Revisado",
+      tone: "border-blue-200 bg-blue-50 text-blue-800",
+      detail: "Ya lo has movido dentro de tu seguimiento interno.",
+    };
+  }
+  return {
+    state,
+    label: "Nuevo",
+    tone: "border-slate-200 bg-slate-100 text-slate-700",
+    detail: "Todavía no tiene acciones internas aplicadas por tu equipo.",
+  };
 }
 
 export function isCandidateVerified(row: CompanyCandidateWorkspaceRow) {

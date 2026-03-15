@@ -4,7 +4,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import CandidateQuickView from "@/components/company/CandidateQuickView";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
-import { computeCandidateQuickFit, resolveCandidateDisplayName, resolveCandidatePipelineBucket, type CompanyCandidateWorkspaceRow } from "@/lib/company/candidate-fit";
+import {
+  computeCandidateQuickFit,
+  resolveCandidateDisplayName,
+  resolveCandidateOperationalStateMeta,
+  resolveCandidatePipelineBucket,
+  type CompanyCandidateWorkspaceRow,
+} from "@/lib/company/candidate-fit";
 import { companyVerificationMethodTone } from "@/lib/company/verification-method";
 
 type Kpis = {
@@ -51,6 +57,14 @@ type DashboardPayload = {
     rejected?: number;
   } | null;
   recent_requests?: RecentRequest[] | null;
+  recent_access_purchases?: Array<{
+    id: string;
+    product_key?: string | null;
+    credits_granted?: number | null;
+    amount?: number | null;
+    currency?: string | null;
+    created_at?: string | null;
+  }> | null;
 };
 
 type ProfileCompletionItem = {
@@ -139,6 +153,23 @@ function verificationStatusClass(statusRaw: unknown) {
   if (status === "uploaded" || status === "under_review") return "border-indigo-200 bg-indigo-50 text-indigo-800";
   if (status === "rejected") return "border-rose-200 bg-rose-50 text-rose-800";
   return "border-amber-200 bg-amber-50 text-amber-800";
+}
+
+function purchaseLabel(productKeyRaw: unknown) {
+  const key = String(productKeyRaw || "").toLowerCase();
+  if (key === "company_single_cv") return "Compra de 1 acceso";
+  if (key === "company_pack_5") return "Compra pack de 5";
+  return "Compra de accesos";
+}
+
+function eurFromCents(amountRaw: unknown, currencyRaw: unknown) {
+  const amount = Number(amountRaw || 0) / 100;
+  const currency = String(currencyRaw || "EUR").toUpperCase();
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: 2,
+  }).format(Number.isFinite(amount) ? amount : 0);
 }
 
 function checklistDot(status: ProfileCompletionItem["status"]) {
@@ -467,6 +498,18 @@ export default function CompanyDashboard() {
     () => imports.filter((item) => String(item.access_status || "").toLowerCase() === "expired").length,
     [imports]
   );
+  const unlockedHistory = useMemo(() => {
+    return imports
+      .filter((item) => item.access_granted_at)
+      .slice()
+      .sort(
+        (a, b) =>
+          Date.parse(String(b.access_granted_at || b.last_activity_at || b.created_at || 0)) -
+          Date.parse(String(a.access_granted_at || a.last_activity_at || a.created_at || 0))
+      )
+      .slice(0, 5);
+  }, [imports]);
+  const recentAccessPurchases = Array.isArray(dashboard?.recent_access_purchases) ? dashboard.recent_access_purchases : [];
 
   function markNotificationRead(id: string) {
     setReadNotificationIds((prev) => {
@@ -696,6 +739,36 @@ export default function CompanyDashboard() {
                     : "Tu plan actual cubre la operación de hoy con margen razonable."}
               </p>
             </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-slate-900">Compras recientes de accesos</p>
+                  <p className="mt-1 text-xs text-slate-500">Histórico breve de compras puntuales registradas para esta empresa.</p>
+                </div>
+                <a href="/company/subscription" className="text-xs font-semibold text-slate-900 underline underline-offset-2">
+                  Ver detalle
+                </a>
+              </div>
+              <div className="mt-3 space-y-2">
+                {recentAccessPurchases.length === 0 ? (
+                  <p className="text-sm text-slate-600">Todavía no hay compras recientes visibles en este historial.</p>
+                ) : (
+                  recentAccessPurchases.map((item) => (
+                    <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-900">{purchaseLabel(item.product_key)}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            +{Number(item.credits_granted || 0)} acceso{Number(item.credits_granted || 0) === 1 ? "" : "s"} · {formatDate(item.created_at)}
+                          </p>
+                        </div>
+                        <span className="text-sm font-semibold text-slate-900">{eurFromCents(item.amount, item.currency)}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
               <p className="text-sm font-semibold">Qué desbloquea el upgrade</p>
               <p className="mt-1 text-sm">
@@ -761,6 +834,7 @@ export default function CompanyDashboard() {
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Base RRHH</h2>
               <p className="mt-1 text-sm text-slate-600">Tus candidatos importados como base interna ligera para seguimiento diario.</p>
+              <p className="mt-2 text-xs text-slate-500">El trust score resume la solidez del perfil con señales verificadas, evidencias y consistencia general.</p>
             </div>
             <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir base completa</a>
           </div>
@@ -800,6 +874,9 @@ export default function CompanyDashboard() {
                             {fit.label}
                           </span>
                           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${badge.tone}`}>{badge.label}</span>
+                          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${resolveCandidateOperationalStateMeta(item).tone}`}>
+                            {resolveCandidateOperationalStateMeta(item).label}
+                          </span>
                           <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
                             {pipeline === "decision" ? "Decisión" : pipeline === "validation" ? "Validación" : "Revisión"}
                           </span>
@@ -845,6 +922,86 @@ export default function CompanyDashboard() {
               <p className="text-sm font-semibold text-slate-900">Ajustes operativos</p>
               <p className="mt-1 text-sm text-slate-600">Configura el área empresa y mantén contexto operativo a mano.</p>
             </a>
+          </div>
+        </article>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Perfiles ya desbloqueados</h2>
+              <p className="mt-1 text-sm text-slate-600">Historial rápido de aperturas completas para saber qué candidatos ya no consumen más accesos.</p>
+            </div>
+            <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir RRHH</a>
+          </div>
+          <div className="mt-4 space-y-3">
+            {unlockedHistory.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+                Todavía no has desbloqueado perfiles completos desde este panel.
+              </div>
+            ) : (
+              unlockedHistory.map((item) => (
+                <div key={`${item.id}-unlock`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">{resolveCandidateDisplayName(item)}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Desbloqueado el {formatDate(item.access_granted_at || item.last_activity_at || item.created_at)}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">Consumo registrado: 1 acceso.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${String(item.access_status || "").toLowerCase() === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+                        {String(item.access_status || "").toLowerCase() === "active" ? "Acceso vigente" : "Acceso caducado"}
+                      </span>
+                      {item.candidate_public_token ? (
+                        <a
+                          href={`/company/candidate/${encodeURIComponent(String(item.candidate_public_token))}?view=full`}
+                          className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
+                        >
+                          Ver perfil completo
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </article>
+
+        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Verificación documental empresa</h2>
+              <p className="mt-1 text-sm text-slate-600">Lectura breve del estado actual, última entrega y prioridad de revisión aplicada.</p>
+            </div>
+            <a href="/company/profile" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir perfil</a>
+          </div>
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${verificationStatusClass(verificationStatus)}`}>
+                {verificationStatusLabelText}
+              </span>
+              {dashboard?.company_document_review_priority_label ? (
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                  {dashboard.company_document_review_priority_label}
+                </span>
+              ) : null}
+            </div>
+            <div className="mt-3 space-y-2 text-sm text-slate-600">
+              <p>{verificationStatusDetail || "Sube un documento oficial para iniciar la revisión documental."}</p>
+              {dashboard?.company_document_last_submitted_at ? (
+                <p>Documento recibido el {formatDate(dashboard.company_document_last_submitted_at)}</p>
+              ) : null}
+              {dashboard?.company_document_review_eta_label && (verificationStatus === "uploaded" || verificationStatus === "under_review") ? (
+                <p>Tiempo estimado según plan: {dashboard.company_document_review_eta_label}</p>
+              ) : null}
+              {dashboard?.company_document_last_reviewed_at ? (
+                <p>Última resolución registrada el {formatDate(dashboard.company_document_last_reviewed_at)}</p>
+              ) : null}
+            </div>
           </div>
         </article>
       </section>
