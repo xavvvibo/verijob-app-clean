@@ -3,6 +3,7 @@ export const revalidate = 0;
 import { headers } from "next/headers";
 import ProfileViewCheckoutButtons from "./ProfileViewCheckoutButtons";
 import ProfileUnlockAction from "@/components/company/ProfileUnlockAction";
+import CheckoutReturnSyncNotice from "@/components/company/CheckoutReturnSyncNotice";
 
 type Ctx = {
   params: Promise<{ token: string }>;
@@ -207,16 +208,12 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
     return (
       <main className="max-w-5xl p-6">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          {checkoutState === "success" ? (
-            <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-              Compra completada. Ya puedes abrir el perfil completo cuando lo necesites. El consumo se hará solo al pulsar el botón de apertura completa.
-            </div>
-          ) : null}
-          {checkoutState === "cancel" ? (
-            <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-              La compra no se completó. Puedes seguir evaluando el resumen parcial y decidir después si compras accesos.
-            </div>
-          ) : null}
+          <div className="mb-5">
+            <CheckoutReturnSyncNotice
+              checkoutState={checkoutState}
+              successMessage="Compra completada. Estamos actualizando tus accesos disponibles para que puedas abrir el perfil completo."
+            />
+          </div>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Perfil parcial</p>

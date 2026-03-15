@@ -43,15 +43,15 @@ const DOWNSCALE_IMPACTS = [
 
 function normalizeTier(planRaw: unknown): CandidateTier {
   const plan = String(planRaw || "").trim().toLowerCase();
-  if (plan === "candidate_starter_monthly") return "starter";
-  if (plan === "candidate_pro_monthly") return "pro";
+  if (plan === "candidate_starter_monthly" || plan === "candidate_starter_yearly") return "starter";
+  if (plan === "candidate_pro_monthly" || plan === "candidate_pro_yearly") return "pro";
   if (plan === "candidate_proplus_monthly") return "proplus_monthly";
   if (plan === "candidate_proplus_yearly") return "proplus_yearly";
   return "free";
 }
 
 function labelForTier(tier: CandidateTier): string {
-  if (tier === "starter") return "Starter legacy";
+  if (tier === "starter") return "Starter";
   if (tier === "pro") return "Pro";
   if (tier === "proplus_monthly") return "Pro+ mensual";
   if (tier === "proplus_yearly") return "Pro+ anual";
@@ -270,11 +270,15 @@ export default function CandidateSubscriptionPage() {
     if (currentTier === "proplus_monthly" || currentTier === "proplus_yearly") {
       return [
         { label: "Cambiar a Pro", targetPlanKey: "candidate_pro_monthly" as const },
+        { label: "Cambiar a Starter", targetPlanKey: "candidate_starter_monthly" as const },
         { label: "Cambiar a Free", targetPlanKey: "free" as const },
       ];
     }
     if (currentTier === "pro") {
-      return [{ label: "Cambiar a Free", targetPlanKey: "free" as const }];
+      return [
+        { label: "Cambiar a Starter", targetPlanKey: "candidate_starter_monthly" as const },
+        { label: "Cambiar a Free", targetPlanKey: "free" as const },
+      ];
     }
     if (currentTier === "starter") {
       return [{ label: "Cambiar a Free", targetPlanKey: "free" as const }];
@@ -420,9 +424,9 @@ export default function CandidateSubscriptionPage() {
           Estás en plan <span className="font-semibold text-slate-900">Free</span>. Mejora a Pro o Pro+ para habilitar QR, ampliar verificaciones activas y desbloquear funciones avanzadas.
         </div>
       ) : null}
-      {commercialTier === "legacy_starter" ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          Tu cuenta mantiene un plan Starter legacy por compatibilidad. La oferta actual de candidato es Free, Pro y Pro+.
+      {commercialTier === "starter" ? (
+        <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          Tu cuenta está en Starter: incluye compartir por link, hasta 2 verificaciones laborales y 2 académicas activas, sin QR y sin descarga de CV verificado.
         </div>
       ) : null}
 

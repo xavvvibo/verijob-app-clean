@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import CandidateQuickView from "@/components/company/CandidateQuickView";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { computeCandidateQuickFit, resolveCandidateDisplayName, resolveCandidatePipelineBucket, type CompanyCandidateWorkspaceRow } from "@/lib/company/candidate-fit";
@@ -166,11 +167,13 @@ function MetricCard({ title, value, helper }: { title: string; value: string; he
 export const dynamic = "force-dynamic";
 
 export default function CompanyDashboard() {
+  const searchParams = useSearchParams();
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [profileData, setProfileData] = useState<ProfilePayload | null>(null);
   const [teamData, setTeamData] = useState<TeamPayload | null>(null);
   const [candidateData, setCandidateData] = useState<CandidatesPayload | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [quickViewRow, setQuickViewRow] = useState<CandidateImportRow | null>(null);
 
@@ -184,52 +187,83 @@ export default function CompanyDashboard() {
     }
   }, []);
 
+  async function loadDashboardData() {
+    try {
+      const [dashboardRes, profileRes, teamRes, candidateRes] = await Promise.all([
+        fetch("/api/company/dashboard", { cache: "no-store" as any }),
+        fetch("/api/company/profile", { cache: "no-store" as any }),
+        fetch("/api/company/team", { cache: "no-store" as any }),
+        fetch("/api/company/candidate-imports", { cache: "no-store" as any }),
+      ]);
+      const [dashboardBody, profileBody, teamBody, candidateBody] = await Promise.all([
+        dashboardRes.json().catch(() => ({})),
+        profileRes.json().catch(() => ({})),
+        teamRes.json().catch(() => ({})),
+        candidateRes.json().catch(() => ({})),
+      ]);
+
+      if (!dashboardRes.ok) {
+        if (dashboardRes.status === 423) {
+          setDashboard(dashboardBody || {});
+          setProfileData(profileRes.ok ? profileBody || {} : null);
+          setTeamData(teamRes.ok ? teamBody || {} : null);
+          setCandidateData(candidateRes.ok ? candidateBody || {} : null);
+          setErrorMessage(
+            dashboardBody?.user_message || "La empresa está desactivada o cerrada. Reactívala desde ajustes para retomar la operación."
+          );
+          return;
+        }
+        throw new Error("No se pudo cargar el panel de empresa.");
+      }
+      setDashboard(dashboardBody || {});
+      setProfileData(profileRes.ok ? profileBody || {} : null);
+      setTeamData(teamRes.ok ? teamBody || {} : null);
+      setCandidateData(candidateRes.ok ? candidateBody || {} : null);
+      setErrorMessage(null);
+    } catch (e: any) {
+      setErrorMessage(e?.message || "No se pudo cargar el panel de empresa.");
+    }
+  }
+
   useEffect(() => {
     let alive = true;
     (async () => {
-      try {
-        const [dashboardRes, profileRes, teamRes, candidateRes] = await Promise.all([
-          fetch("/api/company/dashboard", { cache: "no-store" as any }),
-          fetch("/api/company/profile", { cache: "no-store" as any }),
-          fetch("/api/company/team", { cache: "no-store" as any }),
-          fetch("/api/company/candidate-imports", { cache: "no-store" as any }),
-        ]);
-        const [dashboardBody, profileBody, teamBody, candidateBody] = await Promise.all([
-          dashboardRes.json().catch(() => ({})),
-          profileRes.json().catch(() => ({})),
-          teamRes.json().catch(() => ({})),
-          candidateRes.json().catch(() => ({})),
-        ]);
-
-        if (!dashboardRes.ok) {
-          if (dashboardRes.status === 423) {
-            if (!alive) return;
-            setDashboard(dashboardBody || {});
-            setProfileData(profileRes.ok ? profileBody || {} : null);
-            setTeamData(teamRes.ok ? teamBody || {} : null);
-            setCandidateData(candidateRes.ok ? candidateBody || {} : null);
-            setErrorMessage(
-              dashboardBody?.user_message || "La empresa está desactivada o cerrada. Reactívala desde ajustes para retomar la operación."
-            );
-            return;
-          }
-          throw new Error("No se pudo cargar el panel de empresa.");
-        }
-        if (!alive) return;
-        setDashboard(dashboardBody || {});
-        setProfileData(profileRes.ok ? profileBody || {} : null);
-        setTeamData(teamRes.ok ? teamBody || {} : null);
-        setCandidateData(candidateRes.ok ? candidateBody || {} : null);
-        setErrorMessage(null);
-      } catch (e: any) {
-        if (!alive) return;
-        setErrorMessage(e?.message || "No se pudo cargar el panel de empresa.");
-      }
+      await loadDashboardData();
     })();
     return () => {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    const checkoutState = String(searchParams.get("checkout") || "");
+    if (checkoutState === "cancel") {
+      setCheckoutMessage("La compra no se completó. Puedes seguir operando y volver a intentarlo cuando quieras.");
+      return;
+    }
+    if (checkoutState !== "success") return;
+
+    setCheckoutMessage("Pago recibido. Estamos actualizando tus accesos disponibles.");
+    let cancelled = false;
+    let attempts = 0;
+    const interval = window.setInterval(async () => {
+      if (cancelled) return;
+      attempts += 1;
+      await loadDashboardData();
+      if (attempts >= 4) {
+        window.clearInterval(interval);
+        if (!cancelled) {
+          setCheckoutMessage("Compra completada. El saldo ya debería reflejarse en el panel.");
+        }
+      }
+    }, 2500);
+
+    void loadDashboardData();
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [searchParams]);
 
   const companyName = resolveCompanyDisplayName(
     {
@@ -434,6 +468,11 @@ export default function CompanyDashboard() {
 
   return (
     <div className="space-y-6">
+      {checkoutMessage ? (
+        <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          {checkoutMessage}
+        </section>
+      ) : null}
       <section className="rounded-[28px] border border-slate-200 bg-white p-7 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="min-w-0">

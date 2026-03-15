@@ -6,6 +6,7 @@ import { companyVerificationMethodTone, deriveCompanyVerificationMethod } from "
 import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import CheckoutReturnSyncNotice from "@/components/company/CheckoutReturnSyncNotice";
 import CompanyPlanActions from "./CompanyPlanActions";
 
 export const dynamic = "force-dynamic";
@@ -133,7 +134,13 @@ async function resolveCompanyContext(admin: any, userId: string) {
   };
 }
 
-export default async function CompanySubscriptionPage() {
+export default async function CompanySubscriptionPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ checkout?: string }>;
+}) {
+  const query = (await searchParams) || {};
+  const checkoutState = query.checkout === "success" ? "success" : query.checkout === "cancel" ? "cancel" : null;
   const sessionClient = await createServerSupabaseClient();
   const admin = createServiceRoleClient();
 
@@ -218,6 +225,7 @@ export default async function CompanySubscriptionPage() {
 
   return (
     <div className="space-y-6">
+      <CheckoutReturnSyncNotice checkoutState={checkoutState} />
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Suscripción de empresa</h1>
         <p className="mt-2 text-sm text-slate-600">

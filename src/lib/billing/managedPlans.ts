@@ -29,8 +29,8 @@ export type ManagedPlanOption = {
 
 export const MANAGED_SUBSCRIPTION_PLANS: readonly ManagedPlanOption[] = [
   { key: "free", label: "Free", role: "all", amountCents: 0 },
-  { key: "candidate_starter_monthly", label: "Starter legacy mensual", role: "candidate", amountCents: 299 },
-  { key: "candidate_starter_yearly", label: "Starter legacy anual", role: "candidate", amountCents: 2990 },
+  { key: "candidate_starter_monthly", label: "Starter mensual", role: "candidate", amountCents: 299 },
+  { key: "candidate_starter_yearly", label: "Starter anual", role: "candidate", amountCents: 2990 },
   { key: "candidate_pro_monthly", label: "Pro mensual", role: "candidate", amountCents: 499 },
   { key: "candidate_pro_yearly", label: "Pro anual", role: "candidate", amountCents: 4990 },
   { key: "candidate_proplus_monthly", label: "Pro+ mensual", role: "candidate", amountCents: 999 },

@@ -119,6 +119,7 @@ export default function CompanyCandidatesClient() {
   const [verificationFilter, setVerificationFilter] = useState(searchParams.get("verified") || "all");
   const [profileFilter, setProfileFilter] = useState(searchParams.get("profile") || "all");
   const [sort, setSort] = useState(searchParams.get("sort") || "recent");
+  const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
   const [form, setForm] = useState({
     candidate_email: "",
     candidate_name: "",
@@ -184,6 +185,36 @@ export default function CompanyCandidatesClient() {
   useEffect(() => {
     void loadImports();
   }, []);
+
+  useEffect(() => {
+    const checkoutState = String(searchParams.get("checkout") || "");
+    if (checkoutState === "cancel") {
+      setCheckoutMessage("La compra no se completó. Puedes seguir revisando resúmenes parciales o intentarlo de nuevo.");
+      return;
+    }
+    if (checkoutState !== "success") return;
+
+    setCheckoutMessage("Pago recibido. Estamos actualizando tus accesos disponibles.");
+    let cancelled = false;
+    let attempts = 0;
+    const interval = window.setInterval(async () => {
+      if (cancelled) return;
+      attempts += 1;
+      await loadImports();
+      if (attempts >= 4) {
+        window.clearInterval(interval);
+        if (!cancelled) {
+          setCheckoutMessage("Compra completada. El saldo ya debería reflejarse en la base RRHH.");
+        }
+      }
+    }, 2500);
+
+    void loadImports();
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [searchParams]);
 
   function openCandidate(event: React.FormEvent) {
     event.preventDefault();
@@ -284,6 +315,11 @@ export default function CompanyCandidatesClient() {
 
   return (
     <div className="space-y-6">
+      {checkoutMessage ? (
+        <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          {checkoutMessage}
+        </section>
+      ) : null}
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Candidatos</h1>
         <p className="mt-2 text-sm text-slate-600">

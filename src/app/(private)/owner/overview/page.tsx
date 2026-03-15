@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import type { ReactNode } from "react";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+import { conversionStateLabel, loadVerificationCompanyAcquisition, subscriptionStateLabel } from "@/lib/owner/verification-company-acquisition";
 import OwnerTooltip from "@/components/ui/OwnerTooltip";
 
 type Severity = "high" | "medium" | "low";
@@ -878,6 +879,8 @@ async function OwnerOverviewServer({
     });
   }
 
+  const verificationAcquisition = await loadVerificationCompanyAcquisition(admin);
+  const acquisitionPreview = verificationAcquisition.rows.slice(0, 5);
   const lastUpdated = new Date().toLocaleString("es-ES");
 
   return (
@@ -1210,7 +1213,7 @@ async function OwnerOverviewServer({
         title="Acciones rápidas"
         subtitle="Prioridades operativas del día con acceso directo."
       >
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <Link href="/owner/users" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
             Usuarios en seguimiento
             <span className="mt-1 block text-xs font-normal text-slate-500">{usersTotal} usuarios · {onboardingPending} onboarding pendiente</span>
@@ -1230,6 +1233,67 @@ async function OwnerOverviewServer({
           <Link href="/owner/growth" className="rounded-lg bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800">
             Centro de crecimiento
             <span className="mt-1 block text-xs font-normal text-blue-100">{activeCampaigns} campañas activas · {leadsInRange} leads en {rangeLabel}</span>
+          </Link>
+          <Link href="/owner/company-acquisition" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+            Empresas captadas por verificación
+            <span className="mt-1 block text-xs font-normal text-slate-500">
+              {verificationAcquisition.summary.registeredFromVerification} registradas · {verificationAcquisition.summary.convertedToPaid} de pago
+            </span>
+          </Link>
+        </div>
+      </Section>
+
+      <Section
+        title="Empresas captadas por verificación"
+        subtitle="Resumen operativo del embudo empresa generado desde solicitudes de verificación."
+      >
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard title="Impactadas" value={String(verificationAcquisition.summary.impactedCompanies)} note="Empresas con al menos una solicitud de verificación." />
+          <MetricCard title="Registradas" value={String(verificationAcquisition.summary.registeredFromVerification)} note="Registro atribuido a verificación con señal disponible en datos." />
+          <MetricCard title="Free" value={String(verificationAcquisition.summary.convertedToFree)} note="Onboarding completado y plan free." />
+          <MetricCard title="Pago" value={String(verificationAcquisition.summary.convertedToPaid)} note={`Conversión a pago · ${verificationAcquisition.summary.verificationToPaymentRate}% del total impactado`} />
+        </div>
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+          <table className="min-w-full divide-y divide-slate-200 text-sm">
+            <thead className="bg-slate-50">
+              <tr>
+                <th className="px-3 py-3 text-left font-semibold text-slate-600">Empresa</th>
+                <th className="px-3 py-3 text-left font-semibold text-slate-600">Objetivo</th>
+                <th className="px-3 py-3 text-left font-semibold text-slate-600">Solicitudes</th>
+                <th className="px-3 py-3 text-left font-semibold text-slate-600">Conversión</th>
+                <th className="px-3 py-3 text-left font-semibold text-slate-600">Plan</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 bg-white">
+              {acquisitionPreview.length ? (
+                acquisitionPreview.map((row) => (
+                  <tr key={row.key}>
+                    <td className="px-3 py-3">
+                      <div className="font-semibold text-slate-900">{row.companyName}</div>
+                      <div className="mt-1 text-xs text-slate-500">{row.origin === "verification" ? "Captada por verificación" : row.origin === "preexisting" ? "Empresa preexistente" : "Origen no concluyente"}</div>
+                    </td>
+                    <td className="px-3 py-3 text-slate-700">
+                      <div>{row.targetEmail || "—"}</div>
+                      <div className="mt-1 text-xs text-slate-500">{row.targetDomain || "Dominio no concluyente"}</div>
+                    </td>
+                    <td className="px-3 py-3 text-slate-700">{row.requestsCount}</td>
+                    <td className="px-3 py-3 text-slate-700">{conversionStateLabel(row.conversionState)}</td>
+                    <td className="px-3 py-3 text-slate-700">{subscriptionStateLabel(row.subscriptionState)}</td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">
+                    No hay impacto de verificación suficiente para construir el resumen todavía.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+        <div>
+          <Link href="/owner/company-acquisition" className="inline-flex rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+            Abrir módulo completo
           </Link>
         </div>
       </Section>

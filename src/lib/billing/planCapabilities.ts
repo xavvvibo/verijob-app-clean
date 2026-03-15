@@ -1,4 +1,4 @@
-export type CandidateCommercialPlan = "free" | "pro" | "proplus" | "legacy_starter";
+export type CandidateCommercialPlan = "free" | "starter" | "pro" | "proplus";
 export type CompanyCommercialPlan = "free" | "access" | "hiring" | "team" | "enterprise";
 
 export type CandidatePlanCapabilities = {
@@ -30,10 +30,10 @@ export function normalizeCandidateCommercialPlan(planRaw: unknown): CandidateCom
   if (plan === "pro" || plan === "candidate_pro") return "pro";
   if (plan === "pro+") return "proplus";
   if (plan === "proplus" || plan === "candidate_proplus") return "proplus";
-  if (plan === "starter" || plan === "starter legacy") return "legacy_starter";
+  if (plan === "starter" || plan === "starter legacy") return "starter";
   if (plan === "candidate_pro_monthly" || plan === "candidate_pro_yearly") return "pro";
   if (plan === "candidate_proplus_monthly" || plan === "candidate_proplus_yearly") return "proplus";
-  if (plan === "candidate_starter_monthly" || plan === "candidate_starter_yearly") return "legacy_starter";
+  if (plan === "candidate_starter_monthly" || plan === "candidate_starter_yearly") return "starter";
   return "free";
 }
 
@@ -68,23 +68,23 @@ export function getCandidatePlanCapabilities(planRaw: unknown): CandidatePlanCap
       activeWorkVerificationsLimit: 3,
       activeAcademicVerificationsLimit: 3,
       activeVerificationsLabel: "3 laborales + 3 académicas",
-      summary: "Todo lo de Free, más comparte tu perfil por QR y activa hasta 3 verificaciones laborales y 3 académicas.",
+      summary: "Todo lo de Starter, más comparte tu perfil por QR y activa hasta 3 verificaciones laborales y 3 académicas.",
     };
   }
 
-  if (plan === "legacy_starter") {
+  if (plan === "starter") {
     return {
       plan,
-      label: "Starter legacy",
-      publicLabel: "Starter legacy",
-      legacy: true,
+      label: "Starter",
+      publicLabel: "Starter",
+      legacy: false,
       canShareByLink: true,
       canShareByQr: false,
       canDownloadVerifiedCv: false,
-      activeWorkVerificationsLimit: 1,
-      activeAcademicVerificationsLimit: 1,
-      activeVerificationsLabel: "1 laboral + 1 académica",
-      summary: "Plan legacy mantenido por compatibilidad. La oferta nueva de candidato es Free, Pro y Pro+.",
+      activeWorkVerificationsLimit: 2,
+      activeAcademicVerificationsLimit: 2,
+      activeVerificationsLabel: "2 laborales + 2 académicas",
+      summary: "Todo lo de Free, más hasta 2 verificaciones laborales y 2 académicas activas.",
     };
   }
 
