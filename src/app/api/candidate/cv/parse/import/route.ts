@@ -152,12 +152,13 @@ async function persistLanguagesFromExtract(params: {
     return { imported: 0, duplicatesSkipped: 0 };
   }
 
-  const [profileColumns, cpRes] = await Promise.all([
+  const [profileColumns, candidateProfileColumns, cpRes] = await Promise.all([
     getTableColumns(supabase, "profiles"),
-    supabase.from("candidate_profiles").select("achievements").eq("user_id", userId).maybeSingle(),
+    getTableColumns(supabase, "candidate_profiles"),
+    supabase.from("candidate_profiles").select("*").eq("user_id", userId).maybeSingle(),
   ]);
 
-  const persistenceTarget = selectLanguagesPersistenceTarget(profileColumns);
+  const persistenceTarget = selectLanguagesPersistenceTarget(profileColumns, candidateProfileColumns);
   if (persistenceTarget === "profiles.languages") {
     const { data: profileRow } = await supabase.from("profiles").select("languages").eq("id", userId).maybeSingle();
     const current = Array.isArray((profileRow as any)?.languages)
@@ -177,11 +178,20 @@ async function persistLanguagesFromExtract(params: {
     return { imported: toAppend.length, duplicatesSkipped: normalizedLanguages.length - toAppend.length };
   }
 
-  const currentAchievements = Array.isArray((cpRes.data as any)?.achievements) ? (cpRes.data as any).achievements : [];
+  if (persistenceTarget === "skip") {
+    return {
+      imported: 0,
+      duplicatesSkipped: normalizedLanguages.length,
+      error: "languages_persistence_unavailable",
+    };
+  }
+
+  const targetColumn = persistenceTarget === "candidate_profiles.other_achievements" ? "other_achievements" : "achievements";
+  const currentAchievements = Array.isArray((cpRes.data as any)?.[targetColumn]) ? (cpRes.data as any)[targetColumn] : [];
   const currentLangSet = new Set(
     currentAchievements
       .filter((x: any) => String(x?.category || "").toLowerCase() === "idioma")
-      .map((x: any) => normalizeText(x?.title).toLowerCase())
+      .map((x: any) => normalizeText(x?.language || x?.title).toLowerCase())
       .filter(Boolean)
   );
   const toAppend = normalizedLanguages.filter((lang: string) => !currentLangSet.has(lang.toLowerCase()));
@@ -192,6 +202,7 @@ async function persistLanguagesFromExtract(params: {
       ...currentAchievements,
       ...toAppend.map((lang: string) => ({
         title: lang,
+        language: lang,
         category: "idioma",
         issuer: null,
         date: null,
@@ -203,7 +214,7 @@ async function persistLanguagesFromExtract(params: {
     ];
     const payload = {
       user_id: userId,
-      achievements: merged,
+      [targetColumn]: merged,
       updated_at: nowIso,
     };
     const { error: persistErr } = cpRes.data
@@ -257,13 +268,13 @@ export async function POST(req: Request) {
         const role_title = toNullable(x?.role_title || x?.title);
         const company_name = toNullable(x?.company_name || x?.company);
         const description = toNullable(x?.description);
-        if (!role_title && !company_name && !description) return null;
         const startDate = normalizeDateForDb(x?.start_date);
+        if (!role_title || !company_name || !startDate) return null;
         const endDate = normalizeDateForDb(x?.end_date);
         return {
           user_id: user.id,
-          role_title: role_title || "Experiencia",
-          company_name: company_name || "Empresa",
+          role_title,
+          company_name,
           start_date: startDate,
           end_date: endDate,
           description,

@@ -42,14 +42,16 @@ export default function ExperienceQuickAddClient() {
     try {
       const { data: au } = await supabase.auth.getUser();
       if (!au.user) throw new Error("No autorizado");
-      if (!roleTitle.trim() || !companyName.trim()) throw new Error("Indica puesto y empresa");
+      if (!roleTitle.trim() || !companyName.trim() || !startDate.trim()) {
+        throw new Error("Indica empresa, puesto y fecha de inicio.");
+      }
 
       const { error } = await supabase.from("profile_experiences").insert({
         user_id: au.user.id,
         role_title: roleTitle.trim(),
         company_name: companyName.trim(),
-        start_date: startDate.trim() || null,
-        end_date: isCurrent ? null : endDate.trim() || null,
+        start_date: `${startDate.trim()}-01`,
+        end_date: isCurrent ? null : endDate.trim() ? `${endDate.trim()}-01` : null,
         description: description.trim() || null,
         matched_verification_id: null,
         confidence: null,
@@ -119,7 +121,7 @@ export default function ExperienceQuickAddClient() {
           </label>
           <label className="block">
             <div className="text-xs font-semibold text-gray-900">Fecha inicio</div>
-            <input type="month" lang="es" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" />
+            <input type="month" lang="es" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" required />
           </label>
           <label className="block">
             <div className="text-xs font-semibold text-gray-900">Fecha fin</div>

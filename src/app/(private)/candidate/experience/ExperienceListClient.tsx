@@ -76,14 +76,21 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
     const row = rows.find((x) => x.id === id);
     if (!row) return;
 
+    const roleTitle = String(row.role_title || "").trim();
+    const companyName = String(row.company_name || "").trim();
+    const startDate = normalizeDateForSave(row.start_date || null);
+    if (!roleTitle || !companyName || !startDate) {
+      setMessage("Cada experiencia debe incluir empresa, puesto y fecha de inicio.");
+      return;
+    }
     setSavingId(id);
     setMessage(null);
 
     const isCurrent = !!editingCurrentById[id];
     const payload = {
-      role_title: String(row.role_title || "").trim() || null,
-      company_name: String(row.company_name || "").trim() || null,
-      start_date: normalizeDateForSave(row.start_date || null),
+      role_title: roleTitle,
+      company_name: companyName,
+      start_date: startDate,
       end_date: isCurrent ? null : normalizeDateForSave(row.end_date || null),
       description: String(row.description || "").trim() || null,
       updated_at: new Date().toISOString(),

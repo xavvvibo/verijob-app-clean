@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/browser";
+
+const OTP_RESEND_SECONDS = 60;
 
 function safeNext(raw: string | null) {
   const fallback = "/dashboard";
@@ -81,6 +83,22 @@ export default function LoginCard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+
+  useEffect(() => {
+    if (!otpExpiresAt) {
+      setSecondsLeft(0);
+      return;
+    }
+    const tick = () => {
+      const next = Math.max(0, Math.ceil((otpExpiresAt - Date.now()) / 1000));
+      setSecondsLeft(next);
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [otpExpiresAt]);
 
   async function sendOtp(e: React.FormEvent) {
     e.preventDefault();
@@ -113,6 +131,7 @@ export default function LoginCard() {
         return;
       }
       setStep("otp");
+      setOtpExpiresAt(Date.now() + OTP_RESEND_SECONDS * 1000);
       setNotice(step === "otp" ? "Hemos reenviado un nuevo código a tu email." : "Código enviado. Revisa tu correo.");
     } catch (err: any) {
       console.error("[auth][login][sendOtp] unexpected_error", {
@@ -229,6 +248,14 @@ export default function LoginCard() {
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div>
         ) : null}
 
+        {step === "otp" ? (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+            {secondsLeft > 0
+              ? `El codigo puede caducar pronto. Si no te funciona, podras solicitar uno nuevo en ${secondsLeft}s.`
+              : "Si el codigo ha caducado, solicita uno nuevo antes de volver a intentarlo."}
+          </div>
+        ) : null}
+
         <button
           disabled={loading}
           className="w-full rounded-lg bg-blue-600 py-3 font-medium text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
@@ -239,11 +266,11 @@ export default function LoginCard() {
         {step === "otp" ? (
           <button
             type="button"
-            disabled={loading}
+            disabled={loading || secondsLeft > 0}
             onClick={() => void sendOtp({ preventDefault() {} } as React.FormEvent)}
             className="w-full rounded-lg border border-slate-200 bg-white py-3 font-medium text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Reenviar código
+            {secondsLeft > 0 ? `Reenviar codigo en ${secondsLeft}s` : "Reenviar codigo"}
           </button>
         ) : null}
       </form>

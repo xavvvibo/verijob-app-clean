@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { z } from "zod";
-import { extractCvTextFromBuffer } from "@/utils/cv/extractText";
+import { CvExtractionError, extractCvTextFromBuffer } from "@/utils/cv/extractText";
 import { normalizeCvLanguages } from "@/lib/candidate/cv-parse-normalize";
 
 export const runtime = "nodejs";
@@ -275,7 +275,15 @@ export async function POST(req: Request) {
       "cv_upload.pdf";
 
     const fileBuffer = Buffer.from(await file.arrayBuffer());
-    const extractedText = (await extractCvTextFromBuffer(fileBuffer, effectiveFilename)).trim();
+    let extractedText = "";
+    try {
+      extractedText = (await extractCvTextFromBuffer(fileBuffer, effectiveFilename)).trim();
+    } catch (error: any) {
+      if (error instanceof CvExtractionError) {
+        throw new Error(`${error.code}:${error.message}`);
+      }
+      throw error;
+    }
     if (!extractedText) throw new Error("empty_cv_text");
 
     const openaiKey = getOpenAIKey();

@@ -18,7 +18,12 @@ export function shouldApplyParsedResultOnce({ nextJobId, lastAppliedJobId }) {
   return Boolean(nextId) && nextId !== lastId;
 }
 
-export function selectLanguagesPersistenceTarget(profileColumns) {
-  const set = profileColumns instanceof Set ? profileColumns : new Set(profileColumns || []);
-  return set.has("languages") ? "profiles.languages" : "candidate_profiles.achievements";
+export function selectLanguagesPersistenceTarget(profileColumns, candidateProfileColumns) {
+  const profileSet = profileColumns instanceof Set ? profileColumns : new Set(profileColumns || []);
+  const candidateSet =
+    candidateProfileColumns instanceof Set ? candidateProfileColumns : new Set(candidateProfileColumns || []);
+  if (profileSet.has("languages")) return "profiles.languages";
+  if (candidateSet.has("achievements")) return "candidate_profiles.achievements";
+  if (candidateSet.has("other_achievements")) return "candidate_profiles.other_achievements";
+  return "skip";
 }

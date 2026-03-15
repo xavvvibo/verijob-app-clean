@@ -18,9 +18,11 @@ test("shouldImportEducationRow no descarta entradas válidas por descripción", 
   assert.equal(shouldImportEducationRow({ title: "", institution: "", description: "" }), false);
 });
 
-test("selectLanguagesPersistenceTarget prioriza profiles.languages y hace fallback a candidate_profiles.achievements", () => {
-  assert.equal(selectLanguagesPersistenceTarget(new Set(["id", "languages"])), "profiles.languages");
-  assert.equal(selectLanguagesPersistenceTarget(new Set(["id", "full_name"])), "candidate_profiles.achievements");
+test("selectLanguagesPersistenceTarget prioriza profiles.languages y solo hace fallback a columnas reales", () => {
+  assert.equal(selectLanguagesPersistenceTarget(new Set(["id", "languages"]), new Set(["id", "achievements"])), "profiles.languages");
+  assert.equal(selectLanguagesPersistenceTarget(new Set(["id", "full_name"]), new Set(["id", "achievements"])), "candidate_profiles.achievements");
+  assert.equal(selectLanguagesPersistenceTarget(new Set(["id", "full_name"]), new Set(["id", "other_achievements"])), "candidate_profiles.other_achievements");
+  assert.equal(selectLanguagesPersistenceTarget(new Set(["id", "full_name"]), new Set(["id"])), "skip");
 });
 
 test("shouldApplyParsedResultOnce evita reaplicar polling sobre mismo jobId", () => {

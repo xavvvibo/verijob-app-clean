@@ -21,6 +21,42 @@ type ImportResult = {
   notSelected: number;
 };
 
+const MAX_CV_SIZE_BYTES = 8 * 1024 * 1024;
+
+function isSupportedCvFile(file: File) {
+  const mime = String(file.type || "").toLowerCase();
+  const lowerName = String(file.name || "").toLowerCase();
+  return (
+    mime.includes("pdf") ||
+    mime.includes("wordprocessingml") ||
+    mime.includes("msword") ||
+    lowerName.endsWith(".pdf") ||
+    lowerName.endsWith(".docx") ||
+    lowerName.endsWith(".doc")
+  );
+}
+
+function toFriendlyCvError(raw: string | null | undefined) {
+  const msg = String(raw || "").trim();
+  const lower = msg.toLowerCase();
+  if (!msg) {
+    return "No hemos podido procesar el CV. Puedes continuar completando tu perfil manualmente.";
+  }
+  if (lower.includes("pdf_extract_failed") || lower.includes("bad xref") || lower.includes("empty_pdf_text")) {
+    return "No hemos podido leer este PDF. Puedes continuar con la carga manual de tu experiencia, formacion e idiomas.";
+  }
+  if (lower.includes("docx_extract_failed") || lower.includes("empty_docx_text")) {
+    return "No hemos podido leer este DOCX. Puedes continuar con la carga manual de tu experiencia, formacion e idiomas.";
+  }
+  if (lower.includes("file_too_large")) {
+    return "El archivo supera el tamano maximo permitido de 8 MB. Sube un CV mas ligero o completa tu perfil manualmente.";
+  }
+  if (lower.includes("unsupported_file_type")) {
+    return "Formato no soportado. Usa PDF o DOCX, o completa tu perfil manualmente.";
+  }
+  return msg;
+}
+
 function collapseSpaces(v: string) {
   return v.replace(/\s+/g, " ").trim();
 }
@@ -269,10 +305,12 @@ export default function CvUploadAndParse() {
       return;
     }
 
-    const mime = (file.type || "").toLowerCase();
-    const ok = mime.includes("pdf") || mime.includes("wordprocessingml") || file.name.toLowerCase().endsWith(".docx");
-    if (!ok) {
+    if (!isSupportedCvFile(file)) {
       setMsg("Formato no soportado. Usa PDF o DOCX.");
+      return;
+    }
+    if (file.size > MAX_CV_SIZE_BYTES) {
+      setMsg("El archivo supera el tamano maximo permitido de 8 MB.");
       return;
     }
 
@@ -324,7 +362,7 @@ export default function CvUploadAndParse() {
         body: JSON.stringify({ job_id: parseJob.id }),
       }).catch(() => {});
     } catch (e: any) {
-      setMsg(e?.message || "Error subiendo/procesando CV.");
+      setMsg(toFriendlyCvError(e?.message || "Error subiendo/procesando CV."));
     } finally {
       setBusy(false);
     }
@@ -372,11 +410,11 @@ export default function CvUploadAndParse() {
             setMsg("Listo. CV procesado con extracción laboral y académica.");
           }
         } else if (casted.status === "failed") {
-          setMsg(casted.error || "Falló el parsing.");
+          setMsg(toFriendlyCvError(casted.error || "Falló el parsing."));
         }
       } catch (e: any) {
         if (!alive) return;
-        setMsg(e?.message || "Error consultando job.");
+        setMsg(toFriendlyCvError(e?.message || "Error consultando job."));
       }
     };
 
@@ -408,7 +446,24 @@ export default function CvUploadAndParse() {
         </button>
       </div>
 
-      {msg && <p className="text-sm text-slate-600">{msg}</p>}
+      {msg ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+          <div>{msg}</div>
+          {String(msg).toLowerCase().includes("manualmente") ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              <a href="/candidate/experience" className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100">
+                Completar experiencia manualmente
+              </a>
+              <a href="/candidate/education" className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100">
+                Completar formacion
+              </a>
+              <a href="/candidate/achievements?open=language" className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100">
+                Anadir idiomas
+              </a>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {lastImport ? (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">

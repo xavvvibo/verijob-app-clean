@@ -116,6 +116,16 @@ async function readProfileAndCandidateProfile(supabase: any, userId: string) {
   };
 }
 
+async function getTableColumns(supabase: any, tableName: string) {
+  const { data, error } = await supabase
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", tableName);
+  if (error || !Array.isArray(data)) return new Set<string>();
+  return new Set(data.map((row: any) => String(row?.column_name || "")));
+}
+
 export async function GET() {
   const supabase = await createClient();
   const {
@@ -170,14 +180,24 @@ export async function PUT(req: Request) {
     .map((item) => normalizeText(item.language || item.title))
     .filter(Boolean);
 
-  const payload = {
+  const [candidateProfileColumns, profileColumns] = await Promise.all([
+    getTableColumns(supabase, "candidate_profiles"),
+    getTableColumns(supabase, "profiles"),
+  ]);
+
+  const payload: Record<string, any> = {
     user_id: user.id,
     summary: typeof body?.summary === "string" ? body.summary : candidateProfile?.summary ?? null,
-    education: Array.isArray(body?.education) ? body.education : Array.isArray(candidateProfile?.education) ? candidateProfile.education : [],
-    achievements: normalizedAchievements,
-    certifications,
     updated_at: new Date().toISOString(),
   };
+  if (candidateProfileColumns.has("education")) {
+    payload.education = Array.isArray(body?.education) ? body.education : Array.isArray(candidateProfile?.education) ? candidateProfile.education : [];
+  }
+  if (candidateProfileColumns.has("achievements")) payload.achievements = normalizedAchievements;
+  if (candidateProfileColumns.has("other_achievements") && !candidateProfileColumns.has("achievements")) {
+    payload.other_achievements = normalizedAchievements;
+  }
+  if (candidateProfileColumns.has("certifications")) payload.certifications = certifications;
 
   let writeError: any = null;
   let nextCandidateProfile: any = null;
@@ -195,7 +215,7 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: writeError.message }, { status: 400 });
   }
 
-  if (Array.isArray(profile?.languages) || languages.length > 0) {
+  if (profileColumns.has("languages") && (Array.isArray(profile?.languages) || languages.length > 0)) {
     const profileUpdate = await supabase
       .from("profiles")
       .update({ languages, updated_at: new Date().toISOString() })

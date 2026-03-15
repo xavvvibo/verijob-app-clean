@@ -373,13 +373,14 @@ async function persistLanguagesFromExtract(params: {
   );
   if (normalizedLanguages.length === 0) return { imported: 0, duplicatesSkipped: 0 };
 
-  const [profileColumns, profileRes, cpRes] = await Promise.all([
+  const [profileColumns, candidateProfileColumns, profileRes, cpRes] = await Promise.all([
     getTableColumns(supabase, "profiles"),
+    getTableColumns(supabase, "candidate_profiles"),
     supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
     supabase.from("candidate_profiles").select("*").eq("user_id", userId).maybeSingle(),
   ]);
 
-  const persistenceTarget = selectLanguagesPersistenceTarget(profileColumns);
+  const persistenceTarget = selectLanguagesPersistenceTarget(profileColumns, candidateProfileColumns);
   if (persistenceTarget === "profiles.languages" && profileColumns.has("languages")) {
     const current = Array.isArray((profileRes.data as any)?.languages)
       ? (profileRes.data as any).languages.map((x: any) => normalizeText(x)).filter(Boolean)
@@ -395,11 +396,16 @@ async function persistLanguagesFromExtract(params: {
     return { imported: toAppend.length, duplicatesSkipped: normalizedLanguages.length - toAppend.length };
   }
 
-  const currentAchievements = Array.isArray((cpRes.data as any)?.achievements) ? (cpRes.data as any).achievements : [];
+  if (persistenceTarget === "skip") {
+    return { imported: 0, duplicatesSkipped: normalizedLanguages.length, error: "languages_persistence_unavailable" };
+  }
+
+  const targetColumn = persistenceTarget === "candidate_profiles.other_achievements" ? "other_achievements" : "achievements";
+  const currentAchievements = Array.isArray((cpRes.data as any)?.[targetColumn]) ? (cpRes.data as any)[targetColumn] : [];
   const currentSet = new Set(
     currentAchievements
       .filter((x: any) => String(x?.category || "").toLowerCase() === "idioma")
-      .map((x: any) => normalizeText(x?.title).toLowerCase())
+      .map((x: any) => normalizeText(x?.language || x?.title).toLowerCase())
       .filter(Boolean)
   );
   const toAppend = normalizedLanguages.filter((lang: string) => !currentSet.has(lang.toLowerCase()));
@@ -409,6 +415,7 @@ async function persistLanguagesFromExtract(params: {
       ...currentAchievements,
       ...toAppend.map((lang: string) => ({
         title: lang,
+        language: lang,
         category: "idioma",
         description: null,
         import_source: "company_cv_import",
@@ -418,7 +425,7 @@ async function persistLanguagesFromExtract(params: {
     ];
     const payload = {
       user_id: userId,
-      achievements: merged,
+      [targetColumn]: merged,
       updated_at: nowIso,
     };
     if (cpRes.data) await supabase.from("candidate_profiles").update(payload).eq("user_id", userId);

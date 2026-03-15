@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { vjEvents } from "@/lib/analytics";
 import { createClient } from "@/utils/supabase/browser";
 import type { EmailOtpType } from "@supabase/supabase-js";
+
+const OTP_RESEND_SECONDS = 60;
 
 function safeNext(raw: string | null) {
   const fallback = "/dashboard";
@@ -80,6 +82,22 @@ export default function SignupClient() {
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
+  const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState(0);
+
+  useEffect(() => {
+    if (!otpExpiresAt) {
+      setSecondsLeft(0);
+      return;
+    }
+    const tick = () => {
+      const next = Math.max(0, Math.ceil((otpExpiresAt - Date.now()) / 1000));
+      setSecondsLeft(next);
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [otpExpiresAt]);
 
   async function verifySignupOtp(supabase: ReturnType<typeof createClient>, cleanEmail: string, cleanToken: string) {
     const attemptedTypes: EmailOtpType[] = ["signup", "email"];
@@ -137,6 +155,7 @@ export default function SignupClient() {
 
       vjEvents.signup(isCompanyMode ? "company" : "candidate");
       setStep("otp");
+      setOtpExpiresAt(Date.now() + OTP_RESEND_SECONDS * 1000);
       setIsError(false);
       setMsg(step === "otp" ? "Hemos reenviado un nuevo código a tu email." : "Código enviado. Revisa tu email.");
     } catch (err: any) {
@@ -294,6 +313,14 @@ export default function SignupClient() {
           </div>
         ) : null}
 
+        {step === "otp" ? (
+          <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+            {secondsLeft > 0
+              ? `El codigo puede caducar pronto. Si no llega o falla, podras pedir uno nuevo en ${secondsLeft}s.`
+              : "Si el codigo ha caducado, solicita uno nuevo para completar el registro."}
+          </div>
+        ) : null}
+
         <button
           type="submit"
           disabled={loading}
@@ -309,13 +336,13 @@ export default function SignupClient() {
         {step === "otp" ? (
           <button
             type="button"
-            disabled={loading}
+            disabled={loading || secondsLeft > 0}
             onClick={() =>
               void sendOtp({ preventDefault() {} } as React.FormEvent)
             }
             className="w-full rounded-lg border border-slate-200 bg-white py-3 font-medium text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Reenviar código
+            {secondsLeft > 0 ? `Reenviar codigo en ${secondsLeft}s` : "Reenviar codigo"}
           </button>
         ) : null}
       </form>
