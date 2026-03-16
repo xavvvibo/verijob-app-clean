@@ -64,6 +64,36 @@ function toPublicName(fullNameRaw: unknown) {
   return secondInitial ? `${first} ${secondInitial}.` : first;
 }
 
+function buildInvitePreviewPayload(inviteRow: any) {
+  const extractedPayload =
+    inviteRow?.extracted_payload_json && typeof inviteRow.extracted_payload_json === "object"
+      ? inviteRow.extracted_payload_json
+      : {};
+  const extractedLanguages = Array.isArray(extractedPayload?.languages)
+    ? extractedPayload.languages
+        .map((item: any) => String(item?.name || item?.language || item?.title || item || "").trim())
+        .filter(Boolean)
+    : [];
+
+  return {
+    public_name: String(inviteRow?.candidate_name_raw || inviteRow?.candidate_email || "Candidato").trim(),
+    sector: String(inviteRow?.target_role || extractedPayload?.headline || "").trim() || null,
+    years_experience: Array.isArray(extractedPayload?.experiences) ? extractedPayload.experiences.length : null,
+    approximate_location: String(extractedPayload?.location || extractedPayload?.experiences?.[0]?.location || "").trim() || null,
+    experiences_detected: Array.isArray(extractedPayload?.experiences) ? extractedPayload.experiences.length : 0,
+    total_verifications: 0,
+    approved_verifications: 0,
+    verification_types: [],
+    verification_breakdown: { email_or_company: 0, documental: 0 },
+    languages_detected: extractedLanguages,
+    trust_score: null,
+    onboarding_completion: 25,
+    onboarding_status: "candidate_pending_acceptance",
+    profile_state: "en_construccion",
+    last_activity_at: inviteRow?.updated_at || inviteRow?.accepted_at || inviteRow?.created_at || null,
+  };
+}
+
 function yearsFromVerificationRows(rows: any[]) {
   const dates = rows
     .flatMap((row: any) => [row?.start_date || null, row?.end_date || null])
@@ -183,36 +213,10 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
     if (!link) {
       if (unresolvedInvitePreview?.id) {
-        const extractedPayload =
-          unresolvedInvitePreview?.extracted_payload_json && typeof unresolvedInvitePreview.extracted_payload_json === "object"
-            ? unresolvedInvitePreview.extracted_payload_json
-            : {};
-        const extractedLanguages = Array.isArray(extractedPayload?.languages)
-          ? extractedPayload.languages
-              .map((item: any) => String(item?.name || item?.language || item?.title || item || "").trim())
-              .filter(Boolean)
-          : [];
         return json(200, {
           candidate_id: null,
           view_mode: "preview",
-          preview: {
-            public_name: String(unresolvedInvitePreview?.candidate_name_raw || unresolvedInvitePreview?.candidate_email || "Candidato").trim(),
-            sector: String(unresolvedInvitePreview?.target_role || extractedPayload?.headline || "").trim() || null,
-            years_experience: Array.isArray(extractedPayload?.experiences) ? extractedPayload.experiences.length : null,
-            approximate_location: String(extractedPayload?.location || extractedPayload?.experiences?.[0]?.location || "").trim() || null,
-            experiences_detected: Array.isArray(extractedPayload?.experiences) ? extractedPayload.experiences.length : 0,
-            total_verifications: 0,
-            approved_verifications: 0,
-            verification_types: [],
-            verification_breakdown: { email_or_company: 0, documental: 0 },
-            languages_detected: extractedLanguages,
-            trust_score: null,
-            onboarding_completion: 25,
-            onboarding_status: "candidate_pending_acceptance",
-            profile_state: "en_construccion",
-            last_activity_at:
-              unresolvedInvitePreview?.updated_at || unresolvedInvitePreview?.accepted_at || unresolvedInvitePreview?.created_at || null,
-          },
+          preview: buildInvitePreviewPayload(unresolvedInvitePreview),
           access: {
             access_status: "never",
             access_granted_at: null,
@@ -238,7 +242,49 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     .eq("id", link.candidate_id)
     .maybeSingle();
 
-  if (!profile) return json(404, { error: "Not found" });
+  if (!profile) {
+    const inviteByLinkedUserRes = await service
+      .from("company_candidate_import_invites")
+      .select("id,linked_user_id,candidate_name_raw,candidate_email,target_role,created_at,updated_at,accepted_at,parse_status,status,extracted_payload_json")
+      .eq("company_id", activeCompanyId)
+      .eq("linked_user_id", link.candidate_id)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const inviteByLinkedUser = inviteByLinkedUserRes.data as any;
+    if (inviteByLinkedUser?.id) {
+      const access = activeCompanyId
+        ? await resolveCompanyCandidateAccess({
+            service,
+            companyId: activeCompanyId,
+            candidateId: String(link.candidate_id),
+          })
+        : deriveCompanyCandidateAccess(null, null);
+      const profileAccessCredits = activeCompanyId
+        ? await resolveCompanyProfileAccessCredits({
+            service,
+            userId: au.user.id,
+            companyId: activeCompanyId,
+          })
+        : { available: 0 };
+
+      return json(200, {
+        candidate_id: link.candidate_id,
+        view_mode: "preview",
+        preview: buildInvitePreviewPayload(inviteByLinkedUser),
+        access,
+        gate: {
+          allowed: true,
+          consumed: false,
+          requires_overage: false,
+          credits_remaining: profileAccessCredits.available,
+        },
+      });
+    }
+
+    return json(404, { error: "Not found" });
+  }
   const lifecycleStatus = String((profile as any)?.lifecycle_status || "active").toLowerCase();
   if (isUnavailableLifecycleStatus(lifecycleStatus)) {
     return json(410, { error: "Profile unavailable" });
