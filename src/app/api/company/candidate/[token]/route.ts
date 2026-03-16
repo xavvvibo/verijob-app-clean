@@ -161,23 +161,15 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     const inviteLinkUserId = String(inviteRow?.linked_user_id || "").trim();
 
     if (directLink?.candidate_id) {
-      const inviteByCandidate = await service
-        .from("company_candidate_import_invites")
-        .select("id")
-        .eq("company_id", activeCompanyId)
-        .eq("linked_user_id", String(directLink.candidate_id))
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (inviteByCandidate.data?.id) {
-        link = {
-          id: String(directLink.id || ""),
-          candidate_id: String(directLink.candidate_id),
-          expires_at: directLink.expires_at || null,
-          is_active: directLink.is_active ?? null,
-        };
-      }
+      // Si el token existió realmente en candidate_public_links, debe seguir resolviendo al candidato.
+      // No forzamos dependencia con company_candidate_import_invites porque el acceso empresa puede seguir
+      // siendo válido aunque el token ya no sea el link activo o no provenga de un import invite.
+      link = {
+        id: String(directLink.id || ""),
+        candidate_id: String(directLink.candidate_id),
+        expires_at: directLink.expires_at || null,
+        is_active: directLink.is_active ?? null,
+      };
     } else if (inviteLinkUserId) {
       link = {
         id: "",
