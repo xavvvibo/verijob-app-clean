@@ -125,17 +125,6 @@ function getModeCapabilities(mode: PublicProfilePreviewMode) {
   };
 }
 
-function formatCompactDate(value?: string | null) {
-  if (!value) return "Sin fecha";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "Sin fecha";
-  return new Intl.DateTimeFormat("es-ES", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(d);
-}
-
 export function CandidatePublicProfileRenderer({
   payload,
   mode = "public",
@@ -172,7 +161,6 @@ export function CandidatePublicProfileRenderer({
   const trust = Number(teaser?.trust_score ?? 0);
   const trustLabel = getTrustLabel(trust);
   const profileVisibility = getProfileVisibilityLabel(teaser?.profile_visibility);
-  const profileStatus = getProfileStatusLabel(teaser?.lifecycle_status);
 
   const token = payload?.token;
   const nextPath = token ? `/company/candidate/${token}` : "/company/candidates";
@@ -198,6 +186,17 @@ export function CandidatePublicProfileRenderer({
       reuse: Number(teaser?.reuse_total ?? 0),
     };
   }, [teaser, experiences]);
+  const visibleRecommendations = recommendations.length;
+  const profileState = useMemo(
+    () =>
+      resolveProfilePresentationState({
+        verifiedExperiences: verificationSummary.verified,
+        evidences: verificationSummary.evidences,
+        recommendations: visibleRecommendations,
+      }),
+    [verificationSummary.verified, verificationSummary.evidences, visibleRecommendations]
+  );
+  const profileStatus = getProfileStatusLabel(teaser?.lifecycle_status, profileState.statusTitle);
 
   const trustComponents = useMemo(() => {
     const raw = teaser?.trust_score_components || teaser?.trust_score_breakdown || {};
@@ -226,7 +225,7 @@ export function CandidatePublicProfileRenderer({
   const isOpenPublicView = mode === "public" && !internalPreview;
   const displayName = isOpenPublicView ? (teaser?.public_name || teaser?.full_name) : teaser?.full_name;
   const showPublicTrustScoreNumber = !isOpenPublicView || trust > 80;
-  const publicTrustLabel = trust > 80 ? "Alta confianza verificada" : "Perfil con señales verificadas";
+  const publicTrustLabel = profileState.statusTitle;
   const hasSecondarySummary = Boolean((qrEnabled || internalPreview) || capabilities.showContact || companyAccess);
   const hasExperiences = experiences.length > 0;
   const hasEducation = education.length > 0;
@@ -413,58 +412,6 @@ export function CandidatePublicProfileRenderer({
               />
             </div>
 
-            <div className="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-900">Resumen verificable</h2>
-                  <p className="mt-1 text-xs leading-5 text-slate-600">
-                    Lectura rápida de identidad profesional, verificación acumulada y señales de confianza del perfil.
-                  </p>
-                </div>
-                <span className="inline-flex rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                  {isOpenPublicView ? publicTrustLabel : trustLabel}
-                </span>
-              </div>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-                <SummaryInfo label="Estado" value={profileStatus} />
-                <Stat label="Experiencias verificadas" value={verificationSummary.verified} />
-                <Stat label="Evidencias documentales" value={verificationSummary.evidences} />
-                <SummaryInfo
-                  label="Última verificación"
-                  value={teaser?.latest_verification_at ? formatCompactDate(teaser.latest_verification_at) : "Pendiente"}
-                />
-                <SummaryInfo
-                  label={isOpenPublicView && !showPublicTrustScoreNumber ? "Confianza" : "Trust Score"}
-                  value={String(isOpenPublicView && !showPublicTrustScoreNumber ? publicTrustLabel : trust)}
-                />
-              </div>
-              <p className="mt-4 text-xs text-slate-500">
-                El trust score resume verificación acumulada, evidencias visibles y consistencia general del perfil.
-              </p>
-              {!isOpenPublicView && featuredVerifiedExperiences.length ? (
-                <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-blue-900">Experiencias confirmadas destacadas</div>
-                  <ul className="mt-2 space-y-2">
-                    {featuredVerifiedExperiences.map((item, idx) => (
-                      <li key={`${item.position || "exp"}-${idx}`} className="rounded-xl border border-white/80 bg-white px-3 py-2">
-                        <div className="text-sm font-semibold text-slate-900">{item.position || "Experiencia verificada"}</div>
-                        {item.company_name ? <div className="text-xs text-slate-600">{item.company_name}</div> : null}
-                        {Array.isArray(item.verification_badges) && item.verification_badges.length ? (
-                          <div className="mt-1 flex flex-wrap gap-1.5">
-                            {item.verification_badges.map((badge) => (
-                              <span key={`${item.position || idx}-${badge}`} className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
-                                {badge}
-                              </span>
-                            ))}
-                          </div>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-
             {!isPrintMode ? (
             <div className="mt-5 flex flex-wrap gap-2 print:hidden">
               {visibleTabs.map((tab) => (
@@ -496,7 +443,7 @@ export function CandidatePublicProfileRenderer({
                   </p>
                 </div>
                 <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-                  {isOpenPublicView ? publicTrustLabel : trustLabel}
+                  {profileState.statusTitle}
                 </span>
               </div>
 
@@ -510,10 +457,10 @@ export function CandidatePublicProfileRenderer({
                     </div>
                   </div>
                   <p className="mt-4 text-center text-sm font-semibold text-slate-900">
-                    {isOpenPublicView ? publicTrustLabel : trustLabel}
+                    {profileState.statusTitle}
                   </p>
                   <p className="mt-2 text-center text-xs leading-5 text-slate-600">
-                    Verificación laboral, trazabilidad documental y consistencia global del historial.
+                    {profileState.statusSubtitle}
                   </p>
                 </div>
 
@@ -630,13 +577,13 @@ export function CandidatePublicProfileRenderer({
                       : "Información principal del perfil verificable, priorizada para lectura rápida."
                   }
                 >
-                  <div className="space-y-4">
-                    <p className="max-w-4xl text-sm leading-6 text-slate-700">
-                      {teaser?.summary ||
-                        (isOpenPublicView
-                          ? "Perfil verificable orientado a empresa, con foco en historial profesional, señales públicas de credibilidad y lectura rápida del candidato."
-                          : "Resumen profesional priorizado para compartir un perfil verificable claro, legible y centrado en la trayectoria real del candidato.")}
-                    </p>
+                    <div className="space-y-4">
+                      <p className="max-w-4xl text-sm leading-6 text-slate-700">
+                        {teaser?.summary ||
+                          (isOpenPublicView
+                            ? "Perfil verificable orientado a empresa, con foco en historial profesional, señales públicas de credibilidad y lectura rápida del candidato."
+                            : "Resumen profesional priorizado para compartir un perfil verificable claro, legible y centrado en la trayectoria real del candidato.")}
+                      </p>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       <SummaryInfo label="Experiencias visibles" value={String(verificationSummary.experiences)} />
                       <SummaryInfo label="Formación visible" value={String(Number(teaser?.education_total ?? education.length))} />
@@ -644,8 +591,30 @@ export function CandidatePublicProfileRenderer({
                         label="Idiomas"
                         value={publicLanguages.length ? publicLanguages.join(", ") : isOpenPublicView ? "No visibles" : "Pendientes"}
                       />
-                      <SummaryInfo label="Estado del perfil" value={profileStatus} />
+                      <SummaryInfo label="Estado del perfil" value={profileState.statusSubtitle} />
                     </div>
+                    {!isOpenPublicView && featuredVerifiedExperiences.length ? (
+                      <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
+                        <div className="text-xs font-semibold uppercase tracking-wide text-blue-900">Experiencias confirmadas destacadas</div>
+                        <ul className="mt-2 space-y-2">
+                          {featuredVerifiedExperiences.map((item, idx) => (
+                            <li key={`${item.position || "exp"}-${idx}`} className="rounded-xl border border-white/80 bg-white px-3 py-2">
+                              <div className="text-sm font-semibold text-slate-900">{item.position || "Experiencia verificada"}</div>
+                              {item.company_name ? <div className="text-xs text-slate-600">{item.company_name}</div> : null}
+                              {Array.isArray(item.verification_badges) && item.verification_badges.length ? (
+                                <div className="mt-1 flex flex-wrap gap-1.5">
+                                  {item.verification_badges.map((badge) => (
+                                    <span key={`${item.position || idx}-${badge}`} className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
+                                      {badge}
+                                    </span>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                   </div>
                 </Card>
 
@@ -1008,11 +977,51 @@ function getProfileVisibilityLabel(raw?: string | null) {
   return "Perfil accesible mediante enlace seguro";
 }
 
-function getProfileStatusLabel(raw?: string | null) {
+function getProfileStatusLabel(raw?: string | null, fallback = "Perfil profesional verificable") {
   const value = String(raw || "active").toLowerCase();
   if (value === "deleted") return "Perfil no disponible";
   if (value === "disabled") return "Perfil restringido";
-  return "Perfil verificado";
+  return fallback;
+}
+
+function resolveProfilePresentationState({
+  verifiedExperiences,
+  evidences,
+  recommendations,
+}: {
+  verifiedExperiences: number;
+  evidences: number;
+  recommendations: number;
+}) {
+  const safeVerified = Math.max(0, Number(verifiedExperiences || 0));
+  const safeEvidences = Math.max(0, Number(evidences || 0));
+  const safeRecommendations = Math.max(0, Number(recommendations || 0));
+
+  if (safeVerified >= 2 && safeEvidences >= 1) {
+    return {
+      statusTitle: "Perfil verificado",
+      statusSubtitle: "Verificación consolidada con experiencia contrastada y soporte documental.",
+    };
+  }
+
+  if (safeVerified >= 1) {
+    return {
+      statusTitle: "Perfil parcialmente verificado",
+      statusSubtitle: "Ya existen verificaciones registradas en parte del historial profesional.",
+    };
+  }
+
+  if (safeEvidences > 0 || safeRecommendations > 0) {
+    return {
+      statusTitle: "Perfil con señales verificables",
+      statusSubtitle: "Cuenta con señales de respaldo, aunque aún no hay experiencias verificadas.",
+    };
+  }
+
+  return {
+    statusTitle: "Perfil profesional verificable",
+    statusSubtitle: "Aún sin verificaciones registradas",
+  };
 }
 
 function getStatusBadge(statusText?: string | null) {
