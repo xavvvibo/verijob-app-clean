@@ -551,49 +551,47 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       });
     }
 
-    if (gate?.consumed) {
-      if (companyId) {
-        const verificationId = String(verificationRows.find((row: any) => row?.verification_id)?.verification_id || "").trim() || null;
-        try {
-          const source = await resolveConsumptionSource({
-            service,
-            companyId,
-            viewerUserId: au.user.id,
-          });
-          const existingConsumptionRes = await service
-            .from("profile_view_consumptions")
-            .select("id,created_at,source")
-            .eq("company_id", companyId)
-            .eq("candidate_id", link.candidate_id)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .maybeSingle();
+    if (companyId && gate?.allowed) {
+      const verificationId = String(verificationRows.find((row: any) => row?.verification_id)?.verification_id || "").trim() || null;
+      try {
+        const source = await resolveConsumptionSource({
+          service,
+          companyId,
+          viewerUserId: au.user.id,
+        });
+        const existingConsumptionRes = await service
+          .from("profile_view_consumptions")
+          .select("id,created_at,source")
+          .eq("company_id", companyId)
+          .eq("candidate_id", link.candidate_id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-          const existingConsumption = existingConsumptionRes.data as any;
-          if (existingConsumption?.id) {
-            resolvedAccess = deriveCompanyCandidateAccess(existingConsumption.created_at, existingConsumption.source || source);
-          } else {
-            const insertedAt = new Date().toISOString();
-            await service.from("profile_view_consumptions").insert({
-              company_id: companyId,
-              viewer_user_id: au.user.id,
-              candidate_id: link.candidate_id,
-              verification_id: verificationId,
-              credits_spent: 1,
-              source,
-              created_at: insertedAt,
-            });
-            resolvedAccess = deriveCompanyCandidateAccess(insertedAt, source);
-          }
-        } catch (logErr: any) {
-          console.error("[company-candidate-token] consumption log failed", {
-            candidate_id: link.candidate_id,
+        const existingConsumption = existingConsumptionRes.data as any;
+        if (existingConsumption?.id) {
+          resolvedAccess = deriveCompanyCandidateAccess(existingConsumption.created_at, existingConsumption.source || source);
+        } else {
+          const insertedAt = new Date().toISOString();
+          await service.from("profile_view_consumptions").insert({
             company_id: companyId,
             viewer_user_id: au.user.id,
-            message: logErr?.message || String(logErr),
+            candidate_id: link.candidate_id,
+            verification_id: verificationId,
+            credits_spent: 1,
+            source,
+            created_at: insertedAt,
           });
-          resolvedAccess = deriveCompanyCandidateAccess(new Date().toISOString(), null);
+          resolvedAccess = deriveCompanyCandidateAccess(insertedAt, source);
         }
+      } catch (logErr: any) {
+        console.error("[company-candidate-token] consumption log failed", {
+          candidate_id: link.candidate_id,
+          company_id: companyId,
+          viewer_user_id: au.user.id,
+          message: logErr?.message || String(logErr),
+        });
+        resolvedAccess = deriveCompanyCandidateAccess(new Date().toISOString(), null);
       }
     }
   } else {
