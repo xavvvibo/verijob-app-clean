@@ -306,9 +306,14 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                 <label className="block">
                   <div className="text-xs font-semibold text-gray-900">Email de la persona o empresa que puede validar esta experiencia</div>
                   <input
-                    type="email"
+                    id={`verification-contact-${r.id}`}
+                    type="text"
+                    inputMode="email"
                     name={`verification-contact-${r.id}`}
-                    autoComplete="off"
+                    autoComplete={`section-verification-${r.id} new-password`}
+                    autoCapitalize="none"
+                    autoCorrect="off"
+                    spellCheck={false}
                     value={verificationEmailById[r.id] || ""}
                     onChange={(e) => {
                       setVerificationEmailById((prev) => ({ ...prev, [r.id]: e.target.value }));
@@ -318,6 +323,8 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                       }
                     }}
                     placeholder="ejemplo@empresa.com"
+                    data-1p-ignore="true"
+                    data-lpignore="true"
                     className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900"
                   />
                 </label>

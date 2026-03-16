@@ -1,8 +1,25 @@
+function extractCvLanguageName(item) {
+  if (typeof item === "string") return item.trim();
+  if (item && typeof item === "object") {
+    return String(item.name || item.language || item.title || "").trim();
+  }
+  return String(item || "").trim();
+}
+
 export function normalizeCvLanguages(rawLanguages, max = 30) {
-  return (Array.isArray(rawLanguages) ? rawLanguages : [])
-    .map((x) => String(x || "").trim())
-    .filter(Boolean)
-    .slice(0, max);
+  const seen = new Set();
+  const out = [];
+
+  for (const item of Array.isArray(rawLanguages) ? rawLanguages : []) {
+    const language = extractCvLanguageName(item);
+    const key = language.toLowerCase();
+    if (!language || seen.has(key)) continue;
+    seen.add(key);
+    out.push(language);
+    if (out.length >= max) break;
+  }
+
+  return out;
 }
 
 export function shouldImportEducationRow(item) {

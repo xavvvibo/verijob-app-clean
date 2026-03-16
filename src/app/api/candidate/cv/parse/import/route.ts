@@ -143,10 +143,7 @@ async function persistLanguagesFromExtract(params: {
   languagesRaw: any[];
 }) {
   const { supabase, userId, jobId, languagesRaw } = params;
-  const normalizedLanguages = normalizeCvLanguages(
-    (Array.isArray(languagesRaw) ? languagesRaw : []).map((x: any) => normalizeText(x).trim()),
-    50
-  );
+  const normalizedLanguages = normalizeCvLanguages(Array.isArray(languagesRaw) ? languagesRaw : [], 50);
 
   if (normalizedLanguages.length === 0) {
     return { imported: 0, duplicatesSkipped: 0 };

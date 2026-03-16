@@ -136,6 +136,12 @@ function statusBadge(status: MatchStatus) {
   return "border-slate-200 bg-slate-100 text-slate-700";
 }
 
+function matchStatusLabel(status: MatchStatus) {
+  if (status === "new") return "Nuevo para importar";
+  if (status === "possible_duplicate") return "Posible duplicado";
+  return "Ya existente";
+}
+
 export default function CvUploadAndParse() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
@@ -535,7 +541,7 @@ export default function CvUploadAndParse() {
                             Seleccionar
                           </label>
                           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadge(expStatuses[idx] || "new")}`}>
-                            {expStatuses[idx] || "new"}
+                            {matchStatusLabel(expStatuses[idx] || "new")}
                           </span>
                         </div>
 
@@ -583,7 +589,7 @@ export default function CvUploadAndParse() {
                             Seleccionar
                           </label>
                           <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusBadge(eduStatuses[idx] || "new")}`}>
-                            {eduStatuses[idx] || "new"}
+                            {matchStatusLabel(eduStatuses[idx] || "new")}
                           </span>
                         </div>
 
