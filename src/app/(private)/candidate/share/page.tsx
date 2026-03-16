@@ -29,8 +29,6 @@ const PUBLIC_PROFILE_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || "https://app.ve
 
 const previewModes: Array<{ value: PublicProfilePreviewMode; label: string }> = [
   { value: "public", label: "Vista pública" },
-  { value: "registered", label: "Vista empresa registrada" },
-  { value: "requesting", label: "Vista empresa que solicita verificación" },
   { value: "full", label: "Vista completa" },
 ];
 
@@ -171,8 +169,8 @@ export default function CandidatePublicProfilePage() {
             </div>
 
             <p className="mt-4 text-sm text-blue-900">
-              Tu perfil no se muestra igual a todos los empleadores. Según el tipo de empresa y su nivel de acceso,
-              Verijob protege tu privacidad y muestra más o menos señales verificables.
+              La vista previa muestra dos estados reales y distintos: la vista pública que compartes por enlace y la
+              vista completa con más señales y datos de contacto permitidos.
             </p>
           </header>
 

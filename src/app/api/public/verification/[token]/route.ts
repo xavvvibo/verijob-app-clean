@@ -65,7 +65,7 @@ export async function GET(
   const { count: evidenceCount } = await supabase
     .from("evidences")
     .select("*", { count: "exact", head: true })
-    .eq("verification_id", vr.id)
+    .eq("verification_request_id", vr.id)
 
   const { count: reuseCount } = await supabase
     .from("verification_reuse_events")

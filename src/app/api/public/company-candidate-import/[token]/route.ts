@@ -31,11 +31,11 @@ function isRelationMissingError(error: any, relation: string) {
 function displayStatus(invite: any) {
   const status = String(invite?.status || "").toLowerCase();
   const parseStatus = String(invite?.parse_status || "").toLowerCase();
-  if (status === "converted") return "completed";
-  if (status === "accepted") return "accepted";
-  if (status === "emailed") return "pending_acceptance";
-  if (parseStatus === "parse_failed") return "parse_failed";
-  return "pending";
+  if (status === "converted") return "Perfil preparado";
+  if (status === "accepted") return "Confirmada por el candidato";
+  if (status === "emailed") return "Pendiente de confirmación";
+  if (parseStatus === "parse_failed") return "Documento recibido con incidencias";
+  return "Invitación enviada";
 }
 
 async function readInviteByToken(admin: any, token: string) {

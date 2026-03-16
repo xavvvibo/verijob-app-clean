@@ -11,6 +11,10 @@ import {
   normalizeEvidenceType,
   requiresExperienceAssociation,
 } from "@/lib/candidate/evidence-types";
+import {
+  isMissingExternalResolvedColumn,
+  isVerificationExternallyResolved,
+} from "@/lib/verification/external-resolution";
 
 const BUCKET = "evidence";
 const MAX_MB = 20;
@@ -134,7 +138,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       }
 
       if (!resolvedVerificationRequestId) {
-        const { data: existingRows, error: existingErr } = await supabase
+        const activeQuery = supabase
           .from("verification_requests")
           .select("id")
           .eq("requested_by", auth.user.id)
@@ -145,15 +149,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .order("created_at", { ascending: false })
           .limit(1);
 
+        const { data: existingRows, error: existingErr } = await activeQuery;
+
         if (existingErr) {
-          return json(res, 400, {
-            error: "Error consultando verification_requests activas",
-            route: "/pages/api/candidate/evidence/upload-url",
-            details: existingErr.message,
-          });
+          if (!isMissingExternalResolvedColumn(existingErr)) {
+            return json(res, 400, {
+              error: "Error consultando verification_requests activas",
+              route: "/pages/api/candidate/evidence/upload-url",
+              details: existingErr.message,
+            });
+          }
+
+          const fallback = await supabase
+            .from("verification_requests")
+            .select("id,status,resolved_at,created_at")
+            .eq("requested_by", auth.user.id)
+            .eq("employment_record_id", resolvedEmploymentRecordId)
+            .eq("verification_channel", "documentary")
+            .neq("status", "revoked")
+            .order("created_at", { ascending: false })
+            .limit(10);
+
+          if (fallback.error) {
+            return json(res, 400, {
+              error: "Error consultando verification_requests activas",
+              route: "/pages/api/candidate/evidence/upload-url",
+              details: fallback.error.message,
+            });
+          }
+
+          const activeFallbackRows = (Array.isArray(fallback.data) ? fallback.data : []).filter(
+            (row: any) => !isVerificationExternallyResolved(row),
+          );
+          const activeDocumentaryId = getActiveDocumentaryVerificationId(activeFallbackRows);
+          if (activeDocumentaryId) {
+            resolvedVerificationRequestId = activeDocumentaryId;
+          }
         }
 
-        const activeDocumentaryId = getActiveDocumentaryVerificationId(existingRows);
+        const activeDocumentaryId = resolvedVerificationRequestId
+          ? resolvedVerificationRequestId
+          : getActiveDocumentaryVerificationId(existingRows);
         if (activeDocumentaryId) {
           resolvedVerificationRequestId = activeDocumentaryId;
         } else {

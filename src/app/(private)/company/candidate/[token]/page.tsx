@@ -225,8 +225,8 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
                 Acceder al perfil completo consumirá 1 acceso. El perfil quedará desbloqueado permanentemente para tu empresa.
               </p>
               <p className="mt-2 text-sm text-slate-600">
-                {access?.access_status === "active" && access?.access_expires_at
-                  ? `Perfil desbloqueado por tu empresa desde ${formatDateTime(access.access_expires_at)}.`
+                {access?.access_status === "active" && access?.access_granted_at
+                  ? `Perfil desbloqueado por tu empresa desde ${formatDateTime(access.access_granted_at)}.`
                   : access?.access_status === "expired" && access?.access_expires_at
                     ? `El acceso anterior expiró el ${formatDateTime(access.access_expires_at)}.`
                     : "Tu empresa todavía no ha desbloqueado este perfil completo."}

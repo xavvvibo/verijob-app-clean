@@ -68,6 +68,19 @@ const COMPANY_DOCUMENT_TYPES = [
   { value: "escritura", label: "Escritura o documento equivalente" },
   { value: "otro", label: "Otro documento" },
 ];
+const COMPANY_PROFILE_FIELD_LABELS: Record<string, string> = {
+  legal_name: "Razón social",
+  trade_name: "Nombre comercial",
+  tax_id: "CIF",
+  fiscal_address: "Domicilio fiscal",
+  postal_code: "Código postal",
+  city: "Ciudad",
+  province: "Provincia",
+  country: "País",
+  contact_person_name: "Persona de contacto",
+  contact_email: "Email de contacto",
+  contact_phone: "Teléfono de contacto",
+};
 
 function statusLabel(statusRaw: unknown) {
   const status = String(statusRaw || "").toLowerCase();
@@ -124,6 +137,11 @@ function importStatusLabel(raw: unknown) {
   if (v === "imported") return "Importado al perfil";
   if (v === "no_changes") return "Sin cambios al importar";
   return "Pendiente de importación";
+}
+
+function companyProfileFieldLabel(raw: unknown) {
+  const key = String(raw || "").trim();
+  return COMPANY_PROFILE_FIELD_LABELS[key] || key.replaceAll("_", " ");
 }
 
 function extractionSummary(doc: CompanyVerificationDocument) {
@@ -530,7 +548,28 @@ export default function CompanyProfilePage() {
       setDocuments((prev) => prev.map((d) => (d.id === documentId ? data.document : d)));
     }
     await loadProfileFresh();
-    setMessage(`Datos importados al perfil (${Number(data?.imported_fields || 0)} campos).`);
+    const importedLabels = Array.isArray(data?.imported_field_names)
+      ? data.imported_field_names.map((field: string) => companyProfileFieldLabel(field))
+      : [];
+    const skippedLabels = Array.isArray(data?.skipped_field_names)
+      ? data.skipped_field_names.map((field: string) => companyProfileFieldLabel(field))
+      : [];
+    const importedCount = Number(data?.imported_fields || 0);
+
+    if (importedCount > 0) {
+      setMessage(
+        `Datos importados al perfil (${importedCount} campo${importedCount === 1 ? "" : "s"}): ${importedLabels.join(", ")}${
+          skippedLabels.length ? `. Sin cambios: ${skippedLabels.join(", ")}.` : "."
+        }`,
+      );
+      return;
+    }
+
+    setMessage(
+      skippedLabels.length
+        ? `Hemos revisado el documento. No había cambios nuevos para importar. Ya estaban cubiertos: ${skippedLabels.join(", ")}.`
+        : "Hemos revisado el documento, pero no se detectaron datos aplicables al perfil.",
+    );
   }
 
   async function deleteDocument(documentId: string) {
@@ -988,7 +1027,7 @@ export default function CompanyProfilePage() {
                             </span>
                           </div>
                           <div className="text-[11px] text-slate-500">
-                            {doc.original_filename || doc.storage_path || "documento"}
+                            {doc.original_filename || `${docTypeLabel(doc.document_type)} subido`}
                             {doc.mime_type ? ` · ${doc.mime_type}` : ""}
                           </div>
                         </div>

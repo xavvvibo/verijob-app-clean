@@ -307,6 +307,8 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                   <div className="text-xs font-semibold text-gray-900">Email de la persona o empresa que puede validar esta experiencia</div>
                   <input
                     type="email"
+                    name={`verification-contact-${r.id}`}
+                    autoComplete="off"
                     value={verificationEmailById[r.id] || ""}
                     onChange={(e) => {
                       setVerificationEmailById((prev) => ({ ...prev, [r.id]: e.target.value }));

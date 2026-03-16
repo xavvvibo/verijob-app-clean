@@ -1,18 +1,16 @@
 import { randomUUID } from "crypto";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
 import {
   ensureCandidatePublicToken,
-  extractStructuredCvFromBuffer,
   sha256Hex,
 } from "@/lib/company-candidate-import";
 import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
 import { resolveCompanyCandidateAccessMap } from "@/lib/company/profile-access";
-import { sendTransactionalEmail } from "@/lib/email/sendTransactionalEmail";
-import { buildCompanyCandidateImportInviteEmail } from "@/lib/email/templates/companyCandidateImportInvite";
+import { dispatchBackgroundJob } from "@/lib/jobs/background-processing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -311,7 +309,7 @@ export async function POST(request: Request) {
   try {
     const ctx = await resolveContext();
     if ((ctx as any).error) return (ctx as any).error;
-    const { user, companyId, membershipRole, companyName, admin } = ctx as any;
+    const { user, companyId, membershipRole, admin } = ctx as any;
     const companyLifecycle = await readCompanyLifecycle(admin, companyId);
     if (!companyLifecycle.ok) {
       return json(400, { error: "company_read_failed", details: companyLifecycle.error.message });
@@ -396,7 +394,7 @@ export async function POST(request: Request) {
       });
     }
 
-    let inviteInsert = await admin
+    const inviteInsert = await admin
       .from("company_candidate_import_invites")
       .insert({
         id: inviteId,
@@ -414,10 +412,19 @@ export async function POST(request: Request) {
         mime_type: file.type,
         size_bytes: file.size,
         cv_sha256: cvHash,
-        parse_status: "processing",
+        parse_status: "import_pending",
         invite_token: inviteToken,
         status: "uploaded",
         email_delivery_status: "pending",
+        extracted_payload_json: {
+          _verijob_import_meta: {
+            candidate_already_exists: Boolean(existingCandidateUserId),
+            existing_candidate_user_id: existingCandidateUserId,
+            existing_candidate_public_token: existingCandidatePublicToken,
+            processing_mode: "background_job",
+          },
+        },
+        extracted_warnings: [],
         created_at: nowIso,
         updated_at: nowIso,
       })
@@ -435,86 +442,28 @@ export async function POST(request: Request) {
       }
       return json(400, { error: "company_candidate_import_invite_insert_failed", details: inviteInsert.error.message });
     }
-
-    let parseStatus = "parse_failed";
-    let extractedPayload: any = {
-      _verijob_import_meta: {
-        candidate_already_exists: Boolean(existingCandidateUserId),
-        existing_candidate_user_id: existingCandidateUserId,
-        existing_candidate_public_token: existingCandidatePublicToken,
-      },
-    };
-    let extractedWarnings: string[] = [];
-    let parseError: string | null = null;
-
-    try {
-      const openaiApiKey = normalizeText(process.env.OPENAI_API_KEY || process.env.OPEN_API_KEY || process.env.OPENAI_KEY);
-      if (!openaiApiKey) throw new Error("missing_openai_api_key");
-      const parsed = await extractStructuredCvFromBuffer({
-        fileBuffer: bytes,
-        filename: file.name || "cv",
-        openaiApiKey,
-      });
-      parseStatus = "parsed_ready";
-      extractedPayload = {
-        ...parsed.extracted,
-        _verijob_import_meta: {
-          candidate_already_exists: Boolean(existingCandidateUserId),
-          existing_candidate_user_id: existingCandidateUserId,
-          existing_candidate_public_token: existingCandidatePublicToken,
-        },
-      };
-      extractedWarnings = Array.isArray(parsed.warnings) ? parsed.warnings : [];
-    } catch (error: any) {
-      parseStatus = "parse_failed";
-      parseError = String(error?.message || error);
-    }
+    const createdInvite = inviteInsert.data;
 
     const appUrl = normalizeText(process.env.NEXT_PUBLIC_APP_URL) || "https://app.verijob.es";
     const acceptanceLink = `${appUrl.replace(/\/$/, "")}/company-candidate-import/${inviteToken}`;
-    const emailTemplate = buildCompanyCandidateImportInviteEmail({
-      companyName,
-      candidateEmail,
-      candidateName: candidateNameRaw || null,
-      targetRole,
-      acceptanceLink,
+
+    after(async () => {
+      try {
+        await dispatchBackgroundJob({
+          origin: new URL(request.url).origin,
+          jobType: "company_candidate_import",
+          jobId: inviteId,
+        });
+      } catch {
+        // The invite stays in import_pending/pending and can be retried by the internal runner.
+      }
     });
-    const emailRes = await sendTransactionalEmail({
-      to: candidateEmail,
-      subject: emailTemplate.subject,
-      html: emailTemplate.html,
-      text: emailTemplate.text,
-    });
-
-    const nextStatus = emailRes.ok ? "emailed" : "uploaded";
-    const emailDeliveryStatus = emailRes.ok ? "sent" : emailRes.skipped ? "skipped" : "failed";
-    const lastError = parseError || emailRes.error || null;
-
-    const { data: updatedInvite, error: updateErr } = await admin
-      .from("company_candidate_import_invites")
-      .update({
-        parse_status: parseStatus,
-        extracted_payload_json: extractedPayload,
-        extracted_warnings: extractedWarnings,
-        status: nextStatus,
-        email_delivery_status: emailDeliveryStatus,
-        emailed_at: emailRes.ok ? new Date().toISOString() : null,
-        last_error: lastError,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", inviteId)
-      .select("*")
-      .single();
-
-    if (updateErr) {
-      return json(400, { error: "company_candidate_import_invite_update_failed", details: updateErr.message });
-    }
 
     return json(200, {
       ok: true,
       import_invite: (() => {
         const normalizedInvite = {
-          ...updatedInvite,
+          ...createdInvite,
           candidate_already_exists: Boolean(existingCandidateUserId),
           candidate_public_token: existingCandidatePublicToken,
         };
@@ -523,23 +472,25 @@ export async function POST(request: Request) {
           display_status: formatImportStatus(normalizedInvite),
         };
       })(),
-      user_message: emailRes.ok
-        ? existingCandidateUserId
-          ? "El CV se ha asociado a un candidato ya existente y se le ha solicitado revisar o actualizar su perfil."
-          : "CV importado y candidatura enviada al candidato."
-        : "El CV se ha importado, pero el email no pudo enviarse automáticamente.",
+      user_message: existingCandidateUserId
+        ? "CV recibido. Estamos procesando la importación y preparando la invitación para que el candidato revise su perfil."
+        : "CV recibido. Estamos procesando la importación y enviando la invitación al candidato.",
       acceptance_link: acceptanceLink,
       candidate_already_exists: Boolean(existingCandidateUserId),
       existing_candidate_user_id: existingCandidateUserId,
       existing_candidate_public_token: existingCandidatePublicToken,
       parsing: {
-        status: parseStatus,
-        warnings: extractedWarnings,
+        status: "import_pending",
+        warnings: [],
       },
       email: {
-        ok: emailRes.ok,
-        status: emailDeliveryStatus,
-        error: emailRes.error || null,
+        ok: false,
+        status: "pending",
+        error: null,
+      },
+      processing: {
+        deferred: true,
+        invite_id: inviteId,
       },
     });
   } catch (error: any) {

@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
+import {
+  isMissingExternalResolvedColumn,
+  isVerificationExternallyResolved,
+} from "@/lib/verification/external-resolution";
 
 type ResolvePayload = {
   token?: string;
@@ -40,11 +44,27 @@ export async function POST(req: Request) {
 
     const admin = createServiceRoleClient();
 
-    const { data: requestRow, error: requestErr } = await admin
+    let requestRow: any = null;
+    let requestErr: any = null;
+
+    const primaryLookup = await admin
       .from("verification_requests")
-      .select("id,requested_by,employment_record_id,company_id,status,external_token,external_token_expires_at,external_resolved,external_email_target,company_name_target,request_context")
+      .select("id,requested_by,employment_record_id,company_id,status,resolved_at,external_token,external_token_expires_at,external_resolved,external_email_target,company_name_target,request_context")
       .eq("external_token", token)
       .maybeSingle();
+
+    requestRow = primaryLookup.data;
+    requestErr = primaryLookup.error;
+
+    if (requestErr && isMissingExternalResolvedColumn(requestErr)) {
+      const fallbackLookup = await admin
+        .from("verification_requests")
+        .select("id,requested_by,employment_record_id,company_id,status,resolved_at,external_token,external_token_expires_at,external_email_target,company_name_target,request_context")
+        .eq("external_token", token)
+        .maybeSingle();
+      requestRow = fallbackLookup.data;
+      requestErr = fallbackLookup.error;
+    }
 
     if (requestErr || !requestRow) return json(404, { error: "not_found" });
 
@@ -53,7 +73,7 @@ export async function POST(req: Request) {
       return json(410, { error: "token_expired" });
     }
 
-    if (requestRow.external_resolved) {
+    if (isVerificationExternallyResolved(requestRow)) {
       return json(409, { error: "already_resolved" });
     }
 
@@ -118,20 +138,33 @@ export async function POST(req: Request) {
       },
     };
 
-    const { error: updateRequestErr } = await admin
+    const updatePayload: Record<string, any> = {
+      status: nextStatus,
+      external_resolved: true,
+      resolved_at: resolvedAt,
+      resolution_notes: resolutionNotes,
+      company_id_snapshot: snapshotCompanyId,
+      company_name_snapshot: snapshotCompanyName,
+      company_verification_status_snapshot: snapshotCompanyVerificationStatus,
+      snapshot_at: resolvedAt,
+      request_context: requestContext,
+    };
+
+    let updateRequestErr: any = null;
+    const primaryUpdate = await admin
       .from("verification_requests")
-      .update({
-        status: nextStatus,
-        external_resolved: true,
-        resolved_at: resolvedAt,
-        resolution_notes: resolutionNotes,
-        company_id_snapshot: snapshotCompanyId,
-        company_name_snapshot: snapshotCompanyName,
-        company_verification_status_snapshot: snapshotCompanyVerificationStatus,
-        snapshot_at: resolvedAt,
-        request_context: requestContext,
-      })
+      .update(updatePayload)
       .eq("id", requestRow.id);
+    updateRequestErr = primaryUpdate.error;
+
+    if (updateRequestErr && isMissingExternalResolvedColumn(updateRequestErr)) {
+      delete updatePayload.external_resolved;
+      const fallbackUpdate = await admin
+        .from("verification_requests")
+        .update(updatePayload)
+        .eq("id", requestRow.id);
+      updateRequestErr = fallbackUpdate.error;
+    }
 
     if (updateRequestErr) return json(400, { error: "request_update_failed", detail: updateRequestErr.message });
 

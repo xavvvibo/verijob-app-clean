@@ -2,6 +2,10 @@ import ResolveExperienceForm from "./ResolveExperienceForm";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+import {
+  isMissingExternalResolvedColumn,
+  isVerificationExternallyResolved,
+} from "@/lib/verification/external-resolution";
 
 type PageProps = {
   params: Promise<{ token: string }>;
@@ -32,14 +36,31 @@ export default async function VerifyExperiencePage({ params }: PageProps) {
   const secondaryCtaHref = hasCompanySession ? "/company/upgrade" : "/precios";
   const secondaryCtaLabel = "Ver planes de empresa";
 
-  const { data: rows, error } = await admin
+  let rows: any[] | null = null;
+  let error: any = null;
+  const primaryLookup = await admin
     .from("verification_requests")
     .select(
-      "id,requested_by,company_name_target,external_token_expires_at,external_resolved,employment_record_id,request_context"
+      "id,requested_by,company_name_target,external_token_expires_at,external_resolved,status,resolved_at,employment_record_id,request_context"
     )
     .eq("external_token", normalizedToken)
     .order("created_at", { ascending: false })
     .limit(1);
+  rows = primaryLookup.data as any[] | null;
+  error = primaryLookup.error;
+
+  if (error && isMissingExternalResolvedColumn(error)) {
+    const fallbackLookup = await admin
+      .from("verification_requests")
+      .select(
+        "id,requested_by,company_name_target,external_token_expires_at,status,resolved_at,employment_record_id,request_context"
+      )
+      .eq("external_token", normalizedToken)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    rows = fallbackLookup.data as any[] | null;
+    error = fallbackLookup.error;
+  }
 
   if (error) {
     console.error("verification lookup error", error);
@@ -79,7 +100,7 @@ export default async function VerifyExperiencePage({ params }: PageProps) {
     );
   }
 
-  if (requestRow.external_resolved) {
+  if (isVerificationExternallyResolved(requestRow)) {
     return (
       <main className="min-h-screen bg-slate-50 px-6 py-10">
         <div className="mx-auto max-w-3xl space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">

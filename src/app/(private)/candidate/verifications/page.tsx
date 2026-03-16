@@ -71,7 +71,7 @@ export default async function CandidateVerificationsPage() {
         <div className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
           Aún no tienes solicitudes. Crea la primera desde{" "}
           <Link href="/candidate/experience" className="font-semibold text-blue-700 hover:underline">
-            Experiencia
+            Experiencias
           </Link>
           .
         </div>

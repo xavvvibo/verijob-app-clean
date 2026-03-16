@@ -3,6 +3,10 @@ import { notFound, redirect } from "next/navigation";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import {
+  isMissingExternalResolvedColumn,
+  isVerificationExternallyResolved,
+} from "@/lib/verification/external-resolution";
 
 export const dynamic = "force-dynamic";
 
@@ -25,11 +29,19 @@ export default async function OwnerVerificationDetailPage({ params }: { params: 
   if (!["owner", "admin"].includes(ownerRole)) redirect("/dashboard?forbidden=1&from=owner");
 
   const admin = createServiceRoleClient();
-  const verificationRes = await admin
+  let verificationRes = await admin
     .from("verification_requests")
     .select("id,requested_by,company_id,employment_record_id,status,verification_channel,requested_at,created_at,updated_at,resolved_at,revoked_at,company_name_target,request_context,external_resolved")
     .eq("id", id)
     .maybeSingle();
+
+  if (verificationRes.error && isMissingExternalResolvedColumn(verificationRes.error)) {
+    verificationRes = await admin
+      .from("verification_requests")
+      .select("id,requested_by,company_id,employment_record_id,status,verification_channel,requested_at,created_at,updated_at,resolved_at,revoked_at,company_name_target,request_context")
+      .eq("id", id)
+      .maybeSingle();
+  }
 
   if (verificationRes.error || !verificationRes.data) notFound();
   const verification = verificationRes.data as any;
@@ -127,7 +139,7 @@ export default async function OwnerVerificationDetailPage({ params }: { params: 
             </div>
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <div className="text-xs text-slate-500">Resolución externa</div>
-              <div className="font-semibold text-slate-900">{verification.external_resolved ? "Sí" : "No / no disponible"}</div>
+              <div className="font-semibold text-slate-900">{isVerificationExternallyResolved(verification) ? "Sí" : "No / no disponible"}</div>
             </div>
           </div>
         </section>

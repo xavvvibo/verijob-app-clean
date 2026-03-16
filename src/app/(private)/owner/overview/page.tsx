@@ -5,6 +5,7 @@ import { createServiceRoleClient } from "@/utils/supabase/service";
 import type { ReactNode } from "react";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { conversionStateLabel, loadVerificationCompanyAcquisition, subscriptionStateLabel } from "@/lib/owner/verification-company-acquisition";
+import { isMissingExternalResolvedColumn } from "@/lib/verification/external-resolution";
 import OwnerTooltip from "@/components/ui/OwnerTooltip";
 
 type Severity = "high" | "medium" | "low";
@@ -19,6 +20,16 @@ type AlertItem = {
 };
 
 export const dynamic = "force-dynamic";
+
+async function readOwnerVerificationRequests(admin: any) {
+  const primary = await admin
+    .from("verification_requests")
+    .select("id,status,requested_at,created_at,resolved_at,company_id,requested_by,verification_channel,external_resolved");
+  if (!primary.error || !isMissingExternalResolvedColumn(primary.error)) return primary;
+  return admin
+    .from("verification_requests")
+    .select("id,status,requested_at,created_at,resolved_at,company_id,requested_by,verification_channel");
+}
 
 type GlobalSignalLevel = "ok" | "warning" | "critical";
 
@@ -345,7 +356,7 @@ async function OwnerOverviewServer({
   const [profilesRes, companiesRes, requestsRes, evidenceRes, subscriptionsRes, campaignsRes, jobsRes, publicLinksRes, issuesRes, employmentRes, candidateProfilesRes, platformEventsRes, companyMembersRes, ownerActionsRes, authUsersTotal] = await Promise.all([
     admin.from("profiles").select("id,role,active_company_id,onboarding_completed,created_at,last_activity_at"),
     admin.from("companies").select("id,name,trade_name,legal_name,created_at,updated_at,status", { count: "exact" }),
-    admin.from("verification_requests").select("id,status,requested_at,created_at,resolved_at,company_id,requested_by,verification_channel,external_resolved"),
+    readOwnerVerificationRequests(admin),
     admin.from("evidences").select("id,evidence_type,document_type,validation_status,verification_request_id,uploaded_by,created_at"),
     admin.from("subscriptions").select("id,user_id,status,amount,created_at,plan"),
     admin.from("growth_campaigns").select("*"),
@@ -647,19 +658,19 @@ async function OwnerOverviewServer({
 
   const funnelStepRegistros = candidateCohortIds.size;
   const funnelStepOnboarding = candidateProfiles.filter((p: any) => candidateCohortIds.has(String(p.id || "")) && Boolean(p.onboarding_completed)).length;
-  const funnelStepExperience = new Set(Array.from(candidatesWithExperience).filter((id) => candidateCohortIds.has(id))).size;
+  const funnelStepExperience = new Set(Array.from(candidatesWithExperience).filter((id: string) => candidateCohortIds.has(id))).size;
   const funnelStepEvidence = new Set(
     evidenceRows
       .map((row: any) => String(row.uploaded_by || ""))
       .filter((id: string) => Boolean(id) && candidateCohortIds.has(id))
   ).size;
-  const funnelStepVerificationRequested = new Set(Array.from(candidatesWithVerification).filter((id) => candidateCohortIds.has(id))).size;
+  const funnelStepVerificationRequested = new Set(Array.from(candidatesWithVerification).filter((id: string) => candidateCohortIds.has(id))).size;
   const funnelStepPublicProfileGenerated = new Set(
     publicLinks
       .map((row: any) => String(row.candidate_id || ""))
       .filter((id: string) => Boolean(id) && candidateCohortIds.has(id))
   ).size;
-  const funnelStepVerified = new Set(Array.from(candidatesVerified).filter((id) => candidateCohortIds.has(id))).size;
+  const funnelStepVerified = new Set(Array.from(candidatesVerified).filter((id: string) => candidateCohortIds.has(id))).size;
 
   const onboardingRate = pct(funnelStepOnboarding, funnelStepRegistros);
   const profileReadyRate = pct(funnelStepExperience, funnelStepOnboarding);

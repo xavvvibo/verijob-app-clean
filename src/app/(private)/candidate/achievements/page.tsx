@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type AchievementCategory = "certificacion" | "premio" | "idioma" | "otro";
 type EditorMode = "language" | "certification" | "achievement";
@@ -322,6 +322,8 @@ function EditorCard({
 }
 
 export default function CandidateAchievementsPage() {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [items, setItems] = useState<AchievementItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -347,8 +349,9 @@ export default function CandidateAchievementsPage() {
     if (open === "language") add("language");
     if (open === "certification") add("certification");
     if (open === "achievement") add("achievement");
+    router.replace(pathname, { scroll: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, searchParams]);
+  }, [loading, pathname, router, searchParams]);
 
   const languages = useMemo(() => items.filter((item) => item.category === "idioma"), [items]);
   const certifications = useMemo(() => items.filter((item) => item.category === "certificacion"), [items]);
@@ -402,6 +405,7 @@ export default function CandidateAchievementsPage() {
     }
 
     setItems(normalizeAchievements(j?.profile?.achievements_catalog?.all || j?.profile?.achievements || j?.profile?.certifications));
+    router.replace(`${pathname}?saved=1`, { scroll: false });
     setMessage("Idiomas y logros guardados correctamente.");
   }
 

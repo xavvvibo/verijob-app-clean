@@ -1,5 +1,9 @@
 import { visibleCompanyPlanName } from "@/lib/billing/planCapabilities";
 import { readEffectiveSubscriptionStates } from "@/lib/billing/effectiveSubscription";
+import {
+  isMissingExternalResolvedColumn,
+  isVerificationExternallyResolved,
+} from "@/lib/verification/external-resolution";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 
 type AcquisitionFilter =
@@ -213,13 +217,23 @@ export async function loadVerificationCompanyAcquisition(
     q?: string;
   } = {},
 ): Promise<VerificationCompanyAcquisitionResult> {
-  const requestsRes = await admin
+  let requestsRes = await admin
     .from("verification_requests")
     .select(
       "id,company_id,requested_by,status,verification_channel,requested_at,created_at,updated_at,resolved_at,external_resolved,company_name_target,company_email_target,external_email_target,request_context",
     )
     .order("requested_at", { ascending: false })
     .limit(1000);
+
+  if (requestsRes.error && isMissingExternalResolvedColumn(requestsRes.error)) {
+    requestsRes = await admin
+      .from("verification_requests")
+      .select(
+        "id,company_id,requested_by,status,verification_channel,requested_at,created_at,updated_at,resolved_at,company_name_target,company_email_target,external_email_target,request_context",
+      )
+      .order("requested_at", { ascending: false })
+      .limit(1000);
+  }
 
   const requestRows = Array.isArray(requestsRes.data) ? requestsRes.data : [];
 
@@ -411,7 +425,7 @@ export async function loadVerificationCompanyAcquisition(
         pushIso(requestTimes, request?.requested_at || request?.created_at);
         pushIso(requestTimes, request?.resolved_at);
         pushIso(requestTimes, request?.updated_at);
-        if (request?.external_resolved) anyExternalResolved = true;
+        if (isVerificationExternallyResolved(request)) anyExternalResolved = true;
         const status = asText(request?.status).toLowerCase();
         if (status) latestStatus = status;
       }

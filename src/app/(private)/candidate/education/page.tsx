@@ -50,12 +50,15 @@ export default function CandidateEducationPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
       const r = await fetch("/api/candidate/profile", { credentials: "include", cache: "no-store" as any });
       const j = await r.json().catch(() => ({}));
-      setItems(normalizeEducation(j?.profile?.education));
+      const normalized = normalizeEducation(j?.profile?.education);
+      setItems(normalized);
+      setExpandedIndex(normalized.length === 1 ? 0 : null);
       setLoading(false);
     })();
   }, []);
@@ -68,14 +71,20 @@ export default function CandidateEducationPage() {
   }
 
   function add() {
-    setItems((prev) => [...prev, { ...EMPTY_ITEM }]);
-    setMessage(null);
+    setItems((prev) => [{ ...EMPTY_ITEM }, ...prev]);
+    setExpandedIndex(0);
+    setMessage("Nuevo estudio listo para completar.");
   }
 
   function remove(idx: number) {
     const ok = window.confirm("¿Seguro que quieres eliminar este registro académico?");
     if (!ok) return;
     setItems((prev) => prev.filter((_, i) => i !== idx));
+    setExpandedIndex((prev) => {
+      if (prev === null) return null;
+      if (prev === idx) return null;
+      return prev > idx ? prev - 1 : prev;
+    });
     setMessage(null);
   }
 
@@ -105,6 +114,7 @@ export default function CandidateEducationPage() {
     }
 
     setItems(normalizeEducation(j?.profile?.education));
+    setExpandedIndex(null);
     setMessage("Formación guardada correctamente.");
   }
 
@@ -138,46 +148,69 @@ export default function CandidateEducationPage() {
         <div className="mt-4 space-y-3">
           {items.map((item, idx) => (
             <article key={idx} className="rounded-xl border border-gray-200 p-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <Field label="Centro / institución" value={item.institution} onChange={(v) => update(idx, { institution: v })} />
-                <Field label="Título / estudio" value={item.title} onChange={(v) => update(idx, { title: v })} />
-                <Field label="Fecha inicio" value={item.start_date} onChange={(v) => update(idx, { start_date: v })} placeholder="YYYY-MM" />
-                <Field
-                  label="Fecha fin"
-                  value={item.end_date}
-                  onChange={(v) => update(idx, { end_date: v })}
-                  placeholder="YYYY-MM"
-                  disabled={!!item.in_progress}
-                />
-                <label className="flex items-center gap-2 text-sm text-gray-700">
-                  <input
-                    type="checkbox"
-                    checked={!!item.in_progress}
-                    onChange={(e) => update(idx, { in_progress: e.target.checked })}
-                  />
-                  En curso
-                </label>
-              </div>
-
-              <label className="mt-3 block">
-                <div className="text-sm font-semibold text-gray-900">Descripción breve</div>
-                <textarea
-                  value={item.description}
-                  onChange={(e) => update(idx, { description: e.target.value })}
-                  rows={3}
-                  className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
-                />
-              </label>
-
-              <div className="mt-3 flex justify-end">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold text-gray-900">
+                    {item.title || item.institution ? `${item.title || "Estudio"}${item.institution ? ` — ${item.institution}` : ""}` : "Nuevo estudio"}
+                  </div>
+                  <div className="mt-1 text-xs text-gray-600">
+                    {[item.start_date || "Inicio pendiente", item.in_progress ? "En curso" : item.end_date || "Fin pendiente"].join(" · ")}
+                  </div>
+                  {item.description ? <div className="mt-2 line-clamp-2 text-xs text-gray-500">{item.description}</div> : null}
+                </div>
                 <button
                   type="button"
-                  onClick={() => remove(idx)}
-                  className="inline-flex rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                  onClick={() => setExpandedIndex((prev) => (prev === idx ? null : idx))}
+                  className="inline-flex rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50"
                 >
-                  Eliminar
+                  {expandedIndex === idx ? "Ocultar" : "Editar"}
                 </button>
               </div>
+
+              {expandedIndex === idx ? (
+                <>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <Field label="Centro / institución" value={item.institution} onChange={(v) => update(idx, { institution: v })} />
+                    <Field label="Título / estudio" value={item.title} onChange={(v) => update(idx, { title: v })} />
+                    <Field label="Fecha inicio" value={item.start_date} onChange={(v) => update(idx, { start_date: v })} placeholder="YYYY-MM" />
+                    <Field
+                      label="Fecha fin"
+                      value={item.end_date}
+                      onChange={(v) => update(idx, { end_date: v })}
+                      placeholder="YYYY-MM"
+                      disabled={!!item.in_progress}
+                    />
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={!!item.in_progress}
+                        onChange={(e) => update(idx, { in_progress: e.target.checked })}
+                      />
+                      En curso
+                    </label>
+                  </div>
+
+                  <label className="mt-3 block">
+                    <div className="text-sm font-semibold text-gray-900">Descripción breve</div>
+                    <textarea
+                      value={item.description}
+                      onChange={(e) => update(idx, { description: e.target.value })}
+                      rows={3}
+                      className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                    />
+                  </label>
+
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => remove(idx)}
+                      className="inline-flex rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                    >
+                      Eliminar
+                    </button>
+                  </div>
+                </>
+              ) : null}
             </article>
           ))}
         </div>

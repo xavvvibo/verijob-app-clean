@@ -428,7 +428,8 @@ export default function CandidateOverview() {
     () => listCount(candidateProfile?.achievements_catalog?.all || candidateProfile?.achievements || candidateProfile?.certifications),
     [candidateProfile]
   );
-  const importedFromCompanyCv = searchParams.get("company_cv_import") === "1";
+  const importedFromCompanyCv =
+    searchParams.get("company_cv_import") === "1" || Boolean(candidateProfile?.raw_cv_json?.company_cv_import);
   const importedExperiences = useMemo(() => {
     const rows = Array.isArray(candidateProfile?.raw_cv_json?.company_cv_import?.extracted_payload?.experiences)
       ? candidateProfile.raw_cv_json.company_cv_import.extracted_payload.experiences
@@ -496,6 +497,12 @@ export default function CandidateOverview() {
             <div className="mt-4 flex flex-wrap gap-3">
               <Link href="/candidate/experience" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">
                 Confirmar experiencias
+              </Link>
+              <Link href="/candidate/education" className="inline-flex rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+                Revisar formación
+              </Link>
+              <Link href="/candidate/achievements" className="inline-flex rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+                Revisar idiomas y logros
               </Link>
               <Link href="/candidate/experience?new=1#manual-experience" className="inline-flex rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100">
                 Editar antes de continuar

@@ -598,13 +598,20 @@ export async function PATCH(request: Request) {
 
       const patch: Record<string, any> = { company_id: companyId, updated_at: new Date().toISOString() };
       let importedFields = 0;
+      const importedFieldNames: string[] = [];
+      const detectedFieldNames: string[] = [];
+      const skippedFieldNames: string[] = [];
       for (const field of allowedFields) {
         const incoming = toNull((extracted as any)?.[field]);
         if (!incoming) continue;
+        detectedFieldNames.push(field);
         const current = toNull((profile as any)?.[field]);
         if (!current || overwrite) {
           patch[field] = incoming;
           importedFields += 1;
+          importedFieldNames.push(field);
+        } else {
+          skippedFieldNames.push(field);
         }
       }
 
@@ -632,6 +639,9 @@ export async function PATCH(request: Request) {
       return json(200, {
         ok: true,
         imported_fields: importedFields,
+        imported_field_names: importedFieldNames,
+        detected_field_names: detectedFieldNames,
+        skipped_field_names: skippedFieldNames,
         document: updatedDoc,
       });
     }

@@ -34,14 +34,14 @@ export default async function CandidateEvidencePage(props: any) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, onboarding_completed")
+    .select("id")
     .eq("id", au.user.id)
     .single();
-  if (!profile || !profile.onboarding_completed) redirect("/onboarding");
+  if (!profile) redirect("/onboarding");
 
   const { data: evidences } = await supabase
     .from("evidences")
-    .select("id, verification_request_id, storage_path, created_at, evidence_type, document_type, document_scope, validation_status, inconsistency_reason, trust_weight, verification_requests(status, request_context, employment_record_id, employment_records(position, company_name_freeform))")
+    .select("id, verification_request_id, created_at, evidence_type, document_type, document_scope, validation_status, inconsistency_reason, trust_weight, verification_requests(status, request_context, employment_record_id, employment_records(position, company_name_freeform))")
     .eq("uploaded_by", au.user.id)
     .order("created_at", { ascending: false });
 
@@ -64,18 +64,23 @@ export default async function CandidateEvidencePage(props: any) {
   const items: EvidenceItem[] = (evidences || []).map((r: any) => {
     const vr = Array.isArray(r.verification_requests) ? r.verification_requests[0] : r.verification_requests;
     const er = Array.isArray(vr?.employment_records) ? vr.employment_records[0] : vr?.employment_records;
-    const docName = String(r.storage_path || "documento").split("/").pop() || "documento";
     const processing = vr?.request_context?.documentary_processing || {};
     const ui = toEvidenceUiStatusWithReason({
       validationStatus: r?.validation_status || vr?.status,
       inconsistencyReason: r?.inconsistency_reason || processing?.inconsistency_reason,
       matchingReason: processing?.matching_reason,
       error: processing?.error,
+      fallbackReason:
+        String(processing?.status || "").toLowerCase() === "queued"
+          ? "Evidencia recibida. La estamos analizando."
+          : String(processing?.status || "").toLowerCase() === "processing"
+            ? "Estamos analizando el documento."
+            : null,
     });
     const scope = String(r?.document_scope || vr?.request_context?.documentary_scope || "").toLowerCase();
     return {
       id: r.id,
-      document_name: docName,
+      document_name: getEvidenceTypeLabel(r?.document_type || r?.evidence_type),
       document_type: getEvidenceTypeLabel(r?.document_type || r?.evidence_type),
       experience:
         scope === "global"

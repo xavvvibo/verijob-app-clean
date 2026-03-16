@@ -131,6 +131,8 @@ export default function NewVerificationClient() {
           <label className="block text-sm font-medium">Email de la persona o empresa que puede validar esta experiencia</label>
           <input
             type="email"
+            name="verification-contact-email"
+            autoComplete="off"
             value={companyEmail}
             onChange={(e) => setCompanyEmail(e.target.value)}
             className="mt-1 w-full rounded-lg border px-3 py-2"

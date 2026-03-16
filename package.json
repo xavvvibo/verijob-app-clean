@@ -10,6 +10,7 @@
     "test:company-candidate-import": "node --test tests/company-candidate-import.test.mjs",
     "lint": "eslint",
     "postbuild": "node scripts/vercel-fix-missing-manifests.cjs",
+    "cleanup:test-users": "tsx scripts/cleanup-test-users.ts",
     "stripe:catalog:live": "node scripts/stripe/create-live-catalog.cjs scripts/stripe/verijob-catalog-live-v2.json",
     "demo:seed:marta": "node scripts/demo/seed-marta-gil-ortega.mjs seed",
     "demo:rollback:marta": "node scripts/demo/seed-marta-gil-ortega.mjs rollback"
@@ -38,6 +39,7 @@
     "eslint-config-next": "16.1.6",
     "postcss": "^8.5.8",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.20.5",
     "typescript": "^5"
   }
 }

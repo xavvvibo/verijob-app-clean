@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { resolveEvidenceEmploymentRecordId } from "@/lib/candidate/evidence-linkage";
 import {
   getEvidenceTypeOptions,
+  getEvidenceTypeLabel,
   normalizeEvidenceType,
   requiresExperienceAssociation,
 } from "@/lib/candidate/evidence-types";
@@ -94,6 +95,10 @@ export default function EvidenceListClient({
     () => initialItems.filter((item) => !hiddenIds.has(item.id) && !removedIds.has(item.id)),
     [initialItems, hiddenIds, removedIds]
   );
+  const selectedExperienceLabel = useMemo(
+    () => experienceOptions.find((item) => item.id === selectedExperienceId)?.label || null,
+    [experienceOptions, selectedExperienceId]
+  );
 
   async function uploadEvidence() {
     if (!file) {
@@ -157,15 +162,35 @@ export default function EvidenceListClient({
       if (!confirmRes.ok) {
         throw new Error(confirmJson?.error || "No se pudo registrar la evidencia.");
       }
-      const linkState = String(confirmJson?.documentary_processing?.link_state || "");
-
-      setUploadMessage(linkState === "auto_linked"
-        ? "Evidencia subida y aprobada."
-        : linkState === "suggested_review"
-          ? "Evidencia subida. En proceso de validación."
+      if (confirmJson?.processing?.deferred) {
+        const evidenceLabel = getEvidenceTypeLabel(selectedEvidenceType);
+        const targetContext = requiresExperience && selectedExperienceLabel
+          ? ` para ${selectedExperienceLabel}`
           : requiresExperience
-            ? "Evidencia subida. En proceso de validación para la experiencia seleccionada."
-            : "Evidencia global subida. En proceso de validación.");
+            ? " para la experiencia seleccionada"
+            : " como evidencia global";
+        setUploadMessage(
+          `${evidenceLabel} subida correctamente${targetContext}. La hemos recibido y la estamos analizando.`,
+        );
+        setFile(null);
+        window.location.reload();
+        return;
+      }
+      const linkState = String(confirmJson?.documentary_processing?.link_state || "");
+      const evidenceLabel = getEvidenceTypeLabel(selectedEvidenceType);
+      const targetContext = requiresExperience && selectedExperienceLabel
+        ? ` para ${selectedExperienceLabel}`
+        : requiresExperience
+          ? " para la experiencia seleccionada"
+          : " como evidencia global";
+
+      setUploadMessage(
+        linkState === "auto_linked"
+          ? `${evidenceLabel} subida correctamente${targetContext}. Ha quedado vinculada y aprobada.`
+          : linkState === "suggested_review"
+            ? `${evidenceLabel} subida correctamente${targetContext}. Está en proceso de validación.`
+            : `${evidenceLabel} subida correctamente${targetContext}. Estamos revisándola.`,
+      );
       setFile(null);
       window.location.reload();
     } catch (error: any) {

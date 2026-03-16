@@ -131,13 +131,65 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
   // Resolver token con service role (no dependemos de RLS del link)
   const service = createServiceRoleClient();
+  const activeCompanyId = String((requesterProfile as any)?.active_company_id || "");
 
-  const linkResolved = await resolveActiveCandidatePublicLink(service, tokenParam);
+  let linkResolved = await resolveActiveCandidatePublicLink(service, tokenParam);
+  let link = linkResolved.ok ? linkResolved.link : null;
+
   if (linkResolved.ok === false) {
-    if (linkResolved.reason === "expired") return json(410, { error: "Link expired" });
-    return json(404, { error: "Not found" });
+    const [directLinkRes, inviteRes] = await Promise.all([
+      service
+        .from("candidate_public_links")
+        .select("id,candidate_id,expires_at,is_active,created_at")
+        .eq("public_token", tokenParam)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      service
+        .from("company_candidate_import_invites")
+        .select("id,linked_user_id")
+        .eq("company_id", activeCompanyId)
+        .eq("invite_token", tokenParam)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    const directLink = directLinkRes.data as any;
+    const inviteLinkUserId = String((inviteRes.data as any)?.linked_user_id || "").trim();
+
+    if (directLink?.candidate_id) {
+      const inviteByCandidate = await service
+        .from("company_candidate_import_invites")
+        .select("id")
+        .eq("company_id", activeCompanyId)
+        .eq("linked_user_id", String(directLink.candidate_id))
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (inviteByCandidate.data?.id) {
+        link = {
+          id: String(directLink.id || ""),
+          candidate_id: String(directLink.candidate_id),
+          expires_at: directLink.expires_at || null,
+          is_active: directLink.is_active ?? null,
+        };
+      }
+    } else if (inviteLinkUserId) {
+      link = {
+        id: "",
+        candidate_id: inviteLinkUserId,
+        expires_at: null,
+        is_active: true,
+      };
+    }
+
+    if (!link) {
+      if (linkResolved.reason === "expired") return json(410, { error: "Link expired" });
+      return json(404, { error: "Not found" });
+    }
   }
-  const link = linkResolved.link;
 
   const { data: profile } = await service
     .from("profiles")
@@ -167,7 +219,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     service
       .from("company_candidate_import_invites")
       .select("id,status,accepted_at,updated_at")
-      .eq("company_id", String((requesterProfile as any)?.active_company_id || ""))
+      .eq("company_id", activeCompanyId)
       .eq("linked_user_id", link.candidate_id)
       .order("updated_at", { ascending: false })
       .limit(1)
@@ -179,10 +231,12 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     (candidateProfile as any)?.raw_cv_json?.company_cv_import?.imported_at ||
     null;
 
-  await service
-    .from("candidate_public_links")
-    .update({ last_viewed_at: new Date().toISOString() })
-    .eq("id", link.id);
+  if (link.id) {
+    await service
+      .from("candidate_public_links")
+      .update({ last_viewed_at: new Date().toISOString() })
+      .eq("id", link.id);
+  }
 
   const safe = sanitizePublic(profile);
   const maskedName = toPublicName((safe as any)?.full_name || (safe as any)?.name);

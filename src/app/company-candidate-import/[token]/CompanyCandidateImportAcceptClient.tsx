@@ -270,7 +270,7 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
               <section className="rounded-3xl border border-amber-200 bg-amber-50 p-7 shadow-sm text-sm text-amber-900">
                 Esta invitación está vinculada a <strong>{invite.candidate_email}</strong>. Has iniciado sesión con <strong>{auth.user_email || "otro email"}</strong>. Entra con el email correcto para continuar.
               </section>
-            ) : invite.display_status === "completed" ? (
+            ) : String(invite.status || "").toLowerCase() === "converted" ? (
               <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-7 shadow-sm">
                 <h2 className="text-base font-semibold text-emerald-900">Invitación ya aceptada</h2>
                 <p className="mt-2 text-sm text-emerald-800">
