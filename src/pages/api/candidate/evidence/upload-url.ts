@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { randomUUID, createHash } from "crypto";
 import { createPagesRouteClient } from "@/utils/supabase/pages";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 import {
   buildDocumentaryVerificationInsert,
   buildEmploymentRecordDocumentaryRequestedUpdate,
@@ -64,6 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const supabase = createPagesRouteClient(req, res);
+    const admin = createServiceRoleClient();
     const { data: auth, error: authErr } = await supabase.auth.getUser();
 
     if (authErr || !auth?.user) {
@@ -203,7 +205,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             documentaryScope: "experience",
             evidenceType: evidence_type,
           });
-          const { data: createdVr, error: createVrErr } = await supabase
+          const { data: createdVr, error: createVrErr } = await admin
             .from("verification_requests")
             .insert(payload)
             .select("id")
@@ -241,7 +243,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         documentaryScope: "global",
         evidenceType: evidence_type,
       });
-      const { data: createdVr, error: createVrErr } = await supabase
+      const { data: createdVr, error: createVrErr } = await admin
         .from("verification_requests")
         .insert(payload)
         .select("id")

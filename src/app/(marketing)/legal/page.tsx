@@ -10,7 +10,7 @@ export default function Legal() {
       </p>
       <p className="text-gray-700 mt-3">
         Titular: Javier Bocanegra<br />
-        NIF: 75136778X<br />
+        NIF: 12345678Z<br />
         Domicilio: José Echegaray 10, 18151 Ogíjares, Granada, España<br />
         Correo electrónico de contacto: contacto@verijob.es
       </p>

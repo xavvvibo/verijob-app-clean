@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { createClient } from "@/utils/supabase/client";
 
@@ -55,6 +55,47 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
   const [saving, setSaving] = useState(false);
   const [emailSaving, setEmailSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const response = await fetch("/api/candidate/profile", {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!alive || !response.ok) return;
+        const next = result?.personal_profile || {};
+        setP((current) => ({
+          ...current,
+          full_name: next.full_name ?? current.full_name,
+          phone: next.phone ?? current.phone,
+          title: next.title ?? current.title,
+          location: next.location ?? current.location,
+          address_line1: next.address_line1 ?? current.address_line1,
+          address_line2: next.address_line2 ?? current.address_line2,
+          city: next.city ?? current.city,
+          region: next.region ?? current.region,
+          postal_code: next.postal_code ?? current.postal_code,
+          country: next.country ?? current.country,
+          identity_type: next.identity_type ?? current.identity_type,
+          identity_masked: next.identity_masked ?? current.identity_masked,
+          has_identity: next.has_identity ?? current.has_identity,
+        }));
+        setPersistedIdentity({
+          identity_type: next.identity_type ?? null,
+          identity_masked: next.identity_masked ?? null,
+          has_identity: Boolean(next.has_identity),
+        });
+      } catch {}
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function saveProfile() {
     setSaving(true);
@@ -174,7 +215,7 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
                 setIdentityValue(e.target.value);
                 if (clearIdentityOnSave) setClearIdentityOnSave(false);
               }}
-              placeholder="Ej.: 75136778X"
+              placeholder="Ej.: 12345678Z"
               autoComplete="off"
               className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
             />
