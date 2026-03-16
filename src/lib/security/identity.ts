@@ -22,10 +22,9 @@ export function normalizeIdentityValue(value: unknown) {
 export function maskIdentityValue(value: string) {
   const compact = compactIdentity(value);
   if (!compact) return null;
-  if (compact.length <= 4) return `${compact.charAt(0)}***`;
-  const head = compact.slice(0, Math.min(2, Math.max(1, compact.length - 4)));
-  const tail = compact.slice(-2);
-  return `${head}${"*".repeat(Math.max(compact.length - head.length - tail.length, 3))}${tail}`;
+  if (compact.length <= 3) return `${"*".repeat(Math.max(compact.length - 1, 1))}${compact.slice(-1)}`;
+  const tail = compact.slice(-3);
+  return `${"*".repeat(Math.max(compact.length - tail.length, 3))}${tail}`;
 }
 
 export function hashIdentityValue(value: string) {
@@ -52,4 +51,3 @@ export function buildIdentityRecord(input: { type: unknown; value: unknown }) {
     identityHash: hashIdentityValue(normalizedValue),
   };
 }
-

@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { buildCandidateProfileCompletionModel } from "@/lib/candidate/profile-completion";
+import { buildIdentityRecord, normalizeIdentityType, normalizeIdentityValue } from "@/lib/security/identity";
 
 function normalizeText(value: unknown) {
   return String(value || "").trim();
+}
+
+function normalizeNullableText(value: unknown, max: number) {
+  const normalized = normalizeText(value).slice(0, max);
+  return normalized || null;
 }
 
 type AchievementCategory = "certificacion" | "premio" | "idioma" | "otro";
@@ -170,6 +176,21 @@ export async function GET() {
   });
 
   return NextResponse.json({
+    personal_profile: {
+      full_name: profile?.full_name || null,
+      phone: profile?.phone || null,
+      title: profile?.title || null,
+      location: profile?.location || null,
+      address_line1: profile?.address_line1 || null,
+      address_line2: profile?.address_line2 || null,
+      city: profile?.city || null,
+      region: profile?.region || null,
+      postal_code: profile?.postal_code || null,
+      country: profile?.country || null,
+      identity_type: profile?.identity_type || null,
+      identity_masked: profile?.identity_masked || null,
+      has_identity: Boolean(profile?.identity_hash),
+    },
     profile: {
       ...(candidateProfile || {}),
       languages: achievementsCatalog.languages.map((item) => formatLanguageLabel(item) || item.title).filter(Boolean),
@@ -201,6 +222,12 @@ export async function PUT(req: Request) {
     : Array.isArray(body?.certifications)
       ? body.certifications
       : [];
+  const hasCandidateProfileInput = ["summary", "education", "achievements", "certifications"].some((key) =>
+    Object.prototype.hasOwnProperty.call(body || {}, key)
+  );
+  const hasAchievementsInput = ["achievements", "certifications"].some((key) =>
+    Object.prototype.hasOwnProperty.call(body || {}, key)
+  );
   const normalizedAchievements = dedupeAchievements(
     achievementsInput.map(normalizeAchievement).filter(Boolean) as AchievementItem[]
   );
@@ -215,49 +242,116 @@ export async function PUT(req: Request) {
     getTableColumns(supabase, "profiles"),
   ]);
 
-  const payload: Record<string, any> = {
-    user_id: user.id,
-    summary: typeof body?.summary === "string" ? body.summary : candidateProfile?.summary ?? null,
-    updated_at: new Date().toISOString(),
-  };
-  if (candidateProfileColumns.has("education")) {
-    payload.education = Array.isArray(body?.education) ? body.education : Array.isArray(candidateProfile?.education) ? candidateProfile.education : [];
-  }
-  if (candidateProfileColumns.has("achievements")) payload.achievements = normalizedAchievements;
-  if (candidateProfileColumns.has("other_achievements") && !candidateProfileColumns.has("achievements")) {
-    payload.other_achievements = normalizedAchievements;
-  }
-  if (candidateProfileColumns.has("certifications")) payload.certifications = certifications;
-
   let writeError: any = null;
-  let nextCandidateProfile: any = null;
-  if (candidateProfile?.id) {
-    const res = await supabase.from("candidate_profiles").update(payload).eq("id", candidateProfile.id).select("*").single();
-    writeError = res.error;
-    nextCandidateProfile = res.data;
-  } else {
-    const res = await supabase.from("candidate_profiles").insert(payload).select("*").single();
-    writeError = res.error;
-    nextCandidateProfile = res.data;
+  let nextCandidateProfile: any = candidateProfile || null;
+  if (hasCandidateProfileInput) {
+    const payload: Record<string, any> = {
+      user_id: user.id,
+      summary: typeof body?.summary === "string" ? body.summary : candidateProfile?.summary ?? null,
+      updated_at: new Date().toISOString(),
+    };
+    if (candidateProfileColumns.has("education")) {
+      payload.education = Array.isArray(body?.education)
+        ? body.education
+        : Array.isArray(candidateProfile?.education)
+          ? candidateProfile.education
+          : [];
+    }
+    if (candidateProfileColumns.has("achievements")) payload.achievements = normalizedAchievements;
+    if (candidateProfileColumns.has("other_achievements") && !candidateProfileColumns.has("achievements")) {
+      payload.other_achievements = normalizedAchievements;
+    }
+    if (candidateProfileColumns.has("certifications")) payload.certifications = certifications;
+
+    if (candidateProfile?.id) {
+      const res = await supabase.from("candidate_profiles").update(payload).eq("id", candidateProfile.id).select("*").single();
+      writeError = res.error;
+      nextCandidateProfile = res.data;
+    } else {
+      const res = await supabase.from("candidate_profiles").insert(payload).select("*").single();
+      writeError = res.error;
+      nextCandidateProfile = res.data;
+    }
   }
 
   if (writeError) {
     return NextResponse.json({ error: writeError.message }, { status: 400 });
   }
 
-  if (profileColumns.has("languages") && (Array.isArray(profile?.languages) || languages.length > 0)) {
+  const nextProfilePatch: Record<string, any> = {};
+  if (profileColumns.has("full_name") && Object.prototype.hasOwnProperty.call(body || {}, "full_name")) {
+    nextProfilePatch.full_name = normalizeNullableText(body?.full_name, 160);
+  }
+  if (profileColumns.has("phone") && Object.prototype.hasOwnProperty.call(body || {}, "phone")) {
+    nextProfilePatch.phone = normalizeNullableText(body?.phone, 50);
+  }
+  if (profileColumns.has("title") && Object.prototype.hasOwnProperty.call(body || {}, "title")) {
+    nextProfilePatch.title = normalizeNullableText(body?.title, 160);
+  }
+  if (profileColumns.has("location") && Object.prototype.hasOwnProperty.call(body || {}, "location")) {
+    nextProfilePatch.location = normalizeNullableText(body?.location, 160);
+  }
+  if (profileColumns.has("address_line1") && Object.prototype.hasOwnProperty.call(body || {}, "address_line1")) {
+    nextProfilePatch.address_line1 = normalizeNullableText(body?.address_line1, 160);
+  }
+  if (profileColumns.has("address_line2") && Object.prototype.hasOwnProperty.call(body || {}, "address_line2")) {
+    nextProfilePatch.address_line2 = normalizeNullableText(body?.address_line2, 160);
+  }
+  if (profileColumns.has("city") && Object.prototype.hasOwnProperty.call(body || {}, "city")) {
+    nextProfilePatch.city = normalizeNullableText(body?.city, 120);
+  }
+  if (profileColumns.has("region") && Object.prototype.hasOwnProperty.call(body || {}, "region")) {
+    nextProfilePatch.region = normalizeNullableText(body?.region, 120);
+  }
+  if (profileColumns.has("postal_code") && Object.prototype.hasOwnProperty.call(body || {}, "postal_code")) {
+    nextProfilePatch.postal_code = normalizeNullableText(body?.postal_code, 40);
+  }
+  if (profileColumns.has("country") && Object.prototype.hasOwnProperty.call(body || {}, "country")) {
+    nextProfilePatch.country = normalizeNullableText(body?.country, 80);
+  }
+  const hasIdentityInput =
+    Object.prototype.hasOwnProperty.call(body || {}, "identity_type") ||
+    Object.prototype.hasOwnProperty.call(body || {}, "identity_value");
+  if (hasIdentityInput) {
+    const rawIdentityType = body?.identity_type;
+    const rawIdentityValue = typeof body?.identity_value === "string" ? body.identity_value : "";
+    const identityType = normalizeIdentityType(rawIdentityType);
+    const identityValue = normalizeIdentityValue(rawIdentityValue);
+    const wantsClear = !normalizeText(rawIdentityType) && !normalizeText(rawIdentityValue);
+    if (wantsClear) {
+      if (profileColumns.has("identity_type")) nextProfilePatch.identity_type = null;
+      if (profileColumns.has("identity_masked")) nextProfilePatch.identity_masked = null;
+      if (profileColumns.has("identity_hash")) nextProfilePatch.identity_hash = null;
+    } else if (!identityType || !identityValue) {
+      return NextResponse.json({ error: "invalid_identity_value" }, { status: 400 });
+    } else {
+      const identity = buildIdentityRecord({ type: identityType, value: identityValue });
+      if (!identity.identityType || !identity.identityMasked || !identity.identityHash) {
+        return NextResponse.json({ error: "identity_hash_failed" }, { status: 400 });
+      }
+      if (profileColumns.has("identity_type")) nextProfilePatch.identity_type = identity.identityType;
+      if (profileColumns.has("identity_masked")) nextProfilePatch.identity_masked = identity.identityMasked;
+      if (profileColumns.has("identity_hash")) nextProfilePatch.identity_hash = identity.identityHash;
+    }
+  }
+  if (profileColumns.has("languages") && (hasAchievementsInput || Array.isArray(profile?.languages) || languages.length > 0)) {
+    nextProfilePatch.languages = languages;
+  }
+  if (Object.keys(nextProfilePatch).length) {
+    nextProfilePatch.updated_at = new Date().toISOString();
     const profileUpdate = await supabase
       .from("profiles")
-      .update({ languages, updated_at: new Date().toISOString() })
+      .update(nextProfilePatch)
       .eq("id", user.id);
-    if (profileUpdate.error && !String(profileUpdate.error.message || "").toLowerCase().includes("languages")) {
+    if (profileUpdate.error) {
       return NextResponse.json({ error: profileUpdate.error.message }, { status: 400 });
     }
   }
 
-  const achievementsCatalog = buildAchievementsCatalog({ ...(profile || {}), languages }, nextCandidateProfile);
+  const nextProfile = { ...(profile || {}), ...nextProfilePatch };
+  const achievementsCatalog = buildAchievementsCatalog(nextProfile, nextCandidateProfile);
   const profileCompletion = buildCandidateProfileCompletionModel({
-    profile: { ...(profile || {}), languages },
+    profile: nextProfile,
     candidateProfile: nextCandidateProfile,
     experienceCount: Number(counts?.experience_count || 0),
     evidenceCount: Number(counts?.evidence_count || 0),
@@ -265,6 +359,21 @@ export async function PUT(req: Request) {
   });
   return NextResponse.json({
     ok: true,
+    personal_profile: {
+      full_name: nextProfile?.full_name || null,
+      phone: nextProfile?.phone || null,
+      title: nextProfile?.title || null,
+      location: nextProfile?.location || null,
+      address_line1: nextProfile?.address_line1 || null,
+      address_line2: nextProfile?.address_line2 || null,
+      city: nextProfile?.city || null,
+      region: nextProfile?.region || null,
+      postal_code: nextProfile?.postal_code || null,
+      country: nextProfile?.country || null,
+      identity_type: nextProfile?.identity_type || null,
+      identity_masked: nextProfile?.identity_masked || null,
+      has_identity: Boolean(nextProfile?.identity_hash),
+    },
     profile: {
       ...(nextCandidateProfile || {}),
       languages: achievementsCatalog.languages.map((item) => formatLanguageLabel(item) || item.title).filter(Boolean),

@@ -21,9 +21,6 @@ type CandidateAccount = {
   deleted_at: string | null;
   deletion_requested_at: string | null;
   deletion_mode: string | null;
-  identity_type: string | null;
-  identity_masked: string | null;
-  has_identity: boolean;
 };
 
 const JOB_SEARCH_OPTIONS = [
@@ -64,12 +61,6 @@ const SCHEDULE_OPTIONS = [
   { value: "noches", label: "Noches" },
   { value: "horario_flexible", label: "Horario flexible" },
   { value: "turnos_rotativos", label: "Turnos rotativos" },
-];
-
-const IDENTITY_TYPE_OPTIONS = [
-  { value: "dni", label: "DNI" },
-  { value: "nif", label: "NIF" },
-  { value: "passport", label: "Pasaporte" },
 ];
 
 function normalizeLegacyWorkday(value: string) {
@@ -192,8 +183,6 @@ export default function CandidateSettings() {
   const [accountSaving, setAccountSaving] = useState(false);
   const [accountMessage, setAccountMessage] = useState<string | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
-  const [identityType, setIdentityType] = useState("dni");
-  const [identityValue, setIdentityValue] = useState("");
   const [disableConfirmed, setDisableConfirmed] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [resetCandidateConfirmation, setResetCandidateConfirmation] = useState("");
@@ -239,12 +228,8 @@ export default function CandidateSettings() {
           deleted_at: accountJson?.account?.deleted_at || null,
           deletion_requested_at: accountJson?.account?.deletion_requested_at || null,
           deletion_mode: accountJson?.account?.deletion_mode || null,
-          identity_type: accountJson?.account?.identity_type || null,
-          identity_masked: accountJson?.account?.identity_masked || null,
-          has_identity: Boolean(accountJson?.account?.has_identity),
         };
         setAccount(nextAccount);
-        if (nextAccount.identity_type) setIdentityType(nextAccount.identity_type);
       } else {
         setAccountError(accountJson?.error || "No se pudo cargar el estado de la cuenta.");
       }
@@ -299,28 +284,10 @@ export default function CandidateSettings() {
         deleted_at: payload.account.deleted_at ?? current?.deleted_at ?? null,
         deletion_requested_at: payload.account.deletion_requested_at ?? current?.deletion_requested_at ?? null,
         deletion_mode: payload.account.deletion_mode ?? current?.deletion_mode ?? null,
-        identity_type: payload.account.identity_type ?? current?.identity_type ?? null,
-        identity_masked: payload.account.identity_masked ?? current?.identity_masked ?? null,
-        has_identity: payload.account.has_identity ?? current?.has_identity ?? false,
       }));
     }
     setAccountMessage(payload?.user_message || "Acción completada correctamente.");
     return payload;
-  }
-
-  async function saveIdentity() {
-    const result = await runAccountAction("update_identity", {
-      identity_type: identityType,
-      identity_value: identityValue,
-    });
-    if (result?.account) setIdentityValue("");
-  }
-
-  async function clearIdentity() {
-    const result = await runAccountAction("clear_identity");
-    if (result?.ok) {
-      setIdentityValue("");
-    }
   }
 
   async function deleteProfile() {
@@ -462,7 +429,7 @@ export default function CandidateSettings() {
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Gestión de perfil / cuenta</h2>
                 <p className="mt-1 text-sm text-slate-600">
-                  Controla el estado de tu perfil y la identidad asociada sin exponer el documento completo.
+                  Controla el estado de tu perfil. El documento de identidad ahora se gestiona dentro de tus datos personales.
                 </p>
               </div>
               <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
@@ -473,49 +440,12 @@ export default function CandidateSettings() {
             {accountError ? <p className="mt-4 text-sm text-rose-600">{accountError}</p> : null}
             {accountMessage ? <p className="mt-4 text-sm text-emerald-700">{accountMessage}</p> : null}
 
-            <div className="mt-6 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
+            <div className="mt-6 grid gap-4">
               <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                <h3 className="text-sm font-semibold text-slate-900">Identidad asociada</h3>
-                <p className="mt-1 text-sm text-slate-600">
-                  Guardamos solo la máscara y el hash del documento para deduplicación y auditoría interna.
+                <h3 className="text-sm font-semibold text-slate-900">Documento de identidad</h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  El DNI, NIE o pasaporte se edita en <a className="font-semibold text-slate-900 underline" href="/candidate/profile">Datos personales</a>. Allí se genera automáticamente la máscara visible y el hash interno.
                 </p>
-                <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-                  <p className="text-xs uppercase tracking-wide text-slate-500">Documento actual</p>
-                  <p className="mt-1 font-semibold text-slate-900">
-                    {account?.has_identity ? `${String(account?.identity_type || "").toUpperCase()} · ${account?.identity_masked}` : "Todavía no has asociado un documento."}
-                  </p>
-                </div>
-                <div className="mt-4 grid gap-3 md:grid-cols-[180px_1fr]">
-                  <SelectField label="Tipo" value={identityType} onChange={setIdentityType} options={IDENTITY_TYPE_OPTIONS} />
-                  <label className="block">
-                    <div className="text-sm font-semibold text-gray-900">Documento</div>
-                    <input
-                      type="text"
-                      value={identityValue}
-                      onChange={(e) => setIdentityValue(e.target.value)}
-                      placeholder="Introduce el documento solo para registrarlo"
-                      className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-sm text-gray-900"
-                    />
-                  </label>
-                </div>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    disabled={accountSaving || !identityValue.trim()}
-                    onClick={saveIdentity}
-                    className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-                  >
-                    Guardar identidad
-                  </button>
-                  <button
-                    type="button"
-                    disabled={accountSaving || !account?.has_identity}
-                    onClick={clearIdentity}
-                    className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Borrar asociación
-                  </button>
-                </div>
               </section>
 
               <section className="space-y-4">

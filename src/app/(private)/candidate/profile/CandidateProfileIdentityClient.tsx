@@ -17,7 +17,16 @@ type Profile = {
   region: string | null;
   postal_code: string | null;
   country: string | null;
+  identity_type: string | null;
+  identity_masked: string | null;
+  has_identity: boolean;
 };
+
+const IDENTITY_TYPE_OPTIONS = [
+  { value: "dni", label: "DNI" },
+  { value: "nif", label: "NIE" },
+  { value: "passport", label: "Pasaporte" },
+];
 
 const ProfileSchema = z.object({
   full_name: z.string().max(160).nullable().optional(),
@@ -35,7 +44,14 @@ const ProfileSchema = z.object({
 export default function CandidateProfileIdentityClient({ initialProfile }: { initialProfile: Profile }) {
   const supabase = useMemo(() => createClient(), []);
   const [p, setP] = useState<Profile>(initialProfile);
+  const [persistedIdentity, setPersistedIdentity] = useState({
+    identity_type: initialProfile.identity_type,
+    identity_masked: initialProfile.identity_masked,
+    has_identity: initialProfile.has_identity,
+  });
   const [email, setEmail] = useState(initialProfile.email ?? "");
+  const [identityValue, setIdentityValue] = useState("");
+  const [clearIdentityOnSave, setClearIdentityOnSave] = useState(false);
   const [saving, setSaving] = useState(false);
   const [emailSaving, setEmailSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -56,9 +72,45 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
         postal_code: p.postal_code,
         country: p.country,
       });
-
-      const { error } = await supabase.from("profiles").update(payload).eq("id", p.id);
-      if (error) throw new Error(error.message);
+      const requestBody: Record<string, unknown> = { ...payload };
+      if (clearIdentityOnSave) {
+        requestBody.identity_type = "";
+        requestBody.identity_value = "";
+      } else if (identityValue.trim()) {
+        requestBody.identity_type = p.identity_type ?? "dni";
+        requestBody.identity_value = identityValue;
+      }
+      const response = await fetch("/api/candidate/profile", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(requestBody),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result?.error || "No se pudo guardar el perfil.");
+      const nextPersonalProfile = result?.personal_profile || {};
+      setP((current) => ({
+        ...current,
+        full_name: nextPersonalProfile.full_name ?? current.full_name,
+        phone: nextPersonalProfile.phone ?? current.phone,
+        title: nextPersonalProfile.title ?? current.title,
+        location: nextPersonalProfile.location ?? current.location,
+        address_line1: nextPersonalProfile.address_line1 ?? current.address_line1,
+        address_line2: nextPersonalProfile.address_line2 ?? current.address_line2,
+        city: nextPersonalProfile.city ?? current.city,
+        region: nextPersonalProfile.region ?? current.region,
+        postal_code: nextPersonalProfile.postal_code ?? current.postal_code,
+        country: nextPersonalProfile.country ?? current.country,
+        identity_type: nextPersonalProfile.identity_type ?? current.identity_type,
+        identity_masked: nextPersonalProfile.identity_masked ?? current.identity_masked,
+        has_identity: nextPersonalProfile.has_identity ?? current.has_identity,
+      }));
+      setPersistedIdentity({
+        identity_type: nextPersonalProfile.identity_type ?? p.identity_type,
+        identity_masked: nextPersonalProfile.identity_masked ?? p.identity_masked,
+        has_identity: nextPersonalProfile.has_identity ?? p.has_identity,
+      });
+      setIdentityValue("");
+      setClearIdentityOnSave(false);
       setMessage("Perfil guardado correctamente.");
     } catch (e: any) {
       setMessage(e?.message || "No se pudo guardar el perfil.");
@@ -87,7 +139,12 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
     <div className="space-y-6">
       <section className="rounded-2xl border border-gray-200 bg-white p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-gray-900">Datos de identidad</h2>
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Datos personales</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              El documento de identidad es opcional. Puedes guardar y usar tu perfil sin completarlo.
+            </p>
+          </div>
           <button
             type="button"
             onClick={saveProfile}
@@ -103,6 +160,77 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
           <Field label="Título profesional" value={p.title ?? ""} onChange={(v) => setP({ ...p, title: v || null })} />
           <Field label="Teléfono" value={p.phone ?? ""} onChange={(v) => setP({ ...p, phone: v || null })} />
           <Field label="Ubicación visible" value={p.location ?? ""} onChange={(v) => setP({ ...p, location: v || null })} />
+          <SelectField
+            label="Tipo de documento"
+            value={p.identity_type ?? "dni"}
+            onChange={(v) => setP({ ...p, identity_type: v || null })}
+            options={IDENTITY_TYPE_OPTIONS}
+          />
+          <label className="block w-full">
+            <div className="text-sm font-semibold text-gray-900">Documento de identidad</div>
+            <input
+              value={identityValue}
+              onChange={(e) => {
+                setIdentityValue(e.target.value);
+                if (clearIdentityOnSave) setClearIdentityOnSave(false);
+              }}
+              placeholder="Ej.: 75136778X"
+              autoComplete="off"
+              className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+            />
+            <div className="mt-2 space-y-2 text-xs text-gray-500">
+              <p>
+                Campo opcional. Se usa solo para deduplicación y auditoría interna. Nunca compartimos el documento completo con empresas.
+              </p>
+              <p>
+                Estado actual:{" "}
+                <span className="font-semibold text-gray-700">
+                  {clearIdentityOnSave
+                    ? "Se eliminará al guardar"
+                    : p.identity_masked || "Sin documento registrado"}
+                </span>
+              </p>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {p.has_identity ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClearIdentityOnSave(true);
+                    setIdentityValue("");
+                    setP((current) => ({
+                      ...current,
+                      identity_masked: null,
+                      has_identity: false,
+                      identity_type: null,
+                    }));
+                    setMessage("El documento se eliminará cuando guardes el perfil.");
+                  }}
+                  className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  Borrar documento guardado
+                </button>
+              ) : null}
+              {clearIdentityOnSave ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClearIdentityOnSave(false);
+                    setP((current) => ({
+                      ...current,
+                      identity_type: persistedIdentity.identity_type,
+                      identity_masked: persistedIdentity.identity_masked,
+                      has_identity: persistedIdentity.has_identity,
+                    }));
+                    setMessage(null);
+                  }}
+                  className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                >
+                  Cancelar borrado
+                </button>
+              ) : null}
+            </div>
+          </label>
           <Field label="Dirección (línea 1)" value={p.address_line1 ?? ""} onChange={(v) => setP({ ...p, address_line1: v || null })} />
           <Field label="Dirección (línea 2)" value={p.address_line2 ?? ""} onChange={(v) => setP({ ...p, address_line2: v || null })} />
           <Field label="Ciudad" value={p.city ?? ""} onChange={(v) => setP({ ...p, city: v || null })} />
@@ -142,6 +270,35 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
         onChange={(e) => onChange(e.target.value)}
         className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
       />
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <label className="block w-full">
+      <div className="text-sm font-semibold text-gray-900">{label}</div>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }
