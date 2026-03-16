@@ -10,7 +10,12 @@ import ExperienceListClient from "./ExperienceListClient";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function CandidateExperiencePage() {
+export default async function CandidateExperiencePage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
   const supabase = await createServerSupabaseClient();
   const { data: au } = await supabase.auth.getUser();
   if (!au.user) redirect("/login");
@@ -71,27 +76,30 @@ export default async function CandidateExperiencePage() {
     (importedRows || []).map((r: any) => `${norm(r?.title)}|${norm(r?.company_name)}|${norm(r?.start_date)}|${norm(r?.end_date)}`)
   );
 
-  function resolveStatus(row: any): "Importado" | "Sin verificar" | "En verificación" | "Verificado" | "Revocado" {
+  function resolveStatus(row: any): "Sin verificar" | "Verificación solicitada" | "En revisión" | "Verificada" | "Revocada" {
     const linkedId = row?.matched_verification_id as string | null;
     if (!linkedId) {
-      const sig = `${norm(row?.role_title)}|${norm(row?.company_name)}|${norm(row?.start_date)}|${norm(row?.end_date)}`;
-      return importedSet.has(sig) ? "Importado" : "Sin verificar";
+      return "Sin verificar";
     }
     const linked = verificationMap.get(linkedId);
-    if (!linked) return "En verificación";
-    if (linked.is_revoked) return "Revocado";
+    if (!linked) return "Verificación solicitada";
+    if (linked.is_revoked) return "Revocada";
     const status = String(linked.status || "").toLowerCase();
-    if (status === "verified" || status === "approved") return "Verificado";
-    if (status === "revoked") return "Revocado";
+    if (status === "verified" || status === "approved") return "Verificada";
+    if (status === "revoked") return "Revocada";
+    if (status === "reviewing" || status === "in_review") return "En revisión";
     if (status === "rejected") return "Sin verificar";
-    return "En verificación";
+    return "Verificación solicitada";
   }
 
   function lastActionLabel(row: any) {
     const linkedId = row?.matched_verification_id as string | null;
-    if (!linkedId) return "Sin solicitudes enviadas";
+    if (!linkedId) {
+      const sig = `${norm(row?.role_title)}|${norm(row?.company_name)}|${norm(row?.start_date)}|${norm(row?.end_date)}`;
+      return importedSet.has(sig) ? "Importada desde tu CV. Revísala, corrígela si hace falta y luego solicita verificación o sube evidencia." : "Sin solicitudes enviadas";
+    }
     const linked = verificationMap.get(linkedId);
-    if (!linked) return "Solicitud enviada";
+    if (!linked) return "Solicitud de verificación enviada";
     if (linked.resolved_at) return `Resuelta: ${linked.resolved_at}`;
     if (linked.requested_at) return `Enviada: ${linked.requested_at}`;
     return "Solicitud en curso";
@@ -106,7 +114,14 @@ export default async function CandidateExperiencePage() {
     description: r.description ?? null,
     status: resolveStatus(r),
     last_action: lastActionLabel(r),
+    source_label: importedSet.has(`${norm(r?.role_title)}|${norm(r?.company_name)}|${norm(r?.start_date)}|${norm(r?.end_date)}`)
+      ? "Importada desde CV"
+      : null,
   }));
+
+  const companyCvImportFlag = Array.isArray(resolvedSearchParams?.company_cv_import)
+    ? resolvedSearchParams.company_cv_import[0]
+    : resolvedSearchParams?.company_cv_import;
 
   return (
     <DashboardShell title="Experiencia">
@@ -116,7 +131,7 @@ export default async function CandidateExperiencePage() {
             <div>
               <CardTitle>Mis experiencias</CardTitle>
               <div className="mt-2 text-sm text-gray-600">
-                Mantén aquí tu historial profesional estructurado y alineado con tus verificaciones.
+                Revisa tu historial profesional, despliega cada experiencia para editarla cuando lo necesites y decide desde ahí si quieres verificarla o vincular documentación.
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -149,9 +164,15 @@ export default async function CandidateExperiencePage() {
             <ExperienceQuickAddClient />
           </div>
 
+          {String(companyCvImportFlag || "") === "1" ? (
+            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+              Hemos cargado la información detectada en tu CV importado por empresa. Revisa ahora cada experiencia, corrige lo que haga falta y luego solicita verificación o vincula evidencia documental.
+            </div>
+          ) : null}
+
           <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-            Estado de experiencia: <span className="font-semibold">Importado</span>, <span className="font-semibold">Sin verificar</span>, <span className="font-semibold">En verificación</span>, <span className="font-semibold">Verificado</span> o <span className="font-semibold">Revocado</span>.
-            Verificado implica confirmación por empresa (vía email corporativo) o validación documental.
+            Estados visibles por experiencia: <span className="font-semibold">Sin verificar</span>, <span className="font-semibold">Verificación solicitada</span>, <span className="font-semibold">En revisión</span>, <span className="font-semibold">Verificada</span> o <span className="font-semibold">Revocada</span>.
+            La fe de vida laboral se gestiona como evidencia global y puede reforzar varias experiencias.
           </div>
 
           <div className="mt-4">

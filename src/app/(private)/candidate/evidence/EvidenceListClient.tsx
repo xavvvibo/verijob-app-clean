@@ -6,7 +6,6 @@ import {
   getEvidenceTypeOptions,
   getEvidenceTypeLabel,
   normalizeEvidenceType,
-  requiresExperienceAssociation,
 } from "@/lib/candidate/evidence-types";
 
 type EvidenceItem = {
@@ -113,7 +112,7 @@ export default function EvidenceListClient({
     setUploading(true);
     setUploadMessage(null);
     try {
-      const { guessedId: guessedExperienceId, employmentRecordId } = resolveEvidenceEmploymentRecordId({
+      const { employmentRecordId } = resolveEvidenceEmploymentRecordId({
         filename: file.name,
         options: experienceOptions,
         selectedExperienceId: requiresExperience ? selectedExperienceId : "",
@@ -243,6 +242,11 @@ export default function EvidenceListClient({
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
           {selectedTypeConfig?.helper}
         </div>
+        {selectedEvidenceType === "vida_laboral" ? (
+          <p className="mt-2 text-xs text-slate-600">
+            La fe de vida laboral se trata como evidencia global: no se vincula a una sola experiencia y puede reforzar varias experiencias de tu historial.
+          </p>
+        ) : null}
         <p className="mt-2 text-xs font-medium text-indigo-700">
           Esta evidencia puede reforzar tu Trust Score.
         </p>

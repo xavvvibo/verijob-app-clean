@@ -121,7 +121,7 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
         throw new Error(data?.user_message || data?.details || data?.error || "No se pudo aceptar la invitación.");
       }
       setNotice(data?.user_message || "Invitación aceptada correctamente.");
-      window.location.href = data?.next_url || "/candidate/overview?company_cv_import=1";
+      window.location.href = data?.next_url || "/candidate/experience?company_cv_import=1";
     } catch (e: any) {
       setError(e?.message || "No se pudo aceptar la invitación.");
     } finally {
@@ -197,7 +197,7 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
                 <p className="mt-2 text-sm text-slate-600">
                   {candidateAlreadyExists
                     ? "Tras aceptar podrás revisar posibles experiencias nuevas o cambios detectados antes de incorporarlos a tu perfil."
-                    : "Tras aceptar podrás revisar este perfil preliminar antes de publicarlo o verificarlo."}
+                    : "Tras aceptar te llevaremos a una pantalla de revisión real para validar tu experiencia importada antes de seguir con el perfil."}
                 </p>
                 <div className="mt-4 grid gap-3">
                   <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -277,8 +277,8 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
                   Esta invitación ya quedó registrada y tu perfil preliminar está disponible dentro de VERIJOB.
                 </p>
                 <div className="mt-4">
-                  <Link href={candidateAlreadyExists ? "/candidate/import-updates?company_cv_import=1" : "/candidate/overview?company_cv_import=1"} className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
-                    {candidateAlreadyExists ? "Revisar cambios detectados" : "Ir a mi perfil importado"}
+                  <Link href={candidateAlreadyExists ? "/candidate/import-updates?company_cv_import=1" : "/candidate/experience?company_cv_import=1"} className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+                    {candidateAlreadyExists ? "Revisar cambios detectados" : "Revisar experiencia importada"}
                   </Link>
                 </div>
               </section>
@@ -349,6 +349,10 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
                     Al continuar aceptas el tratamiento inicial de tus datos conforme a la <Link href="/privacidad" className="font-semibold text-slate-700 underline">Política de privacidad</Link> y los <Link href="/terminos" className="font-semibold text-slate-700 underline">Términos de uso</Link> aplicables.
                   </p>
 
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+                    Al confirmar, importaremos la información detectada y te llevaremos directamente a la pantalla de revisión de experiencias para validarla antes de pedir verificaciones o subir evidencias.
+                  </div>
+
                   {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div> : null}
                   {notice ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div> : null}
 
@@ -358,14 +362,8 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
                       disabled={!allChecked || submitting}
                       className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
                     >
-                      {submitting ? "Registrando aceptación…" : "Confirmar experiencias y continuar"}
+                      {submitting ? "Registrando aceptación…" : "Aceptar y revisar mi experiencia importada"}
                     </button>
-                    <Link
-                      href="/candidate/experience?new=1#manual-experience"
-                      className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50"
-                    >
-                      Editar antes de continuar
-                    </Link>
                   </div>
                 </form>
               </section>

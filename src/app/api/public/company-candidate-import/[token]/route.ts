@@ -202,10 +202,10 @@ export async function POST(
       return json(200, {
         ok: true,
         already_completed: true,
-        next_url: candidateAlreadyExists ? "/candidate/import-updates?company_cv_import=1" : "/candidate/overview?company_cv_import=1",
+        next_url: candidateAlreadyExists ? "/candidate/import-updates?company_cv_import=1" : "/candidate/experience?company_cv_import=1",
         user_message: candidateAlreadyExists
           ? "La invitación ya estaba aceptada y tus cambios pendientes de CV siguen disponibles para revisión."
-          : "La invitación ya estaba aceptada y tu perfil ya está preparado.",
+          : "La invitación ya estaba aceptada y tu experiencia importada ya está lista para revisión.",
       });
     }
 
@@ -276,10 +276,10 @@ export async function POST(
       legal_text_version: COMPANY_CV_IMPORT_LEGAL_VERSION,
       persistence: persistRes,
       candidate_public_token: candidatePublicToken,
-      next_url: candidateAlreadyExists ? "/candidate/import-updates?company_cv_import=1" : "/candidate/overview?company_cv_import=1",
+      next_url: candidateAlreadyExists ? "/candidate/import-updates?company_cv_import=1" : "/candidate/experience?company_cv_import=1",
       user_message: candidateAlreadyExists
         ? "Invitación aceptada. Hemos guardado los posibles cambios de CV para que revises qué quieres incorporar a tu perfil."
-        : "Invitación aceptada. Tu perfil preliminar ya está preparado para revisión.",
+        : "Invitación aceptada. Tu experiencia importada ya está preparada para que la revises antes de verificarla.",
     });
   } catch (error: any) {
     return json(500, {
