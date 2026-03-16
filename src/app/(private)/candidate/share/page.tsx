@@ -145,51 +145,52 @@ export default function CandidatePublicProfilePage() {
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-6 xl:grid-cols-[1.45fr_0.75fr]">
-        <div className="space-y-6">
-          <header className="rounded-2xl border border-gray-200 bg-white p-6">
-            <h1 className="text-2xl font-semibold text-gray-900">Perfil público</h1>
-            <p className="mt-2 text-sm text-gray-600">
-              Así verán tu perfil las empresas cuando compartas tu enlace verificable.
-            </p>
+      <section className="space-y-6">
+        <header className="rounded-2xl border border-gray-200 bg-white p-6">
+          <h1 className="text-2xl font-semibold text-gray-900">Perfil público</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Así verán tu perfil las empresas cuando compartas tu enlace verificable.
+          </p>
 
-            <div className="mt-4 max-w-sm">
-              <label className="block text-sm font-semibold text-gray-900">Ver como</label>
-              <select
-                value={mode}
-                onChange={(e) => setMode(e.target.value as PublicProfilePreviewMode)}
-                className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-              >
-                {previewModes.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className="mt-4 max-w-sm">
+            <label className="block text-sm font-semibold text-gray-900">Ver como</label>
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value as PublicProfilePreviewMode)}
+              className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
+            >
+              {previewModes.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            <p className="mt-4 text-sm text-blue-900">
-              La vista previa muestra dos estados reales y distintos: la vista pública que compartes por enlace y la
-              vista completa con más señales y datos de contacto permitidos.
-            </p>
-          </header>
+          <p className="mt-4 text-sm text-blue-900">
+            La vista previa muestra dos estados reales y distintos: la vista pública que compartes por enlace y la
+            vista completa con más señales y datos de contacto permitidos.
+          </p>
+        </header>
 
-          {previewPayload ? (
-            <CandidatePublicProfileRenderer
-              payload={previewPayload}
-              mode={mode}
-              companyAccess={false}
-              internalPreview
-              contact={contact}
-            />
-          ) : (
-            <section className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
-              {previewError || "Generando enlace y cargando vista previa real del perfil público..."}
-            </section>
-          )}
-        </div>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div>
+            {previewPayload ? (
+              <CandidatePublicProfileRenderer
+                payload={previewPayload}
+                mode={mode}
+                companyAccess={false}
+                internalPreview
+                contact={contact}
+              />
+            ) : (
+              <section className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
+                {previewError || "Generando enlace y cargando vista previa real del perfil público..."}
+              </section>
+            )}
+          </div>
 
-        <aside className="h-fit rounded-2xl border border-gray-200 bg-white p-6 xl:sticky xl:top-6">
+          <aside className="h-fit rounded-2xl border border-gray-200 bg-white p-6">
           <h3 className="text-lg font-semibold text-gray-900">Comparte tu perfil</h3>
           <p className="mt-1 text-sm text-gray-600">
             Este es tu enlace público verificable. El QR está disponible con los planes Pro y Pro+.
@@ -268,7 +269,8 @@ export default function CandidatePublicProfilePage() {
             <p>Compartir por QR: {planCapabilities.canShareByQr ? "sí" : "no"}</p>
             <p>Descarga de CV verificado: {planCapabilities.canDownloadVerifiedCv ? "sí" : "no"}</p>
           </div>
-        </aside>
+          </aside>
+        </div>
       </section>
     </div>
   );

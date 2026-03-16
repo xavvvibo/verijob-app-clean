@@ -227,6 +227,7 @@ export function CandidatePublicProfileRenderer({
   const displayName = isOpenPublicView ? (teaser?.public_name || teaser?.full_name) : teaser?.full_name;
   const showPublicTrustScoreNumber = !isOpenPublicView || trust > 80;
   const publicTrustLabel = trust > 80 ? "Alta confianza verificada" : "Perfil con señales verificadas";
+  const hasSecondarySummary = Boolean((qrEnabled || internalPreview) || capabilities.showContact || companyAccess);
   const hasExperiences = experiences.length > 0;
   const hasEducation = education.length > 0;
   const hasRecommendations = recommendations.length > 0;
@@ -276,10 +277,9 @@ export function CandidatePublicProfileRenderer({
   const showLanguagesTab = (!isOpenPublicView && isPrintMode) || activeTab === "languages";
 
   return (
-    <section className="rounded-[30px] border border-slate-200 bg-slate-50/60 p-3 shadow-sm print:rounded-none print:border-0 print:bg-white print:p-0 print:shadow-none sm:p-4">
-      <div className={`grid gap-5 ${isPrintMode ? "grid-cols-1" : "lg:grid-cols-[minmax(0,1fr)_320px]"}`}>
-        <div className="space-y-5">
-          <header className={`${isPrintMode ? "static" : "sticky top-4 z-20"} rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-lg backdrop-blur print:static print:top-auto print:rounded-none print:border-0 print:p-0 print:shadow-none sm:p-7`}>
+    <section className="rounded-[32px] border border-slate-200 bg-white/75 p-3 shadow-sm print:rounded-none print:border-0 print:bg-white print:p-0 print:shadow-none sm:p-4 lg:p-5">
+      <div className="space-y-5">
+        <header className={`${isPrintMode ? "static" : "relative"} rounded-3xl border border-slate-200 bg-white/95 p-6 shadow-lg backdrop-blur print:static print:top-auto print:rounded-none print:border-0 print:p-0 print:shadow-none sm:p-7`}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex min-w-0 items-start gap-4">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 text-xl font-bold text-white shadow-sm">
@@ -483,9 +483,132 @@ export function CandidatePublicProfileRenderer({
               ))}
             </div>
             ) : null}
-          </header>
+        </header>
 
-          <main className="space-y-4">
+        {!isPrintMode ? (
+          <div className={`grid gap-4 ${hasSecondarySummary ? "xl:grid-cols-[minmax(0,1fr)_300px]" : "grid-cols-1"}`}>
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">Resumen ejecutivo</h3>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Señales clave para decisión empresarial, sin comprimir el contenido principal del perfil.
+                  </p>
+                </div>
+                <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                  {isOpenPublicView ? publicTrustLabel : trustLabel}
+                </span>
+              </div>
+
+              <div className="mt-5 grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex items-center justify-center">
+                    <div className="relative h-28 w-28 rounded-full p-1.5" style={trustRingStyle}>
+                      <div className="flex h-full w-full items-center justify-center rounded-full bg-white text-3xl font-bold text-slate-900">
+                        {showPublicTrustScoreNumber ? trust : "—"}
+                      </div>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-center text-sm font-semibold text-slate-900">
+                    {isOpenPublicView ? publicTrustLabel : trustLabel}
+                  </p>
+                  <p className="mt-2 text-center text-xs leading-5 text-slate-600">
+                    Verificación laboral, trazabilidad documental y consistencia global del historial.
+                  </p>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                    <MetricChip label="Experiencias verificadas" value={verificationSummary.verified} />
+                    <MetricChip label="Verificaciones empresariales" value={Number(teaser?.confirmed_experiences ?? 0)} />
+                    <MetricChip label="Docs validados" value={verificationSummary.evidences} />
+                    <MetricChip label="Recomendaciones" value={recommendations.length} />
+                  </div>
+                  {!isOpenPublicView ? (
+                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Desglose de confianza</div>
+                      <div className="mt-3 space-y-2">
+                        <TrustBreakdownBar label="Verificaciones" value={trustComponents.verification} />
+                        <TrustBreakdownBar label="Evidencias" value={trustComponents.evidence} />
+                        <TrustBreakdownBar label="Consistencia" value={trustComponents.consistency} />
+                        <TrustBreakdownBar label="Cobertura histórica" value={trustComponents.reuse} />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-slate-700">
+                      <p className="font-semibold text-slate-900">Qué refuerza este perfil</p>
+                      <ul className="mt-2 space-y-1.5 text-xs leading-5">
+                        <li>Experiencias verificadas: {verificationSummary.verified}</li>
+                        <li>Verificaciones empresariales: {Number(teaser?.confirmed_experiences ?? 0)}</li>
+                        <li>Documentos laborales validados: {verificationSummary.evidences}</li>
+                        <li>Recomendaciones verificadas: {recommendations.length}</li>
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            {hasSecondarySummary ? (
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                {(qrEnabled || internalPreview) ? (
+                  <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <h3 className="text-sm font-semibold text-slate-900">QR del perfil verificado</h3>
+                    {qrEnabled && qrImageUrl ? (
+                      <>
+                        <p className="mt-2 text-xs leading-5 text-slate-600">Escanea para abrir este perfil verificable.</p>
+                        <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={qrImageUrl}
+                            alt="QR del perfil verificado"
+                            className="mx-auto h-auto w-full max-w-[180px] rounded-lg object-contain"
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      <Empty text="Disponible con planes que habilitan QR público del perfil." compact />
+                    )}
+                  </section>
+                ) : null}
+
+                {capabilities.showContact ? (
+                  <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <h3 className="text-sm font-semibold text-slate-900">Contacto visible</h3>
+                    <div className="mt-3 space-y-2 text-sm text-slate-700">
+                      <p>Email: <span className="font-medium text-slate-900">{contact?.email || "No compartido"}</span></p>
+                      <p>Teléfono: <span className="font-medium text-slate-900">{contact?.phone || "No compartido"}</span></p>
+                    </div>
+                  </section>
+                ) : null}
+
+                {companyAccess ? (
+                  <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <h3 className="text-sm font-semibold text-slate-900">{isOpenPublicView ? "Acceso para empresas" : "Acceso empresa"}</h3>
+                    <p className="mt-2 text-xs leading-5 text-slate-600">
+                      {isOpenPublicView
+                        ? "Regístrate para ver más contexto verificable y evaluar mejor este perfil."
+                        : "Para acceder a más contexto operativo, utiliza la vista de empresa."}
+                    </p>
+                    <div className="mt-4 space-y-2">
+                      <a className="inline-flex w-full justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800" href={signupUrl}>
+                        {isOpenPublicView ? "Registro" : "Crear cuenta empresa"}
+                      </a>
+                      <a
+                        className="inline-flex w-full justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                        href={isOpenPublicView ? "/para-empresas" : loginUrl}
+                      >
+                        {isOpenPublicView ? "Ventajas" : "Iniciar sesión empresa"}
+                      </a>
+                    </div>
+                  </section>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <main className="space-y-4">
             {isPrintMode ? (
                 <Card title="Trust Score y verificación" subtitle="Resumen público de credibilidad y verificación del perfil.">
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -507,13 +630,22 @@ export function CandidatePublicProfileRenderer({
                       : "Información principal del perfil verificable, priorizada para lectura rápida."
                   }
                 >
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    <Stat label="Verificaciones" value={verificationSummary.verified} />
-                    <Stat label="Evidencias" value={verificationSummary.evidences} />
-                    {!isOpenPublicView ? <Stat label="Experiencias" value={verificationSummary.experiences} /> : null}
-                    {!isOpenPublicView ? <Stat label="Uso empresarial" value={verificationSummary.reuse} /> : null}
-                    {!isOpenPublicView ? <Stat label="Formación" value={Number(teaser?.education_total ?? education.length)} /> : null}
-                    {!isOpenPublicView ? <Stat label="Logros" value={Number(teaser?.achievements_total ?? achievements.length)} /> : null}
+                  <div className="space-y-4">
+                    <p className="max-w-4xl text-sm leading-6 text-slate-700">
+                      {teaser?.summary ||
+                        (isOpenPublicView
+                          ? "Perfil verificable orientado a empresa, con foco en historial profesional, señales públicas de credibilidad y lectura rápida del candidato."
+                          : "Resumen profesional priorizado para compartir un perfil verificable claro, legible y centrado en la trayectoria real del candidato.")}
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                      <SummaryInfo label="Experiencias visibles" value={String(verificationSummary.experiences)} />
+                      <SummaryInfo label="Formación visible" value={String(Number(teaser?.education_total ?? education.length))} />
+                      <SummaryInfo
+                        label="Idiomas"
+                        value={publicLanguages.length ? publicLanguages.join(", ") : isOpenPublicView ? "No visibles" : "Pendientes"}
+                      />
+                      <SummaryInfo label="Estado del perfil" value={profileStatus} />
+                    </div>
                   </div>
                 </Card>
 
@@ -759,182 +891,8 @@ export function CandidatePublicProfileRenderer({
                 </div>
               </Card>
             ) : null}
-          </main>
-        </div>
-
-        {!isPrintMode ? (
-        <aside className="space-y-4 print:mt-4 lg:sticky lg:top-4 lg:self-start">
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Trust Score</h3>
-            <div className="mt-3 flex items-center gap-4">
-              <div className="relative h-20 w-20 rounded-full p-1" style={trustRingStyle}>
-                <div className="flex h-full w-full items-center justify-center rounded-full bg-white text-2xl font-bold text-slate-900">
-                  {showPublicTrustScoreNumber ? trust : "—"}
-                </div>
-              </div>
-              <div>
-                <div className="text-base font-semibold text-slate-900">
-                  {isOpenPublicView ? publicTrustLabel : trustLabel}
-                </div>
-                <p className="mt-1 text-xs leading-5 text-slate-600">
-                  Basado en verificaciones laborales, trazabilidad documental y consistencia del historial.
-                </p>
-              </div>
-            </div>
-            <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50/60 p-3 text-xs text-slate-700">
-              <div className="font-semibold text-slate-900">Qué refuerza este score</div>
-              <ul className="mt-2 space-y-1.5">
-                <li>Experiencias verificadas: {verificationSummary.verified}</li>
-                <li>Verificaciones empresariales: {Number(teaser?.confirmed_experiences ?? 0)}</li>
-                <li>Documentos laborales validados: {verificationSummary.evidences}</li>
-                <li>Recomendaciones verificadas: {recommendations.length}</li>
-              </ul>
-            </div>
-            <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
-              <MetricChip label="Experiencias verificadas" value={verificationSummary.verified} />
-              <MetricChip label="Verificaciones empresariales" value={Number(teaser?.confirmed_experiences ?? 0)} />
-              <MetricChip label="Docs validados" value={verificationSummary.evidences} />
-              <MetricChip label="Recomendaciones" value={recommendations.length} />
-            </div>
-            {!isOpenPublicView ? (
-              <div className="mt-4 space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                <div className="text-xs font-semibold text-slate-900">Desglose de confianza</div>
-                <TrustBreakdownBar label="Verificaciones" value={trustComponents.verification} />
-                <TrustBreakdownBar label="Evidencias" value={trustComponents.evidence} />
-                <TrustBreakdownBar label="Consistencia" value={trustComponents.consistency} />
-                <TrustBreakdownBar label="Cobertura histórica" value={trustComponents.reuse} />
-              </div>
-            ) : null}
-          </section>
-
-          {(skills.length > 0 || internalPreview) ? (
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-900">Habilidades clave</h3>
-            {skills.length ? (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {skills.slice(0, 10).map((skill) => (
-                  <span key={`side-${skill}`} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700">
-                    {skill}
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <Empty text="Se mostrarán cuando haya señales públicas suficientes." compact />
-            )}
-          </section>
-          ) : null}
-
-          {(education.length > 0 || internalPreview) ? (
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-900">Formación destacada</h3>
-            {education.length ? (
-              <ul className="mt-3 space-y-2">
-                {education.slice(0, 3).map((item, idx) => (
-                  <li key={`side-edu-${item.id || idx}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                    <p className="text-xs font-semibold text-slate-900">{item.title || "Formación"}</p>
-                    <p className="text-[11px] text-slate-600">{item.institution || "Centro no indicado"}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <Empty text="Sin formación destacada visible." compact />
-            )}
-          </section>
-          ) : null}
-
-          {(recommendations.length > 0 || internalPreview) ? (
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-900">Recomendaciones destacadas</h3>
-            {recommendations.length ? (
-              <ul className="mt-3 space-y-2">
-                {recommendations.slice(0, 3).map((recommendation, idx) => (
-                  <li key={`side-rec-${recommendation.id || idx}`} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                    <p className="text-xs font-semibold text-slate-900">{recommendation.company || "Empresa"}</p>
-                    <p className="line-clamp-2 text-[11px] text-slate-600">{recommendation.text || "Validación profesional registrada."}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <Empty text="Sin recomendaciones destacadas visibles." compact />
-            )}
-          </section>
-          ) : null}
-
-          {(qrEnabled || internalPreview) ? (
-          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-slate-900">QR de tu perfil verificado</h3>
-            {qrEnabled && qrImageUrl ? (
-              <>
-                <p className="mt-2 text-xs leading-5 text-slate-600">Escanea para ver este perfil verificado.</p>
-                <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={qrImageUrl}
-                    alt="QR del perfil verificado"
-                    className="mx-auto h-auto w-full max-w-[200px] rounded-lg object-contain"
-                  />
-                </div>
-              </>
-            ) : (
-              <Empty text="Disponible con planes de suscripción que habilitan QR público del perfil." compact />
-            )}
-          </section>
-          ) : null}
-
-          {capabilities.showContact ? (
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">Contacto visible</h3>
-              <div className="mt-3 space-y-2 text-sm text-slate-700">
-                <p>Email: <span className="font-medium text-slate-900">{contact?.email || "No compartido"}</span></p>
-                <p>Teléfono: <span className="font-medium text-slate-900">{contact?.phone || "No compartido"}</span></p>
-              </div>
-            </section>
-          ) : null}
-
-          {companyAccess ? (
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="text-sm font-semibold text-slate-900">{isOpenPublicView ? "Acceso para empresas" : "Acceso empresa"}</h3>
-              <p className="mt-2 text-xs leading-5 text-slate-600">
-                {isOpenPublicView
-                  ? "Regístrate para desbloquear evaluación empresarial y más contexto verificable."
-                  : "Para acceder a más contexto operativo, utiliza la vista de empresa."}
-              </p>
-              <div className="mt-4 space-y-2">
-                <a className="inline-flex w-full justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800" href={signupUrl}>
-                  {isOpenPublicView ? "Registro" : "Crear cuenta empresa"}
-                </a>
-                <a
-                  className="inline-flex w-full justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                  href={isOpenPublicView ? "/para-empresas" : loginUrl}
-                >
-                  {isOpenPublicView ? "Ventajas" : "Iniciar sesión empresa"}
-                </a>
-              </div>
-            </section>
-          ) : null}
-        </aside>
-        ) : null}
+        </main>
       </div>
-
-      {!isPrintMode ? (
-      <div className="mt-5 rounded-3xl border border-slate-200 bg-white p-5 text-center shadow-sm print:hidden">
-        <button
-          type="button"
-          onClick={async () => {
-            if (!profileUrl) return;
-            try {
-              await navigator.clipboard.writeText(profileUrl);
-              setShareMessage("Enlace copiado al portapapeles.");
-            } catch {
-              setShareMessage("No se pudo copiar automáticamente. Copia la URL desde el navegador.");
-            }
-          }}
-          className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-blue-800"
-        >
-          Compartir perfil verificado
-        </button>
-      </div>
-      ) : null}
     </section>
   );
 }
