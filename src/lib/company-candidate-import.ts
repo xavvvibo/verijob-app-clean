@@ -45,35 +45,38 @@ export async function ensureCandidatePublicToken(
   try {
     const { data: existing } = await supabase
       .from("candidate_public_links")
-      .select("id, token")
-      .eq("user_id", userId)
+      .select("id, public_token, expires_at")
+      .eq("candidate_id", userId)
       .eq("is_active", true)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (existing?.token) return existing.token;
+    if (existing?.public_token) return existing.public_token;
   } catch {}
 
   try {
     const { data: existingAny } = await supabase
       .from("candidate_public_links")
-      .select("id, token")
-      .eq("user_id", userId)
+      .select("id, public_token")
+      .eq("candidate_id", userId)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    if (existingAny?.token) return existingAny.token;
+    if (existingAny?.public_token) return existingAny.public_token;
   } catch {}
 
   const token = randomToken(24);
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
   try {
     const { error } = await supabase.from("candidate_public_links").insert({
-      user_id: userId,
-      token,
+      candidate_id: userId,
+      public_token: token,
       is_active: true,
+      created_by: userId,
+      expires_at: expiresAt,
     });
 
     if (!error) return token;
@@ -81,8 +84,8 @@ export async function ensureCandidatePublicToken(
 
   try {
     const { error } = await supabase.from("candidate_public_links").insert({
-      user_id: userId,
-      token,
+      candidate_id: userId,
+      public_token: token,
     });
 
     if (!error) return token;

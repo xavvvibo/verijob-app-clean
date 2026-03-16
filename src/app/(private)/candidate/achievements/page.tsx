@@ -124,12 +124,6 @@ function toPayload(items: AchievementItem[]) {
     });
 }
 
-function classifyCategory(item: AchievementItem): EditorMode {
-  if (item.category === "idioma") return "language";
-  if (item.category === "certificacion") return "certification";
-  return "achievement";
-}
-
 function buildNewItem(mode: EditorMode): AchievementItem {
   if (mode === "language") return { ...EMPTY_LANGUAGE };
   if (mode === "certification") return { ...EMPTY_CERTIFICATION };
@@ -349,7 +343,7 @@ export default function CandidateAchievementsPage() {
     if (open === "language") add("language");
     if (open === "certification") add("certification");
     if (open === "achievement") add("achievement");
-    router.replace(pathname, { scroll: false });
+    window.history.replaceState({}, "", pathname);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, pathname, router, searchParams]);
 

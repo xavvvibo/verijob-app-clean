@@ -69,6 +69,9 @@ function buildAchievementsCatalog(profile: any, candidateProfile: any) {
   const achievements = Array.isArray(candidateProfile?.achievements)
     ? candidateProfile.achievements.map(normalizeAchievement).filter(Boolean)
     : [];
+  const otherAchievements = Array.isArray(candidateProfile?.other_achievements)
+    ? candidateProfile.other_achievements.map(normalizeAchievement).filter(Boolean)
+    : [];
   const certificationsLegacy = Array.isArray(candidateProfile?.certifications)
     ? candidateProfile.certifications.map(normalizeAchievement).filter(Boolean)
     : [];
@@ -88,7 +91,12 @@ function buildAchievementsCatalog(profile: any, candidateProfile: any) {
       }))
     : [];
 
-  const merged = dedupeAchievements([...profileLanguages, ...achievements, ...certificationsLegacy] as AchievementItem[]);
+  const merged = dedupeAchievements([
+    ...profileLanguages,
+    ...achievements,
+    ...otherAchievements,
+    ...certificationsLegacy,
+  ] as AchievementItem[]);
   return {
     all: merged,
     languages: merged.filter((item) => item.category === "idioma"),

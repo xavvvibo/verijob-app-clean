@@ -133,8 +133,9 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const service = createServiceRoleClient();
   const activeCompanyId = String((requesterProfile as any)?.active_company_id || "");
 
-  let linkResolved = await resolveActiveCandidatePublicLink(service, tokenParam);
+  const linkResolved = await resolveActiveCandidatePublicLink(service, tokenParam);
   let link = linkResolved.ok ? linkResolved.link : null;
+  let unresolvedInvitePreview: any = null;
 
   if (linkResolved.ok === false) {
     const [directLinkRes, inviteRes] = await Promise.all([
@@ -147,7 +148,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
         .maybeSingle(),
       service
         .from("company_candidate_import_invites")
-        .select("id,linked_user_id")
+        .select("id,linked_user_id,candidate_name_raw,candidate_email,target_role,created_at,updated_at,accepted_at,parse_status,status,extracted_payload_json")
         .eq("company_id", activeCompanyId)
         .eq("invite_token", tokenParam)
         .order("updated_at", { ascending: false })
@@ -156,7 +157,8 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     ]);
 
     const directLink = directLinkRes.data as any;
-    const inviteLinkUserId = String((inviteRes.data as any)?.linked_user_id || "").trim();
+    const inviteRow = inviteRes.data as any;
+    const inviteLinkUserId = String(inviteRow?.linked_user_id || "").trim();
 
     if (directLink?.candidate_id) {
       const inviteByCandidate = await service
@@ -183,9 +185,56 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
         expires_at: null,
         is_active: true,
       };
+    } else if (inviteRow?.id) {
+      unresolvedInvitePreview = inviteRow;
     }
 
     if (!link) {
+      if (unresolvedInvitePreview?.id) {
+        const extractedPayload =
+          unresolvedInvitePreview?.extracted_payload_json && typeof unresolvedInvitePreview.extracted_payload_json === "object"
+            ? unresolvedInvitePreview.extracted_payload_json
+            : {};
+        const extractedLanguages = Array.isArray(extractedPayload?.languages)
+          ? extractedPayload.languages
+              .map((item: any) => String(item?.name || item?.language || item?.title || item || "").trim())
+              .filter(Boolean)
+          : [];
+        return json(200, {
+          candidate_id: null,
+          view_mode: "preview",
+          preview: {
+            public_name: String(unresolvedInvitePreview?.candidate_name_raw || unresolvedInvitePreview?.candidate_email || "Candidato").trim(),
+            sector: String(unresolvedInvitePreview?.target_role || extractedPayload?.headline || "").trim() || null,
+            years_experience: Array.isArray(extractedPayload?.experiences) ? extractedPayload.experiences.length : null,
+            approximate_location: String(extractedPayload?.location || extractedPayload?.experiences?.[0]?.location || "").trim() || null,
+            experiences_detected: Array.isArray(extractedPayload?.experiences) ? extractedPayload.experiences.length : 0,
+            total_verifications: 0,
+            approved_verifications: 0,
+            verification_types: [],
+            verification_breakdown: { email_or_company: 0, documental: 0 },
+            languages_detected: extractedLanguages,
+            trust_score: null,
+            onboarding_completion: 25,
+            onboarding_status: "candidate_pending_acceptance",
+            profile_state: "en_construccion",
+            last_activity_at:
+              unresolvedInvitePreview?.updated_at || unresolvedInvitePreview?.accepted_at || unresolvedInvitePreview?.created_at || null,
+          },
+          access: {
+            access_status: "never",
+            access_granted_at: null,
+            access_expires_at: null,
+            source: null,
+          },
+          gate: {
+            allowed: true,
+            consumed: false,
+            requires_overage: false,
+            credits_remaining: 0,
+          },
+        });
+      }
       if (linkResolved.reason === "expired") return json(410, { error: "Link expired" });
       return json(404, { error: "Not found" });
     }

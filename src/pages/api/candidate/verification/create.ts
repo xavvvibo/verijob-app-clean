@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import crypto from "crypto";
 import { createPagesRouteClient } from "@/utils/supabase/pages";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 import {
   isMissingExternalResolvedColumn,
   isVerificationExternallyResolved,
@@ -32,6 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (authErr || !auth?.user) {
       return res.status(401).json({ error: "unauthorized" });
     }
+    const admin = createServiceRoleClient();
 
     const {
       employment_record_id,
@@ -57,7 +59,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     let verifiedProfileExperienceId = sourceProfileExperienceId;
     if (sourceProfileExperienceId) {
-      const { data: profileExperience, error: profileExpErr } = await supabase
+      const { data: profileExperience, error: profileExpErr } = await admin
         .from("profile_experiences")
         .select("id")
         .eq("id", sourceProfileExperienceId)
@@ -74,7 +76,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (employmentRecordId) {
-      const { data: employmentRecord } = await supabase
+      const { data: employmentRecord } = await admin
         .from("employment_records")
         .select("id")
         .eq("id", employmentRecordId)
@@ -86,22 +88,22 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     let existingRows: any[] = [];
-    const primaryExisting = await supabase
+    const primaryExisting = await admin
       .from("verification_requests")
       .select("id,status,resolved_at,revoked_at,employment_record_id,request_context,external_resolved")
       .eq("requested_by", userId)
-      .eq("company_email_target", companyEmail)
+      .or(`company_email_target.eq.${companyEmail},external_email_target.eq.${companyEmail}`)
       .order("created_at", { ascending: false })
       .limit(20);
 
     existingRows = Array.isArray(primaryExisting.data) ? primaryExisting.data : [];
 
     if (primaryExisting.error && isMissingExternalResolvedColumn(primaryExisting.error)) {
-      const fallbackExisting = await supabase
+      const fallbackExisting = await admin
         .from("verification_requests")
         .select("id,status,resolved_at,revoked_at,employment_record_id,request_context")
         .eq("requested_by", userId)
-        .eq("company_email_target", companyEmail)
+        .or(`company_email_target.eq.${companyEmail},external_email_target.eq.${companyEmail}`)
         .order("created_at", { ascending: false })
         .limit(20);
       if (fallbackExisting.error) {
@@ -142,39 +144,42 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const { data, error } = await supabase
+    const insertPayload = {
+      employment_record_id: employmentRecordId || null,
+      company_email_target: companyEmail,
+      external_email_target: companyEmail,
+      company_name_target: companyName,
+      requested_by: userId,
+      verification_type: "employment",
+      verification_channel: "email",
+      status: "pending_company",
+      requested_at: new Date().toISOString(),
+      external_token: newToken(),
+      external_token_expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      request_context: {
+        source: "candidate_experience_request",
+        source_profile_experience_id: verifiedProfileExperienceId || null,
+        company_name_freeform: companyName,
+        position: roleTitle,
+        start_date: asText(start_date) || null,
+        end_date: asText(end_date) || null,
+        is_current: Boolean(is_current),
+      },
+    };
+
+    const { data, error } = await admin
       .from("verification_requests")
-      .insert({
-        employment_record_id: employmentRecordId || null,
-        company_email_target: companyEmail,
-        external_email_target: companyEmail,
-        company_name_target: companyName,
-        requested_by: userId,
-        verification_type: "employment",
-        verification_channel: "email",
-        status: "pending_company",
-        requested_at: new Date().toISOString(),
-        external_token: newToken(),
-        external_token_expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-        request_context: {
-          source: "candidate_experience_request",
-          source_profile_experience_id: verifiedProfileExperienceId || null,
-          position: roleTitle,
-          start_date: asText(start_date) || null,
-          end_date: asText(end_date) || null,
-          is_current: Boolean(is_current),
-        },
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
     if (error) {
       console.error("verification_create_error", error);
-      return res.status(500).json({ error: "verification_create_failed" });
+      return res.status(500).json({ error: "verification_create_failed", details: error.message });
     }
 
     if (verifiedProfileExperienceId) {
-      await supabase
+      await admin
         .from("profile_experiences")
         .update({
           matched_verification_id: data.id,
