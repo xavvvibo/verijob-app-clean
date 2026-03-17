@@ -19,6 +19,10 @@ function json(status: number, body: any) {
   return res;
 }
 
+function logCompanyCandidateResponse(event: string, payload: Record<string, unknown>) {
+  console.log("[company-candidate-token]", event, payload);
+}
+
 function isVerifiedStatus(status: any) {
   const s = String(status || "").toLowerCase();
   return s === "approved" || s === "verified";
@@ -196,6 +200,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const { token: tokenParam } = await ctx.params;
   const url = new URL(req.url);
   const mode = url.searchParams.get("mode") === "full" ? "full" : "preview";
+  logCompanyCandidateResponse("request", { token: tokenParam, mode });
 
   // Auth (empresa logueada)
   const supabase = await createClient();
@@ -265,7 +270,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
     if (!link) {
       if (unresolvedInvitePreview?.id) {
-        return json(200, {
+        const previewBody = {
           candidate_id: null,
           view_mode: "preview",
           preview: buildInvitePreviewPayload(unresolvedInvitePreview),
@@ -281,7 +286,20 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
             requires_overage: false,
             credits_remaining: 0,
           },
-        });
+        };
+        if (mode === "full") {
+          logCompanyCandidateResponse("return:invite-preview-instead-of-full", {
+            mode,
+            body: previewBody,
+          });
+          return json(409, {
+            error: "candidate_profile_incomplete",
+            user_message: "Este candidato todavía no tiene un perfil completo desbloqueable.",
+            ...previewBody,
+          });
+        }
+        logCompanyCandidateResponse("return:preview", { mode, body: previewBody });
+        return json(200, previewBody);
       }
       if (linkResolved.reason === "expired") return json(410, { error: "Link expired" });
       return json(404, { error: "Not found" });
@@ -321,7 +339,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
           })
         : { available: 0 };
 
-      return json(200, {
+      const previewBody = {
         candidate_id: link.candidate_id,
         view_mode: "preview",
         preview: buildInvitePreviewPayload(inviteByLinkedUser),
@@ -332,7 +350,29 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
           requires_overage: false,
           credits_remaining: profileAccessCredits.available,
         },
+      };
+
+      if (mode === "full") {
+        logCompanyCandidateResponse("return:linked-invite-preview-instead-of-full", {
+          mode,
+          candidate_id: link.candidate_id,
+          access_status: access?.access_status ?? null,
+          body: previewBody,
+        });
+        return json(409, {
+          error: "candidate_profile_incomplete",
+          user_message: "Este candidato todavía no tiene un perfil completo desbloqueable.",
+          ...previewBody,
+        });
+      }
+
+      logCompanyCandidateResponse("return:preview-with-linked-invite", {
+        mode,
+        candidate_id: link.candidate_id,
+        access_status: access?.access_status ?? null,
+        body: previewBody,
       });
+      return json(200, previewBody);
     }
 
     return json(404, { error: "Not found" });
@@ -564,7 +604,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     : deriveCompanyCandidateAccess(null, null);
 
   if (mode === "preview") {
-    return json(200, {
+    const previewBody = {
       candidate_id: link.candidate_id,
       view_mode: "preview",
       preview: snapshot,
@@ -575,7 +615,14 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
         requires_overage: false,
         credits_remaining: profileAccessCredits.available,
       },
+    };
+    logCompanyCandidateResponse("return:preview", {
+      mode,
+      candidate_id: link.candidate_id,
+      access_status: access?.access_status ?? null,
+      body: previewBody,
     });
+    return json(200, previewBody);
   }
 
   if (companyImportInProgress) {
@@ -606,6 +653,13 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     });
     gate = gateRes.data;
     const gateErr = gateRes.error;
+    logCompanyCandidateResponse("gate:result", {
+      candidate_id: link.candidate_id,
+      company_id: companyId || null,
+      access_status_before: access?.access_status ?? null,
+      gate,
+      gate_error: gateErr?.message || null,
+    });
 
     if (gateErr) {
       console.error("[company-candidate-token] gate failed", {
@@ -660,6 +714,12 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       const existingConsumption = existingConsumptionRes.data as any;
       if (existingConsumption?.id) {
         resolvedAccess = deriveCompanyCandidateAccess(existingConsumption.created_at, existingConsumption.source || source);
+        logCompanyCandidateResponse("unlock:existing-consumption", {
+          candidate_id: link.candidate_id,
+          company_id: companyId,
+          consumption_id: existingConsumption.id,
+          access_status_after: resolvedAccess?.access_status ?? null,
+        });
       } else {
         const insertedAt = new Date().toISOString();
         const insertConsumptionRes = await service.from("profile_view_consumptions").insert({
@@ -685,6 +745,12 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
           });
         }
         accessConsumed = true;
+        logCompanyCandidateResponse("unlock:inserted-consumption", {
+          candidate_id: link.candidate_id,
+          company_id: companyId,
+          credits_spent: 1,
+          source,
+        });
       }
 
       const [reloadedAccess, reloadedCredits] = await Promise.all([
@@ -771,24 +837,34 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     })
     .slice(0, 12);
 
-  return json(
-    200,
-    buildFullAccessPayload({
-      candidateId: link.candidate_id,
-      snapshot,
-      access: resolvedAccess,
-      safe,
-      contact,
-      availability,
-      credibility,
-      trustComponents,
-      verificationTimeline,
-      gate: {
-        ...gate,
-        credits_remaining: gate?.credits_remaining ?? profileAccessCredits.available,
-      },
-      unlocked: resolvedAccess.access_status === "active",
-      accessConsumed: accessConsumed || !!gate?.consumed,
-    })
-  );
+  const fullBody = buildFullAccessPayload({
+    candidateId: link.candidate_id,
+    snapshot,
+    access: resolvedAccess,
+    safe,
+    contact,
+    availability,
+    credibility,
+    trustComponents,
+    verificationTimeline,
+    gate: {
+      ...gate,
+      credits_remaining: gate?.credits_remaining ?? profileAccessCredits.available,
+    },
+    unlocked: resolvedAccess.access_status === "active",
+    accessConsumed: accessConsumed || !!gate?.consumed,
+  });
+  logCompanyCandidateResponse("return:full", {
+    mode,
+    candidate_id: link.candidate_id,
+    access_status_after: resolvedAccess?.access_status ?? null,
+    body: {
+      view_mode: fullBody.view_mode,
+      unlocked: fullBody.unlocked,
+      access_consumed: fullBody.access_consumed,
+      credits_remaining: fullBody.credits_remaining,
+      access_status: fullBody.access?.access_status ?? null,
+    },
+  });
+  return json(200, fullBody);
 }
