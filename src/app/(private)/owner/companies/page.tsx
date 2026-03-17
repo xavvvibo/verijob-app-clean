@@ -44,6 +44,17 @@ function activityBadge(activityState: string, completion: number, pending: numbe
   return "Activa con perfil parcial";
 }
 
+function documentTypeLabel(raw: unknown) {
+  const value = String(raw || "").toLowerCase();
+  if (value === "modelo_036") return "Modelo 036";
+  if (value === "modelo_037") return "Modelo 037";
+  if (value === "cif_nif") return "CIF / NIF empresa";
+  if (value === "certificado_censal") return "Certificado censal / AEAT";
+  if (value === "escritura") return "Escritura o documento equivalente";
+  if (value === "otro") return "Otro documento";
+  return String(raw || "Documento");
+}
+
 export default async function OwnerCompaniesPage({
   searchParams,
 }: {
@@ -105,7 +116,7 @@ export default async function OwnerCompaniesPage({
     companyIds.length
       ? supabase
           .from("company_verification_documents")
-          .select("company_id,review_status,lifecycle_status")
+          .select("id,company_id,document_type,review_status,lifecycle_status,created_at,uploaded_by")
           .in("company_id", companyIds)
       : Promise.resolve({ data: [] as any[] } as any),
   ]);
@@ -114,6 +125,12 @@ export default async function OwnerCompaniesPage({
   const requests = Array.isArray(requestsRes.data) ? requestsRes.data : [];
   const profiles = Array.isArray(profilesRes.data) ? profilesRes.data : [];
   const docs = Array.isArray(docsRes.data) ? docsRes.data : [];
+  const uploaderIds = Array.from(new Set(docs.map((doc: any) => String(doc?.uploaded_by || "")).filter(Boolean)));
+
+  const uploaderProfilesRes = uploaderIds.length
+    ? await supabase.from("profiles").select("id,full_name,email").in("id", uploaderIds)
+    : ({ data: [] as any[] } as any);
+  const uploaderProfilesById = new Map((Array.isArray(uploaderProfilesRes.data) ? uploaderProfilesRes.data : []).map((row: any) => [String(row.id), row]));
 
   const membersByCompany = new Map<string, number>();
   for (const m of memberships as any[]) {
@@ -204,6 +221,14 @@ export default async function OwnerCompaniesPage({
   const unverifiedByStatus =
     rows.filter((r: any) => String(r.status || "").toLowerCase() === "unverified").length ||
     normalized.filter((x) => x.status === "unverified").length;
+  const pendingDocumentQueue = docs
+    .filter((doc: any) => {
+      const lifecycle = String(doc?.lifecycle_status || "active").toLowerCase();
+      const review = String(doc?.review_status || "").toLowerCase();
+      return lifecycle !== "deleted" && (review === "pending_review" || review === "uploaded");
+    })
+    .sort((a: any, b: any) => Date.parse(String(b?.created_at || "")) - Date.parse(String(a?.created_at || "")))
+    .slice(0, 12);
 
   return (
     <div className="space-y-5">
@@ -230,6 +255,60 @@ export default async function OwnerCompaniesPage({
         <p className="mt-3 text-xs text-slate-500">
           Actividad: {rows.length - totalInactive} activas · {totalInactive} inactivas · {totalPending} pendientes · {incomplete} con perfil incompleto · {highUsage} con uso alto.
         </p>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">Cola documental pendiente</h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Documentos empresa pendientes de revisión manual owner. Cada fila enlaza a la ficha de empresa para aprobar o rechazar.
+            </p>
+          </div>
+          <span className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">
+            Pendientes: {pendingDocumentQueue.length}
+          </span>
+        </div>
+        {pendingDocumentQueue.length === 0 ? (
+          <p className="mt-3 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+            No hay documentos empresa pendientes de revisión manual.
+          </p>
+        ) : (
+          <div className="mt-4 overflow-auto">
+            <table className="min-w-[860px] w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th className="px-3 py-3">Empresa</th>
+                  <th className="px-3 py-3">Documento</th>
+                  <th className="px-3 py-3">Subido</th>
+                  <th className="px-3 py-3">Uploader</th>
+                  <th className="px-3 py-3">Estado</th>
+                  <th className="px-3 py-3">Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pendingDocumentQueue.map((doc: any) => {
+                  const company = normalized.find((entry) => entry.id === String(doc.company_id || ""));
+                  const uploader = uploaderProfilesById.get(String(doc.uploaded_by || "")) as any;
+                  return (
+                    <tr key={String(doc.id)} className="border-b border-slate-100 text-slate-800">
+                      <td className="px-3 py-3 font-semibold text-slate-900">{company?.displayName || String(doc.company_id || "Empresa")}</td>
+                      <td className="px-3 py-3">{documentTypeLabel(doc.document_type)}</td>
+                      <td className="px-3 py-3">{doc.created_at ? new Date(String(doc.created_at)).toLocaleDateString("es-ES") : "—"}</td>
+                      <td className="px-3 py-3">{uploader?.full_name || uploader?.email || String(doc.uploaded_by || "—")}</td>
+                      <td className="px-3 py-3">Pendiente de revisión</td>
+                      <td className="px-3 py-3">
+                        <Link href={`/owner/companies/${doc.company_id}`} className="text-xs font-semibold text-slate-700 underline">
+                          Abrir ficha
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

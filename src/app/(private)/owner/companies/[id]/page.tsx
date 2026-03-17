@@ -5,6 +5,7 @@ import { companyVerificationMethodTone, deriveCompanyVerificationMethod } from "
 import { effectivePlanDisplay, readEffectiveCompanySubscriptionState } from "@/lib/billing/effectiveSubscription";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import OwnerCompanyDocumentReviewActions from "./OwnerCompanyDocumentReviewActions";
 
 export const dynamic = "force-dynamic";
 
@@ -48,6 +49,16 @@ function documentTypeLabel(raw: unknown) {
   if (value === "escritura") return "Escritura o documento equivalente";
   if (value === "otro") return "Otro documento";
   return String(raw || "Documento");
+}
+
+function documentDecisionSource(rawReviewedBy: unknown, rawReviewedAt: unknown) {
+  if (String(rawReviewedBy || "").trim()) {
+    return { label: "Manual owner", className: "border-sky-200 bg-sky-50 text-sky-800" };
+  }
+  if (rawReviewedAt) {
+    return { label: "Revisión interna", className: "border-slate-200 bg-slate-100 text-slate-700" };
+  }
+  return { label: "Pendiente", className: "border-amber-200 bg-amber-50 text-amber-800" };
 }
 
 export default async function OwnerCompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -267,6 +278,7 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
                 const reviewer = docActorById.get(String(doc.reviewed_by || "")) as any;
                 const detectedCount = Number(doc?.extracted_json?.detected_fields_count || 0);
                 const importStatus = String(doc?.import_status || "not_imported");
+                const decisionSource = documentDecisionSource(doc.reviewed_by, doc.reviewed_at);
                 return (
                   <article key={String(doc.id)} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -274,9 +286,14 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
                         <p className="font-semibold text-slate-900">{documentTypeLabel(doc.document_type)}</p>
                         <p className="mt-1 text-xs text-slate-500">{doc.original_filename || "Sin nombre de archivo"} · subido {fmtDate(doc.created_at)}</p>
                       </div>
-                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${documentReviewClass(doc.review_status)}`}>
-                        {documentReviewLabel(doc.review_status)}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${documentReviewClass(doc.review_status)}`}>
+                          {documentReviewLabel(doc.review_status)}
+                        </span>
+                        <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${decisionSource.className}`}>
+                          {decisionSource.label}
+                        </span>
+                      </div>
                     </div>
                     <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
                       <div>
@@ -305,6 +322,10 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
                     {doc.rejected_reason ? (
                       <p className="mt-2 text-xs text-rose-700">Motivo de rechazo: {String(doc.rejected_reason)}</p>
                     ) : null}
+                    <OwnerCompanyDocumentReviewActions
+                      documentId={String(doc.id)}
+                      currentStatus={String(doc.review_status || "pending_review")}
+                    />
                   </article>
                 );
               })}
