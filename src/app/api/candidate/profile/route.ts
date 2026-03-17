@@ -248,8 +248,8 @@ export async function PUT(req: Request) {
     const payload: Record<string, any> = {
       user_id: user.id,
       summary: typeof body?.summary === "string" ? body.summary : candidateProfile?.summary ?? null,
-      updated_at: new Date().toISOString(),
     };
+    if (candidateProfileColumns.has("updated_at")) payload.updated_at = new Date().toISOString();
     if (candidateProfileColumns.has("education")) {
       payload.education = Array.isArray(body?.education)
         ? body.education
@@ -275,7 +275,10 @@ export async function PUT(req: Request) {
   }
 
   if (writeError) {
-    return NextResponse.json({ error: writeError.message }, { status: 400 });
+    return NextResponse.json(
+      { error: "candidate_profile_write_failed", details: writeError.message },
+      { status: 400 }
+    );
   }
 
   const nextProfilePatch: Record<string, any> = {};
@@ -338,13 +341,16 @@ export async function PUT(req: Request) {
     nextProfilePatch.languages = languages;
   }
   if (Object.keys(nextProfilePatch).length) {
-    nextProfilePatch.updated_at = new Date().toISOString();
+    if (profileColumns.has("updated_at")) nextProfilePatch.updated_at = new Date().toISOString();
     const profileUpdate = await supabase
       .from("profiles")
       .update(nextProfilePatch)
       .eq("id", user.id);
     if (profileUpdate.error) {
-      return NextResponse.json({ error: profileUpdate.error.message }, { status: 400 });
+      return NextResponse.json(
+        { error: "profile_update_failed", details: profileUpdate.error.message },
+        { status: 400 }
+      );
     }
   }
 

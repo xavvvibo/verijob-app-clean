@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { createClient } from "@/utils/supabase/client";
+import InlineStatusMessage from "@/components/ui/InlineStatusMessage";
 
 type Profile = {
   id: string;
@@ -54,7 +55,8 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
   const [clearIdentityOnSave, setClearIdentityOnSave] = useState(false);
   const [saving, setSaving] = useState(false);
   const [emailSaving, setEmailSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [profileMessage, setProfileMessage] = useState<{ tone: "success" | "warning" | "error"; text: string } | null>(null);
+  const [accountMessage, setAccountMessage] = useState<{ tone: "success" | "warning" | "error"; text: string } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -99,7 +101,7 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
 
   async function saveProfile() {
     setSaving(true);
-    setMessage(null);
+    setProfileMessage(null);
     try {
       const payload = ProfileSchema.parse({
         full_name: p.full_name,
@@ -127,7 +129,10 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
         body: JSON.stringify(requestBody),
       });
       const result = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(result?.error || "No se pudo guardar el perfil.");
+      if (!response.ok) {
+        const details = String(result?.details || "").trim();
+        throw new Error(details ? `No se pudo guardar el perfil. ${details}` : "No se pudo guardar el perfil.");
+      }
       const nextPersonalProfile = result?.personal_profile || {};
       setP((current) => ({
         ...current,
@@ -152,9 +157,9 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
       });
       setIdentityValue("");
       setClearIdentityOnSave(false);
-      setMessage("Perfil guardado correctamente.");
+      setProfileMessage({ tone: "success", text: "Perfil guardado correctamente." });
     } catch (e: any) {
-      setMessage(e?.message || "No se pudo guardar el perfil.");
+      setProfileMessage({ tone: "error", text: e?.message || "No se pudo guardar el perfil." });
     } finally {
       setSaving(false);
     }
@@ -162,15 +167,15 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
 
   async function changeEmail() {
     setEmailSaving(true);
-    setMessage(null);
+    setAccountMessage(null);
     try {
       const next = email.trim();
       if (!next || !next.includes("@")) throw new Error("Email inválido");
       const { error } = await supabase.auth.updateUser({ email: next });
       if (error) throw new Error(error.message);
-      setMessage("Solicitud enviada. Revisa tu email para confirmar el cambio.");
+      setAccountMessage({ tone: "success", text: "Solicitud enviada. Revisa tu email para confirmar el cambio." });
     } catch (e: any) {
-      setMessage(e?.message || "No se pudo cambiar el email.");
+      setAccountMessage({ tone: "error", text: e?.message || "No se pudo cambiar el email." });
     } finally {
       setEmailSaving(false);
     }
@@ -245,7 +250,7 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
                       has_identity: false,
                       identity_type: null,
                     }));
-                    setMessage("El documento se eliminará cuando guardes el perfil.");
+                    setProfileMessage({ tone: "warning", text: "El documento se eliminará cuando guardes el perfil." });
                   }}
                   className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                 >
@@ -263,7 +268,7 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
                       identity_masked: persistedIdentity.identity_masked,
                       has_identity: persistedIdentity.has_identity,
                     }));
-                    setMessage(null);
+                    setProfileMessage(null);
                   }}
                   className="rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50"
                 >
@@ -279,6 +284,7 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
           <Field label="Código postal" value={p.postal_code ?? ""} onChange={(v) => setP({ ...p, postal_code: v || null })} />
           <Field label="País" value={p.country ?? ""} onChange={(v) => setP({ ...p, country: v || null })} />
         </div>
+        {profileMessage ? <InlineStatusMessage tone={profileMessage.tone} message={profileMessage.text} /> : null}
       </section>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-6">
@@ -297,7 +303,7 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
         </div>
       </section>
 
-      {message ? <p className="text-sm text-gray-600">{message}</p> : null}
+      {accountMessage ? <InlineStatusMessage tone={accountMessage.tone} message={accountMessage.text} /> : null}
     </div>
   );
 }
