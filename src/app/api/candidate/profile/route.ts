@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { buildCandidateProfileCompletionModel } from "@/lib/candidate/profile-completion";
-import { buildIdentityRecord, normalizeIdentityType, normalizeIdentityValue } from "@/lib/security/identity";
+import { maskIdentityValue, normalizeIdentityType, normalizeIdentityValue } from "@/lib/security/identity";
 
 const PROFILE_PERSONAL_FIELDS = [
   "full_name",
@@ -231,7 +231,7 @@ export async function GET() {
       country: profile?.country || null,
       identity_type: profile?.identity_type || null,
       identity_masked: profile?.identity_masked || null,
-      has_identity: Boolean(profile?.identity_hash),
+      has_identity: Boolean(profile?.identity_masked || profile?.identity_type),
     },
     profile: {
       ...(candidateProfile || {}),
@@ -352,23 +352,21 @@ export async function PUT(req: Request) {
     if (wantsClear) {
       nextProfilePatch.identity_type = null;
       nextProfilePatch.identity_masked = null;
-      nextProfilePatch.identity_hash = null;
     } else if (!identityType || !identityValue) {
       return NextResponse.json(
         { error: "invalid_identity_value", details: "El documento debe tener al menos 5 caracteres alfanuméricos válidos." },
         { status: 400 }
       );
     } else {
-      const identity = buildIdentityRecord({ type: identityType, value: identityValue });
-      if (!identity.identityType || !identity.identityMasked || !identity.identityHash) {
+      const identityMasked = maskIdentityValue(identityValue);
+      if (!identityMasked) {
         return NextResponse.json(
-          { error: "identity_hash_failed", details: "No se pudo generar el hash interno del documento." },
+          { error: "identity_mask_failed", details: "No se pudo generar la máscara del documento." },
           { status: 400 }
         );
       }
-      nextProfilePatch.identity_type = identity.identityType;
-      nextProfilePatch.identity_masked = identity.identityMasked;
-      nextProfilePatch.identity_hash = identity.identityHash;
+      nextProfilePatch.identity_type = identityType;
+      nextProfilePatch.identity_masked = identityMasked;
     }
   }
   if (hasAchievementsInput || Array.isArray(profile?.languages) || languages.length > 0) {
@@ -380,7 +378,7 @@ export async function PUT(req: Request) {
       .from("profiles")
       .update(nextProfilePatch)
       .eq("id", user.id)
-      .select("id, full_name, phone, title, location, address_line1, address_line2, city, region, postal_code, country, identity_type, identity_masked, identity_hash, languages")
+      .select("id, full_name, phone, title, location, address_line1, address_line2, city, region, postal_code, country, identity_type, identity_masked, languages")
       .maybeSingle();
     if (profileUpdate.error) {
       return NextResponse.json(
@@ -485,7 +483,7 @@ export async function PUT(req: Request) {
       country: nextProfile?.country || null,
       identity_type: nextProfile?.identity_type || null,
       identity_masked: nextProfile?.identity_masked || null,
-      has_identity: Boolean(nextProfile?.identity_hash),
+      has_identity: Boolean(nextProfile?.identity_masked || nextProfile?.identity_type),
     },
     profile: {
       ...(persistedCandidateProfile || {}),
