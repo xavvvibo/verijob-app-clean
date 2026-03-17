@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { buildCandidateProfileCompletionModel } from "@/lib/candidate/profile-completion";
+import { normalizeCandidatePhone } from "@/lib/phone";
 
 const PROFILE_PERSONAL_FIELDS = [
   "full_name",
@@ -153,7 +154,12 @@ function buildRequestedPersonalSnapshot(body: any, currentProfile: any) {
   const next: Record<string, any> = {};
   for (const field of PROFILE_PERSONAL_FIELDS) {
     if (Object.prototype.hasOwnProperty.call(body || {}, field)) {
-      next[field] = normalizeNullableText(body?.[field], field === "phone" ? 50 : 160);
+      if (field === "phone") {
+        const normalizedPhone = normalizeCandidatePhone(body?.[field]);
+        next[field] = normalizedPhone.ok === true ? normalizedPhone.normalized : currentProfile?.[field] ?? null;
+      } else {
+        next[field] = normalizeNullableText(body?.[field], 160);
+      }
     } else {
       next[field] = currentProfile?.[field] ?? null;
     }
@@ -307,10 +313,18 @@ export async function PUT(req: Request) {
   const nextProfilePatch: Record<string, any> = {};
   for (const field of PROFILE_PERSONAL_FIELDS) {
     if (!Object.prototype.hasOwnProperty.call(body || {}, field)) continue;
-    nextProfilePatch[field] = normalizeNullableText(
-      body?.[field],
-      field === "phone" ? 50 : 160
-    );
+    if (field === "phone") {
+      const normalizedPhone = normalizeCandidatePhone(body?.[field]);
+      if (normalizedPhone.ok === false) {
+        return NextResponse.json(
+          { error: "invalid_phone", details: normalizedPhone.error },
+          { status: 400 }
+        );
+      }
+      nextProfilePatch[field] = normalizedPhone.normalized;
+      continue;
+    }
+    nextProfilePatch[field] = normalizeNullableText(body?.[field], 160);
   }
   const hasIdentityInput =
     Object.prototype.hasOwnProperty.call(body || {}, "identity_type") ||

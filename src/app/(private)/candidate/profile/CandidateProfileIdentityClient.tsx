@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import { createClient } from "@/utils/supabase/client";
 import InlineStatusMessage from "@/components/ui/InlineStatusMessage";
+import { normalizeCandidatePhone } from "@/lib/phone";
 
 type Profile = {
   id: string;
@@ -115,7 +116,12 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
         postal_code: undefined,
         country: undefined,
       });
+      const normalizedPhone = normalizeCandidatePhone(payload.phone);
+      if (normalizedPhone.ok === false) {
+        throw new Error(normalizedPhone.error);
+      }
       const requestBody: Record<string, unknown> = { ...payload };
+      requestBody.phone = normalizedPhone.normalized;
       const identityRequested = clearIdentityOnSave || Boolean(identityValue.trim());
       const response = await fetch("/api/candidate/profile", {
         method: "PUT",
