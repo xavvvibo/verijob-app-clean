@@ -26,7 +26,7 @@ type Profile = {
 
 const IDENTITY_TYPE_OPTIONS = [
   { value: "dni", label: "DNI" },
-  { value: "nif", label: "NIE" },
+  { value: "nie", label: "NIE" },
   { value: "passport", label: "Pasaporte" },
 ];
 
@@ -122,7 +122,14 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
       }
       const requestBody: Record<string, unknown> = { ...payload };
       requestBody.phone = normalizedPhone.normalized;
-      const identityRequested = clearIdentityOnSave || Boolean(identityValue.trim());
+      const trimmedIdentityValue = identityValue.trim();
+      const identityRequested = clearIdentityOnSave || Boolean(trimmedIdentityValue);
+      if (clearIdentityOnSave) {
+        requestBody.clear_identity = true;
+      } else if (trimmedIdentityValue) {
+        requestBody.identity_type = p.identity_type ?? "dni";
+        requestBody.identity_value = trimmedIdentityValue;
+      }
       const response = await fetch("/api/candidate/profile", {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -157,17 +164,8 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
       });
       setIdentityValue("");
       setClearIdentityOnSave(false);
-      if (identityRequested || result?.identity_ignored) {
-        setP((current) => ({
-          ...current,
-          identity_type: null,
-          identity_masked: null,
-          has_identity: false,
-        }));
-        setProfileMessage({
-          tone: "warning",
-          text: "Perfil guardado correctamente. El documento de identidad no se persiste en este entorno.",
-        });
+      if (identityRequested && clearIdentityOnSave) {
+        setProfileMessage({ tone: "success", text: "Perfil guardado correctamente. El documento se eliminó." });
       } else {
         setProfileMessage({ tone: "success", text: "Perfil guardado correctamente." });
       }

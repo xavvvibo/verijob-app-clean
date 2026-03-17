@@ -1,16 +1,17 @@
 import "server-only";
 import { createHmac } from "crypto";
 
-export type IdentityType = "dni" | "nif" | "passport";
+export type IdentityType = "dni" | "nie" | "passport";
 
-const ALLOWED_IDENTITY_TYPES = new Set<IdentityType>(["dni", "nif", "passport"]);
+const ALLOWED_IDENTITY_TYPES = new Set<IdentityType>(["dni", "nie", "passport"]);
 
 function compactIdentity(value: string) {
   return value.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
 }
 
 export function normalizeIdentityType(value: unknown): IdentityType | null {
-  const normalized = String(value || "").trim().toLowerCase() as IdentityType;
+  const raw = String(value || "").trim().toLowerCase();
+  const normalized = (raw === "nif" ? "nie" : raw) as IdentityType;
   return ALLOWED_IDENTITY_TYPES.has(normalized) ? normalized : null;
 }
 

@@ -3,6 +3,7 @@ import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { buildCandidateProfileCompletionModel } from "@/lib/candidate/profile-completion";
 import { normalizeCandidatePhone } from "@/lib/phone";
+import { buildIdentityRecord } from "@/lib/security/identity";
 
 const PROFILE_PERSONAL_FIELDS = [
   "full_name",
@@ -116,9 +117,14 @@ function buildAchievementsCatalog(profile: any, candidateProfile: any) {
 }
 
 async function readProfileAndCandidateProfile(supabase: any, userId: string) {
-  const [profileRes, candidateProfileRes, experienceCountRes, evidenceCountRes] = await Promise.all([
+  const [profileRes, candidateProfileRes, identityRes, experienceCountRes, evidenceCountRes] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
     supabase.from("candidate_profiles").select("*").eq("user_id", userId).maybeSingle(),
+    supabase
+      .from("candidate_identities")
+      .select("user_id, identity_type, identity_masked")
+      .eq("user_id", userId)
+      .maybeSingle(),
     supabase.from("profile_experiences").select("id", { count: "exact", head: true }).eq("user_id", userId),
     supabase.from("evidences").select("id", { count: "exact", head: true }).eq("uploaded_by", userId),
   ]);
@@ -128,6 +134,9 @@ async function readProfileAndCandidateProfile(supabase: any, userId: string) {
   }
   if (candidateProfileRes.error) {
     return { error: NextResponse.json({ error: candidateProfileRes.error.message }, { status: 400 }) };
+  }
+  if (identityRes.error) {
+    return { error: NextResponse.json({ error: identityRes.error.message }, { status: 400 }) };
   }
   if (experienceCountRes.error) {
     return { error: NextResponse.json({ error: experienceCountRes.error.message }, { status: 400 }) };
@@ -139,6 +148,7 @@ async function readProfileAndCandidateProfile(supabase: any, userId: string) {
   return {
     profile: profileRes.data || null,
     candidateProfile: candidateProfileRes.data || null,
+    identity: identityRes.data || null,
     counts: {
       experience_count: Number(experienceCountRes.count || 0),
       evidence_count: Number(evidenceCountRes.count || 0),
@@ -192,7 +202,7 @@ export async function GET() {
   const admin = createServiceRoleClient();
   const read = await readProfileAndCandidateProfile(admin, user.id);
   if ((read as any).error) return (read as any).error;
-  const { profile, candidateProfile, counts } = read as any;
+  const { profile, candidateProfile, identity, counts } = read as any;
   const achievementsCatalog = buildAchievementsCatalog(profile, candidateProfile);
   const profileCompletion = buildCandidateProfileCompletionModel({
     profile,
@@ -214,9 +224,9 @@ export async function GET() {
       region: null,
       postal_code: null,
       country: null,
-      identity_type: null,
-      identity_masked: null,
-      has_identity: false,
+      identity_type: identity?.identity_type || null,
+      identity_masked: identity?.identity_masked || null,
+      has_identity: Boolean(identity?.identity_type && identity?.identity_masked),
     },
     profile: {
       ...(candidateProfile || {}),
@@ -326,9 +336,11 @@ export async function PUT(req: Request) {
     }
     nextProfilePatch[field] = normalizeNullableText(body?.[field], 160);
   }
-  const hasIdentityInput =
-    Object.prototype.hasOwnProperty.call(body || {}, "identity_type") ||
-    Object.prototype.hasOwnProperty.call(body || {}, "identity_value");
+  const clearIdentity = body?.clear_identity === true;
+  const hasIdentityValueInput =
+    Object.prototype.hasOwnProperty.call(body || {}, "identity_value") &&
+    typeof body?.identity_value === "string" &&
+    body.identity_value.trim().length > 0;
   if (Object.keys(nextProfilePatch).length) {
     nextProfilePatch.updated_at = new Date().toISOString();
     const profileUpdate = await admin
@@ -352,10 +364,79 @@ export async function PUT(req: Request) {
     Object.assign(profile, profileUpdate.data || {});
   }
 
+  let requestedIdentitySnapshot:
+    | { identity_type: string; identity_masked: string }
+    | null
+    | undefined = undefined;
+
+  if (clearIdentity) {
+    const deleteIdentity = await admin.from("candidate_identities").delete().eq("user_id", user.id);
+    if (deleteIdentity.error) {
+      return NextResponse.json(
+        {
+          error: "candidate_identity_delete_failed",
+          details: deleteIdentity.error.message,
+        },
+        { status: 400 }
+      );
+    }
+    requestedIdentitySnapshot = null;
+  } else if (hasIdentityValueInput) {
+    const identityRecord = buildIdentityRecord({
+      type: body?.identity_type,
+      value: body?.identity_value,
+    });
+    if (!identityRecord.identityType || !identityRecord.identityMasked || !identityRecord.identityHash) {
+      return NextResponse.json(
+        {
+          error: "invalid_identity",
+          details: "El documento de identidad no es válido.",
+        },
+        { status: 400 }
+      );
+    }
+    const upsertIdentity = await admin
+      .from("candidate_identities")
+      .upsert(
+        {
+          user_id: user.id,
+          identity_type: identityRecord.identityType,
+          identity_hash: identityRecord.identityHash,
+          identity_masked: identityRecord.identityMasked,
+        },
+        { onConflict: "user_id" }
+      )
+      .select("user_id, identity_type, identity_masked")
+      .maybeSingle();
+    if (upsertIdentity.error) {
+      return NextResponse.json(
+        {
+          error: "candidate_identity_write_failed",
+          details: upsertIdentity.error.message,
+        },
+        { status: 400 }
+      );
+    }
+    if (!upsertIdentity.data) {
+      return NextResponse.json(
+        {
+          error: "candidate_identity_write_no_rows",
+          details: "No se pudo persistir la identidad del candidato.",
+        },
+        { status: 400 }
+      );
+    }
+    requestedIdentitySnapshot = {
+      identity_type: identityRecord.identityType,
+      identity_masked: identityRecord.identityMasked,
+    };
+  }
+
   const reread = await readProfileAndCandidateProfile(admin, user.id);
   if ((reread as any).error) return (reread as any).error;
   const persistedProfile = (reread as any).profile || null;
   const persistedCandidateProfile = (reread as any).candidateProfile || null;
+  const persistedIdentity = (reread as any).identity || null;
   const persistedCounts = (reread as any).counts || counts;
 
   const requestedPersonalSnapshot = buildRequestedPersonalSnapshot(body, profile);
@@ -400,6 +481,31 @@ export async function PUT(req: Request) {
     }
   }
 
+  if (requestedIdentitySnapshot === null) {
+    if (persistedIdentity) {
+      return NextResponse.json(
+        {
+          error: "candidate_identity_persistence_mismatch",
+          details: "El documento de identidad no se eliminó tras la relectura.",
+        },
+        { status: 409 }
+      );
+    }
+  } else if (requestedIdentitySnapshot) {
+    if (
+      (persistedIdentity?.identity_type ?? null) !== requestedIdentitySnapshot.identity_type ||
+      (persistedIdentity?.identity_masked ?? null) !== requestedIdentitySnapshot.identity_masked
+    ) {
+      return NextResponse.json(
+        {
+          error: "candidate_identity_persistence_mismatch",
+          details: "El documento de identidad no quedó persistido tras la relectura.",
+        },
+        { status: 409 }
+      );
+    }
+  }
+
   const nextProfile = persistedProfile;
   const achievementsCatalog = buildAchievementsCatalog(nextProfile, persistedCandidateProfile);
   const profileCompletion = buildCandidateProfileCompletionModel({
@@ -411,8 +517,6 @@ export async function PUT(req: Request) {
   });
   return NextResponse.json({
     ok: true,
-    identity_persistence_supported: false,
-    identity_ignored: hasIdentityInput,
     personal_profile: {
       full_name: nextProfile?.full_name || null,
       phone: nextProfile?.phone || null,
@@ -424,9 +528,9 @@ export async function PUT(req: Request) {
       region: null,
       postal_code: null,
       country: null,
-      identity_type: null,
-      identity_masked: null,
-      has_identity: false,
+      identity_type: persistedIdentity?.identity_type || null,
+      identity_masked: persistedIdentity?.identity_masked || null,
+      has_identity: Boolean(persistedIdentity?.identity_type && persistedIdentity?.identity_masked),
     },
     profile: {
       ...(persistedCandidateProfile || {}),
