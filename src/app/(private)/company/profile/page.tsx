@@ -148,25 +148,25 @@ function extractionSummary(doc: CompanyVerificationDocument) {
   const count = Number(doc?.extracted_json?.detected_fields_count || 0);
   if (count <= 0) {
     return {
-      label: "Sin datos útiles detectados",
-      detail: "Puedes subir otro documento más legible si quieres completar mejor el perfil.",
+      label: "Sin datos útiles detectados en el archivo",
+      detail: "No hemos detectado texto suficiente para extraer datos orientativos de este archivo.",
     };
   }
   if (count <= 2) {
     return {
-      label: "Pocos datos detectados",
-      detail: `${count} campo${count === 1 ? "" : "s"} detectado${count === 1 ? "" : "s"} para ayudarte a completar el perfil.`,
+      label: "Pocas señales detectadas",
+      detail: `${count} campo${count === 1 ? "" : "s"} detectado${count === 1 ? "" : "s"} de forma orientativa a partir del archivo.`,
     };
   }
   if (count <= 5) {
     return {
-      label: "Datos detectados",
-      detail: `${count} campos detectados para ayudarte a completar el perfil.`,
+      label: "Datos orientativos detectados",
+      detail: `${count} campos detectados de forma orientativa para ayudarte a completar el perfil.`,
     };
   }
   return {
-    label: "Muchos datos detectados",
-    detail: `${count} campos detectados para completar el perfil con más rapidez.`,
+    label: "Muchos datos orientativos detectados",
+    detail: `${count} campos detectados de forma orientativa para completar el perfil con más rapidez.`,
   };
 }
 
@@ -180,14 +180,14 @@ function documentaryNextStep(doc: CompanyVerificationDocument) {
   if (review === "rejected") return "Revisa el motivo indicado y sube una nueva versión del documento.";
   if (review === "pending_review" || review === "uploaded") {
     return detected > 0
-      ? "La revisión interna sigue abierta. Si te encajan, puedes importar ya los datos detectados para adelantar el perfil de empresa."
-      : "La revisión interna sigue abierta. No necesitas hacer nada más hasta que revisemos el documento.";
+      ? "El archivo sigue en revisión interna. Los datos detectados son orientativos y puedes importarlos al perfil si te encajan."
+      : "El archivo sigue en revisión interna. No necesitas hacer nada más hasta que revisemos el documento.";
   }
   if (review === "approved") {
     if (detected > 0 && importStatus !== "imported") {
-      return "Documento validado. Puedes importar los datos detectados al perfil de empresa si te encajan.";
+      return "Documento validado internamente. Puedes importar los datos detectados del archivo al perfil de empresa si te encajan.";
     }
-    return "Documento validado. No requiere más acciones.";
+    return "Documento validado internamente. No requiere más acciones.";
   }
   return "Documento recibido. Te avisaremos si hace falta revisar o completar algo.";
 }
@@ -558,7 +558,7 @@ export default function CompanyProfilePage() {
 
     if (importedCount > 0) {
       setMessage(
-        `Datos importados al perfil (${importedCount} campo${importedCount === 1 ? "" : "s"}): ${importedLabels.join(", ")}${
+        `Datos detectados del archivo importados al perfil (${importedCount} campo${importedCount === 1 ? "" : "s"}): ${importedLabels.join(", ")}${
           skippedLabels.length ? `. Sin cambios: ${skippedLabels.join(", ")}.` : "."
         }`,
       );
@@ -567,8 +567,8 @@ export default function CompanyProfilePage() {
 
     setMessage(
       skippedLabels.length
-        ? `Hemos revisado el documento. No había cambios nuevos para importar. Ya estaban cubiertos: ${skippedLabels.join(", ")}.`
-        : "Hemos revisado el documento, pero no se detectaron datos aplicables al perfil.",
+        ? `No había cambios nuevos que importar desde los datos detectados del archivo. Ya estaban cubiertos: ${skippedLabels.join(", ")}.`
+        : "No se detectaron datos aplicables al perfil a partir del archivo subido.",
     );
   }
 
@@ -880,7 +880,7 @@ export default function CompanyProfilePage() {
             </div>
           </div>
           <p className="mt-3 text-xs text-slate-600">
-            La revisión documental no es instantánea. Incorporar datos al perfil te ayuda a completar la ficha, pero no valida por sí solo la empresa.
+            La revisión documental no es instantánea. Importar datos detectados del archivo ayuda a completar la ficha, pero no valida por sí solo el tipo documental ni la empresa.
           </p>
           {profile?.company_document_rejection_reason || profile?.verification_rejection_reason ? (
             <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
@@ -893,7 +893,7 @@ export default function CompanyProfilePage() {
             </p>
           ) : null}
           <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
-            Verás por separado el estado del documento, los datos detectados para completar el perfil y la siguiente acción recomendada en cada caso.
+            Verás por separado el estado del archivo, los datos detectados de forma orientativa y la siguiente acción recomendada en cada caso.
           </div>
           <div className="mt-3 grid gap-2 md:grid-cols-3">
             <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">

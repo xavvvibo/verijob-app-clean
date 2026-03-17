@@ -377,33 +377,7 @@ export default function CompanySettingsPage() {
         {accountError ? <p className="mt-4 text-sm text-rose-600">{accountError}</p> : null}
         {accountMessage ? <p className="mt-4 text-sm text-emerald-700">{accountMessage}</p> : null}
 
-        <div className="mt-6 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-          <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <h3 className="text-sm font-semibold text-slate-900">Identidad fiscal de empresa</h3>
-            <p className="mt-1 text-sm text-slate-600">
-              La edición de CIF/NIF y datos fiscales de empresa se centraliza en Perfil de empresa para evitar duplicidades entre superficies.
-            </p>
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Resumen actual</p>
-              <p className="mt-1 font-semibold text-slate-900">
-                {account?.company?.has_identity
-                  ? `${String(account?.company.identity_type || "").toUpperCase()} · ${account?.company.identity_masked}`
-                  : "Todavía no hay identidad fiscal resumida en esta cuenta."}
-              </p>
-              <p className="mt-2 text-xs text-slate-500">
-                Si necesitas actualizar el documento fiscal o completar datos legales, hazlo desde el perfil de empresa.
-              </p>
-            </div>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <a
-                href="/company/profile"
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
-              >
-                Abrir perfil de empresa
-              </a>
-            </div>
-          </section>
-
+        <div className="mt-6">
           <section className="space-y-4">
             <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
               <h3 className="text-sm font-semibold text-amber-950">Mi usuario empresa</h3>

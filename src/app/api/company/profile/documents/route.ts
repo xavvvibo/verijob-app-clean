@@ -300,7 +300,7 @@ export async function GET() {
       review_priority_label: documentaryState.priority_label,
       ...(docsState.warningCode ? { warning: docsState.warningCode, ...docsMigrationPayload(docsState.warningCode) } : {}),
     });
-  } catch (e: any) {
+  } catch {
     return json(500, {
       error: "unhandled_exception",
       user_message: "No se pudo cargar la documentación de empresa. Inténtalo de nuevo en unos minutos.",
@@ -454,7 +454,7 @@ export async function POST(request: Request) {
       return json(200, {
         ok: true,
         document: docsInsert.data,
-        user_message: "Documento subido correctamente. Ya está en revisión, pero no se pudo refrescar el histórico automáticamente.",
+        user_message: "Archivo recibido para revisión documental. No se pudo refrescar el histórico automáticamente.",
         documents: [docsInsert.data].filter(Boolean),
         profile_update_warning: profileUpdateRes.error ? "company_profile_document_sync_failed" : null,
         documentary_status: "under_review",
@@ -484,7 +484,7 @@ export async function POST(request: Request) {
       ok: true,
       document: docsInsert.data,
       documents: finalizedDocs,
-      user_message: "Documento subido correctamente. Estamos revisándolo.",
+      user_message: "Archivo recibido para revisión documental. Estamos revisándolo.",
       documentary_status: documentaryState.status,
       documentary_label: documentaryState.label,
       documentary_detail: documentaryState.detail,
@@ -499,7 +499,7 @@ export async function POST(request: Request) {
           }
         : {}),
     });
-  } catch (e: any) {
+  } catch {
     return json(500, {
       error: "unhandled_exception",
       user_message: "No se pudo subir el documento. Inténtalo de nuevo en unos minutos.",
@@ -647,7 +647,7 @@ export async function PATCH(request: Request) {
     }
 
     return json(400, { error: "unsupported_action" });
-  } catch (e: any) {
+  } catch {
     return json(500, {
       error: "unhandled_exception",
       user_message: "No se pudo actualizar el estado del documento. Inténtalo de nuevo en unos minutos.",
