@@ -54,6 +54,45 @@ function clampPercent(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+function buildFullAccessPayload(args: {
+  candidateId: string;
+  snapshot: any;
+  access: any;
+  safe: any;
+  contact: any;
+  availability: any;
+  credibility: any;
+  trustComponents: any;
+  verificationTimeline: any[];
+  gate: any;
+  unlocked: boolean;
+  accessConsumed: boolean;
+}) {
+  return {
+    candidate_id: args.candidateId,
+    view_mode: "full",
+    unlocked: args.unlocked,
+    access_consumed: args.accessConsumed,
+    credits_remaining: args.gate?.credits_remaining ?? null,
+    preview: args.snapshot,
+    access: args.access,
+    profile: args.safe,
+    contact: args.contact,
+    availability: args.availability,
+    credibility: args.credibility,
+    trust_components: args.trustComponents,
+    verification_timeline: args.verificationTimeline,
+    gate: {
+      allowed: true,
+      consumed: !!args.gate?.consumed,
+      requires_overage: !!args.gate?.requires_overage,
+      overage_price: args.gate?.overage_price ?? null,
+      credits_remaining: args.gate?.credits_remaining ?? null,
+      period_start: args.gate?.period_start ?? null,
+    },
+  };
+}
+
 function toPublicName(fullNameRaw: unknown) {
   const fullName = String(fullNameRaw || "").trim();
   if (!fullName) return "Candidato verificado";
@@ -558,6 +597,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     period_start: null,
   };
   let resolvedAccess = access;
+  let accessConsumed = false;
 
   if (access.access_status !== "active") {
     // Consumo de crédito solo cuando se pide el perfil completo y no existe acceso activo.
@@ -590,45 +630,96 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
     if (companyId && gate?.allowed) {
       const verificationId = String(verificationRows.find((row: any) => row?.verification_id)?.verification_id || "").trim() || null;
-      try {
-        const source = await resolveConsumptionSource({
-          service,
-          companyId,
-          viewerUserId: au.user.id,
-        });
-        const existingConsumptionRes = await service
-          .from("profile_view_consumptions")
-          .select("id,created_at,source")
-          .eq("company_id", companyId)
-          .eq("candidate_id", link.candidate_id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
+      const source = await resolveConsumptionSource({
+        service,
+        companyId,
+        viewerUserId: au.user.id,
+      });
+      const existingConsumptionRes = await service
+        .from("profile_view_consumptions")
+        .select("id,created_at,source")
+        .eq("company_id", companyId)
+        .eq("candidate_id", link.candidate_id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-        const existingConsumption = existingConsumptionRes.data as any;
-        if (existingConsumption?.id) {
-          resolvedAccess = deriveCompanyCandidateAccess(existingConsumption.created_at, existingConsumption.source || source);
-        } else {
-          const insertedAt = new Date().toISOString();
-          await service.from("profile_view_consumptions").insert({
-            company_id: companyId,
-            viewer_user_id: au.user.id,
-            candidate_id: link.candidate_id,
-            verification_id: verificationId,
-            credits_spent: 1,
-            source,
-            created_at: insertedAt,
-          });
-          resolvedAccess = deriveCompanyCandidateAccess(insertedAt, source);
-        }
-      } catch (logErr: any) {
-        console.error("[company-candidate-token] consumption log failed", {
+      if (existingConsumptionRes.error) {
+        console.error("[company-candidate-token] existing consumption read failed", {
           candidate_id: link.candidate_id,
           company_id: companyId,
           viewer_user_id: au.user.id,
-          message: logErr?.message || String(logErr),
+          message: existingConsumptionRes.error.message,
         });
-        resolvedAccess = deriveCompanyCandidateAccess(new Date().toISOString(), null);
+        return json(500, {
+          error: "unlock_state_read_failed",
+          details: existingConsumptionRes.error.message,
+        });
+      }
+
+      const existingConsumption = existingConsumptionRes.data as any;
+      if (existingConsumption?.id) {
+        resolvedAccess = deriveCompanyCandidateAccess(existingConsumption.created_at, existingConsumption.source || source);
+      } else {
+        const insertedAt = new Date().toISOString();
+        const insertConsumptionRes = await service.from("profile_view_consumptions").insert({
+          company_id: companyId,
+          viewer_user_id: au.user.id,
+          candidate_id: link.candidate_id,
+          verification_id: verificationId,
+          credits_spent: 1,
+          source,
+          created_at: insertedAt,
+        });
+
+        if (insertConsumptionRes.error) {
+          console.error("[company-candidate-token] consumption log failed", {
+            candidate_id: link.candidate_id,
+            company_id: companyId,
+            viewer_user_id: au.user.id,
+            message: insertConsumptionRes.error.message,
+          });
+          return json(500, {
+            error: "unlock_persistence_failed",
+            details: insertConsumptionRes.error.message,
+          });
+        }
+        accessConsumed = true;
+      }
+
+      const [reloadedAccess, reloadedCredits] = await Promise.all([
+        resolveCompanyCandidateAccess({
+          service,
+          companyId,
+          candidateId: String(link.candidate_id),
+        }),
+        resolveCompanyProfileAccessCredits({
+          service,
+          userId: au.user.id,
+          companyId,
+        }),
+      ]);
+
+      resolvedAccess = reloadedAccess;
+      gate = {
+        ...gate,
+        credits_remaining: reloadedCredits.available,
+      };
+
+      if (resolvedAccess.access_status !== "active") {
+        console.error("[company-candidate-token] unlock did not persist", {
+          candidate_id: link.candidate_id,
+          company_id: companyId,
+          viewer_user_id: au.user.id,
+          gate,
+        });
+        return json(409, {
+          error: "unlock_not_persisted",
+          details: "El unlock no quedó registrado correctamente.",
+          preview: snapshot,
+          access: resolvedAccess,
+          credits_remaining: reloadedCredits.available,
+        });
       }
     }
   } else {
@@ -638,6 +729,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       consumed: false,
       credits_remaining: profileAccessCredits.available,
     };
+    accessConsumed = false;
   }
 
   const experiencesBase = Math.max(1, verificationRows.length || 0);
@@ -679,24 +771,24 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     })
     .slice(0, 12);
 
-  return json(200, {
-    candidate_id: link.candidate_id,
-    view_mode: "full",
-    preview: snapshot,
-    access: resolvedAccess,
-    profile: safe,
-    contact,
-    availability,
-    credibility,
-    trust_components: trustComponents,
-    verification_timeline: verificationTimeline,
-    gate: {
-      allowed: true,
-      consumed: !!gate?.consumed,
-      requires_overage: !!gate?.requires_overage, // Enterprise sin créditos -> true
-      overage_price: gate?.overage_price ?? null,
-      credits_remaining: gate?.credits_remaining ?? profileAccessCredits.available,
-      period_start: gate?.period_start ?? null,
-    },
-  });
+  return json(
+    200,
+    buildFullAccessPayload({
+      candidateId: link.candidate_id,
+      snapshot,
+      access: resolvedAccess,
+      safe,
+      contact,
+      availability,
+      credibility,
+      trustComponents,
+      verificationTimeline,
+      gate: {
+        ...gate,
+        credits_remaining: gate?.credits_remaining ?? profileAccessCredits.available,
+      },
+      unlocked: resolvedAccess.access_status === "active",
+      accessConsumed: accessConsumed || !!gate?.consumed,
+    })
+  );
 }

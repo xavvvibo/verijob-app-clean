@@ -86,6 +86,16 @@ export default function CompanyCandidateAccessCta({
         return;
       }
 
+      const unlocked = payload?.unlocked === true;
+      const fullView = payload?.view_mode === "full";
+      if (!unlocked || !fullView) {
+        const contractError = String(payload?.error || payload?.details || "unlock_contract_invalid");
+        setError("La API no confirmó el desbloqueo real del perfil.");
+        setLastError(contractError);
+        setConfirmState("error");
+        return;
+      }
+
       setConfirmState("success");
       window.location.assign(href);
     } catch (clientError: any) {
