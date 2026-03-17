@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { createRouteHandlerClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 import { buildCandidateProfileCompletionModel } from "@/lib/candidate/profile-completion";
 import { buildIdentityRecord, normalizeIdentityType, normalizeIdentityValue } from "@/lib/security/identity";
 
@@ -154,7 +155,7 @@ async function getTableColumns(supabase: any, tableName: string) {
 }
 
 export async function GET() {
-  const supabase = await createClient();
+  const supabase = await createRouteHandlerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -163,7 +164,8 @@ export async function GET() {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const read = await readProfileAndCandidateProfile(supabase, user.id);
+  const admin = createServiceRoleClient();
+  const read = await readProfileAndCandidateProfile(admin, user.id);
   if ((read as any).error) return (read as any).error;
   const { profile, candidateProfile, counts } = read as any;
   const achievementsCatalog = buildAchievementsCatalog(profile, candidateProfile);
@@ -203,7 +205,7 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  const supabase = await createClient();
+  const supabase = await createRouteHandlerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -212,8 +214,9 @@ export async function PUT(req: Request) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
+  const admin = createServiceRoleClient();
   const body = await req.json().catch(() => ({}));
-  const read = await readProfileAndCandidateProfile(supabase, user.id);
+  const read = await readProfileAndCandidateProfile(admin, user.id);
   if ((read as any).error) return (read as any).error;
   const { profile, candidateProfile, counts } = read as any;
 
@@ -238,8 +241,8 @@ export async function PUT(req: Request) {
     .filter(Boolean);
 
   const [candidateProfileColumns, profileColumns] = await Promise.all([
-    getTableColumns(supabase, "candidate_profiles"),
-    getTableColumns(supabase, "profiles"),
+    getTableColumns(admin, "candidate_profiles"),
+    getTableColumns(admin, "profiles"),
   ]);
 
   let writeError: any = null;
@@ -264,11 +267,24 @@ export async function PUT(req: Request) {
     if (candidateProfileColumns.has("certifications")) payload.certifications = certifications;
 
     if (candidateProfile?.id) {
-      const res = await supabase.from("candidate_profiles").update(payload).eq("id", candidateProfile.id).select("*").single();
+      const res = await admin
+        .from("candidate_profiles")
+        .update(payload)
+        .eq("id", candidateProfile.id)
+        .eq("user_id", user.id)
+        .select("*")
+        .maybeSingle();
       writeError = res.error;
       nextCandidateProfile = res.data;
+      if (!writeError && !nextCandidateProfile) {
+        writeError = { message: "candidate_profile_update_no_rows" };
+      }
     } else {
-      const res = await supabase.from("candidate_profiles").insert(payload).select("*").single();
+      const res = await admin
+        .from("candidate_profiles")
+        .insert(payload)
+        .select("*")
+        .single();
       writeError = res.error;
       nextCandidateProfile = res.data;
     }
@@ -342,16 +358,25 @@ export async function PUT(req: Request) {
   }
   if (Object.keys(nextProfilePatch).length) {
     if (profileColumns.has("updated_at")) nextProfilePatch.updated_at = new Date().toISOString();
-    const profileUpdate = await supabase
+    const profileUpdate = await admin
       .from("profiles")
       .update(nextProfilePatch)
-      .eq("id", user.id);
+      .eq("id", user.id)
+      .select("id, full_name, phone, title, location, address_line1, address_line2, city, region, postal_code, country, identity_type, identity_masked, identity_hash, languages")
+      .maybeSingle();
     if (profileUpdate.error) {
       return NextResponse.json(
         { error: "profile_update_failed", details: profileUpdate.error.message },
         { status: 400 }
       );
     }
+    if (!profileUpdate.data) {
+      return NextResponse.json(
+        { error: "profile_update_no_rows", details: "No se actualizó ninguna fila en profiles." },
+        { status: 400 }
+      );
+    }
+    Object.assign(profile, profileUpdate.data);
   }
 
   const nextProfile = { ...(profile || {}), ...nextProfilePatch };

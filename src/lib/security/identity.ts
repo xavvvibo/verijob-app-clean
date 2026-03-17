@@ -28,7 +28,13 @@ export function maskIdentityValue(value: string) {
 }
 
 export function hashIdentityValue(value: string) {
-  const secret = String(process.env.IDENTITY_HASH_PEPPER || "").trim();
+  const secret = String(
+    process.env.IDENTITY_HASH_PEPPER ||
+    process.env.INTERNAL_HASH_PEPPER ||
+    process.env.APP_SECRET ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    ""
+  ).trim();
   if (!secret) {
     throw new Error("identity_hash_pepper_missing");
   }
