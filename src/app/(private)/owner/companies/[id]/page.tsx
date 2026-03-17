@@ -24,6 +24,32 @@ function verificationLabel(raw: unknown) {
   return "Pendiente de clasificación";
 }
 
+function documentReviewLabel(raw: unknown) {
+  const value = String(raw || "").toLowerCase();
+  if (value === "approved") return "Aprobado";
+  if (value === "rejected") return "Rechazado";
+  if (value === "uploaded") return "Recibido";
+  return "Pendiente de revisión";
+}
+
+function documentReviewClass(raw: unknown) {
+  const value = String(raw || "").toLowerCase();
+  if (value === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (value === "rejected") return "border-rose-200 bg-rose-50 text-rose-800";
+  return "border-amber-200 bg-amber-50 text-amber-800";
+}
+
+function documentTypeLabel(raw: unknown) {
+  const value = String(raw || "").toLowerCase();
+  if (value === "modelo_036") return "Modelo 036";
+  if (value === "modelo_037") return "Modelo 037";
+  if (value === "cif_nif") return "CIF / NIF empresa";
+  if (value === "certificado_censal") return "Certificado censal / AEAT";
+  if (value === "escritura") return "Escritura o documento equivalente";
+  if (value === "otro") return "Otro documento";
+  return String(raw || "Documento");
+}
+
 export default async function OwnerCompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
@@ -63,7 +89,7 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
       .limit(20),
     admin
       .from("company_verification_documents")
-      .select("review_status,lifecycle_status")
+      .select("id,document_type,original_filename,uploaded_by,review_status,rejected_reason,review_notes,reviewed_by,reviewed_at,lifecycle_status,created_at,updated_at,extracted_json,import_status,imported_at")
       .eq("company_id", id)
       .order("created_at", { ascending: false })
       .limit(20),
@@ -73,16 +99,28 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
   const requests = Array.isArray(requestsRes.data) ? requestsRes.data : [];
   const memberIds = members.map((row: any) => String(row.user_id || "")).filter(Boolean);
 
-  const [profilesRes, companyAdminRes] = await Promise.all([
+  const docActors = Array.from(
+    new Set(
+      (Array.isArray(docsRes.data) ? docsRes.data : [])
+        .flatMap((row: any) => [String(row?.uploaded_by || "").trim(), String(row?.reviewed_by || "").trim()])
+        .filter(Boolean)
+    )
+  );
+
+  const [profilesRes, companyAdminRes, docActorProfilesRes] = await Promise.all([
     memberIds.length
       ? admin.from("profiles").select("id,full_name,email,last_activity_at").in("id", memberIds)
       : Promise.resolve({ data: [] } as any),
     members.length
       ? admin.from("company_members").select("user_id,role").eq("company_id", id).limit(1).maybeSingle()
       : Promise.resolve({ data: null } as any),
+    docActors.length
+      ? admin.from("profiles").select("id,full_name,email").in("id", docActors)
+      : Promise.resolve({ data: [] } as any),
   ]);
 
   const profilesById = new Map((Array.isArray(profilesRes.data) ? profilesRes.data : []).map((row: any) => [String(row.id), row]));
+  const docActorById = new Map((Array.isArray(docActorProfilesRes.data) ? docActorProfilesRes.data : []).map((row: any) => [String(row.id), row]));
   const companyAdminUserId = String((companyAdminRes.data as any)?.user_id || "").trim() || memberIds[0] || null;
   const effectiveSubscription = companyAdminUserId
     ? await readEffectiveCompanySubscriptionState(admin, {
@@ -213,6 +251,68 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Documentos de empresa</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            Trazabilidad documental interna por empresa. Aquí ves archivo recibido, tipo declarado, datos detectados, revisión registrada y notas internas disponibles.
+          </p>
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+            Estado actual del módulo owner: esta vista expone trazabilidad y contexto real. La decisión manual owner todavía no tiene acción dedicada en esta pantalla; hoy el `review_status` se resuelve por el flujo interno existente.
+          </div>
+          {!activeDocs.length ? (
+            <p className="mt-3 text-sm text-slate-600">No hay documentos activos registrados para esta empresa.</p>
+          ) : (
+            <div className="mt-4 space-y-3">
+              {activeDocs.map((doc: any) => {
+                const uploader = docActorById.get(String(doc.uploaded_by || "")) as any;
+                const reviewer = docActorById.get(String(doc.reviewed_by || "")) as any;
+                const detectedCount = Number(doc?.extracted_json?.detected_fields_count || 0);
+                const importStatus = String(doc?.import_status || "not_imported");
+                return (
+                  <article key={String(doc.id)} className="rounded-lg border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-slate-900">{documentTypeLabel(doc.document_type)}</p>
+                        <p className="mt-1 text-xs text-slate-500">{doc.original_filename || "Sin nombre de archivo"} · subido {fmtDate(doc.created_at)}</p>
+                      </div>
+                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${documentReviewClass(doc.review_status)}`}>
+                        {documentReviewLabel(doc.review_status)}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4 text-sm">
+                      <div>
+                        <div className="text-xs uppercase tracking-wide text-slate-500">Uploader</div>
+                        <div className="mt-1 text-slate-900">{uploader?.full_name || uploader?.email || doc.uploaded_by || "No registrado"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase tracking-wide text-slate-500">Reviewer</div>
+                        <div className="mt-1 text-slate-900">{reviewer?.full_name || reviewer?.email || doc.reviewed_by || "Sin reviewer registrado"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase tracking-wide text-slate-500">Datos detectados</div>
+                        <div className="mt-1 text-slate-900">{detectedCount} campo{detectedCount === 1 ? "" : "s"}</div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase tracking-wide text-slate-500">Import al perfil</div>
+                        <div className="mt-1 text-slate-900">{importStatus}</div>
+                      </div>
+                    </div>
+                    {doc.reviewed_at ? (
+                      <p className="mt-3 text-xs text-slate-500">Revisado el {fmtDate(doc.reviewed_at)}</p>
+                    ) : null}
+                    {doc.review_notes ? (
+                      <p className="mt-2 text-xs text-slate-700">Notas internas: {String(doc.review_notes)}</p>
+                    ) : null}
+                    {doc.rejected_reason ? (
+                      <p className="mt-2 text-xs text-rose-700">Motivo de rechazo: {String(doc.rejected_reason)}</p>
+                    ) : null}
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Verificaciones recientes</h2>
           {requests.length === 0 ? (
             <p className="mt-3 text-sm text-slate-600">No hay verificaciones asociadas todavía.</p>
