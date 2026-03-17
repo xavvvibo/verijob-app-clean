@@ -126,8 +126,17 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
             <p className="text-xs font-semibold uppercase tracking-wide text-amber-800">Perfil aún en preparación</p>
             <h1 className="mt-2 text-2xl font-semibold text-amber-950">Este candidato aún está completando su perfil verificable</h1>
             <p className="mt-3 text-sm leading-6 text-amber-900">
-              Recibirás una notificación cuando esté disponible. De momento puedes revisar el resumen parcial actual sin consumir un acceso ni desbloquear el perfil completo.
+              El perfil completo todavía no está disponible para desbloqueo. Mientras tanto puedes revisar el resumen parcial del candidato y volver más adelante cuando el perfil verificable esté listo.
             </p>
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-white p-4 text-sm text-amber-900">
+              <p className="font-semibold">No se ha consumido ningún acceso.</p>
+              <p className="mt-1">
+                El acceso solo se consumirá cuando el perfil completo esté realmente listo para desbloquearse y tu empresa pueda abrir la vista completa.
+              </p>
+              <p className="mt-1 text-amber-800">
+                Siguiente paso: vuelve al resumen o a tu base RRHH y revisa este candidato cuando termine de completar su perfil verificable.
+              </p>
+            </div>
             <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <SnapshotField label="Experiencias detectadas" value={String(preview?.experiences_detected ?? "—")} />
               <SnapshotField label="Verificaciones" value={String(preview?.total_verifications ?? "—")} />
