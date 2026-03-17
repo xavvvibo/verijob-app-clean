@@ -4,6 +4,28 @@ import { createServiceRoleClient } from "@/utils/supabase/service";
 import { buildCandidateProfileCompletionModel } from "@/lib/candidate/profile-completion";
 import { buildIdentityRecord, normalizeIdentityType, normalizeIdentityValue } from "@/lib/security/identity";
 
+const PROFILE_PERSONAL_FIELDS = [
+  "full_name",
+  "phone",
+  "title",
+  "location",
+  "address_line1",
+  "address_line2",
+  "city",
+  "region",
+  "postal_code",
+  "country",
+] as const;
+
+const CANDIDATE_PROFILE_MUTABLE_FIELDS = [
+  "summary",
+  "education",
+  "achievements",
+  "other_achievements",
+  "certifications",
+  "updated_at",
+] as const;
+
 function normalizeText(value: unknown) {
   return String(value || "").trim();
 }
@@ -144,14 +166,32 @@ async function readProfileAndCandidateProfile(supabase: any, userId: string) {
   };
 }
 
-async function getTableColumns(supabase: any, tableName: string) {
-  const { data, error } = await supabase
-    .from("information_schema.columns")
-    .select("column_name")
-    .eq("table_schema", "public")
-    .eq("table_name", tableName);
-  if (error || !Array.isArray(data)) return new Set<string>();
-  return new Set(data.map((row: any) => String(row?.column_name || "")));
+function sameJson(a: unknown, b: unknown) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function buildRequestedPersonalSnapshot(body: any, currentProfile: any) {
+  const next: Record<string, any> = {};
+  for (const field of PROFILE_PERSONAL_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(body || {}, field)) {
+      next[field] = normalizeNullableText(body?.[field], field === "phone" ? 50 : field === "postal_code" ? 40 : field === "city" || field === "region" ? 120 : field === "country" ? 80 : 160);
+    } else {
+      next[field] = currentProfile?.[field] ?? null;
+    }
+  }
+  return next;
+}
+
+function validatePersistedPersonalSnapshot(params: {
+  requested: Record<string, any>;
+  persisted: any;
+}) {
+  for (const field of PROFILE_PERSONAL_FIELDS) {
+    if ((params.requested?.[field] ?? null) !== (params.persisted?.[field] ?? null)) {
+      return field;
+    }
+  }
+  return null;
 }
 
 export async function GET() {
@@ -240,31 +280,26 @@ export async function PUT(req: Request) {
     .map((item) => normalizeText(item.language || item.title))
     .filter(Boolean);
 
-  const [candidateProfileColumns, profileColumns] = await Promise.all([
-    getTableColumns(admin, "candidate_profiles"),
-    getTableColumns(admin, "profiles"),
-  ]);
-
   let writeError: any = null;
   let nextCandidateProfile: any = candidateProfile || null;
   if (hasCandidateProfileInput) {
     const payload: Record<string, any> = {
       user_id: user.id,
       summary: typeof body?.summary === "string" ? body.summary : candidateProfile?.summary ?? null,
+      updated_at: new Date().toISOString(),
     };
-    if (candidateProfileColumns.has("updated_at")) payload.updated_at = new Date().toISOString();
-    if (candidateProfileColumns.has("education")) {
+    if (CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("education")) {
       payload.education = Array.isArray(body?.education)
         ? body.education
         : Array.isArray(candidateProfile?.education)
           ? candidateProfile.education
           : [];
     }
-    if (candidateProfileColumns.has("achievements")) payload.achievements = normalizedAchievements;
-    if (candidateProfileColumns.has("other_achievements") && !candidateProfileColumns.has("achievements")) {
+    if (CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("achievements")) payload.achievements = normalizedAchievements;
+    if (CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("other_achievements") && !CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("achievements")) {
       payload.other_achievements = normalizedAchievements;
     }
-    if (candidateProfileColumns.has("certifications")) payload.certifications = certifications;
+    if (CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("certifications")) payload.certifications = certifications;
 
     if (candidateProfile?.id) {
       const res = await admin
@@ -298,35 +333,12 @@ export async function PUT(req: Request) {
   }
 
   const nextProfilePatch: Record<string, any> = {};
-  if (profileColumns.has("full_name") && Object.prototype.hasOwnProperty.call(body || {}, "full_name")) {
-    nextProfilePatch.full_name = normalizeNullableText(body?.full_name, 160);
-  }
-  if (profileColumns.has("phone") && Object.prototype.hasOwnProperty.call(body || {}, "phone")) {
-    nextProfilePatch.phone = normalizeNullableText(body?.phone, 50);
-  }
-  if (profileColumns.has("title") && Object.prototype.hasOwnProperty.call(body || {}, "title")) {
-    nextProfilePatch.title = normalizeNullableText(body?.title, 160);
-  }
-  if (profileColumns.has("location") && Object.prototype.hasOwnProperty.call(body || {}, "location")) {
-    nextProfilePatch.location = normalizeNullableText(body?.location, 160);
-  }
-  if (profileColumns.has("address_line1") && Object.prototype.hasOwnProperty.call(body || {}, "address_line1")) {
-    nextProfilePatch.address_line1 = normalizeNullableText(body?.address_line1, 160);
-  }
-  if (profileColumns.has("address_line2") && Object.prototype.hasOwnProperty.call(body || {}, "address_line2")) {
-    nextProfilePatch.address_line2 = normalizeNullableText(body?.address_line2, 160);
-  }
-  if (profileColumns.has("city") && Object.prototype.hasOwnProperty.call(body || {}, "city")) {
-    nextProfilePatch.city = normalizeNullableText(body?.city, 120);
-  }
-  if (profileColumns.has("region") && Object.prototype.hasOwnProperty.call(body || {}, "region")) {
-    nextProfilePatch.region = normalizeNullableText(body?.region, 120);
-  }
-  if (profileColumns.has("postal_code") && Object.prototype.hasOwnProperty.call(body || {}, "postal_code")) {
-    nextProfilePatch.postal_code = normalizeNullableText(body?.postal_code, 40);
-  }
-  if (profileColumns.has("country") && Object.prototype.hasOwnProperty.call(body || {}, "country")) {
-    nextProfilePatch.country = normalizeNullableText(body?.country, 80);
+  for (const field of PROFILE_PERSONAL_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(body || {}, field)) continue;
+    nextProfilePatch[field] = normalizeNullableText(
+      body?.[field],
+      field === "phone" ? 50 : field === "postal_code" ? 40 : field === "city" || field === "region" ? 120 : field === "country" ? 80 : 160
+    );
   }
   const hasIdentityInput =
     Object.prototype.hasOwnProperty.call(body || {}, "identity_type") ||
@@ -338,26 +350,32 @@ export async function PUT(req: Request) {
     const identityValue = normalizeIdentityValue(rawIdentityValue);
     const wantsClear = !normalizeText(rawIdentityType) && !normalizeText(rawIdentityValue);
     if (wantsClear) {
-      if (profileColumns.has("identity_type")) nextProfilePatch.identity_type = null;
-      if (profileColumns.has("identity_masked")) nextProfilePatch.identity_masked = null;
-      if (profileColumns.has("identity_hash")) nextProfilePatch.identity_hash = null;
+      nextProfilePatch.identity_type = null;
+      nextProfilePatch.identity_masked = null;
+      nextProfilePatch.identity_hash = null;
     } else if (!identityType || !identityValue) {
-      return NextResponse.json({ error: "invalid_identity_value" }, { status: 400 });
+      return NextResponse.json(
+        { error: "invalid_identity_value", details: "El documento debe tener al menos 5 caracteres alfanuméricos válidos." },
+        { status: 400 }
+      );
     } else {
       const identity = buildIdentityRecord({ type: identityType, value: identityValue });
       if (!identity.identityType || !identity.identityMasked || !identity.identityHash) {
-        return NextResponse.json({ error: "identity_hash_failed" }, { status: 400 });
+        return NextResponse.json(
+          { error: "identity_hash_failed", details: "No se pudo generar el hash interno del documento." },
+          { status: 400 }
+        );
       }
-      if (profileColumns.has("identity_type")) nextProfilePatch.identity_type = identity.identityType;
-      if (profileColumns.has("identity_masked")) nextProfilePatch.identity_masked = identity.identityMasked;
-      if (profileColumns.has("identity_hash")) nextProfilePatch.identity_hash = identity.identityHash;
+      nextProfilePatch.identity_type = identity.identityType;
+      nextProfilePatch.identity_masked = identity.identityMasked;
+      nextProfilePatch.identity_hash = identity.identityHash;
     }
   }
-  if (profileColumns.has("languages") && (hasAchievementsInput || Array.isArray(profile?.languages) || languages.length > 0)) {
+  if (hasAchievementsInput || Array.isArray(profile?.languages) || languages.length > 0) {
     nextProfilePatch.languages = languages;
   }
   if (Object.keys(nextProfilePatch).length) {
-    if (profileColumns.has("updated_at")) nextProfilePatch.updated_at = new Date().toISOString();
+    nextProfilePatch.updated_at = new Date().toISOString();
     const profileUpdate = await admin
       .from("profiles")
       .update(nextProfilePatch)
@@ -376,16 +394,80 @@ export async function PUT(req: Request) {
         { status: 400 }
       );
     }
-    Object.assign(profile, profileUpdate.data);
+    Object.assign(profile, profileUpdate.data || {});
   }
 
-  const nextProfile = { ...(profile || {}), ...nextProfilePatch };
-  const achievementsCatalog = buildAchievementsCatalog(nextProfile, nextCandidateProfile);
+  const reread = await readProfileAndCandidateProfile(admin, user.id);
+  if ((reread as any).error) return (reread as any).error;
+  const persistedProfile = (reread as any).profile || null;
+  const persistedCandidateProfile = (reread as any).candidateProfile || null;
+  const persistedCounts = (reread as any).counts || counts;
+
+  const requestedPersonalSnapshot = buildRequestedPersonalSnapshot(body, profile);
+  const personalMismatchField = validatePersistedPersonalSnapshot({
+    requested: requestedPersonalSnapshot,
+    persisted: persistedProfile,
+  });
+  if (personalMismatchField) {
+    return NextResponse.json(
+      {
+        error: "profile_persistence_mismatch",
+        details: `El campo ${personalMismatchField} no quedó persistido tras la relectura.`,
+      },
+      { status: 409 }
+    );
+  }
+
+  if (hasIdentityInput) {
+    const requestedIdentityType = nextProfilePatch.identity_type ?? null;
+    const requestedIdentityMasked = nextProfilePatch.identity_masked ?? null;
+    const persistedIdentityType = persistedProfile?.identity_type ?? null;
+    const persistedIdentityMasked = persistedProfile?.identity_masked ?? null;
+    if (requestedIdentityType !== persistedIdentityType || requestedIdentityMasked !== persistedIdentityMasked) {
+      return NextResponse.json(
+        {
+          error: "identity_persistence_mismatch",
+          details: "La identidad no quedó persistida correctamente tras la relectura.",
+        },
+        { status: 409 }
+      );
+    }
+  }
+
+  if (hasCandidateProfileInput) {
+    const requestedSummary = typeof body?.summary === "string" ? body.summary : candidateProfile?.summary ?? null;
+    const persistedSummary = persistedCandidateProfile?.summary ?? null;
+    if ((requestedSummary ?? null) !== (persistedSummary ?? null)) {
+      return NextResponse.json(
+        {
+          error: "candidate_profile_persistence_mismatch",
+          details: "El resumen profesional no quedó persistido tras la relectura.",
+        },
+        { status: 409 }
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(body || {}, "education")) {
+      const requestedEducation = Array.isArray(body?.education) ? body.education : [];
+      const persistedEducation = Array.isArray(persistedCandidateProfile?.education) ? persistedCandidateProfile.education : [];
+      if (!sameJson(requestedEducation, persistedEducation)) {
+        return NextResponse.json(
+          {
+            error: "candidate_profile_persistence_mismatch",
+            details: "La formación no quedó persistida tras la relectura.",
+          },
+          { status: 409 }
+        );
+      }
+    }
+  }
+
+  const nextProfile = persistedProfile;
+  const achievementsCatalog = buildAchievementsCatalog(nextProfile, persistedCandidateProfile);
   const profileCompletion = buildCandidateProfileCompletionModel({
     profile: nextProfile,
-    candidateProfile: nextCandidateProfile,
-    experienceCount: Number(counts?.experience_count || 0),
-    evidenceCount: Number(counts?.evidence_count || 0),
+    candidateProfile: persistedCandidateProfile,
+    experienceCount: Number(persistedCounts?.experience_count || 0),
+    evidenceCount: Number(persistedCounts?.evidence_count || 0),
     achievementsCount: achievementsCatalog.all.length,
   });
   return NextResponse.json({
@@ -406,12 +488,12 @@ export async function PUT(req: Request) {
       has_identity: Boolean(nextProfile?.identity_hash),
     },
     profile: {
-      ...(nextCandidateProfile || {}),
+      ...(persistedCandidateProfile || {}),
       languages: achievementsCatalog.languages.map((item) => formatLanguageLabel(item) || item.title).filter(Boolean),
       achievements: achievementsCatalog.all,
       achievements_catalog: achievementsCatalog,
     },
     profile_completion: profileCompletion,
-    counts,
+    counts: persistedCounts,
   });
 }
