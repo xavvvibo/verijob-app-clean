@@ -1,37 +1,89 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function ProfileUnlockAction({
   href,
+  requestHref,
   availableAccesses,
   alreadyUnlocked = false,
   primaryLabel = "Acceder al perfil",
 }: {
   href: string;
+  requestHref?: string;
   availableAccesses: number;
   alreadyUnlocked?: boolean;
   primaryLabel?: string;
 }) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   if (alreadyUnlocked) {
     return (
-      <a
-        href={href}
+      <button
+        type="button"
+        onClick={() => router.push(href)}
         className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
       >
         Ver perfil completo
-      </a>
+      </button>
     );
+  }
+
+  const unlockRequestHref = requestHref || href.replace("/company/candidate/", "/api/company/candidate/");
+
+  async function handleConfirmUnlock() {
+    if (submitting) return;
+    setError(null);
+    if (availableAccesses <= 0) {
+      setError("No tienes accesos disponibles para ver perfiles completos.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const response = await fetch(unlockRequestHref, {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        if (response.status === 402) {
+          setError("No tienes accesos disponibles para ver perfiles completos.");
+          return;
+        }
+        if (response.status === 409) {
+          router.push(href);
+          router.refresh();
+          return;
+        }
+        const details = String(payload?.user_message || payload?.details || payload?.error || "").trim();
+        setError(details || "No se pudo abrir el perfil completo.");
+        return;
+      }
+
+      router.push(href);
+      router.refresh();
+    } catch {
+      setError("No se pudo abrir el perfil completo.");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
         className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
       >
         {primaryLabel}
@@ -52,22 +104,27 @@ export default function ProfileUnlockAction({
                 <p className="mt-1 text-rose-700">No tienes accesos disponibles para ver perfiles completos.</p>
               ) : null}
             </div>
+            {error ? (
+              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+                {error}
+              </div>
+            ) : null}
             <div className="mt-5 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={handleConfirmUnlock}
+                disabled={submitting}
+                className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
+              >
+                {submitting ? "Abriendo perfil…" : "Acceder al perfil"}
+              </button>
               <button
                 type="button"
                 onClick={() => {
                   if (submitting) return;
-                  setSubmitting(true);
-                  window.location.href = href;
+                  setOpen(false);
+                  setError(null);
                 }}
-                disabled={submitting}
-                className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
-              >
-                Acceder al perfil
-              </button>
-              <button
-                type="button"
-                onClick={() => setOpen(false)}
                 className="inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50"
               >
                 Cancelar

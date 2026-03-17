@@ -242,6 +242,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
             <div className="flex flex-wrap gap-3">
               <ProfileUnlockAction
                 href={`/company/candidate/${encodeURIComponent(token)}?view=full`}
+                requestHref={`/api/company/candidate/${encodeURIComponent(token)}?mode=full`}
                 availableAccesses={creditsRemaining}
                 alreadyUnlocked={access?.access_status === "active"}
               />
@@ -280,6 +281,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
               <div className="mt-5 flex flex-wrap gap-3">
                 <ProfileUnlockAction
                   href={`/company/candidate/${encodeURIComponent(token)}?view=full`}
+                  requestHref={`/api/company/candidate/${encodeURIComponent(token)}?mode=full`}
                   availableAccesses={creditsRemaining}
                   alreadyUnlocked={access?.access_status === "active"}
                 />

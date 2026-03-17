@@ -178,6 +178,7 @@ export default function CandidateQuickView({
                 {canOpenSummary ? (
                   <ProfileUnlockAction
                     href={`/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}?view=full`}
+                    requestHref={`/api/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}?mode=full`}
                     availableAccesses={availableProfileAccesses}
                     alreadyUnlocked={row.access_status === "active"}
                     primaryLabel={accessActionLabel}
