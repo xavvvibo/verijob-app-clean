@@ -113,7 +113,6 @@ function getSections(role: Role, candidateOnboardingLocked = false): Section[] {
           { href: "/company", label: "Dashboard" },
           { href: "/company/profile", label: "Perfil de empresa" },
           { href: "/company/requests", label: "Solicitudes" },
-          { href: "/company/reuse", label: "Accesos" },
           { href: "/company/candidates", label: "Candidatos" },
         ],
       },

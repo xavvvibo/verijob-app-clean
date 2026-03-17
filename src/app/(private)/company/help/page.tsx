@@ -36,8 +36,8 @@ export default function CompanyHelpPage() {
             <li>1. Configura tu panel en <a href="/company/settings" className="underline underline-offset-2">Ajustes</a>.</li>
             <li>2. Revisa la cola de verificación en <a href="/company/requests" className="underline underline-offset-2">Solicitudes</a>.</li>
             <li>3. Consulta candidatos por token en <a href="/company/candidates" className="underline underline-offset-2">Candidatos</a>.</li>
-            <li>4. Gestiona accesos desde <a href="/company/reuse" className="underline underline-offset-2">Accesos</a>.</li>
-            <li>5. Revisa límites y plan en <a href="/company/billing" className="underline underline-offset-2">Suscripción</a>.</li>
+            <li>4. Gestiona accesos y desbloqueos desde <a href="/company/candidates" className="underline underline-offset-2">Candidatos</a>.</li>
+            <li>5. Revisa límites, saldo y plan en <a href="/company/billing" className="underline underline-offset-2">Suscripción</a>.</li>
           </ol>
         </article>
 

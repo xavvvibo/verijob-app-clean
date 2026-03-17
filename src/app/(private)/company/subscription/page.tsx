@@ -251,6 +251,9 @@ export default async function CompanySubscriptionPage({
         <p className="mt-2 text-sm text-slate-600">
           Estado real del plan, capacidad operativa y camino claro para ampliar o gestionar la suscripción.
         </p>
+        <p className="mt-2 text-sm text-slate-600">
+          Aquí ves de un vistazo qué capacidad viene del plan activo, qué parte viene de compras puntuales y en qué estado está la verificación documental de tu empresa.
+        </p>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
@@ -363,6 +366,15 @@ export default async function CompanySubscriptionPage({
           </div>
 
           <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
+            <p className="font-semibold text-slate-900">Cómo se consume un acceso</p>
+            <ul className="mt-2 space-y-1">
+              <li>• Se consume cuando tu empresa desbloquea un perfil completo.</li>
+              <li>• No se consume al revisar un resumen parcial.</li>
+              <li>• Tampoco se consume si el candidato aún está en preparación y el perfil completo no está listo.</li>
+            </ul>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
             <p className="font-semibold text-slate-900">Coherencia de estado</p>
             <ul className="mt-2 space-y-1">
               <li>• Fuente plan/estado: suscripción real o override manual owner activo.</li>
@@ -390,11 +402,11 @@ export default async function CompanySubscriptionPage({
       <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
         <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Historial de compras de accesos</h2>
-          <p className="mt-1 text-sm text-slate-600">Últimas compras puntuales registradas para esta empresa. El saldo real disponible se refleja en el bloque superior del plan.</p>
+          <p className="mt-1 text-sm text-slate-600">Últimas compras puntuales registradas para esta empresa. El saldo real disponible se calcula arriba combinando plan activo, grants y consumos ya registrados.</p>
           <div className="mt-4 space-y-3">
             {recentPurchases.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
-                Todavía no hay compras puntuales registradas en este historial. Si operas solo con accesos incluidos por plan, aquí no aparecerán movimientos.
+                Todavía no hay compras puntuales registradas en este historial. Si tu capacidad actual viene solo del plan activo, este bloque seguirá vacío y el saldo útil se reflejará igualmente en el bloque superior.
               </div>
             ) : (
               recentPurchases.map((purchase: any) => (
@@ -416,31 +428,38 @@ export default async function CompanySubscriptionPage({
 
         <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Seguimiento de verificación documental</h2>
-          <p className="mt-1 text-sm text-slate-600">Estado real del último documento recibido, prioridad de revisión y siguiente paso visible para tu empresa.</p>
+          <p className="mt-1 text-sm text-slate-600">Estado real del último documento recibido, qué implica para tu empresa y cuál es el siguiente paso visible sin ambigüedad.</p>
           <div className="mt-4 space-y-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estado actual</p>
               <p className="mt-1 text-sm font-semibold text-slate-900">{verificationStatusLabel(documentaryVerification.status)}</p>
               <p className="mt-2 text-sm text-slate-600">{documentaryVerification.detail}</p>
+              <p className="mt-2 text-xs text-slate-500">
+                La revisión documental se resuelve en flujo interno de VERIJOB. Desde empresa, el siguiente paso visible es esperar la revisión o sustituir el documento si el estado lo pide.
+              </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Último documento recibido</p>
               <p className="mt-1 text-sm font-semibold text-slate-900">{documentaryVerification.latest_document_type || "Sin documento"}</p>
-              <p className="mt-2 text-xs text-slate-500">Enviado el {formatDateTime(documentaryVerification.submitted_at)}</p>
+              <p className="mt-2 text-xs text-slate-500">
+                {documentaryVerification.submitted_at
+                  ? `Recibido el ${formatDateTime(documentaryVerification.submitted_at)}`
+                  : "Todavía no consta ningún documento recibido."}
+              </p>
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revisión y prioridad</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Siguiente paso visible</p>
               <p className="mt-1 text-sm font-semibold text-slate-900">
                 {documentaryVerification.review_eta_label || "Sin ETA"}
                 {documentaryVerification.priority_label ? ` · ${documentaryVerification.priority_label}` : ""}
               </p>
               <p className="mt-2 text-xs text-slate-500">
                 {documentaryVerification.reviewed_at
-                  ? `Última resolución: ${formatDateTime(documentaryVerification.reviewed_at)}`
-                  : "La revisión se resolverá cuando el documento complete su cola actual."}
+                  ? `Última resolución registrada: ${formatDateTime(documentaryVerification.reviewed_at)}`
+                  : "La revisión sigue abierta y se resolverá cuando el documento complete su cola actual."}
               </p>
               <p className="mt-2 text-xs text-slate-500">
-                Si necesitas revisar o sustituir el documento, gestiona el detalle completo desde el perfil de empresa.
+                Si necesitas revisar el detalle, sustituir el documento o completar datos de empresa a partir de lo detectado, gestiona el flujo desde el perfil de empresa.
               </p>
               {documentaryVerification.rejection_reason ? (
                 <p className="mt-2 text-xs text-rose-700">Motivo visible: {documentaryVerification.rejection_reason}</p>
