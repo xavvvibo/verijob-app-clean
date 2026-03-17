@@ -116,13 +116,7 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
         country: p.country,
       });
       const requestBody: Record<string, unknown> = { ...payload };
-      if (clearIdentityOnSave) {
-        requestBody.identity_type = "";
-        requestBody.identity_value = "";
-      } else if (identityValue.trim()) {
-        requestBody.identity_type = p.identity_type ?? "dni";
-        requestBody.identity_value = identityValue;
-      }
+      const identityRequested = clearIdentityOnSave || Boolean(identityValue.trim());
       const response = await fetch("/api/candidate/profile", {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -151,13 +145,26 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
         has_identity: nextPersonalProfile.has_identity ?? current.has_identity,
       }));
       setPersistedIdentity({
-        identity_type: nextPersonalProfile.identity_type ?? p.identity_type,
-        identity_masked: nextPersonalProfile.identity_masked ?? p.identity_masked,
-        has_identity: nextPersonalProfile.has_identity ?? p.has_identity,
+        identity_type: nextPersonalProfile.identity_type ?? null,
+        identity_masked: nextPersonalProfile.identity_masked ?? null,
+        has_identity: nextPersonalProfile.has_identity ?? false,
       });
       setIdentityValue("");
       setClearIdentityOnSave(false);
-      setProfileMessage({ tone: "success", text: "Perfil guardado correctamente." });
+      if (identityRequested || result?.identity_ignored) {
+        setP((current) => ({
+          ...current,
+          identity_type: null,
+          identity_masked: null,
+          has_identity: false,
+        }));
+        setProfileMessage({
+          tone: "warning",
+          text: "Perfil guardado correctamente. El documento de identidad no se persiste en este entorno.",
+        });
+      } else {
+        setProfileMessage({ tone: "success", text: "Perfil guardado correctamente." });
+      }
     } catch (e: any) {
       setProfileMessage({ tone: "error", text: e?.message || "No se pudo guardar el perfil." });
     } finally {

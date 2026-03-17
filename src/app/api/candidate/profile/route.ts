@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { buildCandidateProfileCompletionModel } from "@/lib/candidate/profile-completion";
-import { maskIdentityValue, normalizeIdentityType, normalizeIdentityValue } from "@/lib/security/identity";
 
 const PROFILE_PERSONAL_FIELDS = [
   "full_name",
@@ -229,9 +228,9 @@ export async function GET() {
       region: profile?.region || null,
       postal_code: profile?.postal_code || null,
       country: profile?.country || null,
-      identity_type: profile?.identity_type || null,
-      identity_masked: profile?.identity_masked || null,
-      has_identity: Boolean(profile?.identity_masked || profile?.identity_type),
+      identity_type: null,
+      identity_masked: null,
+      has_identity: false,
     },
     profile: {
       ...(candidateProfile || {}),
@@ -343,32 +342,6 @@ export async function PUT(req: Request) {
   const hasIdentityInput =
     Object.prototype.hasOwnProperty.call(body || {}, "identity_type") ||
     Object.prototype.hasOwnProperty.call(body || {}, "identity_value");
-  if (hasIdentityInput) {
-    const rawIdentityType = body?.identity_type;
-    const rawIdentityValue = typeof body?.identity_value === "string" ? body.identity_value : "";
-    const identityType = normalizeIdentityType(rawIdentityType);
-    const identityValue = normalizeIdentityValue(rawIdentityValue);
-    const wantsClear = !normalizeText(rawIdentityType) && !normalizeText(rawIdentityValue);
-    if (wantsClear) {
-      nextProfilePatch.identity_type = null;
-      nextProfilePatch.identity_masked = null;
-    } else if (!identityType || !identityValue) {
-      return NextResponse.json(
-        { error: "invalid_identity_value", details: "El documento debe tener al menos 5 caracteres alfanuméricos válidos." },
-        { status: 400 }
-      );
-    } else {
-      const identityMasked = maskIdentityValue(identityValue);
-      if (!identityMasked) {
-        return NextResponse.json(
-          { error: "identity_mask_failed", details: "No se pudo generar la máscara del documento." },
-          { status: 400 }
-        );
-      }
-      nextProfilePatch.identity_type = identityType;
-      nextProfilePatch.identity_masked = identityMasked;
-    }
-  }
   if (hasAchievementsInput || Array.isArray(profile?.languages) || languages.length > 0) {
     nextProfilePatch.languages = languages;
   }
@@ -378,7 +351,7 @@ export async function PUT(req: Request) {
       .from("profiles")
       .update(nextProfilePatch)
       .eq("id", user.id)
-      .select("id, full_name, phone, title, location, address_line1, address_line2, city, region, postal_code, country, identity_type, identity_masked, languages")
+      .select("id, full_name, phone, title, location, address_line1, address_line2, city, region, postal_code, country, languages")
       .maybeSingle();
     if (profileUpdate.error) {
       return NextResponse.json(
@@ -414,22 +387,6 @@ export async function PUT(req: Request) {
       },
       { status: 409 }
     );
-  }
-
-  if (hasIdentityInput) {
-    const requestedIdentityType = nextProfilePatch.identity_type ?? null;
-    const requestedIdentityMasked = nextProfilePatch.identity_masked ?? null;
-    const persistedIdentityType = persistedProfile?.identity_type ?? null;
-    const persistedIdentityMasked = persistedProfile?.identity_masked ?? null;
-    if (requestedIdentityType !== persistedIdentityType || requestedIdentityMasked !== persistedIdentityMasked) {
-      return NextResponse.json(
-        {
-          error: "identity_persistence_mismatch",
-          details: "La identidad no quedó persistida correctamente tras la relectura.",
-        },
-        { status: 409 }
-      );
-    }
   }
 
   if (hasCandidateProfileInput) {
@@ -470,6 +427,8 @@ export async function PUT(req: Request) {
   });
   return NextResponse.json({
     ok: true,
+    identity_persistence_supported: false,
+    identity_ignored: hasIdentityInput,
     personal_profile: {
       full_name: nextProfile?.full_name || null,
       phone: nextProfile?.phone || null,
@@ -481,9 +440,9 @@ export async function PUT(req: Request) {
       region: nextProfile?.region || null,
       postal_code: nextProfile?.postal_code || null,
       country: nextProfile?.country || null,
-      identity_type: nextProfile?.identity_type || null,
-      identity_masked: nextProfile?.identity_masked || null,
-      has_identity: Boolean(nextProfile?.identity_masked || nextProfile?.identity_type),
+      identity_type: null,
+      identity_masked: null,
+      has_identity: false,
     },
     profile: {
       ...(persistedCandidateProfile || {}),
