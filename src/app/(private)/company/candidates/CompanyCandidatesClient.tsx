@@ -34,21 +34,6 @@ type ImportsMeta = {
   migration_files?: string[];
 };
 
-const HOW_TO_USE = [
-  {
-    title: "Importa un CV recibido fuera de VERIJOB",
-    description: "Sube el CV, indica el email del candidato y genera una invitación trazable.",
-  },
-  {
-    title: "El candidato acepta expresamente",
-    description: "VERIJOB registra la aceptación legal antes de desbloquear el perfil pre-rellenado.",
-  },
-  {
-    title: "Sigue el estado del proceso",
-    description: "Controla quién está pendiente, quién ya creó perfil y quién está verificando su historial.",
-  },
-];
-
 function formatDate(value: string | null | undefined) {
   if (!value) return "Sin fecha";
   const date = new Date(value);
@@ -330,148 +315,21 @@ export default function CompanyCandidatesClient() {
         </section>
       ) : null}
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Candidatos</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Gestiona candidatos que llegan directamente a VERIJOB y también CV recibidos fuera de plataforma con trazabilidad de aceptación.
-        </p>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-base font-semibold text-slate-900">Importar CV externo e invitar candidato</h2>
-              <p className="mt-2 text-sm text-slate-600">
-                ¿Has recibido un CV fuera de VERIJOB? Súbelo aquí e invita al candidato a verificar su perfil.
-              </p>
-            </div>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-              Flujo empresa → candidato
-            </span>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Base RRHH</h1>
+            <p className="mt-2 text-sm text-slate-600">
+              Centro operativo para revisar pipeline, abrir resúmenes parciales y decidir cuándo merece la pena desbloquear un perfil completo.
+            </p>
           </div>
-
-          {!importsMeta.available ? (
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-              <p className="font-semibold">Módulo pendiente de activación en base de datos</p>
-              <p className="mt-1">{importsMeta.warning_message}</p>
-              {importsMeta.migration_files?.length ? (
-                <p className="mt-2 text-xs text-amber-800">SQL requerido: {importsMeta.migration_files.join(", ")}</p>
-              ) : null}
-            </div>
-          ) : null}
-
-          <form onSubmit={submitImport} className="mt-5 space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="block">
-                <span className="text-sm font-semibold text-slate-900">Email del candidato</span>
-                <input
-                  type="email"
-                  value={form.candidate_email}
-                  onChange={(e) => setForm((prev) => ({ ...prev, candidate_email: e.target.value }))}
-                  placeholder="candidato@email.com"
-                  className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm font-semibold text-slate-900">Nombre del candidato</span>
-                <input
-                  value={form.candidate_name}
-                  onChange={(e) => setForm((prev) => ({ ...prev, candidate_name: e.target.value }))}
-                  placeholder="Opcional si el CV ya lo trae"
-                  className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                />
-              </label>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="block">
-                <span className="text-sm font-semibold text-slate-900">Puesto al que aplica</span>
-                <input
-                  value={form.target_role}
-                  onChange={(e) => setForm((prev) => ({ ...prev, target_role: e.target.value }))}
-                  placeholder="Opcional"
-                  className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                />
-              </label>
-              <label className="block">
-                <span className="text-sm font-semibold text-slate-900">CV del candidato</span>
-                <input
-                  type="file"
-                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                  onChange={(e) => setFile(e.target.files?.[0] || null)}
-                  className="mt-2 block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-700"
-                />
-              </label>
-            </div>
-
-            <label className="block">
-              <span className="text-sm font-semibold text-slate-900">Contexto o nota interna</span>
-              <textarea
-                value={form.source_notes}
-                onChange={(e) => setForm((prev) => ({ ...prev, source_notes: e.target.value }))}
-                placeholder="Ej. CV recibido en entrevista presencial para responsable de turno."
-                rows={3}
-                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-              />
-            </label>
-
-            {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div> : null}
-            {notice ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div> : null}
-
-            <div className="flex flex-wrap gap-3">
-              <button
-                type="submit"
-                disabled={submitting || !importsMeta.available}
-                className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
-              >
-                {submitting ? "Importando CV…" : "Subir CV e invitar candidato"}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setForm({ candidate_email: "", candidate_name: "", target_role: "", source_notes: "" });
-                  setFile(null);
-                  setError(null);
-                  setNotice(null);
-                }}
-                className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50"
-              >
-                Limpiar
-              </button>
-            </div>
-          </form>
-        </article>
-
-        <aside className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-          <h2 className="text-sm font-semibold text-slate-900">Cómo usar esta sección</h2>
-          <ul className="mt-3 space-y-3">
-            {HOW_TO_USE.map((item) => (
-              <li key={item.title}>
-                <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                <p className="text-sm text-slate-600">{item.description}</p>
-              </li>
-            ))}
-          </ul>
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Acceso directo</p>
-            <form onSubmit={openCandidate} className="mt-3">
-              <label className="block text-sm font-semibold text-slate-900">Abrir candidato por token</label>
-              <input
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder="Pega aquí el token recibido"
-                className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-              />
-              <button
-                type="submit"
-                disabled={tokenDisabled}
-                className="mt-3 inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
-              >
-                Abrir perfil candidato
-              </button>
-            </form>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Accesos disponibles</p>
+            <p className="mt-1 font-semibold text-slate-900">{availableProfileAccesses}</p>
+            {availableProfileAccesses <= 0 ? (
+              <p className="mt-1 text-xs text-rose-700">Sin saldo para perfiles completos ahora mismo.</p>
+            ) : null}
           </div>
-        </aside>
+        </div>
       </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -481,12 +339,6 @@ export default function CompanyCandidatesClient() {
             <p className="mt-1 text-sm text-slate-600">
               Base RRHH ligera para detectar encaje rápido, mover pipeline y decidir cuándo merece la pena acceder al perfil completo.
             </p>
-            <p className="mt-2 text-sm font-semibold text-slate-900">
-              Accesos a perfiles disponibles: {availableProfileAccesses}
-            </p>
-            {availableProfileAccesses <= 0 ? (
-              <p className="mt-1 text-sm text-rose-700">No tienes accesos disponibles para ver perfiles completos.</p>
-            ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
             <a
@@ -768,6 +620,163 @@ export default function CompanyCandidatesClient() {
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-base font-semibold text-slate-900">Quick actions</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Usa estas acciones para incorporar candidatos externos o abrir directamente un perfil compartido por token.
+              </p>
+            </div>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
+              Acciones auxiliares
+            </span>
+          </div>
+
+          {error ? <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div> : null}
+          {notice ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div> : null}
+
+          <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">Importar CV externo</h3>
+                  <p className="mt-1 text-xs text-slate-600">
+                    Sube un CV recibido fuera de VERIJOB y genera una invitación trazable al candidato.
+                  </p>
+                </div>
+                <details className="text-xs text-slate-500">
+                  <summary className="cursor-pointer list-none font-semibold text-slate-700">Ayuda rápida</summary>
+                  <div className="mt-2 max-w-sm rounded-xl border border-slate-200 bg-white p-3 text-slate-600">
+                    VERIJOB registra la aceptación legal del candidato antes de activar su perfil pre-rellenado y mostrarlo en esta base RRHH.
+                  </div>
+                </details>
+              </div>
+
+              {!importsMeta.available ? (
+                <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                  <p className="font-semibold">Módulo pendiente de activación en base de datos</p>
+                  <p className="mt-1">{importsMeta.warning_message}</p>
+                  {importsMeta.migration_files?.length ? (
+                    <p className="mt-2 text-xs text-amber-800">SQL requerido: {importsMeta.migration_files.join(", ")}</p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <form onSubmit={submitImport} className="mt-4 space-y-3">
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email del candidato</span>
+                    <input
+                      type="email"
+                      value={form.candidate_email}
+                      onChange={(e) => setForm((prev) => ({ ...prev, candidate_email: e.target.value }))}
+                      placeholder="candidato@email.com"
+                      className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nombre</span>
+                    <input
+                      value={form.candidate_name}
+                      onChange={(e) => setForm((prev) => ({ ...prev, candidate_name: e.target.value }))}
+                      placeholder="Opcional si el CV ya lo trae"
+                      className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    />
+                  </label>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Puesto</span>
+                    <input
+                      value={form.target_role}
+                      onChange={(e) => setForm((prev) => ({ ...prev, target_role: e.target.value }))}
+                      placeholder="Opcional"
+                      className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">CV</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                      onChange={(e) => setFile(e.target.files?.[0] || null)}
+                      className="mt-2 block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-700"
+                    />
+                  </label>
+                </div>
+
+                <label className="block">
+                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nota interna</span>
+                  <textarea
+                    value={form.source_notes}
+                    onChange={(e) => setForm((prev) => ({ ...prev, source_notes: e.target.value }))}
+                    placeholder="Ej. CV recibido en entrevista presencial para responsable de turno."
+                    rows={2}
+                    className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  />
+                </label>
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="submit"
+                    disabled={submitting || !importsMeta.available}
+                    className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
+                  >
+                    {submitting ? "Importando CV…" : "Subir CV e invitar"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm({ candidate_email: "", candidate_name: "", target_role: "", source_notes: "" });
+                      setFile(null);
+                      setError(null);
+                      setNotice(null);
+                    }}
+                    className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                  >
+                    Limpiar
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Abrir por token</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Utilidad rápida para abrir un candidato compartido fuera de la base actual.
+                </p>
+                <form onSubmit={openCandidate} className="mt-3">
+                  <input
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder="Pega aquí el token recibido"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  />
+                  <button
+                    type="submit"
+                    disabled={tokenDisabled}
+                    className="mt-3 inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Abrir perfil candidato
+                  </button>
+                </form>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+                <p className="font-semibold text-slate-900">Ayuda contextual</p>
+                <p className="mt-2">
+                  La base RRHH es el centro de trabajo. Importa un CV externo cuando el candidato aún no está en VERIJOB y usa el token solo como acceso rápido puntual.
+                </p>
+              </div>
+            </div>
+          </div>
+        </article>
       </section>
 
       <CandidateQuickView
