@@ -2,8 +2,8 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 import { headers } from "next/headers";
 import ProfileViewCheckoutButtons from "./ProfileViewCheckoutButtons";
-import ProfileUnlockAction from "@/components/company/ProfileUnlockAction";
 import CheckoutReturnSyncNotice from "@/components/company/CheckoutReturnSyncNotice";
+import CompanyCandidateAccessCta from "./CompanyCandidateAccessCta";
 
 type Ctx = {
   params: Promise<{ token: string }>;
@@ -240,7 +240,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
               ) : null}
             </div>
             <div className="flex flex-wrap gap-3">
-              <ProfileUnlockAction
+              <CompanyCandidateAccessCta
                 href={`/company/candidate/${encodeURIComponent(token)}?view=full`}
                 requestHref={`/api/company/candidate/${encodeURIComponent(token)}?mode=full`}
                 availableAccesses={creditsRemaining}
@@ -279,7 +279,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
                 Si este candidato encaja, accede al perfil completo. Consumirá 1 acceso y quedará desbloqueado de forma permanente para tu empresa.
               </p>
               <div className="mt-5 flex flex-wrap gap-3">
-                <ProfileUnlockAction
+                <CompanyCandidateAccessCta
                   href={`/company/candidate/${encodeURIComponent(token)}?view=full`}
                   requestHref={`/api/company/candidate/${encodeURIComponent(token)}?mode=full`}
                   availableAccesses={creditsRemaining}
