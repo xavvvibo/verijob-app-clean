@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function CompanyCandidateAccessCta({
   href,
@@ -16,12 +15,15 @@ export default function CompanyCandidateAccessCta({
   alreadyUnlocked?: boolean;
   primaryLabel?: string;
 }) {
-  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [clickCount, setClickCount] = useState(0);
+  const [confirmState, setConfirmState] = useState<"idle" | "running" | "success" | "error">("idle");
+  const [lastStatus, setLastStatus] = useState<string | null>(null);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [lastRequestUrl, setLastRequestUrl] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -31,43 +33,67 @@ export default function CompanyCandidateAccessCta({
   async function handleConfirmUnlock() {
     if (submitting) return;
     setError(null);
-    console.log("[company-candidate-cta] confirm", { requestHref, availableAccesses, alreadyUnlocked });
+    setLastError(null);
+    setLastStatus(null);
+    setConfirmState("running");
 
     if (availableAccesses <= 0) {
       setError("No tienes accesos disponibles para ver perfiles completos.");
+      setLastError("no_available_accesses");
+      setConfirmState("error");
       return;
     }
 
     setSubmitting(true);
     try {
-      const response = await fetch(requestHref, {
+      const targetUrl = new URL(requestHref, window.location.origin).toString();
+      setLastRequestUrl(targetUrl);
+      console.log("[company-candidate-cta] confirm:start", {
+        href,
+        requestHref,
+        targetUrl,
+        availableAccesses,
+        alreadyUnlocked,
+      });
+
+      const response = await window.fetch(targetUrl, {
         method: "GET",
         credentials: "include",
         cache: "no-store",
       });
       const payload = await response.json().catch(() => ({}));
-      console.log("[company-candidate-cta] response", { status: response.status, ok: response.ok, payload });
+      const statusLabel = `${response.status} ${response.ok ? "ok" : "error"}`;
+      setLastStatus(statusLabel);
+      console.log("[company-candidate-cta] confirm:response", { status: response.status, ok: response.ok, payload });
 
       if (!response.ok) {
         if (response.status === 402) {
           setError("No tienes accesos disponibles para ver perfiles completos.");
+          setLastError("402 no_available_accesses");
+          setConfirmState("error");
           return;
         }
         if (response.status === 409) {
-          router.push(href);
-          router.refresh();
+          setConfirmState("success");
+          window.location.assign(href);
           return;
         }
         const details = String(payload?.user_message || payload?.details || payload?.error || "").trim();
-        setError(details || "No se pudo abrir el perfil completo.");
+        const message = details || "No se pudo abrir el perfil completo.";
+        setError(message);
+        setLastError(message);
+        setConfirmState("error");
         return;
       }
 
-      router.push(href);
-      router.refresh();
+      setConfirmState("success");
+      window.location.assign(href);
     } catch (clientError: any) {
-      console.error("[company-candidate-cta] client error", clientError);
+      const message = String(clientError?.message || clientError || "client_error");
+      console.error("[company-candidate-cta] confirm:client_error", clientError);
       setError("No se pudo abrir el perfil completo.");
+      setLastError(message);
+      setConfirmState("error");
     } finally {
       setSubmitting(false);
     }
@@ -80,7 +106,7 @@ export default function CompanyCandidateAccessCta({
           type="button"
           onClick={() => {
             console.log("[company-candidate-cta] open-full-direct", { href });
-            router.push(href);
+            window.location.assign(href);
           }}
           className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
         >
@@ -99,6 +125,9 @@ export default function CompanyCandidateAccessCta({
           console.log("[company-candidate-cta] primary-click", { href, requestHref });
           setClickCount((value) => value + 1);
           setError(null);
+          setLastError(null);
+          setLastStatus(null);
+          setConfirmState("idle");
           setOpen(true);
         }}
         className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
@@ -130,6 +159,12 @@ export default function CompanyCandidateAccessCta({
                 {error}
               </div>
             ) : null}
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+              <p>confirm={confirmState}</p>
+              <p>lastStatus={lastStatus || "—"}</p>
+              <p>lastError={lastError || "—"}</p>
+              <p className="break-all">request={lastRequestUrl || "—"}</p>
+            </div>
             <div className="mt-5 flex flex-wrap gap-3">
               <button
                 type="button"
@@ -137,7 +172,7 @@ export default function CompanyCandidateAccessCta({
                 disabled={submitting}
                 className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
               >
-                {submitting ? "Abriendo perfil…" : "Acceder al perfil"}
+                {submitting ? "Procesando..." : "Acceder al perfil"}
               </button>
               <button
                 type="button"
@@ -146,6 +181,7 @@ export default function CompanyCandidateAccessCta({
                   console.log("[company-candidate-cta] cancel");
                   setOpen(false);
                   setError(null);
+                  setConfirmState("idle");
                 }}
                 className="inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50"
               >
