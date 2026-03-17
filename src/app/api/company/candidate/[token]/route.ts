@@ -107,6 +107,19 @@ function yearsFromVerificationRows(rows: any[]) {
   return years > 0 ? Math.round(years) : null;
 }
 
+function yearsFromExperienceRows(rows: any[]) {
+  const dates = rows
+    .flatMap((row: any) => [row?.start_date || null, row?.end_date || null])
+    .filter(Boolean)
+    .map((value: any) => Date.parse(String(value)));
+  const valid = dates.filter((value) => Number.isFinite(value));
+  if (!valid.length) return null;
+  const min = Math.min(...valid);
+  const max = Math.max(...valid, Date.now());
+  const years = Math.max(0, Math.round(((max - min) / (365.25 * 24 * 60 * 60 * 1000)) * 10) / 10);
+  return years > 0 ? Math.round(years) : null;
+}
+
 async function resolveConsumptionSource(args: {
   service: ReturnType<typeof createServiceRoleClient>;
   companyId: string;
@@ -302,10 +315,13 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     .eq("candidate_id", link.candidate_id);
 
   const [experienceCountRes, linkedInviteRes] = await Promise.all([
-    service.from("profile_experiences").select("id", { count: "exact", head: true }).eq("user_id", link.candidate_id),
+    service
+      .from("profile_experiences")
+      .select("id,start_date,end_date,location,position,company_name")
+      .eq("user_id", link.candidate_id),
     service
       .from("company_candidate_import_invites")
-      .select("id,status,accepted_at,updated_at")
+      .select("id,status,accepted_at,updated_at,target_role,candidate_name_raw,candidate_email,extracted_payload_json")
       .eq("company_id", activeCompanyId)
       .eq("linked_user_id", link.candidate_id)
       .order("updated_at", { ascending: false })
@@ -389,7 +405,8 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     profile_status: profileStatus,
   };
   const breakdownRaw = (candidateProfile as any)?.trust_score_breakdown || {};
-  const experienceCount = Number(experienceCountRes.count || 0);
+  const experienceRows = Array.isArray(experienceCountRes.data) ? experienceCountRes.data : [];
+  const experienceCount = experienceRows.length;
   const profileLanguages = Array.isArray((profile as any)?.languages)
     ? (profile as any).languages.map((x: any) => String(x || "").trim()).filter(Boolean)
     : [];
@@ -401,9 +418,13 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     : [];
   const importedLanguages = Array.isArray((candidateProfile as any)?.raw_cv_json?.company_cv_import?.extracted_payload?.languages)
     ? (candidateProfile as any).raw_cv_json.company_cv_import.extracted_payload.languages
-        .map((item: any) => String(item || "").trim())
+        .map((item: any) => String(item?.name || item?.language || item?.title || item || "").trim())
         .filter(Boolean)
     : [];
+  const invitePayload =
+    linkedInviteRes.data && typeof (linkedInviteRes.data as any)?.extracted_payload_json === "object"
+      ? (linkedInviteRes.data as any).extracted_payload_json
+      : {};
   const languagesDetected = Array.from(new Set([...profileLanguages, ...achievementLanguages, ...importedLanguages]));
   const verificationTypes = Array.from(
     new Set(
@@ -454,10 +475,26 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const snapshot = {
     public_name: toPublicName((profile as any)?.full_name),
     sector:
-      String((Array.isArray((candidateProfile as any)?.preferred_roles) ? (candidateProfile as any)?.preferred_roles?.[0] : "") || "").trim() ||
-      null,
-    years_experience: yearsFromVerificationRows(verificationRows),
-    approximate_location: String((profile as any)?.location || (candidateProfile as any)?.work_zones || "").trim() || null,
+      String(
+        (Array.isArray((candidateProfile as any)?.preferred_roles) ? (candidateProfile as any)?.preferred_roles?.[0] : "") ||
+          (profile as any)?.title ||
+          (linkedInviteRes.data as any)?.target_role ||
+          invitePayload?.headline ||
+          ""
+      ).trim() || null,
+    years_experience:
+      yearsFromExperienceRows(experienceRows) ||
+      yearsFromVerificationRows(verificationRows) ||
+      (Array.isArray(invitePayload?.experiences) ? invitePayload.experiences.length : null),
+    approximate_location:
+      String(
+        (profile as any)?.location ||
+          (candidateProfile as any)?.work_zones ||
+          experienceRows.find((row: any) => String(row?.location || "").trim())?.location ||
+          invitePayload?.location ||
+          invitePayload?.experiences?.[0]?.location ||
+          ""
+      ).trim() || null,
     experiences_detected: experienceCount,
     total_verifications: totalVerifications,
     approved_verifications: verifiedRows.length,

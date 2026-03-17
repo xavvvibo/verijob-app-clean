@@ -390,11 +390,11 @@ export default async function CompanySubscriptionPage({
       <section className="grid gap-4 lg:grid-cols-[1.05fr_0.95fr]">
         <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Historial de compras de accesos</h2>
-          <p className="mt-1 text-sm text-slate-600">Últimas compras puntuales registradas para esta empresa.</p>
+          <p className="mt-1 text-sm text-slate-600">Últimas compras puntuales registradas para esta empresa. El saldo real disponible se refleja en el bloque superior del plan.</p>
           <div className="mt-4 space-y-3">
             {recentPurchases.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
-                Todavía no hay compras puntuales registradas en este historial.
+                Todavía no hay compras puntuales registradas en este historial. Si operas solo con accesos incluidos por plan, aquí no aparecerán movimientos.
               </div>
             ) : (
               recentPurchases.map((purchase: any) => (
@@ -416,7 +416,7 @@ export default async function CompanySubscriptionPage({
 
         <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Seguimiento de verificación documental</h2>
-          <p className="mt-1 text-sm text-slate-600">Resumen corto del documento recibido, prioridad de revisión y último hito visible.</p>
+          <p className="mt-1 text-sm text-slate-600">Estado real del último documento recibido, prioridad de revisión y siguiente paso visible para tu empresa.</p>
           <div className="mt-4 space-y-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Estado actual</p>
@@ -438,6 +438,9 @@ export default async function CompanySubscriptionPage({
                 {documentaryVerification.reviewed_at
                   ? `Última resolución: ${formatDateTime(documentaryVerification.reviewed_at)}`
                   : "La revisión se resolverá cuando el documento complete su cola actual."}
+              </p>
+              <p className="mt-2 text-xs text-slate-500">
+                Si necesitas revisar o sustituir el documento, gestiona el detalle completo desde el perfil de empresa.
               </p>
               {documentaryVerification.rejection_reason ? (
                 <p className="mt-2 text-xs text-rose-700">Motivo visible: {documentaryVerification.rejection_reason}</p>

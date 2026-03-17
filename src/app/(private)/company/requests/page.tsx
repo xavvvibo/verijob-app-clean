@@ -44,6 +44,9 @@ type ReqRow = {
   reuse_events: number;
 };
 
+const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const RECENT_THRESHOLD_TS = Date.now() - RECENT_WINDOW_MS;
+
 function statusLabel(v: string | null) {
   if (v === "verified") return "Confirmada";
   if (v === "pending_company" || v === "reviewing") return "Pendiente";
@@ -181,7 +184,7 @@ export default async function CompanyRequestsPage({
     resolved: rows.filter((r) => isResolvedStatus(r.status_effective)).length,
     recent: rows.filter((r) => {
       const ts = Date.parse(String(r.requested_at || ""));
-      return Number.isFinite(ts) && ts >= Date.now() - 7 * 24 * 60 * 60 * 1000;
+      return Number.isFinite(ts) && ts >= RECENT_THRESHOLD_TS;
     }).length,
     withEvidence: rows.filter((r) => r.evidence_count > 0).length,
     withReuse: rows.filter((r) => r.reuse_events > 0).length,
@@ -193,7 +196,7 @@ export default async function CompanyRequestsPage({
   if (filter === "recent") {
     filtered = rows.filter((r) => {
       const ts = Date.parse(String(r.requested_at || ""));
-      return Number.isFinite(ts) && ts >= Date.now() - 7 * 24 * 60 * 60 * 1000;
+      return Number.isFinite(ts) && ts >= RECENT_THRESHOLD_TS;
     });
   }
   if (filter === "with_evidence") filtered = rows.filter((r) => r.evidence_count > 0);
@@ -222,11 +225,11 @@ export default async function CompanyRequestsPage({
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Solicitudes</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Inbox operativa para confirmar o rechazar experiencias con contexto suficiente para decidir rápido.
+          Inbox operativa para revisar solicitudes que llegan cuando un candidato pide validar una experiencia frente a tu empresa.
         </p>
         {!planActive ? (
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            Puedes resolver solicitudes en modo free. Mejora tu plan si quieres más capacidad operativa en el resto del panel empresa.
+            Puedes revisar y resolver las solicitudes recibidas aunque tu empresa esté en plan Free. El plan afecta a accesos a perfiles, colaboración y capacidad operativa adicional, no a responder validaciones ya recibidas.
             <Link href="/company/upgrade" className="ml-2 font-semibold underline underline-offset-2">
               Ver opciones
             </Link>

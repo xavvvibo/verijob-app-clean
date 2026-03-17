@@ -113,6 +113,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
   const { ok, status, body } = await fetchCompanyProfile(token, requestedView);
   const preview: PreviewSnapshot = body?.preview ?? {};
   const access: AccessState = body?.access ?? {};
+  const creditsRemaining = Number(body?.gate?.credits_remaining ?? body?.credits_remaining ?? 0);
   const returnPath = `/company/candidate/${encodeURIComponent(token)}`;
 
   if (!ok) {
@@ -232,16 +233,16 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
                     : "Tu empresa todavía no ha desbloqueado este perfil completo."}
               </p>
               <p className="mt-2 text-sm font-semibold text-slate-900">
-                Accesos a perfiles disponibles: {body?.credits_remaining != null ? String(body.credits_remaining) : "0"}
+                Accesos a perfiles disponibles: {String(creditsRemaining)}
               </p>
-              {Number(body?.credits_remaining ?? 0) <= 0 && access?.access_status !== "active" ? (
+              {creditsRemaining <= 0 && access?.access_status !== "active" ? (
                 <p className="mt-1 text-sm text-rose-700">No tienes accesos disponibles para ver perfiles completos.</p>
               ) : null}
             </div>
             <div className="flex flex-wrap gap-3">
               <ProfileUnlockAction
                 href={`/company/candidate/${encodeURIComponent(token)}?view=full`}
-                availableAccesses={Number(body?.credits_remaining ?? 0)}
+                availableAccesses={creditsRemaining}
                 alreadyUnlocked={access?.access_status === "active"}
               />
               {access?.access_status !== "active" ? (
@@ -279,7 +280,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
               <div className="mt-5 flex flex-wrap gap-3">
                 <ProfileUnlockAction
                   href={`/company/candidate/${encodeURIComponent(token)}?view=full`}
-                  availableAccesses={Number(body?.credits_remaining ?? 0)}
+                  availableAccesses={creditsRemaining}
                   alreadyUnlocked={access?.access_status === "active"}
                 />
                 {access?.access_status !== "active" ? (
