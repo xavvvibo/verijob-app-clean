@@ -108,12 +108,12 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
         phone: p.phone,
         title: p.title,
         location: p.location,
-        address_line1: p.address_line1,
-        address_line2: p.address_line2,
-        city: p.city,
-        region: p.region,
-        postal_code: p.postal_code,
-        country: p.country,
+        address_line1: undefined,
+        address_line2: undefined,
+        city: undefined,
+        region: undefined,
+        postal_code: undefined,
+        country: undefined,
       });
       const requestBody: Record<string, unknown> = { ...payload };
       const identityRequested = clearIdentityOnSave || Boolean(identityValue.trim());
@@ -134,12 +134,12 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
         phone: nextPersonalProfile.phone ?? current.phone,
         title: nextPersonalProfile.title ?? current.title,
         location: nextPersonalProfile.location ?? current.location,
-        address_line1: nextPersonalProfile.address_line1 ?? current.address_line1,
-        address_line2: nextPersonalProfile.address_line2 ?? current.address_line2,
-        city: nextPersonalProfile.city ?? current.city,
-        region: nextPersonalProfile.region ?? current.region,
-        postal_code: nextPersonalProfile.postal_code ?? current.postal_code,
-        country: nextPersonalProfile.country ?? current.country,
+        address_line1: null,
+        address_line2: null,
+        city: null,
+        region: null,
+        postal_code: null,
+        country: null,
         identity_type: nextPersonalProfile.identity_type ?? current.identity_type,
         identity_masked: nextPersonalProfile.identity_masked ?? current.identity_masked,
         has_identity: nextPersonalProfile.has_identity ?? current.has_identity,
@@ -284,12 +284,6 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
               ) : null}
             </div>
           </label>
-          <Field label="Dirección (línea 1)" value={p.address_line1 ?? ""} onChange={(v) => setP({ ...p, address_line1: v || null })} />
-          <Field label="Dirección (línea 2)" value={p.address_line2 ?? ""} onChange={(v) => setP({ ...p, address_line2: v || null })} />
-          <Field label="Ciudad" value={p.city ?? ""} onChange={(v) => setP({ ...p, city: v || null })} />
-          <Field label="Provincia / región" value={p.region ?? ""} onChange={(v) => setP({ ...p, region: v || null })} />
-          <Field label="Código postal" value={p.postal_code ?? ""} onChange={(v) => setP({ ...p, postal_code: v || null })} />
-          <Field label="País" value={p.country ?? ""} onChange={(v) => setP({ ...p, country: v || null })} />
         </div>
         {profileMessage ? <InlineStatusMessage tone={profileMessage.tone} message={profileMessage.text} /> : null}
       </section>

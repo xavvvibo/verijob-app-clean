@@ -14,7 +14,7 @@ export default async function CandidateProfilePage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, full_name, phone, title, location, address_line1, address_line2, city, region, postal_code, country")
+    .select("id, full_name, phone, title, location")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -33,12 +33,12 @@ export default async function CandidateProfilePage() {
           phone: (profile as any)?.phone ?? null,
           title: (profile as any)?.title ?? null,
           location: (profile as any)?.location ?? null,
-          address_line1: (profile as any)?.address_line1 ?? null,
-          address_line2: (profile as any)?.address_line2 ?? null,
-          city: (profile as any)?.city ?? null,
-          region: (profile as any)?.region ?? null,
-          postal_code: (profile as any)?.postal_code ?? null,
-          country: (profile as any)?.country ?? null,
+          address_line1: null,
+          address_line2: null,
+          city: null,
+          region: null,
+          postal_code: null,
+          country: null,
           identity_type: null,
           identity_masked: null,
           has_identity: false,

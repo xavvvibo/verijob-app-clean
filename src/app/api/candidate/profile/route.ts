@@ -8,12 +8,6 @@ const PROFILE_PERSONAL_FIELDS = [
   "phone",
   "title",
   "location",
-  "address_line1",
-  "address_line2",
-  "city",
-  "region",
-  "postal_code",
-  "country",
 ] as const;
 
 const CANDIDATE_PROFILE_MUTABLE_FIELDS = [
@@ -103,21 +97,7 @@ function buildAchievementsCatalog(profile: any, candidateProfile: any) {
   const certificationsLegacy = Array.isArray(candidateProfile?.certifications)
     ? candidateProfile.certifications.map(normalizeAchievement).filter(Boolean)
     : [];
-  const profileLanguages = Array.isArray(profile?.languages)
-    ? profile.languages
-      .map((item: any) => normalizeText(item))
-      .filter(Boolean)
-      .map((title: string) => ({
-        title,
-        language: title,
-        level: null,
-        certificate_title: null,
-        issuer: null,
-        date: null,
-        description: null,
-        category: "idioma" as AchievementCategory,
-      }))
-    : [];
+  const profileLanguages: AchievementItem[] = [];
 
   const merged = dedupeAchievements([
     ...profileLanguages,
@@ -173,7 +153,7 @@ function buildRequestedPersonalSnapshot(body: any, currentProfile: any) {
   const next: Record<string, any> = {};
   for (const field of PROFILE_PERSONAL_FIELDS) {
     if (Object.prototype.hasOwnProperty.call(body || {}, field)) {
-      next[field] = normalizeNullableText(body?.[field], field === "phone" ? 50 : field === "postal_code" ? 40 : field === "city" || field === "region" ? 120 : field === "country" ? 80 : 160);
+      next[field] = normalizeNullableText(body?.[field], field === "phone" ? 50 : 160);
     } else {
       next[field] = currentProfile?.[field] ?? null;
     }
@@ -222,12 +202,12 @@ export async function GET() {
       phone: profile?.phone || null,
       title: profile?.title || null,
       location: profile?.location || null,
-      address_line1: profile?.address_line1 || null,
-      address_line2: profile?.address_line2 || null,
-      city: profile?.city || null,
-      region: profile?.region || null,
-      postal_code: profile?.postal_code || null,
-      country: profile?.country || null,
+      address_line1: null,
+      address_line2: null,
+      city: null,
+      region: null,
+      postal_code: null,
+      country: null,
       identity_type: null,
       identity_masked: null,
       has_identity: false,
@@ -267,17 +247,10 @@ export async function PUT(req: Request) {
   const hasCandidateProfileInput = ["summary", "education", "achievements", "certifications"].some((key) =>
     Object.prototype.hasOwnProperty.call(body || {}, key)
   );
-  const hasAchievementsInput = ["achievements", "certifications"].some((key) =>
-    Object.prototype.hasOwnProperty.call(body || {}, key)
-  );
   const normalizedAchievements = dedupeAchievements(
     achievementsInput.map(normalizeAchievement).filter(Boolean) as AchievementItem[]
   );
   const certifications = normalizedAchievements.filter((item) => item.category === "certificacion");
-  const languages = normalizedAchievements
-    .filter((item) => item.category === "idioma")
-    .map((item) => normalizeText(item.language || item.title))
-    .filter(Boolean);
 
   let writeError: any = null;
   let nextCandidateProfile: any = candidateProfile || null;
@@ -336,22 +309,19 @@ export async function PUT(req: Request) {
     if (!Object.prototype.hasOwnProperty.call(body || {}, field)) continue;
     nextProfilePatch[field] = normalizeNullableText(
       body?.[field],
-      field === "phone" ? 50 : field === "postal_code" ? 40 : field === "city" || field === "region" ? 120 : field === "country" ? 80 : 160
+      field === "phone" ? 50 : 160
     );
   }
   const hasIdentityInput =
     Object.prototype.hasOwnProperty.call(body || {}, "identity_type") ||
     Object.prototype.hasOwnProperty.call(body || {}, "identity_value");
-  if (hasAchievementsInput || Array.isArray(profile?.languages) || languages.length > 0) {
-    nextProfilePatch.languages = languages;
-  }
   if (Object.keys(nextProfilePatch).length) {
     nextProfilePatch.updated_at = new Date().toISOString();
     const profileUpdate = await admin
       .from("profiles")
       .update(nextProfilePatch)
       .eq("id", user.id)
-      .select("id, full_name, phone, title, location, address_line1, address_line2, city, region, postal_code, country, languages")
+      .select("id, full_name, phone, title, location")
       .maybeSingle();
     if (profileUpdate.error) {
       return NextResponse.json(
@@ -434,12 +404,12 @@ export async function PUT(req: Request) {
       phone: nextProfile?.phone || null,
       title: nextProfile?.title || null,
       location: nextProfile?.location || null,
-      address_line1: nextProfile?.address_line1 || null,
-      address_line2: nextProfile?.address_line2 || null,
-      city: nextProfile?.city || null,
-      region: nextProfile?.region || null,
-      postal_code: nextProfile?.postal_code || null,
-      country: nextProfile?.country || null,
+      address_line1: null,
+      address_line2: null,
+      city: null,
+      region: null,
+      postal_code: null,
+      country: null,
       identity_type: null,
       identity_masked: null,
       has_identity: false,
