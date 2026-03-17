@@ -180,12 +180,12 @@ function documentaryNextStep(doc: CompanyVerificationDocument) {
   if (review === "rejected") return "Revisa el motivo indicado y sube una nueva versión del documento.";
   if (review === "pending_review" || review === "uploaded") {
     return detected > 0
-      ? "Sigue pendiente de revisión manual. Si quieres, puedes usar los datos detectados para completar el perfil."
-      : "Sigue pendiente de revisión manual. No necesitas hacer nada más hasta que revisemos el documento.";
+      ? "La revisión interna sigue abierta. Si te encajan, puedes importar ya los datos detectados para adelantar el perfil de empresa."
+      : "La revisión interna sigue abierta. No necesitas hacer nada más hasta que revisemos el documento.";
   }
   if (review === "approved") {
     if (detected > 0 && importStatus !== "imported") {
-      return "Documento validado. Puedes usar los datos detectados para completar el perfil si te encajan.";
+      return "Documento validado. Puedes importar los datos detectados al perfil de empresa si te encajan.";
     }
     return "Documento validado. No requiere más acciones.";
   }
@@ -990,7 +990,7 @@ export default function CompanyProfilePage() {
             </div>
           </div>
           <p className="mt-2 text-xs text-slate-600">
-            Cada fila indica si el documento ya está revisado, si sigue pendiente y si puede ayudarte a completar el perfil.
+            Cada fila indica si el documento ya está revisado, si sigue pendiente y si puede aportar datos útiles al perfil de empresa.
           </p>
           {documents.length === 0 ? (
             <p className="mt-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-sm text-slate-600">
@@ -1075,7 +1075,7 @@ export default function CompanyProfilePage() {
                                   disabled={docActionLoadingId === doc.id || Number(doc?.extracted_json?.detected_fields_count || 0) === 0}
                                   className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                                 >
-                                  {docActionLoadingId === doc.id ? "Procesando…" : "Completar perfil con este documento"}
+                                  {docActionLoadingId === doc.id ? "Procesando…" : "Importar datos detectados al perfil"}
                                 </button>
                                 <button
                                   type="button"

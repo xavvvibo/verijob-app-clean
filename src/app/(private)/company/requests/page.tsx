@@ -227,9 +227,12 @@ export default async function CompanyRequestsPage({
         <p className="mt-2 text-sm text-slate-600">
           Inbox operativa para revisar solicitudes que llegan cuando un candidato pide validar una experiencia frente a tu empresa.
         </p>
+        <p className="mt-2 text-sm text-slate-600">
+          Esta pantalla no crea solicitudes manualmente: aquí gestionas las que ya han llegado desde el flujo del candidato y sus verificaciones.
+        </p>
         {!planActive ? (
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            Puedes revisar y resolver las solicitudes recibidas aunque tu empresa esté en plan Free. El plan afecta a accesos a perfiles, colaboración y capacidad operativa adicional, no a responder validaciones ya recibidas.
+            Puedes revisar y resolver las solicitudes recibidas aunque tu empresa esté en plan Free. El plan afecta a accesos a perfiles, colaboración y capacidad operativa adicional, no a responder validaciones ya recibidas en esta bandeja.
             <Link href="/company/upgrade" className="ml-2 font-semibold underline underline-offset-2">
               Ver opciones
             </Link>

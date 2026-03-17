@@ -61,11 +61,6 @@ type CompanyAccount = {
   can_manage_company: boolean;
 };
 
-const IDENTITY_TYPE_OPTIONS = [
-  { value: "nif", label: "NIF / CIF" },
-  { value: "passport", label: "Pasaporte" },
-];
-
 function ToggleCard({
   label,
   helper,
@@ -122,8 +117,6 @@ export default function CompanySettingsPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
   const [accountMessage, setAccountMessage] = useState<string | null>(null);
-  const [identityType, setIdentityType] = useState("nif");
-  const [identityValue, setIdentityValue] = useState("");
   const [disableUserConfirmed, setDisableUserConfirmed] = useState(false);
   const [closeCompanyConfirmation, setCloseCompanyConfirmation] = useState("");
   const [deleteUserConfirmation, setDeleteUserConfirmation] = useState("");
@@ -174,7 +167,6 @@ export default function CompanySettingsPage() {
       if (accountRes.ok) {
         const nextAccount: CompanyAccount = accountData.account;
         setAccount(nextAccount);
-        if (nextAccount?.company?.identity_type) setIdentityType(nextAccount.company.identity_type);
       } else {
         setAccountError(accountData?.error || "No se pudo cargar el estado de la cuenta empresa.");
       }
@@ -244,14 +236,6 @@ export default function CompanySettingsPage() {
     }
     setAccountMessage(payload?.user_message || "Acción completada correctamente.");
     return payload;
-  }
-
-  async function saveIdentity() {
-    const result = await runAccountAction("update_company_identity", {
-      identity_type: identityType,
-      identity_value: identityValue,
-    });
-    if (result?.ok) setIdentityValue("");
   }
 
   async function deleteUser() {
@@ -395,61 +379,28 @@ export default function CompanySettingsPage() {
 
         <div className="mt-6 grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
           <section className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-            <h3 className="text-sm font-semibold text-slate-900">Identidad fiscal asociada</h3>
+            <h3 className="text-sm font-semibold text-slate-900">Identidad fiscal de empresa</h3>
             <p className="mt-1 text-sm text-slate-600">
-              Guardamos solo la máscara y el hash del documento para conciliación interna. El valor completo no vuelve a mostrarse.
+              La edición de CIF/NIF y datos fiscales de empresa se centraliza en Perfil de empresa para evitar duplicidades entre superficies.
             </p>
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-700">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Documento asociado</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Resumen actual</p>
               <p className="mt-1 font-semibold text-slate-900">
                 {account?.company?.has_identity
                   ? `${String(account?.company.identity_type || "").toUpperCase()} · ${account?.company.identity_masked}`
-                  : "Todavía no hay documento asociado a la empresa."}
+                  : "Todavía no hay identidad fiscal resumida en esta cuenta."}
+              </p>
+              <p className="mt-2 text-xs text-slate-500">
+                Si necesitas actualizar el documento fiscal o completar datos legales, hazlo desde el perfil de empresa.
               </p>
             </div>
-            <div className="mt-4 grid gap-3 md:grid-cols-[180px_1fr]">
-              <label className="block">
-                <div className="text-sm font-semibold text-slate-900">Tipo</div>
-                <select
-                  value={identityType}
-                  onChange={(e) => setIdentityType(e.target.value)}
-                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900"
-                >
-                  {IDENTITY_TYPE_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="block">
-                <div className="text-sm font-semibold text-slate-900">Documento</div>
-                <input
-                  type="text"
-                  value={identityValue}
-                  onChange={(e) => setIdentityValue(e.target.value)}
-                  placeholder="Introduce el NIF o pasaporte solo para registrarlo"
-                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900"
-                />
-              </label>
-            </div>
             <div className="mt-4 flex flex-wrap gap-3">
-              <button
-                type="button"
-                disabled={accountSaving || !account?.can_manage_company || !identityValue.trim()}
-                onClick={saveIdentity}
-                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+              <a
+                href="/company/profile"
+                className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
               >
-                Guardar identidad
-              </button>
-              <button
-                type="button"
-                disabled={accountSaving || !account?.can_manage_company || !account?.company?.has_identity}
-                onClick={() => runAccountAction("clear_company_identity")}
-                className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Borrar asociación
-              </button>
+                Abrir perfil de empresa
+              </a>
             </div>
           </section>
 
