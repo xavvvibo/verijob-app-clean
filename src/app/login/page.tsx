@@ -13,7 +13,7 @@ export default async function LoginPage() {
   if (auth?.user) {
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role,onboarding_completed")
+      .select("role,app_role,onboarding_completed")
       .eq("id", auth.user.id)
       .maybeSingle();
     const destination = resolveAuthenticatedHomePath({ ...(profile || {}), user: auth.user });

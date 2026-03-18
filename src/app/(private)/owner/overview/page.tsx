@@ -324,10 +324,14 @@ async function OwnerOverviewServer({
 
   const { data: ownerProfile } = await sessionClient
     .from("profiles")
-    .select("role")
+    .select("role,app_role")
     .eq("id", auth.user.id)
     .maybeSingle();
-  const ownerRole = resolveSessionRole({ profileRole: ownerProfile?.role, user: auth.user });
+  const ownerRole = resolveSessionRole({
+    profileRole: ownerProfile?.role,
+    profileAppRole: (ownerProfile as any)?.app_role,
+    user: auth.user,
+  });
   if (!isOwnerSessionRole(ownerRole)) redirect("/dashboard?forbidden=1&from=owner");
 
   const admin = createServiceRoleClient();

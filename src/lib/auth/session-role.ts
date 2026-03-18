@@ -5,10 +5,16 @@ function normalizeRole(value: unknown) {
 
 export function resolveSessionRole(input: {
   profileRole?: unknown;
+  profileAppRole?: unknown;
   user?: any;
 }) {
+  const fromProfileAppRole = normalizeRole(input.profileAppRole);
+  if (fromProfileAppRole === "owner" || fromProfileAppRole === "admin") return fromProfileAppRole;
+
   const fromProfile = normalizeRole(input.profileRole);
   if (fromProfile) return fromProfile;
+
+  if (fromProfileAppRole) return fromProfileAppRole;
 
   const user = input.user || {};
   const appRole = normalizeRole(user?.app_metadata?.role);

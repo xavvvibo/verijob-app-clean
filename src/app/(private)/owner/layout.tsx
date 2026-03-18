@@ -12,11 +12,15 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role,app_role")
     .eq("id", au.user.id)
     .maybeSingle();
 
-  const role = resolveSessionRole({ profileRole: profile?.role, user: au.user });
+  const role = resolveSessionRole({
+    profileRole: profile?.role,
+    profileAppRole: (profile as any)?.app_role,
+    user: au.user,
+  });
   if (!isOwnerSessionRole(role)) {
     if (role === "candidate") redirect("/candidate/overview?forbidden=1&from=owner");
     if (role === "company") redirect("/company?forbidden=1&from=owner");

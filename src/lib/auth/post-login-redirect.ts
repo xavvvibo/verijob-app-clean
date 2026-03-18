@@ -3,12 +3,17 @@ import { resolveCandidateOnboardingCompleted } from "@/lib/auth/onboarding-state
 
 export function resolveAuthenticatedHomePath(input: {
   role?: unknown;
+  app_role?: unknown;
   onboardingCompleted?: unknown;
   onboarding_completed?: unknown;
   currentPath?: unknown;
   user?: any;
 }) {
-  const role = resolveSessionRole({ profileRole: input.role, user: input.user });
+  const role = resolveSessionRole({
+    profileRole: input.role,
+    profileAppRole: input.app_role,
+    user: input.user,
+  });
   const onboardingCompleted = resolveCandidateOnboardingCompleted(input);
   const currentPath = String(input.currentPath || "").trim();
 

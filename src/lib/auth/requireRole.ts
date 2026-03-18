@@ -15,11 +15,15 @@ export async function requireRole(
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role,onboarding_completed")
+    .select("role,app_role,onboarding_completed")
     .eq("id", data.user.id)
     .single();
 
-  const role = resolveSessionRole({ profileRole: profile?.role, user: data.user });
+  const role = resolveSessionRole({
+    profileRole: profile?.role,
+    profileAppRole: (profile as any)?.app_role,
+    user: data.user,
+  });
 
   if (role === "candidate" && !resolveCandidateOnboardingCompleted(profile || {})) {
     redirect("/onboarding");

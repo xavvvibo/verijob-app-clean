@@ -12,7 +12,7 @@ export default async function DashboardRouter() {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("role, onboarding_completed")
+    .select("role, app_role, onboarding_completed")
     .eq("id", user.id)
     .maybeSingle();
 
