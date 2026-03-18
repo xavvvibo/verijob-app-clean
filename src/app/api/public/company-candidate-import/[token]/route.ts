@@ -2,12 +2,12 @@ import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
+import { resolveSafeCandidateName } from "@/lib/company-candidate-import-shared";
 import {
   buildCompanyCvImportLegalSnapshot,
   COMPANY_CV_IMPORT_LEGAL_VERSION,
   ensureCandidatePublicToken,
   persistImportedCandidateProfile,
-  resolveSafeCandidateName,
 } from "@/lib/company-candidate-import";
 
 export const runtime = "nodejs";

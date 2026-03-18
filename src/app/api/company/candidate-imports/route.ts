@@ -4,9 +4,9 @@ import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
+import { resolveSafeCandidateName } from "@/lib/company-candidate-import-shared";
 import {
   ensureCandidatePublicToken,
-  resolveSafeCandidateName,
   sha256Hex,
 } from "@/lib/company-candidate-import";
 import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";

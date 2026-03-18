@@ -5,7 +5,7 @@ import { sanitizePublic } from "@/utils/sanitizePublic";
 import { resolveActiveCandidatePublicLink } from "@/lib/public/candidate-public-link";
 import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
 import { normalizeCompanyProfileAccessProductKey } from "@/lib/company/profile-access-products";
-import { resolveSafeCandidateName } from "@/lib/company-candidate-import";
+import { resolveSafeCandidateName } from "@/lib/company-candidate-import-shared";
 import {
   deriveCompanyCandidateAccess,
   resolveCompanyCandidateAccess,

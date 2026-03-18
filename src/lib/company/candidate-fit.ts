@@ -1,4 +1,4 @@
-import { resolveSafeCandidateName } from "@/lib/company-candidate-import";
+import { resolveSafeCandidateName } from "@/lib/company-candidate-import-shared";
 
 export type CompanyCandidateWorkspaceRow = {
   id: string;
