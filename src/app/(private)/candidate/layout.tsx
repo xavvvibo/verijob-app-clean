@@ -24,12 +24,12 @@ export default async function CandidateLayout({ children }: { children: React.Re
     .maybeSingle();
 
   const routing = resolveAuthenticatedRouting({ ...(profile || {}), user: au.user });
-  if (routing.role !== "candidate") {
-    redirect(`${routing.destination}?forbidden=1&from=candidate`);
+  if (routing.destination === "/onboarding") {
+    redirect("/onboarding?blocked=1&source=candidate");
   }
 
-  if (!routing.onboardingCompleted) {
-    redirect("/onboarding?blocked=1&source=candidate");
+  if (routing.destination !== "/candidate/overview") {
+    redirect(`${routing.destination}?forbidden=1&from=candidate`);
   }
 
   return <>{children}</>;
