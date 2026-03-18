@@ -1,6 +1,9 @@
 function normalizeRole(value: unknown) {
   const role = String(value || "").trim().toLowerCase();
-  return role || "";
+  if (role === "owner" || role === "admin" || role === "company" || role === "candidate") return role;
+  if (role === "empresa") return "company";
+  if (role === "candidato") return "candidate";
+  return "";
 }
 
 export function resolveSessionRole(input: {
@@ -8,33 +11,24 @@ export function resolveSessionRole(input: {
   profileAppRole?: unknown;
   user?: any;
 }) {
-  const fromProfileAppRole = normalizeRole(input.profileAppRole);
-  if (fromProfileAppRole === "owner" || fromProfileAppRole === "admin") return fromProfileAppRole;
-
-  const fromProfile = normalizeRole(input.profileRole);
-  if (fromProfile) return fromProfile;
-
-  if (fromProfileAppRole) return fromProfileAppRole;
-
   const user = input.user || {};
-  const appRole = normalizeRole(user?.app_metadata?.role);
-  if (appRole) return appRole;
+  const roles = [
+    normalizeRole(input.profileAppRole),
+    normalizeRole(user?.app_metadata?.role),
+    normalizeRole(user?.user_metadata?.role),
+    normalizeRole(user?.app_metadata?.claims?.role),
+    ...(Array.isArray(user?.app_metadata?.roles)
+      ? user.app_metadata.roles.map((item: unknown) => normalizeRole(item)).filter(Boolean)
+      : []),
+    normalizeRole(input.profileRole),
+    user?.app_metadata?.is_admin === true || user?.user_metadata?.is_admin === true ? "admin" : "",
+    user?.app_metadata?.is_owner === true || user?.user_metadata?.is_owner === true ? "owner" : "",
+  ].filter(Boolean);
 
-  const userRole = normalizeRole(user?.user_metadata?.role);
-  if (userRole) return userRole;
-
-  const claimRole = normalizeRole(user?.app_metadata?.claims?.role);
-  if (claimRole) return claimRole;
-
-  const appRoles = Array.isArray(user?.app_metadata?.roles)
-    ? user.app_metadata.roles.map((item: unknown) => normalizeRole(item)).filter(Boolean)
-    : [];
-  if (appRoles.includes("owner")) return "owner";
-  if (appRoles.includes("admin")) return "admin";
-
-  if (user?.app_metadata?.is_owner === true || user?.user_metadata?.is_owner === true) return "owner";
-  if (user?.app_metadata?.is_admin === true || user?.user_metadata?.is_admin === true) return "admin";
-
+  if (roles.includes("admin")) return "admin";
+  if (roles.includes("owner")) return "owner";
+  if (roles.includes("company")) return "company";
+  if (roles.includes("candidate")) return "candidate";
   return "";
 }
 
