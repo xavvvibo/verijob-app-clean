@@ -1,4 +1,5 @@
 import { resolveSessionRole } from "@/lib/auth/session-role";
+import { resolveCandidateOnboardingCompleted } from "@/lib/auth/onboarding-state";
 
 export function resolveAuthenticatedHomePath(input: {
   role?: unknown;
@@ -8,10 +9,7 @@ export function resolveAuthenticatedHomePath(input: {
   user?: any;
 }) {
   const role = resolveSessionRole({ profileRole: input.role, user: input.user });
-  const onboardingCompleted =
-    typeof input.onboardingCompleted !== "undefined"
-      ? Boolean(input.onboardingCompleted)
-      : Boolean(input.onboarding_completed);
+  const onboardingCompleted = resolveCandidateOnboardingCompleted(input);
   const currentPath = String(input.currentPath || "").trim();
 
   let destination: string | null = null;

@@ -10,7 +10,7 @@ import type { EmailOtpType } from "@supabase/supabase-js";
 const OTP_RESEND_SECONDS = 60;
 
 function safeNext(raw: string | null) {
-  const fallback = "/dashboard";
+  const fallback = "/";
   if (!raw) return fallback;
   if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
   return fallback;

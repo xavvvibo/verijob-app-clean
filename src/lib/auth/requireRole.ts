@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+import { resolveCandidateOnboardingCompleted } from "@/lib/auth/onboarding-state";
 import { resolveAuthenticatedHomePath } from "@/lib/auth/post-login-redirect";
 import { resolveSessionRole } from "@/lib/auth/session-role";
 
@@ -20,7 +21,7 @@ export async function requireRole(
 
   const role = resolveSessionRole({ profileRole: profile?.role, user: data.user });
 
-  if (role === "candidate" && !profile?.onboarding_completed) {
+  if (role === "candidate" && !resolveCandidateOnboardingCompleted(profile || {})) {
     redirect("/onboarding");
   }
 

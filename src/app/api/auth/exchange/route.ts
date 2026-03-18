@@ -20,7 +20,7 @@ function getSupabaseEnv() {
 }
 
 function safeNext(raw: string | null, origin: string) {
-  const fallback = "/candidate/overview";
+  const fallback = "/";
 
   if (!raw) return fallback;
 
@@ -50,7 +50,7 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL(`/login?error=missing_env&next=${encodeURIComponent(next)}`, origin));
   }
 
-  let response = NextResponse.redirect(new URL(next, origin));
+  const response = NextResponse.redirect(new URL(next, origin));
   const cookieStore = await cookies();
 
   const supabase = createServerClient(url, anon, {
