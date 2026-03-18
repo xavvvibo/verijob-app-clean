@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import type { ReactNode } from "react";
+import { isOwnerSessionRole, resolveSessionRole } from "@/lib/auth/session-role";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { conversionStateLabel, loadVerificationCompanyAcquisition, subscriptionStateLabel } from "@/lib/owner/verification-company-acquisition";
 import { isMissingExternalResolvedColumn } from "@/lib/verification/external-resolution";
@@ -326,8 +327,8 @@ async function OwnerOverviewServer({
     .select("role")
     .eq("id", auth.user.id)
     .maybeSingle();
-  const ownerRole = String(ownerProfile?.role || "").toLowerCase();
-  if (ownerRole !== "owner" && ownerRole !== "admin") redirect("/dashboard?forbidden=1&from=owner");
+  const ownerRole = resolveSessionRole({ profileRole: ownerProfile?.role, user: auth.user });
+  if (!isOwnerSessionRole(ownerRole)) redirect("/dashboard?forbidden=1&from=owner");
 
   const admin = createServiceRoleClient();
   const now = Date.now();

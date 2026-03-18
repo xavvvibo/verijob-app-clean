@@ -1,10 +1,13 @@
+import { resolveSessionRole } from "@/lib/auth/session-role";
+
 export function resolveAuthenticatedHomePath(input: {
   role?: unknown;
   onboardingCompleted?: unknown;
   onboarding_completed?: unknown;
   currentPath?: unknown;
+  user?: any;
 }) {
-  const role = String(input.role || "").toLowerCase();
+  const role = resolveSessionRole({ profileRole: input.role, user: input.user });
   const onboardingCompleted =
     typeof input.onboardingCompleted !== "undefined"
       ? Boolean(input.onboardingCompleted)

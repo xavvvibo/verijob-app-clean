@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+import { isOwnerSessionRole, resolveSessionRole } from "@/lib/auth/session-role";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,8 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
     .eq("id", au.user.id)
     .maybeSingle();
 
-  const role = String(profile?.role || "").toLowerCase();
-  if (role !== "owner" && role !== "admin") {
+  const role = resolveSessionRole({ profileRole: profile?.role, user: au.user });
+  if (!isOwnerSessionRole(role)) {
     if (role === "candidate") redirect("/candidate/overview?forbidden=1&from=owner");
     if (role === "company") redirect("/company?forbidden=1&from=owner");
     redirect("/dashboard?forbidden=1&from=owner");

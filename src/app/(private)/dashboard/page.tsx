@@ -20,6 +20,7 @@ export default async function DashboardRouter() {
 
   const destination = resolveAuthenticatedHomePath({
     ...(profile || {}),
+    user,
     currentPath: "/dashboard",
   });
   if (destination) redirect(destination);

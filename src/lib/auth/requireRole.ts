@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { resolveAuthenticatedHomePath } from "@/lib/auth/post-login-redirect";
+import { resolveSessionRole } from "@/lib/auth/session-role";
 
 export async function requireRole(
   allowed: ("candidate" | "company" | "owner")[]
@@ -17,17 +18,19 @@ export async function requireRole(
     .eq("id", data.user.id)
     .single();
 
-  if (String(profile?.role || "").toLowerCase() === "candidate" && !profile?.onboarding_completed) {
+  const role = resolveSessionRole({ profileRole: profile?.role, user: data.user });
+
+  if (role === "candidate" && !profile?.onboarding_completed) {
     redirect("/onboarding");
   }
 
-  if (!allowed.includes(profile.role)) {
-    const destination = resolveAuthenticatedHomePath(profile || {});
+  if (!allowed.includes(role as any)) {
+    const destination = resolveAuthenticatedHomePath({ ...(profile || {}), user: data.user });
     if (destination) redirect(destination);
   }
 
   return {
     user: data.user,
-    role: profile.role,
+    role,
   };
 }
