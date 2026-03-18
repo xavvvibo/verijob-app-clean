@@ -15,7 +15,8 @@ export default async function SignupPage() {
       .select("role,onboarding_completed")
       .eq("id", auth.user.id)
       .maybeSingle();
-    redirect(resolveAuthenticatedHomePath(profile || {}));
+    const destination = resolveAuthenticatedHomePath(profile || {});
+    if (destination) redirect(destination);
   }
 
   return (

@@ -16,5 +16,11 @@ export default async function DashboardRouter() {
     .eq("id", user.id)
     .single();
 
-  redirect(resolveAuthenticatedHomePath(profile || {}));
+  const destination = resolveAuthenticatedHomePath({
+    ...(profile || {}),
+    currentPath: "/dashboard",
+  });
+  if (destination) redirect(destination);
+
+  redirect("/candidate/overview");
 }

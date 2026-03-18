@@ -102,7 +102,7 @@ export default function OnboardingPage() {
         if (!cancelled) router.replace("/onboarding/company?blocked=1&source=onboarding");
         return;
       } else if (profile?.onboarding_completed) {
-        if (!cancelled) router.replace("/dashboard");
+        if (!cancelled) router.replace("/candidate/overview");
         return;
       } else if (!cancelled) {
         const stepFromUrl = normalizeStep(searchParams.get("step"));

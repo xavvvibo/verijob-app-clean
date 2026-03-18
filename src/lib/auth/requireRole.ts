@@ -22,7 +22,8 @@ export async function requireRole(
   }
 
   if (!allowed.includes(profile.role)) {
-    redirect(resolveAuthenticatedHomePath(profile || {}));
+    const destination = resolveAuthenticatedHomePath(profile || {});
+    if (destination) redirect(destination);
   }
 
   return {
