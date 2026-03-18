@@ -1,8 +1,13 @@
 function normalizeRole(value: unknown) {
   const role = String(value || "").trim().toLowerCase();
-  if (role === "owner" || role === "admin" || role === "company" || role === "candidate") return role;
   if (role === "empresa") return "company";
   if (role === "candidato") return "candidate";
+  return role || "";
+}
+
+function knownRole(value: unknown) {
+  const role = normalizeRole(value);
+  if (role === "owner" || role === "admin" || role === "company" || role === "candidate") return role;
   return "";
 }
 
@@ -12,7 +17,7 @@ export function resolveSessionRole(input: {
   user?: any;
 }) {
   const user = input.user || {};
-  const roles = [
+  const roleCandidates = [
     normalizeRole(input.profileAppRole),
     normalizeRole(user?.app_metadata?.role),
     normalizeRole(user?.user_metadata?.role),
@@ -25,11 +30,15 @@ export function resolveSessionRole(input: {
     user?.app_metadata?.is_owner === true || user?.user_metadata?.is_owner === true ? "owner" : "",
   ].filter(Boolean);
 
+  const roles = roleCandidates.map((value) => knownRole(value)).filter(Boolean);
+
   if (roles.includes("admin")) return "admin";
   if (roles.includes("owner")) return "owner";
   if (roles.includes("company")) return "company";
   if (roles.includes("candidate")) return "candidate";
-  return "";
+
+  // Keep authenticated users in an accessible state instead of collapsing to an empty role.
+  return roleCandidates.length > 0 ? "candidate" : "";
 }
 
 export function isOwnerSessionRole(role: unknown) {
