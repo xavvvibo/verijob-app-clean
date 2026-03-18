@@ -1,9 +1,6 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import type { ReactNode } from "react";
-import { isOwnerSessionRole, resolveSessionRole } from "@/lib/auth/session-role";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { conversionStateLabel, loadVerificationCompanyAcquisition, subscriptionStateLabel } from "@/lib/owner/verification-company-acquisition";
 import { isMissingExternalResolvedColumn } from "@/lib/verification/external-resolution";
@@ -318,22 +315,6 @@ async function OwnerOverviewServer({
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = searchParams ? await searchParams : {};
-  const sessionClient = await createServerSupabaseClient();
-  const { data: auth } = await sessionClient.auth.getUser();
-  if (!auth?.user) redirect("/login?next=/owner/overview");
-
-  const { data: ownerProfile } = await sessionClient
-    .from("profiles")
-    .select("role,app_role")
-    .eq("id", auth.user.id)
-    .maybeSingle();
-  const ownerRole = resolveSessionRole({
-    profileRole: ownerProfile?.role,
-    profileAppRole: (ownerProfile as any)?.app_role,
-    user: auth.user,
-  });
-  if (!isOwnerSessionRole(ownerRole)) redirect("/dashboard?forbidden=1&from=owner");
-
   const admin = createServiceRoleClient();
   const now = Date.now();
   const dayMs = 24 * 60 * 60 * 1000;

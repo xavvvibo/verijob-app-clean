@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { resolveSessionRole } from "@/lib/auth/session-role";
 import Sidebar from "./_components/layout/Sidebar";
 import Topbar from "./_components/layout/Topbar";
 
@@ -12,10 +13,14 @@ export default async function PrivateLayout({ children }: { children: ReactNode 
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role,app_role")
     .eq("id", user.id)
-    .single();
-  const role = String(profile?.role || "candidate").toLowerCase();
+    .maybeSingle();
+  const role = resolveSessionRole({
+    profileRole: profile?.role,
+    profileAppRole: (profile as any)?.app_role,
+    user,
+  }) || "candidate";
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", minHeight: "100vh", background: "#F8FAFC" }}>
