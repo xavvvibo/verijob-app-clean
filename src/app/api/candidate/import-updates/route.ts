@@ -75,6 +75,24 @@ function updateSuggestionStatus(rawCvJson: any, inviteId: string, suggestionId: 
   };
 }
 
+function updateProfileProposal(rawCvJson: any, inviteId: string, patch: Record<string, any>) {
+  const base = rawCvJson && typeof rawCvJson === "object" ? rawCvJson : {};
+  const updates = Array.isArray(base.company_cv_import_updates) ? base.company_cv_import_updates : [];
+  return {
+    ...base,
+    company_cv_import_updates: updates.map((entry: any) => {
+      if (String(entry?.invite_id || "") !== inviteId) return entry;
+      return {
+        ...entry,
+        profile_proposal: {
+          ...(entry?.profile_proposal && typeof entry.profile_proposal === "object" ? entry.profile_proposal : {}),
+          ...patch,
+        },
+      };
+    }),
+  };
+}
+
 export async function GET() {
   const supabase = await createRouteHandlerClient();
   const admin = createServiceRoleClient();
@@ -122,8 +140,11 @@ export async function PATCH(request: Request) {
   const inviteId = normalizeText(body?.invite_id);
   const suggestionId = normalizeText(body?.suggestion_id);
   const action = normalizeText(body?.action).toLowerCase();
-  if (!inviteId || !suggestionId) return json(400, { error: "missing_identifiers" });
-  if (!["accept", "dismiss"].includes(action)) return json(400, { error: "unsupported_action" });
+  const proposalAction = normalizeText(body?.proposal_action).toLowerCase();
+  if (!inviteId) return json(400, { error: "missing_identifiers" });
+  if (!["accept", "dismiss"].includes(action) && proposalAction !== "apply_languages") {
+    return json(400, { error: "unsupported_action" });
+  }
 
   const { data: candidateProfile, error: cpErr } = await admin
     .from("candidate_profiles")
@@ -135,6 +156,58 @@ export async function PATCH(request: Request) {
   const rawCvJson = candidateProfile?.raw_cv_json && typeof candidateProfile.raw_cv_json === "object" ? candidateProfile.raw_cv_json : {};
   const updates = Array.isArray((rawCvJson as any)?.company_cv_import_updates) ? (rawCvJson as any).company_cv_import_updates : [];
   const updateEntry = updates.find((entry: any) => String(entry?.invite_id || "") === inviteId);
+  if (!updateEntry) return json(404, { error: "update_entry_not_found" });
+
+  if (proposalAction === "apply_languages") {
+    const proposal = updateEntry?.profile_proposal && typeof updateEntry.profile_proposal === "object" ? updateEntry.profile_proposal : {};
+    const mergedLanguages = Array.isArray(proposal?.merged_languages)
+      ? proposal.merged_languages.map((item: any) => normalizeText(item)).filter(Boolean)
+      : [];
+    const newLanguages = Array.isArray(proposal?.new_languages)
+      ? proposal.new_languages.map((item: any) => normalizeText(item)).filter(Boolean)
+      : [];
+
+    if (mergedLanguages.length === 0) {
+      return json(400, { error: "no_languages_to_apply" });
+    }
+
+    const { data: profileRow, error: profileErr } = await admin.from("profiles").select("languages").eq("id", user.id).maybeSingle();
+    if (profileErr) return json(400, { error: "profile_read_failed", details: profileErr.message });
+
+    const currentLanguages = Array.isArray((profileRow as any)?.languages)
+      ? (profileRow as any).languages.map((item: any) => normalizeText(item)).filter(Boolean)
+      : [];
+    const deduped = Array.from(
+      new Map(
+        [...currentLanguages, ...mergedLanguages].map((language) => [language.toLowerCase(), language])
+      ).values()
+    );
+
+    const { error: profileUpdateErr } = await admin
+      .from("profiles")
+      .update({
+        languages: deduped,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", user.id);
+    if (profileUpdateErr) return json(400, { error: "profile_languages_update_failed", details: profileUpdateErr.message });
+
+    const nextRawCvJson = updateProfileProposal(rawCvJson, inviteId, {
+      languages_applied_at: new Date().toISOString(),
+      languages_applied_count: newLanguages.length,
+    });
+    const { error: profileProposalErr } = await admin
+      .from("candidate_profiles")
+      .update({ raw_cv_json: nextRawCvJson, updated_at: new Date().toISOString() })
+      .eq("user_id", user.id);
+    if (profileProposalErr) {
+      return json(400, { error: "candidate_profile_update_failed", details: profileProposalErr.message });
+    }
+
+    return json(200, { ok: true, proposal_action: proposalAction, applied_languages: newLanguages.length });
+  }
+
+  if (!suggestionId) return json(400, { error: "missing_identifiers" });
   const suggestion = Array.isArray(updateEntry?.experience_suggestions)
     ? updateEntry.experience_suggestions.find((item: any) => String(item?.id || "") === suggestionId)
     : null;
@@ -190,9 +263,10 @@ export async function PATCH(request: Request) {
   }
 
   const nextRawCvJson = updateSuggestionStatus(rawCvJson, inviteId, suggestionId, action === "accept" ? "accepted" : "dismissed");
+  const nowIso = new Date().toISOString();
   const { error: updateProfileErr } = await admin
     .from("candidate_profiles")
-    .update({ raw_cv_json: nextRawCvJson, updated_at: new Date().toISOString() })
+    .update({ raw_cv_json: nextRawCvJson, updated_at: nowIso })
     .eq("user_id", user.id);
   if (updateProfileErr) return json(400, { error: "candidate_profile_update_failed", details: updateProfileErr.message });
 

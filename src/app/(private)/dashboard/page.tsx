@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
+import { resolveAuthenticatedHomePath } from "@/lib/auth/post-login-redirect";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,12 +16,5 @@ export default async function DashboardRouter() {
     .eq("id", user.id)
     .single();
 
-  const r = String(profile?.role || "").toLowerCase();
-  if (r === "owner" || r === "admin") redirect("/owner/overview");
-  if (!profile?.onboarding_completed) {
-    if (r === "company") redirect("/onboarding/company?blocked=1&source=dashboard");
-    redirect("/onboarding?blocked=1&source=dashboard");
-  }
-  if (r === "company") redirect("/company");
-  redirect("/candidate/overview");
+  redirect(resolveAuthenticatedHomePath(profile || {}));
 }

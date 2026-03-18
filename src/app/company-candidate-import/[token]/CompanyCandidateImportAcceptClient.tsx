@@ -135,6 +135,7 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
   const companyName = resolveCompanyDisplayName(invite?.company || null, "Tu empresa");
   const candidateAlreadyExists = Boolean(invite?.candidate_already_exists);
   const parsePreview = invite?.extracted_payload_json || null;
+  const importMeta = parsePreview?._verijob_import_meta || {};
   const experienceCount = Array.isArray(parsePreview?.experiences) ? parsePreview.experiences.length : 0;
   const educationCount = Array.isArray(parsePreview?.education) ? parsePreview.education.length : 0;
   const languagesCount = Array.isArray(parsePreview?.languages) ? parsePreview.languages.length : 0;
@@ -199,6 +200,16 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
                     ? "Tras aceptar podrás revisar posibles experiencias nuevas o cambios detectados antes de incorporarlos a tu perfil."
                     : "Tras aceptar te llevaremos a una pantalla de revisión real para validar tu experiencia importada antes de seguir con el perfil."}
                 </p>
+                {candidateAlreadyExists ? (
+                  <p className="mt-3 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-xs text-violet-800">
+                    El email ya existía en VERIJOB. La empresa no puede sobrescribir tu perfil: esta importación queda en staging hasta que revises la propuesta.
+                  </p>
+                ) : null}
+                {importMeta?.identity_name_mismatch ? (
+                  <p className="mt-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                    El nombre detectado en este CV no coincide razonablemente con el nombre ya asociado a ese email. Revísalo con atención antes de continuar.
+                  </p>
+                ) : null}
                 <div className="mt-4 grid gap-3">
                   <div className="rounded-2xl border border-slate-200 bg-white p-4">
                     <p className="text-xs uppercase tracking-[0.12em] text-slate-500">Experiencia</p>

@@ -2,13 +2,21 @@ import SignupClient from "./SignupClient";
 import PublicAuthShell from "@/components/public/PublicAuthShell";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
+import { resolveAuthenticatedHomePath } from "@/lib/auth/post-login-redirect";
 
 export const dynamic = "force-dynamic";
 
 export default async function SignupPage() {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
-  if (auth?.user) redirect("/dashboard");
+  if (auth?.user) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role,onboarding_completed")
+      .eq("id", auth.user.id)
+      .maybeSingle();
+    redirect(resolveAuthenticatedHomePath(profile || {}));
+  }
 
   return (
     <PublicAuthShell

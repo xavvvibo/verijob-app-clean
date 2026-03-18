@@ -17,6 +17,52 @@ function newToken() {
   return crypto.randomBytes(16).toString("hex");
 }
 
+async function resolveRegisteredCompanyTarget(admin: any, companyEmail: string) {
+  const normalizedEmail = asText(companyEmail).toLowerCase();
+  if (!normalizedEmail) {
+    return {
+      companyId: null,
+      companyNameSnapshot: null,
+      companyVerificationStatusSnapshot: null,
+    };
+  }
+
+  const { data: matchedProfile } = await admin
+    .from("profiles")
+    .select("active_company_id")
+    .eq("email", normalizedEmail)
+    .eq("role", "company")
+    .maybeSingle();
+
+  const companyId = (matchedProfile as any)?.active_company_id ? String((matchedProfile as any).active_company_id) : null;
+  if (!companyId) {
+    return {
+      companyId: null,
+      companyNameSnapshot: null,
+      companyVerificationStatusSnapshot: null,
+    };
+  }
+
+  const [{ data: company }, { data: companyProfile }] = await Promise.all([
+    admin.from("companies").select("name,company_verification_status").eq("id", companyId).maybeSingle(),
+    admin.from("company_profiles").select("trade_name,legal_name").eq("company_id", companyId).maybeSingle(),
+  ]);
+
+  const companyNameSnapshot = asText(
+    (companyProfile as any)?.trade_name ||
+      (companyProfile as any)?.legal_name ||
+      (company as any)?.name
+  ) || null;
+  const companyVerificationStatusSnapshot =
+    asText((company as any)?.company_verification_status) || null;
+
+  return {
+    companyId,
+    companyNameSnapshot,
+    companyVerificationStatusSnapshot,
+  };
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -144,8 +190,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    const targetCompany = await resolveRegisteredCompanyTarget(admin, companyEmail);
+    const requestedAt = new Date().toISOString();
     const insertPayload = {
       employment_record_id: employmentRecordId || null,
+      company_id: targetCompany.companyId,
       company_email_target: companyEmail,
       external_email_target: companyEmail,
       company_name_target: companyName,
@@ -153,9 +202,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       verification_type: "employment",
       verification_channel: "email",
       status: "pending_company",
-      requested_at: new Date().toISOString(),
+      requested_at: requestedAt,
       external_token: newToken(),
       external_token_expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
+      company_id_snapshot: targetCompany.companyId,
+      company_name_snapshot: targetCompany.companyNameSnapshot || companyName || null,
+      company_verification_status_snapshot: targetCompany.companyVerificationStatusSnapshot,
+      snapshot_at: targetCompany.companyId ? requestedAt : null,
       request_context: {
         source: "candidate_experience_request",
         source_profile_experience_id: verifiedProfileExperienceId || null,
@@ -164,6 +217,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         start_date: asText(start_date) || null,
         end_date: asText(end_date) || null,
         is_current: Boolean(is_current),
+        target_company_registered: Boolean(targetCompany.companyId),
       },
     };
 

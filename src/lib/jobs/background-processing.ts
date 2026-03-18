@@ -130,7 +130,7 @@ function readResponseOutputText(resp: any): string {
   return "";
 }
 
-function normalizeCvExtract(raw: any) {
+function normalizeCvExtract(raw: any, cvText = "") {
   const experiences = Array.isArray(raw?.experiences) ? raw.experiences : [];
   const education = Array.isArray(raw?.education) ? raw.education : [];
   return {
@@ -138,7 +138,7 @@ function normalizeCvExtract(raw: any) {
     email: normalizeText(raw?.email) || null,
     phone: normalizeText(raw?.phone) || null,
     headline: normalizeText(raw?.headline) || null,
-    languages: normalizeCvLanguages(Array.isArray(raw?.languages) ? raw.languages : [], 30),
+    languages: normalizeCvLanguages(Array.isArray(raw?.languages) ? raw.languages : [], 30, cvText),
     experiences: experiences.map((x: any) => ({
       company_name: normalizeText(x?.company_name) || null,
       role_title: normalizeText(x?.role_title) || null,
@@ -282,7 +282,7 @@ async function processCandidateCvParseJob(jobId: string): Promise<JobSummary> {
       throw new Error("openai_invalid_json_output");
     }
 
-    const normalized = normalizeCvExtract(parsed);
+    const normalized = normalizeCvExtract(parsed, extractedText);
     const warningData = buildCvWarnings({
       cvText: extractedText,
       experiences: normalized.experiences,

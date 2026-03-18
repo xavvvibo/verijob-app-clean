@@ -34,6 +34,26 @@ type ImportsMeta = {
   migration_files?: string[];
 };
 
+type ImportPreview = {
+  prefill?: {
+    candidate_email?: string;
+    candidate_name?: string;
+    target_role?: string | null;
+  };
+  candidate_already_exists?: boolean;
+  existing_candidate_name?: string | null;
+  identity_name_mismatch?: boolean;
+  parsing?: {
+    warnings?: string[];
+    extracted?: {
+      languages?: string[];
+      experiences?: any[];
+      full_name?: string | null;
+      email?: string | null;
+    };
+  };
+};
+
 function formatDate(value: string | null | undefined) {
   if (!value) return "Sin fecha";
   const date = new Date(value);
@@ -96,6 +116,7 @@ export default function CompanyCandidatesClient() {
   const [importsMeta, setImportsMeta] = useState<ImportsMeta>({ available: true, migration_files: [] });
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -107,6 +128,7 @@ export default function CompanyCandidatesClient() {
   const [trustFilter, setTrustFilter] = useState(searchParams.get("trust") || "all");
   const [verificationFilter, setVerificationFilter] = useState(searchParams.get("verified") || "all");
   const [profileFilter, setProfileFilter] = useState(searchParams.get("profile") || "all");
+  const [archivedFilter, setArchivedFilter] = useState(searchParams.get("archived") || "hide");
   const [sort, setSort] = useState(searchParams.get("sort") || "recent");
   const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
   const [form, setForm] = useState({
@@ -116,8 +138,13 @@ export default function CompanyCandidatesClient() {
     source_notes: "",
   });
   const [file, setFile] = useState<File | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
 
   const tokenDisabled = useMemo(() => token.trim().length === 0, [token]);
+  const submitDisabled = useMemo(
+    () => submitting || !importsMeta.available || !file || !String(form.candidate_email || "").trim(),
+    [file, form.candidate_email, importsMeta.available, submitting]
+  );
   const filteredImports = useMemo(() => {
     const query = search.trim().toLowerCase();
     const rows = imports.filter((row) => {
@@ -132,6 +159,8 @@ export default function CompanyCandidatesClient() {
       if (verificationFilter === "verified" && !isCandidateVerified(row)) return false;
       if (verificationFilter === "unverified" && isCandidateVerified(row)) return false;
       if (profileFilter !== "all" && resolveCandidateProfileReadiness(row) !== profileFilter) return false;
+      if (archivedFilter === "hide" && String(row.company_stage || "").toLowerCase() === "archived") return false;
+      if (archivedFilter === "only" && String(row.company_stage || "").toLowerCase() !== "archived") return false;
       return true;
     });
 
@@ -141,7 +170,7 @@ export default function CompanyCandidatesClient() {
       return Date.parse(String(b.last_activity_at || b.created_at || 0)) - Date.parse(String(a.last_activity_at || a.created_at || 0));
     });
     return rows;
-  }, [imports, pipelineFilter, profileFilter, savedFilter, search, sort, trustFilter, verificationFilter]);
+  }, [archivedFilter, imports, pipelineFilter, profileFilter, savedFilter, search, sort, trustFilter, verificationFilter]);
 
   const pipelineCounts = useMemo(
     () => ({
@@ -247,12 +276,52 @@ export default function CompanyCandidatesClient() {
         source_notes: "",
       });
       setFile(null);
+      setImportPreview(null);
       setNotice(data?.user_message || "CV importado correctamente.");
       await loadImports();
     } catch (e: any) {
       setError(e?.message || "No se pudo crear la invitación.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function analyzeImport() {
+    setPreviewing(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      if (!file) throw new Error("Adjunta un CV antes de analizarlo.");
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("candidate_email", form.candidate_email);
+      fd.append("candidate_name", form.candidate_name);
+      fd.append("target_role", form.target_role);
+      fd.append("source_notes", form.source_notes);
+      fd.append("preview_only", "1");
+
+      const res = await fetch("/api/company/candidate-imports", {
+        method: "POST",
+        body: fd,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.user_message || data?.details || data?.error || "No se pudo analizar el CV.");
+      }
+
+      setImportPreview(data);
+      setForm((prev) => ({
+        ...prev,
+        candidate_email: data?.prefill?.candidate_email || prev.candidate_email,
+        candidate_name: data?.prefill?.candidate_name || prev.candidate_name,
+        target_role: data?.prefill?.target_role || prev.target_role,
+      }));
+      setNotice(data?.user_message || "CV analizado. Revisa el prefill antes de enviar.");
+    } catch (e: any) {
+      setError(e?.message || "No se pudo analizar el CV.");
+    } finally {
+      setPreviewing(false);
     }
   }
 
@@ -441,6 +510,8 @@ export default function CompanyCandidatesClient() {
                 { label: "Todo pipeline", active: pipelineFilter === "all", onClick: () => setPipelineFilter("all") },
                 { label: "Guardados", active: savedFilter === "saved", onClick: () => setSavedFilter("saved") },
                 { label: "Preseleccionados", active: savedFilter === "preselected", onClick: () => setSavedFilter("preselected") },
+                { label: "Archivados", active: archivedFilter === "only", onClick: () => setArchivedFilter("only") },
+                { label: "Ocultar archivados", active: archivedFilter === "hide", onClick: () => setArchivedFilter("hide") },
                 { label: "Trust alto", active: trustFilter === "high", onClick: () => setTrustFilter("high") },
                 { label: "Trust medio", active: trustFilter === "medium", onClick: () => setTrustFilter("medium") },
                 { label: "Trust bajo", active: trustFilter === "low", onClick: () => setTrustFilter("low") },
@@ -468,6 +539,7 @@ export default function CompanyCandidatesClient() {
                   setTrustFilter("all");
                   setVerificationFilter("all");
                   setProfileFilter("all");
+                  setArchivedFilter("hide");
                   setSearch("");
                   setSort("recent");
                 }}
@@ -638,11 +710,19 @@ export default function CompanyCandidatesClient() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => void archiveImport(row.id)}
+                            onClick={() =>
+                              void (row.company_stage === "archived" ? updateCompanyStage(row.id, "none") : archiveImport(row.id))
+                            }
                             disabled={actionId === row.id}
                             className={`${actionButtonClass({})} disabled:opacity-60`}
                           >
-                            {actionId === row.id ? "Archivando…" : "Archivar"}
+                            {actionId === row.id
+                              ? row.company_stage === "archived"
+                                ? "Restaurando…"
+                                : "Archivando…"
+                              : row.company_stage === "archived"
+                                ? "Restaurar"
+                                : "Archivar"}
                           </button>
                           <button
                             type="button"
@@ -745,7 +825,10 @@ export default function CompanyCandidatesClient() {
                     <input
                       type="file"
                       accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                      onChange={(e) => setFile(e.target.files?.[0] || null)}
+                      onChange={(e) => {
+                        setFile(e.target.files?.[0] || null);
+                        setImportPreview(null);
+                      }}
                       className="mt-2 block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-700"
                     />
                   </label>
@@ -764,8 +847,16 @@ export default function CompanyCandidatesClient() {
 
                 <div className="flex flex-wrap gap-3">
                   <button
+                    type="button"
+                    onClick={() => void analyzeImport()}
+                    disabled={previewing || submitting || !importsMeta.available || !file}
+                    className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    {previewing ? "Analizando CV…" : "Analizar y pre-rellenar"}
+                  </button>
+                  <button
                     type="submit"
-                    disabled={submitting || !importsMeta.available}
+                    disabled={submitDisabled}
                     className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
                   >
                     {submitting ? "Importando CV…" : "Subir CV e invitar"}
@@ -775,6 +866,7 @@ export default function CompanyCandidatesClient() {
                     onClick={() => {
                       setForm({ candidate_email: "", candidate_name: "", target_role: "", source_notes: "" });
                       setFile(null);
+                      setImportPreview(null);
                       setError(null);
                       setNotice(null);
                     }}
@@ -784,6 +876,61 @@ export default function CompanyCandidatesClient() {
                   </button>
                 </div>
               </form>
+
+              {importPreview ? (
+                <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-900">Prefill detectado desde CV</h4>
+                      <p className="mt-1 text-xs text-slate-600">
+                        Revisa estos datos antes del envío. Si el email ya existe, el perfil no se sobrescribirá y la importación quedará en staging.
+                      </p>
+                    </div>
+                    {importPreview.candidate_already_exists ? (
+                      <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
+                        Email ya existente
+                      </span>
+                    ) : null}
+                  </div>
+                  <dl className="mt-3 grid gap-3 text-sm text-slate-700 md:grid-cols-3">
+                    <div>
+                      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</dt>
+                      <dd className="mt-1">{form.candidate_email || "No detectado"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nombre</dt>
+                      <dd className="mt-1">{form.candidate_name || "No detectado"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Puesto</dt>
+                      <dd className="mt-1">{form.target_role || "No detectado"}</dd>
+                    </div>
+                  </dl>
+                  {importPreview.candidate_already_exists ? (
+                    <p className="mt-3 text-xs text-violet-700">
+                      El email ya existe en VERIJOB.
+                      {importPreview.existing_candidate_name ? ` Perfil actual: ${importPreview.existing_candidate_name}.` : ""}
+                    </p>
+                  ) : null}
+                  {importPreview.identity_name_mismatch ? (
+                    <p className="mt-2 text-xs text-amber-700">
+                      El nombre detectado no coincide razonablemente con el ya asociado a ese email. Revísalo antes de continuar.
+                    </p>
+                  ) : null}
+                  {Array.isArray(importPreview.parsing?.extracted?.languages) && importPreview.parsing?.extracted?.languages?.length ? (
+                    <div className="mt-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Idiomas detectados</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {importPreview.parsing?.extracted?.languages?.map((language) => (
+                          <span key={language} className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                            {language}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
             <div className="space-y-4">

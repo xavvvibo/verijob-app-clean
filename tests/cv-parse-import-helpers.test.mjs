@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  extractCvLanguagesFromText,
   normalizeCvLanguages,
   selectLanguagesPersistenceTarget,
   shouldApplyParsedResultOnce,
@@ -10,6 +11,24 @@ import {
 test("normalizeCvLanguages admite languages y normaliza trim/empty/max", () => {
   const out = normalizeCvLanguages([" Español ", "", null, "Inglés", "  "], 3);
   assert.deepEqual(out, ["Español", "Inglés"]);
+});
+
+test("normalizeCvLanguages usa fallback textual cuando el parser no trae idiomas", () => {
+  const out = normalizeCvLanguages([], 5, "Idiomas: español, inglés C1, catalán.");
+  assert.deepEqual(out, ["Español", "Inglés", "Catalán"]);
+});
+
+test("extractCvLanguagesFromText detecta bloque de idiomas con niveles", () => {
+  const out = extractCvLanguagesFromText(`
+    Perfil profesional
+    Idiomas:
+    Español nativo
+    Inglés B2
+    Francés básico
+    Experiencia
+    Camarero de sala
+  `);
+  assert.deepEqual(out, ["Español", "Inglés", "Francés"]);
 });
 
 test("shouldImportEducationRow no descarta entradas válidas por descripción", () => {

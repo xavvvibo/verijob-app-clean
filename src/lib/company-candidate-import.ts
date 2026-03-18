@@ -367,7 +367,7 @@ export async function extractStructuredCvFromBuffer(
           description: safeTrim(item?.notes) || null,
         }))
       : [],
-    languages: Array.isArray(structuredFromLlm?.languages) ? structuredFromLlm.languages : [],
+    languages: normalizeCvLanguages(Array.isArray(structuredFromLlm?.languages) ? structuredFromLlm.languages : [], 30, normalizedText),
     skills: Array.isArray(structuredFromLlm?.skills)
       ? structuredFromLlm.skills.map((item: any) => safeTrim(item)).filter(Boolean)
       : [],
@@ -441,7 +441,11 @@ export async function persistImportedCandidateProfile(input: {
     .filter((item: any) => String(item?.category || "").toLowerCase() === "idioma")
     .map((item: any) => safeTrim(item?.language || item?.title))
     .filter(Boolean);
-  const importedLanguages = normalizeCvLanguages(Array.isArray(parsed?.languages) ? parsed.languages : [], 50);
+  const importedLanguages = normalizeCvLanguages(
+    Array.isArray(parsed?.languages) ? parsed.languages : [],
+    50,
+    safeTrim(parsed?.summary || parsed?.raw_text || parsed?.cv_text || parsed?.text)
+  );
   const mergedLanguages = Array.from(new Set([...profileLanguages, ...achievementLanguages, ...importedLanguages]));
   const newLanguages = mergedLanguages.filter((language) => {
     const key = language.toLowerCase();
@@ -481,6 +485,7 @@ export async function persistImportedCandidateProfile(input: {
       location: safeTrim((currentProfile as any)?.location) || safeTrim(parsed?.location || parsed?.city) || null,
       merged_languages: mergedLanguages,
       new_languages: newLanguages,
+      detected_languages_count: importedLanguages.length,
       summary: safeTrim(parsed?.summary || parsed?.about) || null,
     },
     experience_suggestions: suggestions,

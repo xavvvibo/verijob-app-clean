@@ -29,6 +29,19 @@ type UpdateEntry = {
   invite_id: string;
   company_name?: string | null;
   imported_at?: string | null;
+  candidate_identity?: {
+    display_name?: string | null;
+    email?: string | null;
+    reliable_name?: string | null;
+    existing_candidate?: boolean | null;
+  };
+  profile_proposal?: {
+    merged_languages?: string[];
+    new_languages?: string[];
+    languages_applied_at?: string | null;
+    full_name?: string | null;
+    full_name_source?: string | null;
+  };
   experience_suggestions?: Suggestion[];
 };
 
@@ -113,6 +126,7 @@ export default function CandidateImportUpdatesClient() {
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [proposalLoadingId, setProposalLoadingId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -151,6 +165,27 @@ export default function CandidateImportUpdatesClient() {
       setError(e?.message || "No se pudo actualizar la sugerencia.");
     } finally {
       setLoadingId(null);
+    }
+  }
+
+  async function applyLanguages(inviteId: string) {
+    setProposalLoadingId(inviteId);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/candidate/import-updates", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ invite_id: inviteId, proposal_action: "apply_languages" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.details || data?.error || "No se pudieron aplicar los idiomas detectados.");
+      setNotice("Idiomas incorporados al perfil sin borrar los que ya tenías.");
+      await load();
+    } catch (e: any) {
+      setError(e?.message || "No se pudieron aplicar los idiomas detectados.");
+    } finally {
+      setProposalLoadingId(null);
     }
   }
 
@@ -198,6 +233,11 @@ export default function CandidateImportUpdatesClient() {
                 <div>
                   <h2 className="text-base font-semibold text-slate-900">{entry.company_name || "Empresa"}</h2>
                   <p className="mt-1 text-sm text-slate-600">Importado el {formatDate(entry.imported_at)}</p>
+                  {entry.candidate_identity?.existing_candidate ? (
+                    <p className="mt-1 text-xs text-violet-700">
+                      Email ya existente detectado. Esta importación se ha mantenido en staging y agrupada sobre tu identidad actual.
+                    </p>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap gap-2 text-xs text-slate-600">
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">Nuevas: {fresh.length}</span>
@@ -205,6 +245,45 @@ export default function CandidateImportUpdatesClient() {
                   <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1">Duplicadas: {existing.length}</span>
                 </div>
               </div>
+
+              {Array.isArray(entry.profile_proposal?.merged_languages) && entry.profile_proposal?.merged_languages.length ? (
+                <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-sm font-semibold text-emerald-950">Idiomas detectados en la propuesta</h3>
+                      <p className="mt-1 text-sm text-emerald-900">
+                        Los idiomas actuales se conservan. Solo se añaden los nuevos detectados con suficiente claridad.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void applyLanguages(entry.invite_id)}
+                      disabled={proposalLoadingId === entry.invite_id || Boolean(entry.profile_proposal?.languages_applied_at)}
+                      className="inline-flex rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black disabled:opacity-60"
+                    >
+                      {entry.profile_proposal?.languages_applied_at
+                        ? "Idiomas ya aplicados"
+                        : proposalLoadingId === entry.invite_id
+                          ? "Aplicando…"
+                          : "Aplicar idiomas"}
+                    </button>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {entry.profile_proposal.merged_languages?.map((language) => (
+                      <span key={`${entry.invite_id}-${language}`} className="rounded-full border border-emerald-300 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-900">
+                        {language}
+                      </span>
+                    ))}
+                  </div>
+                  {Array.isArray(entry.profile_proposal?.new_languages) && entry.profile_proposal.new_languages.length ? (
+                    <p className="mt-3 text-xs text-emerald-900">
+                      Nuevos detectados: {entry.profile_proposal.new_languages.join(", ")}.
+                    </p>
+                  ) : (
+                    <p className="mt-3 text-xs text-emerald-900">No se han detectado idiomas nuevos respecto a tu perfil actual.</p>
+                  )}
+                </div>
+              ) : null}
 
               {fresh.length ? (
                 <div className="mt-5">

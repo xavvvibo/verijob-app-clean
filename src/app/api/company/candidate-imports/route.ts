@@ -6,6 +6,7 @@ import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
 import { resolveSafeCandidateName } from "@/lib/company-candidate-import-shared";
 import {
+  extractStructuredCvFromBuffer,
   ensureCandidatePublicToken,
   sha256Hex,
 } from "@/lib/company-candidate-import";
@@ -48,6 +49,27 @@ function extFromFilename(filename: string) {
   const ext = clean.split(".").pop()?.toLowerCase() || "pdf";
   if (["pdf", "doc", "docx"].includes(ext)) return ext;
   return "pdf";
+}
+
+function normalizeNameForMatch(value: unknown) {
+  return normalizeText(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function namesReasonablyMatch(left: unknown, right: unknown) {
+  const a = normalizeNameForMatch(left);
+  const b = normalizeNameForMatch(right);
+  if (!a || !b) return true;
+  if (a === b) return true;
+  const aParts = a.split(" ").filter(Boolean);
+  const bParts = b.split(" ").filter(Boolean);
+  if (!aParts.length || !bParts.length) return true;
+  return aParts.some((part) => bParts.includes(part));
 }
 
 function formatImportStatus(row: any) {
@@ -363,11 +385,9 @@ export async function POST(request: Request) {
     const candidateNameRaw = normalizeText(form.get("candidate_name"));
     const targetRole = normalizeText(form.get("target_role")) || null;
     const sourceNotes = normalizeText(form.get("source_notes")) || null;
+    const previewOnly = normalizeText(form.get("preview_only")) === "1";
     const file = form.get("file");
 
-    if (!candidateEmail || !candidateEmail.includes("@")) {
-      return json(400, { error: "invalid_candidate_email", user_message: "Introduce un email válido del candidato." });
-    }
     if (!(file instanceof File)) {
       return json(400, { error: "file_required", user_message: "Adjunta un CV en PDF, DOC o DOCX." });
     }
@@ -386,6 +406,25 @@ export async function POST(request: Request) {
     }
 
     const bytes = Buffer.from(await file.arrayBuffer());
+    const openaiApiKey = normalizeText(process.env.OPENAI_API_KEY) || normalizeText(process.env.OPENAI_KEY) || null;
+    const previewParsed = await extractStructuredCvFromBuffer({
+      fileBuffer: bytes,
+      filename: file.name || "cv",
+      openaiApiKey,
+    });
+    const detectedEmail = normalizeText(previewParsed?.structured?.email).toLowerCase() || candidateEmail;
+    const detectedName = resolveSafeCandidateName(
+      previewParsed?.structured?.full_name || candidateNameRaw,
+      detectedEmail || candidateEmail
+    );
+    const candidateNameToPersist = candidateNameRaw || detectedName;
+    const previewRole = normalizeText(previewParsed?.structured?.headline) || targetRole || null;
+    const previewWarnings = Array.isArray(previewParsed?.warnings) ? previewParsed.warnings : [];
+    const lookupEmail = detectedEmail || candidateEmail;
+
+    if (!lookupEmail || !lookupEmail.includes("@")) {
+      return json(400, { error: "invalid_candidate_email", user_message: "Introduce un email válido del candidato." });
+    }
     const cvHash = sha256Hex(bytes);
     const inviteId = randomUUID();
     const inviteToken = randomUUID().replace(/-/g, "") + randomUUID().replace(/-/g, "");
@@ -395,7 +434,7 @@ export async function POST(request: Request) {
     const { data: existingCandidateProfile } = await admin
       .from("profiles")
       .select("id,role,full_name,email")
-      .eq("email", candidateEmail)
+      .eq("email", lookupEmail)
       .maybeSingle();
     const existingCandidateUserId =
       String(existingCandidateProfile?.role || "").toLowerCase() === "candidate" && existingCandidateProfile?.id
@@ -404,6 +443,37 @@ export async function POST(request: Request) {
     const existingCandidatePublicToken = existingCandidateUserId
       ? await ensureCandidatePublicToken(admin, existingCandidateUserId)
       : null;
+    const existingProfileName = normalizeText(existingCandidateProfile?.full_name) || null;
+    const identityNameMismatch =
+      Boolean(existingCandidateUserId) &&
+      Boolean(existingProfileName) &&
+      Boolean(detectedName) &&
+      !namesReasonablyMatch(existingProfileName, detectedName);
+
+    if (previewOnly) {
+      return json(200, {
+        ok: true,
+        preview_only: true,
+        prefill: {
+          candidate_email: lookupEmail,
+          candidate_name: detectedName,
+          target_role: previewRole,
+        },
+        candidate_already_exists: Boolean(existingCandidateUserId),
+        existing_candidate_user_id: existingCandidateUserId,
+        existing_candidate_public_token: existingCandidatePublicToken,
+        existing_candidate_name: existingProfileName,
+        identity_name_mismatch: identityNameMismatch,
+        parsing: {
+          status: "preview_ready",
+          warnings: previewWarnings,
+          extracted: previewParsed?.structured || {},
+        },
+        user_message: existingCandidateUserId
+          ? "Hemos detectado que el email ya existe. La importación se mantendrá en staging y no sobrescribirá el perfil."
+          : "CV analizado. Revisa el prefill antes de enviar la solicitud.",
+      });
+    }
 
     const uploadRes = await admin.storage.from(BUCKET).upload(storagePath, bytes, {
       contentType: file.type,
@@ -424,8 +494,8 @@ export async function POST(request: Request) {
         company_id: companyId,
         invited_by_user_id: user.id,
         linked_user_id: existingCandidateUserId,
-        candidate_email: candidateEmail,
-        candidate_name_raw: candidateNameRaw || null,
+        candidate_email: lookupEmail,
+        candidate_name_raw: candidateNameToPersist || null,
         target_role: targetRole,
         source: "company_cv_upload",
         source_notes: sourceNotes,
@@ -444,6 +514,11 @@ export async function POST(request: Request) {
             candidate_already_exists: Boolean(existingCandidateUserId),
             existing_candidate_user_id: existingCandidateUserId,
             existing_candidate_public_token: existingCandidatePublicToken,
+            existing_candidate_name: existingProfileName,
+            identity_name_mismatch: identityNameMismatch,
+            detected_candidate_email: lookupEmail,
+            detected_candidate_name: detectedName,
+            detected_target_role: previewRole,
             processing_mode: "background_job",
           },
         },
@@ -489,6 +564,7 @@ export async function POST(request: Request) {
           ...createdInvite,
           candidate_already_exists: Boolean(existingCandidateUserId),
           candidate_public_token: existingCandidatePublicToken,
+          candidate_email: lookupEmail,
         };
         return {
           ...normalizedInvite,
@@ -502,9 +578,10 @@ export async function POST(request: Request) {
       candidate_already_exists: Boolean(existingCandidateUserId),
       existing_candidate_user_id: existingCandidateUserId,
       existing_candidate_public_token: existingCandidatePublicToken,
+      identity_name_mismatch: identityNameMismatch,
       parsing: {
         status: "import_pending",
-        warnings: [],
+        warnings: previewWarnings,
       },
       email: {
         ok: false,
