@@ -1,8 +1,6 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
-import { resolveCandidateOnboardingCompleted } from "@/lib/auth/onboarding-state";
-import { resolveAuthenticatedHomePath } from "@/lib/auth/post-login-redirect";
-import { resolveSessionRole } from "@/lib/auth/session-role";
+import { resolveAuthenticatedRouting, roleMatchesAllowed } from "@/lib/auth/post-login-redirect";
 
 export async function requireRole(
   allowed: ("candidate" | "company" | "owner")[]
@@ -19,19 +17,15 @@ export async function requireRole(
     .eq("id", data.user.id)
     .single();
 
-  const role = resolveSessionRole({
-    profileRole: profile?.role,
-    profileAppRole: (profile as any)?.app_role,
-    user: data.user,
-  });
+  const routing = resolveAuthenticatedRouting({ ...(profile || {}), user: data.user });
+  const role = routing.role;
 
-  if (role === "candidate" && !resolveCandidateOnboardingCompleted(profile || {})) {
+  if (role === "candidate" && !routing.onboardingCompleted) {
     redirect("/onboarding");
   }
 
-  if (!allowed.includes(role as any)) {
-    const destination = resolveAuthenticatedHomePath({ ...(profile || {}), user: data.user });
-    if (destination) redirect(destination);
+  if (!roleMatchesAllowed(role, allowed)) {
+    redirect(routing.destination);
   }
 
   return {

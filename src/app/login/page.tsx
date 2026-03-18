@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import LoginClient from "./LoginClient";
 import PublicAuthShell from "@/components/public/PublicAuthShell";
 import { createClient } from "@/utils/supabase/server";
-import { resolveAuthenticatedHomePath } from "@/lib/auth/post-login-redirect";
+import { resolveAuthenticatedRouting } from "@/lib/auth/post-login-redirect";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +16,7 @@ export default async function LoginPage() {
       .select("role,app_role,onboarding_completed")
       .eq("id", auth.user.id)
       .maybeSingle();
-    const destination = resolveAuthenticatedHomePath({ ...(profile || {}), user: auth.user });
-    if (destination) redirect(destination);
+    redirect(resolveAuthenticatedRouting({ ...(profile || {}), user: auth.user }).destination);
   }
 
   return (

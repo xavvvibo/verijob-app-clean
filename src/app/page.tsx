@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
-import { resolveAuthenticatedHomePath } from "@/lib/auth/post-login-redirect";
+import { resolveAuthenticatedRouting } from "@/lib/auth/post-login-redirect";
 
 export default async function AppRootPage() {
   const supabase = await createClient();
@@ -16,8 +16,5 @@ export default async function AppRootPage() {
     .eq("id", auth.user.id)
     .maybeSingle();
 
-  const destination = resolveAuthenticatedHomePath({ ...(profile || {}), user: auth.user });
-  if (destination) redirect(destination);
-
-  redirect("/login");
+  redirect(resolveAuthenticatedRouting({ ...(profile || {}), user: auth.user }).destination);
 }

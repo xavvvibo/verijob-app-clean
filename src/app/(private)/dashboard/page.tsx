@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
-import { resolveAuthenticatedHomePath } from "@/lib/auth/post-login-redirect";
+import { resolveAuthenticatedRouting } from "@/lib/auth/post-login-redirect";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -16,14 +16,15 @@ export default async function DashboardRouter() {
     .eq("id", user.id)
     .maybeSingle();
 
-  if (profileError) redirect("/login?error=profile_context");
+  if (profileError) {
+    redirect(resolveAuthenticatedRouting({ user, currentPath: "/dashboard" }).destination);
+  }
 
-  const destination = resolveAuthenticatedHomePath({
+  const routing = resolveAuthenticatedRouting({
     ...(profile || {}),
     user,
     currentPath: "/dashboard",
   });
-  if (destination) redirect(destination);
-
-  redirect("/login?error=profile_missing");
+  if (routing.shouldRedirect) redirect(routing.destination);
+  redirect(routing.destination);
 }

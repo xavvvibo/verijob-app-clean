@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+import { resolveAuthenticatedRouting } from "@/lib/auth/post-login-redirect";
 
 export const metadata: Metadata = {
   title: { default: "VERIJOB — Candidato", template: "VERIJOB Candidato — %s" },
@@ -18,15 +19,17 @@ export default async function CandidateLayout({ children }: { children: React.Re
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role,onboarding_completed")
+    .select("role,app_role,onboarding_completed")
     .eq("id", au.user.id)
     .maybeSingle();
 
-  const role = String(profile?.role || "").toLowerCase();
-  if (role !== "candidate") {
-    if (role === "company") redirect("/company?forbidden=1&from=candidate");
-    if (role === "owner" || role === "admin") redirect("/owner/overview?forbidden=1&from=candidate");
-    redirect("/dashboard?forbidden=1&from=candidate");
+  const routing = resolveAuthenticatedRouting({ ...(profile || {}), user: au.user });
+  if (routing.role !== "candidate") {
+    redirect(`${routing.destination}?forbidden=1&from=candidate`);
+  }
+
+  if (!routing.onboardingCompleted) {
+    redirect("/onboarding?blocked=1&source=candidate");
   }
 
   return <>{children}</>;

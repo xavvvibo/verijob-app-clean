@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { vjEvents } from "@/lib/analytics";
+import { resolveAuthenticatedRouting } from "@/lib/auth/post-login-redirect";
 import CvUploadAndParse from "@/components/candidate/profile/CvUploadAndParse";
 
 export const dynamic = "force-dynamic";
@@ -92,25 +93,30 @@ export default function OnboardingPage() {
 
       const { data: profile, error: pErr } = await supabase
         .from("profiles")
-        .select("id, role, onboarding_completed, onboarding_step")
+        .select("id, role, app_role, onboarding_completed, onboarding_step")
         .eq("id", user.id)
         .maybeSingle();
 
       if (pErr) {
         if (!cancelled) setErr("No se pudo leer tu perfil. Intenta recargar.");
-      } else if (String(profile?.role || "").toLowerCase() === "company") {
-        if (!cancelled) router.replace("/onboarding/company?blocked=1&source=onboarding");
-        return;
-      } else if (profile?.onboarding_completed) {
-        if (!cancelled) router.replace("/candidate/overview");
-        return;
-      } else if (!cancelled) {
-        const stepFromUrl = normalizeStep(searchParams.get("step"));
-        const stepFromProfile = normalizeStep(profile?.onboarding_step);
-        setCurrentStep(searchParams.get("step") ? stepFromUrl : stepFromProfile);
+      } else {
+        const routing = resolveAuthenticatedRouting({ ...(profile || {}), user });
+        if (routing.destination !== "/onboarding") {
+          if (!cancelled) router.replace(routing.destination);
+          return;
+        }
+        if (!cancelled) {
+          const stepFromUrl = normalizeStep(searchParams.get("step"));
+          const stepFromProfile = normalizeStep(profile?.onboarding_step);
+          setCurrentStep(searchParams.get("step") ? stepFromUrl : stepFromProfile);
+        }
       }
 
-      if (!cancelled) setLoading(false);
+      if (!cancelled && !pErr) {
+        setLoading(false);
+      } else if (!cancelled && pErr) {
+        setLoading(false);
+      }
     }
 
     boot();

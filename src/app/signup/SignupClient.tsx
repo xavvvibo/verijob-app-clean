@@ -217,12 +217,7 @@ export default function SignupClient() {
         return;
       }
 
-      const fallbackNext = isCompanyMode ? "/onboarding/company" : "/onboarding";
-      const finalNext = rawNext
-        ? next === "/onboarding"
-          ? fallbackNext
-          : next
-        : fallbackNext;
+      const finalNext = rawNext ? next : "/";
 
       window.location.href = finalNext;
     } catch (err: any) {
