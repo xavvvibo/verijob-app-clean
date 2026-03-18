@@ -10,11 +10,13 @@ export default async function DashboardRouter() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from("profiles")
     .select("role, onboarding_completed")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
+
+  if (profileError) redirect("/login?error=profile_context");
 
   const destination = resolveAuthenticatedHomePath({
     ...(profile || {}),
@@ -22,5 +24,5 @@ export default async function DashboardRouter() {
   });
   if (destination) redirect(destination);
 
-  redirect("/candidate/overview");
+  redirect("/login?error=profile_missing");
 }

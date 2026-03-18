@@ -11,11 +11,12 @@ export function resolveAuthenticatedHomePath(input: {
       : Boolean(input.onboarding_completed);
   const currentPath = String(input.currentPath || "").trim();
 
-  let destination = "/dashboard";
+  let destination: string | null = null;
   if (role === "owner" || role === "admin") destination = "/owner";
   else if (role === "company") destination = "/company";
   else if (role === "candidate" && !onboardingCompleted) destination = "/onboarding";
   else if (role === "candidate") destination = "/candidate/overview";
 
+  if (!destination) return null;
   return currentPath && currentPath === destination ? null : destination;
 }
