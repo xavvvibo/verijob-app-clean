@@ -47,14 +47,9 @@ function formatDate(value: string | null | undefined) {
 
 function statusMeta(status: string | null | undefined) {
   const key = String(status || "").toLowerCase();
-  if (key === "verified") return { label: "Verificado", tone: "bg-emerald-50 text-emerald-700 border-emerald-200" };
-  if (key === "verifying") return { label: "Verificando", tone: "bg-blue-50 text-blue-700 border-blue-200" };
-  if (key === "profile_created") return { label: "Perfil creado", tone: "bg-indigo-50 text-indigo-700 border-indigo-200" };
-  if (key === "existing_candidate") return { label: "Candidato existente", tone: "bg-violet-50 text-violet-700 border-violet-200" };
-  if (key === "acceptance_pending") return { label: "Pendiente de aceptación", tone: "bg-amber-50 text-amber-800 border-amber-200" };
-  if (key === "parse_failed") return { label: "Importación parcial", tone: "bg-rose-50 text-rose-700 border-rose-200" };
-  if (key === "processing") return { label: "Importando", tone: "bg-slate-100 text-slate-700 border-slate-200" };
-  return { label: "Subido", tone: "bg-slate-100 text-slate-700 border-slate-200" };
+  if (key === "ready") return { label: "Listo", tone: "bg-emerald-50 text-emerald-700 border-emerald-200" };
+  if (key === "in_review") return { label: "En revisión", tone: "bg-blue-50 text-blue-700 border-blue-200" };
+  return { label: "Nuevo", tone: "bg-slate-100 text-slate-700 border-slate-200" };
 }
 
 function accessMeta(status: string | null | undefined) {
@@ -261,7 +256,7 @@ export default function CompanyCandidatesClient() {
     }
   }
 
-  async function updateCompanyStage(inviteId: string, stage: "saved" | "preselected" | "none") {
+  async function updateCompanyStage(inviteId: string, stage: "saved" | "preselected" | "archived" | "none") {
     setActionId(inviteId);
     setError(null);
     setNotice(null);
@@ -286,6 +281,7 @@ export default function CompanyCandidatesClient() {
             ? {
                 ...row,
                 company_stage: stage,
+                display_status: stage === "archived" ? "ready" : row.display_status,
                 last_activity_at: data?.invite?.last_activity_at || new Date().toISOString(),
               }
             : row
@@ -296,12 +292,44 @@ export default function CompanyCandidatesClient() {
           ? {
               ...prev,
               company_stage: stage,
+              display_status: stage === "archived" ? "ready" : prev.display_status,
               last_activity_at: data?.invite?.last_activity_at || new Date().toISOString(),
             }
           : prev
       );
     } catch (e: any) {
       setError(e?.message || "No se pudo actualizar el estado del candidato.");
+    } finally {
+      setActionId(null);
+    }
+  }
+
+  async function archiveImport(inviteId: string) {
+    await updateCompanyStage(inviteId, "archived");
+  }
+
+  async function deleteImport(inviteId: string) {
+    setActionId(inviteId);
+    setError(null);
+    setNotice(null);
+    try {
+      const res = await fetch("/api/company/candidate-imports", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "delete_import",
+          invite_id: inviteId,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.user_message || data?.details || data?.error || "No se pudo eliminar la importación.");
+      }
+      setNotice(data?.user_message || "Importación eliminada.");
+      setImports((prev) => prev.filter((row) => row.id !== inviteId));
+      setQuickViewRow((prev) => (prev?.id === inviteId ? null : prev));
+    } catch (e: any) {
+      setError(e?.message || "No se pudo eliminar la importación.");
     } finally {
       setActionId(null);
     }
@@ -506,7 +534,10 @@ export default function CompanyCandidatesClient() {
                         <div className="mt-1 text-xs text-slate-500">{fit.summary}</div>
                         <div className="mt-1 text-xs text-slate-500">{operational.detail}</div>
                         {row.candidate_already_exists ? (
-                          <div className="mt-1 text-xs text-violet-700">Ya existía en VERIJOB antes de esta importación.</div>
+                          <div className="mt-1 text-xs text-violet-700">Candidato existente detectado por email único. La importación se ha dejado en staging.</div>
+                        ) : null}
+                        {Number((row as any).import_attempts || 0) > 1 ? (
+                          <div className="mt-1 text-xs text-slate-500">{Number((row as any).import_attempts)} importaciones agrupadas en esta misma identidad.</div>
                         ) : null}
                       </td>
                       <td className="py-4 pr-4 align-top text-slate-700">{resolveCandidateSector(row)}</td>
@@ -605,12 +636,22 @@ export default function CompanyCandidatesClient() {
                                 ? "Quitar preselección"
                                 : "Preseleccionar"}
                           </button>
-                          <span className={actionButtonClass({ disabled: true })} title="La acción de archivado todavía no está disponible en este flujo.">
-                            Archivar
-                          </span>
-                          <span className={actionButtonClass({ danger: true, disabled: true })} title="La eliminación todavía no está disponible en este flujo.">
-                            Eliminar
-                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void archiveImport(row.id)}
+                            disabled={actionId === row.id}
+                            className={`${actionButtonClass({})} disabled:opacity-60`}
+                          >
+                            {actionId === row.id ? "Archivando…" : "Archivar"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void deleteImport(row.id)}
+                            disabled={actionId === row.id}
+                            className={`${actionButtonClass({ danger: true })} disabled:opacity-60`}
+                          >
+                            {actionId === row.id ? "Eliminando…" : "Eliminar"}
+                          </button>
                         </div>
                       </td>
                     </tr>

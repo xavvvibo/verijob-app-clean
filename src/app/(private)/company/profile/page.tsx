@@ -1,6 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  COMPANY_BUSINESS_MODEL_OPTIONS,
+  COMPANY_MARKET_SEGMENT_OPTIONS,
+  COMPANY_SECTOR_OPTIONS,
+  COMPANY_TYPE_OPTIONS,
+  getCompanySubsectorOptions,
+} from "@/lib/company/company-profile";
 import { companyVerificationMethodTone } from "@/lib/company/verification-method";
 
 type Profile = Record<string, any>;
@@ -264,6 +271,10 @@ function TextArea(props: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...props} className={`w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 ${props.className || ""}`} />;
 }
 
+function SelectInput(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return <select {...props} className={`w-full rounded-xl border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 ${props.className || ""}`} />;
+}
+
 function ToggleChip({
   label,
   active,
@@ -350,6 +361,8 @@ export default function CompanyProfilePage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -423,9 +436,19 @@ export default function CompanyProfilePage() {
       }),
     [activeDocuments.length, approvedDocumentsCount, pendingDocumentsCount, rejectedDocumentsCount]
   );
+  const subsectorOptions = useMemo(() => getCompanySubsectorOptions(profile?.sector), [profile?.sector]);
 
   function updateField(key: string, value: any) {
-    setProfile((prev) => ({ ...(prev || {}), [key]: value }));
+    setProfile((prev) => {
+      const next = { ...(prev || {}), [key]: value };
+      if (key === "sector") {
+        const nextSubsectors = getCompanySubsectorOptions(value);
+        if (!nextSubsectors.includes(String(next.subsector || ""))) {
+          next.subsector = "";
+        }
+      }
+      return next;
+    });
   }
 
   function toggleArrayField(key: string, value: string) {
@@ -442,8 +465,8 @@ export default function CompanyProfilePage() {
   async function saveProfile() {
     if (!profile) return;
     setSaving(true);
-    setMessage(null);
-    setError(null);
+    setSaveMessage(null);
+    setSaveError(null);
 
     const payload = {
       ...profile,
@@ -462,7 +485,7 @@ export default function CompanyProfilePage() {
     setSaving(false);
 
     if (!res.ok) {
-      setError(data?.details || data?.error || "No se pudo guardar el perfil.");
+      setSaveError(data?.details || data?.error || "No se pudo guardar el perfil.");
       return;
     }
 
@@ -472,7 +495,7 @@ export default function CompanyProfilePage() {
       setDocuments(data.verification_documents);
     }
     setCompletion(data?.profile_completion || completion);
-    setMessage("Perfil de empresa actualizado correctamente.");
+    setSaveMessage("Perfil actualizado correctamente.");
   }
 
   async function uploadVerificationDocument() {
@@ -720,7 +743,12 @@ export default function CompanyProfilePage() {
           <Field label="Razón social"><TextInput value={profile.legal_name || ""} onChange={(e) => updateField("legal_name", e.target.value)} disabled={!canEdit} /></Field>
           <Field label="Nombre comercial"><TextInput value={profile.trade_name || ""} onChange={(e) => updateField("trade_name", e.target.value)} disabled={!canEdit} /></Field>
           <Field label="NIF/CIF"><TextInput value={profile.tax_id || ""} onChange={(e) => updateField("tax_id", e.target.value)} disabled={!canEdit} /></Field>
-          <Field label="Tipo de empresa"><TextInput value={profile.company_type || ""} onChange={(e) => updateField("company_type", e.target.value)} disabled={!canEdit} /></Field>
+          <Field label="Tipo de empresa">
+            <SelectInput value={profile.company_type || ""} onChange={(e) => updateField("company_type", e.target.value)} disabled={!canEdit}>
+              <option value="">Selecciona tipo</option>
+              {COMPANY_TYPE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </SelectInput>
+          </Field>
           <Field label="Año de fundación"><TextInput type="number" value={profile.founding_year || ""} onChange={(e) => updateField("founding_year", e.target.value)} disabled={!canEdit} /></Field>
           <Field label="Web"><TextInput value={profile.website_url || ""} onChange={(e) => updateField("website_url", e.target.value)} disabled={!canEdit} /></Field>
           <Field label="Email de contacto"><TextInput value={profile.contact_email || ""} onChange={(e) => updateField("contact_email", e.target.value)} disabled={!canEdit} /></Field>
@@ -738,23 +766,54 @@ export default function CompanyProfilePage() {
           <Field label="Ciudad"><TextInput value={profile.city || ""} onChange={(e) => updateField("city", e.target.value)} disabled={!canEdit} /></Field>
           <Field label="Código postal"><TextInput value={profile.postal_code || ""} onChange={(e) => updateField("postal_code", e.target.value)} disabled={!canEdit} /></Field>
           <Field label="Dirección fiscal"><TextInput value={profile.fiscal_address || ""} onChange={(e) => updateField("fiscal_address", e.target.value)} disabled={!canEdit} /></Field>
-          <Field label="Dirección operativa"><TextInput value={profile.operating_address || ""} onChange={(e) => updateField("operating_address", e.target.value)} disabled={!canEdit} /></Field>
+          <Field label="Dirección operativa">
+            <div className="space-y-1">
+              <TextInput
+                value={profile.operating_address || ""}
+                onChange={(e) => updateField("operating_address", e.target.value)}
+                disabled={!canEdit}
+                placeholder="Calle, número, nave o centro de trabajo"
+                autoComplete="street-address"
+              />
+              <span className="block text-xs text-slate-500">Indica la ubicación operativa principal. Ciudad, provincia y código postal se guardan en sus campos dedicados.</span>
+            </div>
+          </Field>
         </div>
       </Section>
 
       <Section title="Actividad" subtitle="Clasifica tu empresa para filtros de sector, mercado y automatización comercial.">
         <div className="grid gap-3 md:grid-cols-2">
-          <Field label="Sector"><TextInput value={profile.sector || ""} onChange={(e) => updateField("sector", e.target.value)} disabled={!canEdit} /></Field>
-          <Field label="Subsector"><TextInput value={profile.subsector || ""} onChange={(e) => updateField("subsector", e.target.value)} disabled={!canEdit} /></Field>
+          <Field label="Sector">
+            <SelectInput value={profile.sector || ""} onChange={(e) => updateField("sector", e.target.value)} disabled={!canEdit}>
+              <option value="">Selecciona sector</option>
+              {COMPANY_SECTOR_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </SelectInput>
+          </Field>
+          <Field label="Subsector">
+            <SelectInput value={profile.subsector || ""} onChange={(e) => updateField("subsector", e.target.value)} disabled={!canEdit || !profile.sector}>
+              <option value="">{profile.sector ? "Selecciona subsector" : "Selecciona antes un sector"}</option>
+              {subsectorOptions.map((option) => <option key={option} value={option}>{option}</option>)}
+            </SelectInput>
+          </Field>
           <Field label="Actividad principal"><TextInput value={profile.primary_activity || ""} onChange={(e) => updateField("primary_activity", e.target.value)} disabled={!canEdit} /></Field>
-          <Field label="Modelo de negocio"><TextInput value={profile.business_model || ""} onChange={(e) => updateField("business_model", e.target.value)} disabled={!canEdit} /></Field>
-          <Field label="Segmento de mercado"><TextInput value={profile.market_segment || ""} onChange={(e) => updateField("market_segment", e.target.value)} disabled={!canEdit} /></Field>
+          <Field label="Modelo de negocio">
+            <SelectInput value={profile.business_model || ""} onChange={(e) => updateField("business_model", e.target.value)} disabled={!canEdit}>
+              <option value="">Selecciona modelo</option>
+              {COMPANY_BUSINESS_MODEL_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </SelectInput>
+          </Field>
+          <Field label="Segmento de mercado">
+            <SelectInput value={profile.market_segment || ""} onChange={(e) => updateField("market_segment", e.target.value)} disabled={!canEdit}>
+              <option value="">Selecciona segmento</option>
+              {COMPANY_MARKET_SEGMENT_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}
+            </SelectInput>
+          </Field>
           <Field label="Descripción"><TextArea rows={3} value={profile.business_description || ""} onChange={(e) => updateField("business_description", e.target.value)} disabled={!canEdit} /></Field>
           <Field label="Negocio estacional">
-            <select className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" value={profile.seasonal_business ? "si" : "no"} onChange={(e) => updateField("seasonal_business", e.target.value === "si")} disabled={!canEdit}>
+            <SelectInput value={profile.seasonal_business ? "si" : "no"} onChange={(e) => updateField("seasonal_business", e.target.value === "si")} disabled={!canEdit}>
               <option value="no">No</option>
               <option value="si">Sí</option>
-            </select>
+            </SelectInput>
           </Field>
         </div>
       </Section>
@@ -762,23 +821,23 @@ export default function CompanyProfilePage() {
       <Section title="Tamaño y contratación" subtitle="Parámetros para capacidad de equipo y patrones de contratación.">
         <div className="grid gap-3 md:grid-cols-2">
           <Field label="Rango de empleados">
-            <select className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" value={profile.employee_count_range || ""} onChange={(e) => updateField("employee_count_range", e.target.value)} disabled={!canEdit}>
+            <SelectInput value={profile.employee_count_range || ""} onChange={(e) => updateField("employee_count_range", e.target.value)} disabled={!canEdit}>
               <option value="">Selecciona</option>
               {EMPLOYEE_RANGES.map((x) => <option key={x} value={x}>{x}</option>)}
-            </select>
+            </SelectInput>
           </Field>
           <Field label="Nº ubicaciones"><TextInput type="number" value={profile.locations_count || ""} onChange={(e) => updateField("locations_count", e.target.value)} disabled={!canEdit} /></Field>
           <Field label="Volumen de contratación">
-            <select className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" value={profile.annual_hiring_volume_range || ""} onChange={(e) => updateField("annual_hiring_volume_range", e.target.value)} disabled={!canEdit}>
+            <SelectInput value={profile.annual_hiring_volume_range || ""} onChange={(e) => updateField("annual_hiring_volume_range", e.target.value)} disabled={!canEdit}>
               <option value="">Selecciona</option>
               {HIRING_RANGES.map((x) => <option key={x} value={x}>{x}</option>)}
-            </select>
+            </SelectInput>
           </Field>
           <Field label="Tiene equipo de RRHH">
-            <select className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm" value={profile.has_internal_hr ? "si" : "no"} onChange={(e) => updateField("has_internal_hr", e.target.value === "si")} disabled={!canEdit}>
+            <SelectInput value={profile.has_internal_hr ? "si" : "no"} onChange={(e) => updateField("has_internal_hr", e.target.value === "si")} disabled={!canEdit}>
               <option value="no">No</option>
               <option value="si">Sí</option>
-            </select>
+            </SelectInput>
           </Field>
           <Field label="Roles que contrata">
             <TextArea
@@ -1101,17 +1160,21 @@ export default function CompanyProfilePage() {
         </div>
       </Section>
 
-      <div className="flex flex-wrap gap-3">
-        <button
-          onClick={saveProfile}
-          disabled={!canEdit || saving}
-          className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
-        >
-          {saving ? "Guardando…" : "Guardar perfil de empresa"}
-        </button>
-        {!canEdit ? (
-          <p className="self-center text-sm text-slate-600">Solo usuarios admin pueden editar este perfil. Puedes revisar la información en modo lectura.</p>
-        ) : null}
+      <div className="space-y-3">
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={saveProfile}
+            disabled={!canEdit || saving}
+            className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
+          >
+            {saving ? "Guardando…" : "Guardar perfil de empresa"}
+          </button>
+          {!canEdit ? (
+            <p className="self-center text-sm text-slate-600">Solo usuarios admin pueden editar este perfil. Puedes revisar la información en modo lectura.</p>
+          ) : null}
+        </div>
+        {saveError ? <p className="text-sm text-rose-600">{saveError}</p> : null}
+        {saveMessage ? <p className="text-sm text-emerald-700">{saveMessage}</p> : null}
       </div>
     </div>
   );

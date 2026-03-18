@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   classifyExperienceSuggestion,
+  resolveSafeCandidateName,
   simulateAcceptancePersistence,
   simulateInviteCreation,
   simulatePersistImportedCandidateProfile,
@@ -38,10 +39,12 @@ test("Caso A: candidato nuevo crea import preliminar sin publicación automátic
   });
 
   assert.equal(persisted.mode, "new_candidate");
-  assert.equal(persisted.inserted_experiences.length, 2);
-  assert.equal(persisted.suggestions.length, 0);
+  assert.equal(persisted.inserted_experiences.length, 0);
+  assert.equal(persisted.suggestions.length, 2);
   assert.equal(persisted.profile_patch.email, fixture.invite.candidate_email);
   assert.equal(persisted.raw_cv_json.company_cv_import.mode, "new_candidate");
+  assert.equal(persisted.raw_cv_json.company_cv_import.staged_only, true);
+  assert.equal(persisted.raw_cv_json.company_cv_import_updates.length, 1);
   assert.ok(!("is_public" in persisted.profile_patch));
 });
 
@@ -73,6 +76,7 @@ test("Caso B: candidato existente se marca explícitamente y recibe public token
   assert.equal(persisted.suggestions.length, 2);
   assert.equal(persisted.raw_cv_json.company_cv_import_updates.length, 1);
   assert.equal(persisted.raw_cv_json.company_cv_import_updates[0].company_name, fixture.invite.company_name);
+  assert.equal(persisted.profile_patch.full_name, fixture.existing_candidate.full_name);
 });
 
 test("Caso C: clasifica experiencias en duplicate, update y new sin insertar duplicados automáticos", () => {
@@ -135,4 +139,35 @@ test("Caso D: aceptación legal persiste trazabilidad mínima requerida", () => 
   assert.ok(acceptance.accepted_at);
   assert.equal(acceptance.accepted_ip, "127.0.0.1");
   assert.equal(acceptance.accepted_user_agent, "node-test-harness");
+});
+
+test("Caso E: nombre corrupto de PDF no se usa y cae a fallback por email", () => {
+  const resolved = resolveSafeCandidateName("%PDF-1.7 obj xref endobj", "candidato.demo@verijob.test");
+  assert.equal(resolved, "candidato.demo@verijob.test");
+});
+
+test("Caso F: merge de idiomas suma nuevos y conserva nombre válido existente", () => {
+  const persisted = simulatePersistImportedCandidateProfile({
+    mode: "existing_candidate",
+    inviteId: "invite-merge-1",
+    companyName: "Hotel Costa Centro",
+    candidateEmail: "marta.gil@verijob.test",
+    extracted: {
+      full_name: "%PDF-1.7 corrupted",
+      languages: [{ name: "Español" }, { name: "Inglés" }, { name: "Francés" }],
+      experiences: [],
+    },
+    existingProfile: {
+      full_name: "Marta Gil Ortega",
+      email: "marta.gil@verijob.test",
+      languages: ["Español", "Inglés"],
+    },
+    existingExperiences: [],
+    rawCvJson: {},
+  });
+
+  const proposal = persisted.raw_cv_json.company_cv_import.profile_proposal;
+  assert.equal(proposal.full_name, "Marta Gil Ortega");
+  assert.deepEqual(proposal.merged_languages, ["Español", "Inglés", "Francés"]);
+  assert.deepEqual(proposal.new_languages, ["Francés"]);
 });

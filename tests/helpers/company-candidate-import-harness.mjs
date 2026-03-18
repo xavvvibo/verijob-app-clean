@@ -13,6 +13,37 @@ function collapseSpaces(value) {
   return String(value || "").replace(/\s+/g, " ").trim();
 }
 
+function sanitizeCandidateText(value) {
+  return collapseSpaces(String(value || "").replace(/[\u0000-\u001f\u007f]+/g, " "));
+}
+
+function looksLikeBinaryPdfContent(value) {
+  const text = sanitizeCandidateText(value).toLowerCase();
+  if (!text) return false;
+  return text.startsWith("%pdf-") || text.includes("endobj") || text.includes("xref") || text.includes("catalog pages");
+}
+
+function isReliableCandidateName(value) {
+  const text = sanitizeCandidateText(value);
+  if (!text) return false;
+  if (looksLikeBinaryPdfContent(text)) return false;
+  if (text.includes("@")) return false;
+  if (/\.pdf$|\.docx?$|^cv\b/i.test(text)) return false;
+  if (/[<>%{}[\]\\]/.test(text)) return false;
+  const letters = (text.match(/\p{L}/gu) || []).length;
+  const digits = (text.match(/\d/g) || []).length;
+  if (letters < 2 || digits > 2) return false;
+  return true;
+}
+
+export function resolveSafeCandidateName(value, email) {
+  const text = sanitizeCandidateText(value);
+  if (isReliableCandidateName(text)) return text;
+  const fallbackEmail = sanitizeCandidateText(email);
+  if (fallbackEmail && fallbackEmail.includes("@")) return fallbackEmail;
+  return "Candidato";
+}
+
 function normalizedBase(value) {
   return collapseSpaces(String(value || "").toLowerCase()).normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
@@ -197,40 +228,23 @@ export function simulatePersistImportedCandidateProfile({
   rawCvJson = {},
 }) {
   const safeMode = mode === "existing_candidate" ? "existing_candidate" : "new_candidate";
-  const existingExact = new Set(existingExperiences.map((row) => expExactSig(row)));
-  const existingPossible = new Set(existingExperiences.map((row) => expPossibleSig(row)));
   const experienceRows = Array.isArray(extracted?.experiences) ? extracted.experiences : [];
-
-  const suggestions =
-    safeMode === "existing_candidate"
-      ? experienceRows.map((row, index) =>
-          classifyExperienceSuggestion({
-            extracted: row,
-            existingRows: existingExperiences,
-            inviteId,
-            index,
-          })
-        )
-      : [];
-
-  const insertedExperiences = [];
-  if (safeMode === "new_candidate") {
-    for (const row of experienceRows) {
-      const normalized = normalizeExtractedExperience(row);
-      const exact = expExactSig(normalized);
-      const possible = expPossibleSig(normalized);
-      if (existingExact.has(exact) || existingPossible.has(possible)) continue;
-      existingExact.add(exact);
-      existingPossible.add(possible);
-      insertedExperiences.push({
-        role_title: normalized.role_title || "Experiencia",
-        company_name: normalized.company_name || "Empresa",
-        start_date: normalized.start_date,
-        end_date: normalized.end_date,
-        description: normalized.description,
-      });
-    }
-  }
+  const suggestions = experienceRows.map((row, index) =>
+    classifyExperienceSuggestion({
+      extracted: row,
+      existingRows: existingExperiences,
+      inviteId,
+      index,
+    })
+  );
+  const currentLanguages = Array.isArray(existingProfile.languages) ? existingProfile.languages.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  const importedLanguages = Array.isArray(extracted?.languages)
+    ? extracted.languages.map((item) => String(item?.name || item?.language || item || "").trim()).filter(Boolean)
+    : [];
+  const mergedLanguages = Array.from(new Set([...currentLanguages, ...importedLanguages]));
+  const newLanguages = mergedLanguages.filter((item) => !currentLanguages.some((current) => current.toLowerCase() === item.toLowerCase()));
+  const existingValidName = isReliableCandidateName(existingProfile.full_name) ? sanitizeCandidateText(existingProfile.full_name) : null;
+  const importedValidName = isReliableCandidateName(extracted?.full_name) ? sanitizeCandidateText(extracted.full_name) : null;
 
   const nextRawCvJson = {
     ...(rawCvJson || {}),
@@ -239,30 +253,46 @@ export function simulatePersistImportedCandidateProfile({
       imported_at: "2026-03-13T10:00:00.000Z",
       mode: safeMode,
       extracted_payload: extracted,
+      staged_only: true,
+      profile_proposal: {
+        full_name: existingValidName || importedValidName || null,
+        full_name_source: existingValidName ? "existing_profile" : importedValidName ? "imported_cv" : "fallback",
+        merged_languages: mergedLanguages,
+        new_languages: newLanguages,
+      },
     },
-    company_cv_import_updates:
-      safeMode === "existing_candidate"
-        ? [
-            {
-              invite_id: inviteId,
-              company_name: companyName,
-              imported_at: "2026-03-13T10:00:00.000Z",
-              mode: safeMode,
-              experience_suggestions: suggestions,
-            },
-          ]
-        : [],
+    company_cv_import_updates: [
+      {
+        invite_id: inviteId,
+        company_name: companyName,
+        imported_at: "2026-03-13T10:00:00.000Z",
+        mode: safeMode,
+        candidate_identity: {
+          email: candidateEmail,
+          display_name: resolveSafeCandidateName(extracted?.full_name, candidateEmail),
+          reliable_name: importedValidName,
+          existing_candidate: safeMode === "existing_candidate",
+        },
+        profile_proposal: {
+          full_name: existingValidName || importedValidName || null,
+          full_name_source: existingValidName ? "existing_profile" : importedValidName ? "imported_cv" : "fallback",
+          merged_languages: mergedLanguages,
+          new_languages: newLanguages,
+        },
+        experience_suggestions: suggestions,
+      },
+    ],
   };
 
   return {
     mode: safeMode,
     candidate_email: candidateEmail,
     profile_patch: {
-      full_name: existingProfile.full_name || extracted?.full_name || null,
-      title: existingProfile.title || extracted?.headline || null,
+      full_name: existingValidName || null,
+      title: existingProfile.title || null,
       email: existingProfile.email || candidateEmail || null,
     },
-    inserted_experiences: insertedExperiences,
+    inserted_experiences: [],
     suggestions,
     raw_cv_json: nextRawCvJson,
   };

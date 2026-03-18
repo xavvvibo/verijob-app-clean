@@ -62,8 +62,13 @@ export default function SignupClient() {
   const sp = useSearchParams();
   const modeParam = sp.get("mode");
   const roleParam = sp.get("role");
-  const initialAccountType = modeParam === "company" || roleParam === "company" ? "company" : "candidate";
-  const [accountType, setAccountType] = useState<"candidate" | "company">(initialAccountType);
+  const initialAccountType =
+    modeParam === "company" || roleParam === "company"
+      ? "company"
+      : modeParam === "candidate" || roleParam === "candidate"
+        ? "candidate"
+        : null;
+  const [accountType, setAccountType] = useState<"candidate" | "company" | null>(initialAccountType);
   const mode = accountType === "company" ? "company" : null;
   const rawNext = sp.get("next");
   const next = useMemo(() => safeNext(rawNext), [rawNext]);
@@ -75,6 +80,7 @@ export default function SignupClient() {
     return qs ? `/login?${qs}` : "/login";
   }, [mode, rawNext, next]);
   const isCompanyMode = accountType === "company";
+  const hasExplicitAccountType = accountType !== null;
 
   const [email, setEmail] = useState("");
   const [token, setToken] = useState("");
@@ -131,6 +137,12 @@ export default function SignupClient() {
     setIsError(false);
 
     try {
+      if (!accountType) {
+        setIsError(true);
+        setMsg("Selecciona si quieres crear una cuenta de candidato o de empresa.");
+        return;
+      }
+
       const supabase = createClient();
       const cleanEmail = email.trim().toLowerCase();
 
@@ -253,9 +265,11 @@ export default function SignupClient() {
             </button>
           </div>
         </div>
-        <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">
-          {isCompanyMode ? "Alta empresa" : "Alta candidato"}
-        </span>
+        {hasExplicitAccountType ? (
+          <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-indigo-700">
+            {isCompanyMode ? "Alta empresa" : "Alta candidato"}
+          </span>
+        ) : null}
         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
           Acceso por código seguro
         </span>
@@ -269,6 +283,11 @@ export default function SignupClient() {
           ? "Empieza sin contraseña. Te enviaremos un código por email para activar el acceso."
           : "Introduce el código recibido para completar el acceso a tu entorno VERIJOB."}
       </p>
+      {!hasExplicitAccountType ? (
+        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Elige primero si vas a acceder como candidato o como empresa para continuar.
+        </p>
+      ) : null}
 
       <form
         onSubmit={step === "email" ? sendOtp : verifyCode}
@@ -323,7 +342,7 @@ export default function SignupClient() {
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || (step === "email" && !hasExplicitAccountType)}
           className="w-full rounded-lg bg-slate-900 py-3 font-medium text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
         >
           {loading
@@ -350,7 +369,9 @@ export default function SignupClient() {
       <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-600">
         {isCompanyMode
           ? "Crear tu acceso de empresa no requiere tarjeta y te permite gestionar verificaciones desde el primer día."
-          : "Tu cuenta te permite construir un perfil verificable y compartirlo con empresas con más contexto."}
+          : hasExplicitAccountType
+            ? "Tu cuenta te permite construir un perfil verificable y compartirlo con empresas con más contexto."
+            : "Selecciona un rol y te mostraremos el mensaje de activación adecuado para ese acceso."}
       </div>
 
       <div className="mt-5 text-sm text-slate-600">

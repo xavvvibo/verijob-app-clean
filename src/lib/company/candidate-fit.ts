@@ -1,3 +1,5 @@
+import { resolveSafeCandidateName } from "@/lib/company-candidate-import";
+
 export type CompanyCandidateWorkspaceRow = {
   id: string;
   candidate_email?: string | null;
@@ -30,7 +32,7 @@ export type CandidateProfileReadiness = "complete" | "incomplete";
 export type CandidateOperationalState = "new" | "reviewed" | "unlocked";
 
 export function resolveCandidateDisplayName(row: CompanyCandidateWorkspaceRow) {
-  return row.linked_profile_name || row.candidate_name_raw || row.candidate_email || "Candidato";
+  return resolveSafeCandidateName(row.linked_profile_name || row.candidate_name_raw, row.candidate_email);
 }
 
 export function resolveCandidatePartialName(row: CompanyCandidateWorkspaceRow) {
@@ -72,8 +74,8 @@ export function resolveCandidateAvailableVerifications(row: CompanyCandidateWork
 
 export function resolveCandidatePipelineBucket(row: CompanyCandidateWorkspaceRow): CandidatePipelineBucket {
   const status = String(row.display_status || "").toLowerCase();
-  if (status === "verified" || status === "existing_candidate") return "decision";
-  if (status === "verifying" || status === "profile_created") return "validation";
+  if (status === "ready") return "decision";
+  if (status === "in_review") return "validation";
   return "review";
 }
 
@@ -94,9 +96,7 @@ export function resolveCandidateTrustBand(row: CompanyCandidateWorkspaceRow): Ca
 export function resolveCandidateProfileReadiness(row: CompanyCandidateWorkspaceRow): CandidateProfileReadiness {
   const hasProfile = Boolean(row.linked_user_id && row.candidate_public_token);
   const status = String(row.display_status || "").toLowerCase();
-  return hasProfile && !["acceptance_pending", "processing", "uploaded", "parse_failed"].includes(status)
-    ? "complete"
-    : "incomplete";
+  return hasProfile && status === "ready" ? "complete" : "incomplete";
 }
 
 export function resolveCandidateOperationalState(row: CompanyCandidateWorkspaceRow): CandidateOperationalState {
@@ -133,7 +133,7 @@ export function resolveCandidateOperationalStateMeta(row: CompanyCandidateWorksp
 }
 
 export function isCandidateVerified(row: CompanyCandidateWorkspaceRow) {
-  return String(row.display_status || "").toLowerCase() === "verified" || Number(row.approved_verifications || 0) > 0;
+  return String(row.display_status || "").toLowerCase() === "ready" || Number(row.approved_verifications || 0) > 0;
 }
 
 export function computeCandidateQuickFit(row: CompanyCandidateWorkspaceRow): {

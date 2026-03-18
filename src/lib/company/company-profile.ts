@@ -8,6 +8,98 @@ export type CompanyChecklistItem = {
   total: number;
 };
 
+export const COMPANY_TYPE_OPTIONS = [
+  "Autónomo/a",
+  "Startup / scaleup",
+  "Pyme",
+  "Gran empresa",
+  "ETT / agencia de selección",
+  "Consultora / servicios profesionales",
+  "Administración / entidad pública",
+  "ONG / fundación",
+] as const;
+
+export const COMPANY_SECTOR_OPTIONS = [
+  "Hostelería y turismo",
+  "Retail y comercio",
+  "Logística y transporte",
+  "Industria y producción",
+  "Construcción e inmobiliario",
+  "Tecnología y digital",
+  "Sanidad y sociosanitario",
+  "Servicios profesionales",
+] as const;
+
+export const COMPANY_SUBSECTOR_OPTIONS: Record<string, readonly string[]> = {
+  "Hostelería y turismo": [
+    "Restauración",
+    "Hoteles y alojamientos",
+    "Catering y colectividades",
+    "Ocio y eventos",
+  ],
+  "Retail y comercio": [
+    "Tienda especializada",
+    "Gran distribución",
+    "Moda y belleza",
+    "E-commerce",
+  ],
+  "Logística y transporte": [
+    "Almacén y operaciones",
+    "Reparto última milla",
+    "Transporte por carretera",
+    "Mensajería y paquetería",
+  ],
+  "Industria y producción": [
+    "Alimentación",
+    "Manufactura",
+    "Automoción",
+    "Mantenimiento industrial",
+  ],
+  "Construcción e inmobiliario": [
+    "Edificación",
+    "Obra civil",
+    "Instalaciones y mantenimiento",
+    "Gestión de activos",
+  ],
+  "Tecnología y digital": [
+    "Software / SaaS",
+    "Servicios IT",
+    "Datos, IA y ciberseguridad",
+    "Producto digital",
+  ],
+  "Sanidad y sociosanitario": [
+    "Clínica y hospital",
+    "Residencias y cuidados",
+    "Farmacia y laboratorio",
+    "Atención domiciliaria",
+  ],
+  "Servicios profesionales": [
+    "Limpieza y facility services",
+    "Seguridad",
+    "Contact center",
+    "Formación y consultoría",
+  ],
+};
+
+export const COMPANY_BUSINESS_MODEL_OPTIONS = [
+  "B2B",
+  "B2C",
+  "B2B2C",
+  "Marketplace / plataforma",
+  "Franquicia",
+  "Outsourcing / servicios gestionados",
+  "Suscripción / SaaS",
+] as const;
+
+export const COMPANY_MARKET_SEGMENT_OPTIONS = [
+  "Consumidor final",
+  "Microempresas",
+  "Pymes",
+  "Mid-market",
+  "Grandes empresas",
+  "Sector público",
+] as const;
+
 type CompanyProfileShape = {
   legal_name?: string | null;
   trade_name?: string | null;
@@ -86,6 +178,11 @@ export function resolveCompanyDisplayName(
     asTrimmedText(company.companyName) ||
     fallback
   );
+}
+
+export function getCompanySubsectorOptions(sector: unknown) {
+  const key = asTrimmedText(sector);
+  return key ? [...(COMPANY_SUBSECTOR_OPTIONS[key] || [])] : [];
 }
 
 function isFilledArray(value: unknown) {

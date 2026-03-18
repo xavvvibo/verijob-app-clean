@@ -170,7 +170,7 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
             </p>
             <div className="mt-4 rounded-2xl border border-rose-200 bg-white p-4 text-sm text-rose-900">
               <p className="font-semibold">Accesos a perfiles disponibles</p>
-              <p className="mt-1">{body?.credits_remaining != null ? String(body.credits_remaining) : "0"} disponibles ahora mismo.</p>
+              <p className="mt-1">{String(creditsRemaining)} disponibles ahora mismo.</p>
               <p className="mt-1 text-rose-800">Después de comprar podrás volver aquí y acceder al perfil completo.</p>
             </div>
             <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">

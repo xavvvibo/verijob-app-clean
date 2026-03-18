@@ -7,6 +7,7 @@ import {
   COMPANY_CV_IMPORT_LEGAL_VERSION,
   ensureCandidatePublicToken,
   persistImportedCandidateProfile,
+  resolveSafeCandidateName,
 } from "@/lib/company-candidate-import";
 
 export const runtime = "nodejs";
@@ -112,7 +113,7 @@ export async function GET(
       invite: {
         id: String(invite.id || ""),
         candidate_email: String(invite.candidate_email || ""),
-        candidate_name_raw: invite.candidate_name_raw || null,
+        candidate_name_raw: resolveSafeCandidateName(invite.candidate_name_raw, invite.candidate_email),
         target_role: invite.target_role || null,
         status: String(invite.status || ""),
         parse_status: String(invite.parse_status || ""),
@@ -138,7 +139,7 @@ export async function GET(
         snapshot: legalSnapshot,
       },
     });
-  } catch (error: any) {
+  } catch {
     return json(500, {
       error: "unhandled_exception",
       user_message: "No se pudo cargar la invitacion en este momento. Intentalo de nuevo en unos minutos.",
@@ -202,10 +203,10 @@ export async function POST(
       return json(200, {
         ok: true,
         already_completed: true,
-        next_url: candidateAlreadyExists ? "/candidate/import-updates?company_cv_import=1" : "/candidate/experience?company_cv_import=1",
+        next_url: "/candidate/import-updates?company_cv_import=1",
         user_message: candidateAlreadyExists
-          ? "La invitación ya estaba aceptada y tus cambios pendientes de CV siguen disponibles para revisión."
-          : "La invitación ya estaba aceptada y tu experiencia importada ya está lista para revisión.",
+          ? "La invitación ya estaba aceptada y tu propuesta de cambios sigue disponible para revisión."
+          : "La invitación ya estaba aceptada y tu propuesta de CV sigue disponible para revisión.",
       });
     }
 
@@ -276,12 +277,12 @@ export async function POST(
       legal_text_version: COMPANY_CV_IMPORT_LEGAL_VERSION,
       persistence: persistRes,
       candidate_public_token: candidatePublicToken,
-      next_url: candidateAlreadyExists ? "/candidate/import-updates?company_cv_import=1" : "/candidate/experience?company_cv_import=1",
+      next_url: "/candidate/import-updates?company_cv_import=1",
       user_message: candidateAlreadyExists
-        ? "Invitación aceptada. Hemos guardado los posibles cambios de CV para que revises qué quieres incorporar a tu perfil."
-        : "Invitación aceptada. Tu experiencia importada ya está preparada para que la revises antes de verificarla.",
+        ? "Invitación aceptada. Hemos guardado la propuesta de cambios de CV para que revises qué quieres incorporar a tu perfil."
+        : "Invitación aceptada. Hemos guardado tu CV importado como propuesta para que revises primero los cambios.",
     });
-  } catch (error: any) {
+  } catch {
     return json(500, {
       error: "unhandled_exception",
       user_message: "No se pudo aceptar la invitacion en este momento. Intentalo de nuevo en unos minutos.",

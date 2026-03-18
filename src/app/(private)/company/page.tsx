@@ -339,9 +339,9 @@ export default function CompanyDashboard() {
   const seatUsagePct = seatsLimit > 0 ? Math.round(((seatsUsed + pendingInvitations) / seatsLimit) * 100) : 0;
 
   const pipeline = useMemo(() => {
-    const byReview = Number(kpis?.pending_requests || 0) + imports.filter((item) => item.display_status === "acceptance_pending" || item.display_status === "processing").length;
-    const validating = imports.filter((item) => item.display_status === "verifying" || item.display_status === "profile_created").length;
-    const ready = imports.filter((item) => item.display_status === "existing_candidate" || item.display_status === "verified").length;
+    const byReview = Number(kpis?.pending_requests || 0) + imports.filter((item) => item.display_status === "new").length;
+    const validating = imports.filter((item) => item.display_status === "in_review").length;
+    const ready = imports.filter((item) => item.display_status === "ready").length;
     return { byReview, validating, ready };
   }, [imports, kpis?.pending_requests]);
 
@@ -365,7 +365,7 @@ export default function CompanyDashboard() {
       });
 
     imports
-      .filter((item) => item.display_status === "acceptance_pending" || item.display_status === "existing_candidate" || item.display_status === "profile_created")
+      .filter((item) => item.display_status === "new" || item.display_status === "in_review" || item.display_status === "ready")
       .slice(0, 4)
       .forEach((item, index) => {
         const fit = computeCandidateQuickFit(item);
@@ -373,17 +373,19 @@ export default function CompanyDashboard() {
           id: `imp-${item.id}`,
           title: resolveCandidateDisplayName(item),
           detail:
-            item.display_status === "acceptance_pending"
-              ? "CV importado pendiente de aceptación del candidato."
-              : item.display_status === "existing_candidate"
-                ? "El candidato ya existe en VERIJOB y puede revisarse desde perfil."
-                : "Perfil creado y listo para revisión interna.",
+            item.display_status === "new"
+              ? "CV recibido y pendiente de revisión inicial."
+              : item.display_status === "in_review"
+                ? "Importación en revisión con propuesta de cambios disponible."
+                : "Candidato listo para decisión en la base RRHH.",
           href: item.candidate_public_token ? `/company/candidate/${item.candidate_public_token}` : "/company/candidates",
           cta: item.candidate_public_token ? "Abrir perfil" : "Abrir base RRHH",
           tone:
-            item.display_status === "acceptance_pending"
+            item.display_status === "new"
               ? "border-blue-200 bg-blue-50 text-blue-900"
-              : "border-violet-200 bg-violet-50 text-violet-900",
+              : item.display_status === "in_review"
+                ? "border-amber-200 bg-amber-50 text-amber-900"
+                : "border-violet-200 bg-violet-50 text-violet-900",
           priority: 80 - index,
           meta: `${fit.label} · Última actividad ${formatDate(item.last_activity_at || item.created_at)}`,
         });
@@ -420,11 +422,11 @@ export default function CompanyDashboard() {
         const label = item.linked_profile_name || item.candidate_name_raw || item.candidate_email || "Candidato";
         const href = item.candidate_public_token ? `/company/candidate/${item.candidate_public_token}` : "/company/candidates";
         const rows: NotificationItem[] = [];
-        if (item.display_status === "profile_created") {
+        if (item.display_status === "ready") {
           rows.push({
             id: `${item.id}-onboarding`,
             tone: "border-indigo-200 bg-indigo-50 text-indigo-900",
-            title: `${label} ha terminado el onboarding inicial`,
+            title: `${label} ya está listo para revisión`,
             detail: "El perfil ya está disponible para revisar en resumen parcial antes de acceder al perfil completo.",
             href,
             cta: "Revisar candidato",
@@ -432,24 +434,24 @@ export default function CompanyDashboard() {
             type: "onboarding",
           });
         }
-        if (item.display_status === "profile_created") {
+        if (item.display_status === "ready") {
           rows.push({
             id: `${item.id}-experiences`,
             tone: "border-slate-200 bg-slate-50 text-slate-900",
-            title: `${label} ya tiene experiencias cargadas`,
-            detail: "Puedes revisar la nueva versión del perfil y decidir si merece abrir el perfil completo.",
+            title: `${label} ya tiene propuesta revisable`,
+            detail: "Puedes revisar la propuesta actual y decidir si merece abrir el perfil completo.",
             href,
             cta: "Ver resumen",
             timestamp: item.last_activity_at || item.created_at || null,
             type: "experiences",
           });
         }
-        if (item.display_status === "verifying") {
+        if (item.display_status === "in_review") {
           rows.push({
             id: `${item.id}-verifying`,
             tone: "border-blue-200 bg-blue-50 text-blue-900",
-            title: `${label} está avanzando en verificaciones`,
-            detail: "Ya hay actividad de validación sobre el perfil y conviene revisar su progreso.",
+            title: `${label} está en revisión`,
+            detail: "La importación sigue en revisión y conviene comprobar su progreso.",
             href,
             cta: "Ver progreso",
             timestamp: item.last_activity_at || item.created_at || null,
@@ -468,7 +470,7 @@ export default function CompanyDashboard() {
             type: "verification",
           });
         }
-        if (item.display_status === "verifying" || (Number(item.total_verifications || 0) > 0 && Number(item.approved_verifications || 0) === 0)) {
+        if (item.display_status === "in_review" || (Number(item.total_verifications || 0) > 0 && Number(item.approved_verifications || 0) === 0)) {
           rows.push({
             id: `${item.id}-evidences`,
             tone: "border-amber-200 bg-amber-50 text-amber-900",

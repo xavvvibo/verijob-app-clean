@@ -121,7 +121,7 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
         throw new Error(data?.user_message || data?.details || data?.error || "No se pudo aceptar la invitación.");
       }
       setNotice(data?.user_message || "Invitación aceptada correctamente.");
-      window.location.href = data?.next_url || "/candidate/experience?company_cv_import=1";
+      window.location.href = data?.next_url || "/candidate/import-updates?company_cv_import=1";
     } catch (e: any) {
       setError(e?.message || "No se pudo aceptar la invitación.");
     } finally {
@@ -277,7 +277,7 @@ export default function CompanyCandidateImportAcceptClient({ token }: { token: s
                   Esta invitación ya quedó registrada y tu perfil preliminar está disponible dentro de VERIJOB.
                 </p>
                 <div className="mt-4">
-                  <Link href={candidateAlreadyExists ? "/candidate/import-updates?company_cv_import=1" : "/candidate/experience?company_cv_import=1"} className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+                  <Link href="/candidate/import-updates?company_cv_import=1" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
                     {candidateAlreadyExists ? "Revisar cambios detectados" : "Revisar experiencia importada"}
                   </Link>
                 </div>

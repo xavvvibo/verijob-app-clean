@@ -6,6 +6,7 @@ import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
 import {
   ensureCandidatePublicToken,
+  resolveSafeCandidateName,
   sha256Hex,
 } from "@/lib/company-candidate-import";
 import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
@@ -50,26 +51,25 @@ function extFromFilename(filename: string) {
 }
 
 function formatImportStatus(row: any) {
-  const alreadyExists = Boolean(row?.candidate_already_exists);
   const status = String(row?.status || "").toLowerCase();
   const parseStatus = String(row?.parse_status || "").toLowerCase();
   const approved = Number(row?.approved_verifications || 0);
   const total = Number(row?.total_verifications || 0);
+  const archived = String(row?.company_stage || "").toLowerCase() === "archived";
 
-  if (alreadyExists && status === "emailed") return "existing_candidate";
-  if (status === "converted" && approved > 0) return "verified";
-  if (status === "converted" && total > 0) return "verifying";
-  if (status === "converted" || status === "accepted") return "profile_created";
-  if (status === "emailed") return "acceptance_pending";
-  if (parseStatus === "parse_failed") return "parse_failed";
-  if (parseStatus === "processing" || parseStatus === "import_pending") return "processing";
-  return "uploaded";
+  if (archived) return "ready";
+  if (status === "converted" || approved > 0 || total > 0 || Boolean(row?.linked_user_id)) return "ready";
+  if (parseStatus === "parse_failed" || parseStatus === "processing" || parseStatus === "import_pending" || status === "emailed" || status === "accepted") {
+    return "in_review";
+  }
+  return "new";
 }
 
 function normalizeCompanyStage(value: unknown) {
   const stage = String(value || "").toLowerCase();
   if (stage === "saved") return "saved";
   if (stage === "preselected") return "preselected";
+  if (stage === "archived") return "archived";
   return "none";
 }
 
@@ -240,7 +240,8 @@ async function readInvitesSnapshot(admin: any, companyId: string) {
     const normalized = {
       ...row,
       candidate_already_exists: Boolean(importMeta?.candidate_already_exists),
-      linked_profile_name: normalizeText(linkedProfile?.full_name) || null,
+      linked_profile_name: resolveSafeCandidateName(linkedProfile?.full_name, linkedProfile?.email || row?.candidate_email),
+      candidate_name_raw: resolveSafeCandidateName(row?.candidate_name_raw, row?.candidate_email),
       linked_profile_email: normalizeText(linkedProfile?.email) || null,
       candidate_public_token: linkedUserId ? publicTokenByUserId.get(linkedUserId) ?? null : null,
       trust_score: linkedUserId ? trustById.get(linkedUserId) ?? null : null,
@@ -269,8 +270,30 @@ async function readInvitesSnapshot(admin: any, companyId: string) {
     };
   });
 
+  const dedupedInvites = new Map<string, any>();
+  for (const row of invites) {
+    const identityKey = row.linked_user_id
+      ? `user:${String(row.linked_user_id)}`
+      : `email:${String(row.candidate_email || "").trim().toLowerCase()}`;
+    const previous = dedupedInvites.get(identityKey);
+    if (!previous) {
+      dedupedInvites.set(identityKey, { ...row, import_attempts: 1 });
+      continue;
+    }
+    const previousTs = Date.parse(String(previous.last_activity_at || previous.updated_at || previous.created_at || 0));
+    const currentTs = Date.parse(String(row.last_activity_at || row.updated_at || row.created_at || 0));
+    const winner = currentTs >= previousTs ? row : previous;
+    dedupedInvites.set(identityKey, {
+      ...winner,
+      import_attempts: Number(previous.import_attempts || 1) + 1,
+      candidate_already_exists: Boolean(previous.candidate_already_exists || row.candidate_already_exists),
+      total_verifications: Math.max(Number(previous.total_verifications || 0), Number(row.total_verifications || 0)),
+      approved_verifications: Math.max(Number(previous.approved_verifications || 0), Number(row.approved_verifications || 0)),
+    });
+  }
+
   return {
-    invites,
+    invites: Array.from(dedupedInvites.values()),
     meta: {
       available: true,
       warning_code: null,
@@ -469,12 +492,12 @@ export async function POST(request: Request) {
         };
         return {
           ...normalizedInvite,
-          display_status: formatImportStatus(normalizedInvite),
+      display_status: formatImportStatus(normalizedInvite),
         };
       })(),
       user_message: existingCandidateUserId
-        ? "CV recibido. Estamos procesando la importación y preparando la invitación para que el candidato revise su perfil."
-        : "CV recibido. Estamos procesando la importación y enviando la invitación al candidato.",
+        ? "CV recibido. Candidato existente detectado por email. La importación quedará en staging para revisión, sin sobrescribir su perfil."
+        : "CV recibido. Estamos procesando la importación y preparando una propuesta de cambios para el candidato.",
       acceptance_link: acceptanceLink,
       candidate_already_exists: Boolean(existingCandidateUserId),
       existing_candidate_user_id: existingCandidateUserId,
@@ -516,7 +539,7 @@ export async function PATCH(request: Request) {
     if (!inviteId) {
       return json(400, { error: "invite_id_required", user_message: "Falta el candidato que quieres actualizar." });
     }
-    if (action !== "set_stage") {
+    if (!["set_stage", "delete_import"].includes(action)) {
       return json(400, { error: "unsupported_action", user_message: "La acción solicitada no está soportada." });
     }
 
@@ -542,11 +565,35 @@ export async function PATCH(request: Request) {
       return json(404, { error: "import_invite_not_found", user_message: "No se encontró ese candidato importado." });
     }
 
+    const nowIso = new Date().toISOString();
+
+    if (action === "delete_import") {
+      const { error: deleteErr } = await admin
+        .from("company_candidate_import_invites")
+        .delete()
+        .eq("id", inviteId)
+        .eq("company_id", companyId);
+
+      if (deleteErr) {
+        return json(400, {
+          error: "company_candidate_import_invite_delete_failed",
+          details: deleteErr.message,
+          user_message: "No se pudo eliminar la importación.",
+        });
+      }
+
+      return json(200, {
+        ok: true,
+        invite_id: inviteId,
+        deleted: true,
+        user_message: "Importación eliminada.",
+      });
+    }
+
     const currentPayload =
       inviteRow?.extracted_payload_json && typeof inviteRow.extracted_payload_json === "object"
         ? inviteRow.extracted_payload_json
         : {};
-    const nowIso = new Date().toISOString();
     const nextPayload = {
       ...currentPayload,
       _verijob_company_state: {
@@ -585,6 +632,8 @@ export async function PATCH(request: Request) {
       user_message:
         nextStage === "preselected"
           ? "Candidato marcado como preseleccionado."
+          : nextStage === "archived"
+            ? "Importación archivada."
           : nextStage === "saved"
             ? "Candidato guardado en tu base interna."
             : "Estado interno eliminado.",

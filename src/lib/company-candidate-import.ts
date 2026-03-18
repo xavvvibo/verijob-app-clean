@@ -1,6 +1,8 @@
 import crypto from "crypto";
 import { createServiceRoleClient } from "@/utils/supabase/service";
-import { normalizeCvLanguages, selectLanguagesPersistenceTarget } from "@/lib/candidate/cv-parse-normalize";
+import { normalizeCvLanguages } from "@/lib/candidate/cv-parse-normalize";
+import { extractStructuredFromCvText } from "@/utils/cv/openaiExtract";
+import { extractCvTextFromBuffer } from "@/utils/cv/extractText";
 
 export const COMPANY_CV_IMPORT_LEGAL_VERSION = "v1";
 
@@ -18,6 +20,63 @@ function safeTrim(value: unknown): string {
 
 function collapseSpaces(value: string) {
   return value.replace(/\s+/g, " ").trim();
+}
+
+function sanitizeCandidateText(value: unknown) {
+  return collapseSpaces(
+    String(value || "")
+      .replace(/[\u0000-\u001f\u007f]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+  );
+}
+
+function titleCaseEmailLocalPart(email: string) {
+  return sanitizeCandidateText(email.split("@")[0] || "")
+    .split(/[._-]+/)
+    .map((part) => (part ? `${part.charAt(0).toUpperCase()}${part.slice(1)}` : ""))
+    .filter(Boolean)
+    .join(" ");
+}
+
+function looksLikeBinaryPdfContent(value: unknown) {
+  const text = sanitizeCandidateText(value).toLowerCase();
+  if (!text) return false;
+  return (
+    text.startsWith("%pdf-") ||
+    text.includes("endobj") ||
+    text.includes("xref") ||
+    text.includes("stream endstream") ||
+    text.includes("catalog pages")
+  );
+}
+
+function isReliableCandidateName(value: unknown) {
+  const text = sanitizeCandidateText(value);
+  if (!text) return false;
+  if (looksLikeBinaryPdfContent(text)) return false;
+  if (text.includes("@")) return false;
+  if (/\.pdf$|\.docx?$|^cv\b/i.test(text)) return false;
+  if (/[<>%{}[\]\\]/.test(text)) return false;
+  if (text.length < 2 || text.length > 120) return false;
+  const letters = (text.match(/\p{L}/gu) || []).length;
+  const digits = (text.match(/\d/g) || []).length;
+  if (letters < 2) return false;
+  if (digits > 2) return false;
+  return true;
+}
+
+export function resolveSafeCandidateName(value: unknown, email?: unknown) {
+  const candidateName = sanitizeCandidateText(value);
+  if (isReliableCandidateName(candidateName)) return candidateName;
+
+  const fallbackEmail = sanitizeCandidateText(email);
+  if (fallbackEmail && fallbackEmail.includes("@")) return fallbackEmail;
+
+  const emailLocal = titleCaseEmailLocalPart(String(email || ""));
+  if (emailLocal) return emailLocal;
+
+  return "Candidato";
 }
 
 function normalizedBase(value: unknown) {
@@ -90,34 +149,106 @@ function expExactSig(row: any) {
   ].join("|");
 }
 
-function expPossibleSig(row: any) {
-  return [
-    normalizeRoleOrTitle(row?.role_title || row?.title || row?.role),
-    normalizeCompanyOrInstitution(row?.company_name || row?.company),
-  ].join("|");
+function tokenizeText(value: unknown) {
+  return normalizedBase(value)
+    .replace(/[^a-z0-9\s]+/g, " ")
+    .split(" ")
+    .map((item) => item.trim())
+    .filter(Boolean);
 }
 
-function eduExactSig(row: any) {
-  return [
-    normalizeRoleOrTitle(row?.title || row?.degree),
-    normalizeCompanyOrInstitution(row?.institution),
-    normalizeMonth(row?.start_date || row?.start),
-    normalizeMonth(row?.end_date || row?.end),
-  ].join("|");
-}
-
-async function getTableColumns(supabase: any, table: string): Promise<Set<string>> {
-  try {
-    const { data, error } = await supabase
-      .from("information_schema.columns")
-      .select("column_name")
-      .eq("table_schema", "public")
-      .eq("table_name", table);
-    if (error || !Array.isArray(data)) return new Set();
-    return new Set(data.map((row: any) => String(row?.column_name || "").trim()).filter(Boolean));
-  } catch {
-    return new Set();
+function jaccardSimilarity(leftValue: unknown, rightValue: unknown) {
+  const left = new Set(tokenizeText(leftValue));
+  const right = new Set(tokenizeText(rightValue));
+  if (!left.size || !right.size) return 0;
+  let intersection = 0;
+  for (const token of left) {
+    if (right.has(token)) intersection += 1;
   }
+  return intersection / (left.size + right.size - intersection);
+}
+
+function normalizeExtractedExperience(item: any) {
+  return {
+    company_name: safeTrim(item?.company_name || item?.company) || null,
+    role_title: safeTrim(item?.role_title || item?.title || item?.role) || null,
+    start_date: normalizeDateForDb(item?.start_date || item?.start),
+    end_date: normalizeDateForDb(item?.end_date || item?.end),
+    location: safeTrim(item?.location) || null,
+    description:
+      safeTrim(item?.description) ||
+      (Array.isArray(item?.highlights) ? collapseSpaces(item.highlights.join(" · ")) : "") ||
+      null,
+    skills: Array.isArray(item?.skills) ? item.skills.map((x: any) => safeTrim(x)).filter(Boolean) : [],
+  };
+}
+
+export function classifyCompanyImportExperienceSuggestion(args: {
+  extracted: any;
+  existingRows: any[];
+  inviteId: string;
+  index: number;
+}) {
+  const normalized = normalizeExtractedExperience(args.extracted);
+  const sameCompanyRole = (Array.isArray(args.existingRows) ? args.existingRows : []).filter((row) => {
+    return (
+      normalizeCompanyOrInstitution(row?.company_name) === normalizeCompanyOrInstitution(normalized.company_name) &&
+      normalizeRoleOrTitle(row?.role_title) === normalizeRoleOrTitle(normalized.role_title)
+    );
+  });
+
+  const exactMatch = sameCompanyRole.find((row) => expExactSig(row) === expExactSig(normalized));
+  if (exactMatch) {
+    return {
+      id: `${args.inviteId}:exp:${args.index}`,
+      kind: "duplicate",
+      status: "pending",
+      reason: "Ya existe una experiencia sustancialmente igual en el perfil.",
+      extracted_experience: normalized,
+      matched_existing: {
+        id: exactMatch?.id ? String(exactMatch.id) : null,
+        company_name: safeTrim(exactMatch?.company_name) || null,
+        role_title: safeTrim(exactMatch?.role_title) || null,
+        start_date: normalizeDateForDb(exactMatch?.start_date),
+        end_date: normalizeDateForDb(exactMatch?.end_date),
+        description: safeTrim(exactMatch?.description) || null,
+      },
+    };
+  }
+
+  const updateMatch = sameCompanyRole.find((row) => {
+    const startMonthMatches = normalizeMonth(row?.start_date) && normalizeMonth(row?.start_date) === normalizeMonth(normalized.start_date);
+    const endMonthMatches = normalizeMonth(row?.end_date) && normalizeMonth(row?.end_date) === normalizeMonth(normalized.end_date);
+    const similarity = jaccardSimilarity(row?.description, normalized.description);
+    return startMonthMatches || endMonthMatches || similarity >= 0.45;
+  });
+
+  if (updateMatch) {
+    return {
+      id: `${args.inviteId}:exp:${args.index}`,
+      kind: "update",
+      status: "pending",
+      reason: "Parece una experiencia existente con información nueva o más completa.",
+      extracted_experience: normalized,
+      matched_existing: {
+        id: updateMatch?.id ? String(updateMatch.id) : null,
+        company_name: safeTrim(updateMatch?.company_name) || null,
+        role_title: safeTrim(updateMatch?.role_title) || null,
+        start_date: normalizeDateForDb(updateMatch?.start_date),
+        end_date: normalizeDateForDb(updateMatch?.end_date),
+        description: safeTrim(updateMatch?.description) || null,
+      },
+    };
+  }
+
+  return {
+    id: `${args.inviteId}:exp:${args.index}`,
+    kind: "new",
+    status: "pending",
+    reason: "No existe una experiencia equivalente en el perfil actual.",
+    extracted_experience: normalized,
+    matched_existing: null,
+  };
 }
 
 export function buildCompanyCvImportLegalSnapshot(input?: {
@@ -222,39 +353,80 @@ export async function extractStructuredCvFromBuffer(
 }> {
   const buffer = Buffer.isBuffer(input) ? input : input?.fileBuffer;
   const filename = Buffer.isBuffer(input) ? legacyFilename : input?.filename;
+  const openaiApiKey = Buffer.isBuffer(input) ? null : safeTrim(input?.openaiApiKey);
   let text = "";
+  let structuredFromLlm: any = null;
 
   try {
-    text = buffer?.toString("utf8") || "";
+    text = buffer ? await extractCvTextFromBuffer(buffer, filename || undefined) : "";
   } catch {
     text = "";
   }
 
-  const normalizedText = text.replace(/\0/g, " ").replace(/\s+/g, " ").trim();
+  const normalizedText = sanitizeCandidateText(text);
   const emailMatches = normalizedText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
   const phoneMatches = normalizedText.match(/(?:\+?\d[\d\s().-]{7,}\d)/g) || [];
-  const lines = text
+  const lines = normalizedText
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
+  const candidateLines = lines.filter((line) => {
+    if (!line) return false;
+    if (looksLikeBinaryPdfContent(line)) return false;
+    if (line.includes("@")) return false;
+    if (/\+?\d[\d\s().-]{7,}\d/.test(line)) return false;
+    if (/curriculum|cv|resume/i.test(line) && line.split(" ").length <= 3) return false;
+    return true;
+  });
 
-  const firstNonEmpty = lines[0] || null;
+  if (normalizedText && openaiApiKey) {
+    try {
+      const llm = await extractStructuredFromCvText(normalizedText);
+      structuredFromLlm = llm?.result && typeof llm.result === "object" ? llm.result : null;
+    } catch {
+      structuredFromLlm = null;
+    }
+  }
+
+  const extractedName = structuredFromLlm?.full_name ?? candidateLines[0] ?? null;
+  const safeName = resolveSafeCandidateName(extractedName, emailMatches[0] || null);
 
   const structured = {
-    full_name: firstNonEmpty,
-    email: emailMatches[0] ?? null,
-    phone: phoneMatches[0] ?? null,
-    location: null,
-    headline: filename ?? null,
-    summary: null,
-    experiences: [],
-    education: [],
-    languages: [],
-    skills: [],
+    full_name: isReliableCandidateName(extractedName) ? sanitizeCandidateText(extractedName) : null,
+    display_name: safeName,
+    email: safeTrim(structuredFromLlm?.email) || emailMatches[0] || null,
+    phone: safeTrim(structuredFromLlm?.phone) || phoneMatches[0] || null,
+    location: safeTrim(structuredFromLlm?.location) || null,
+    headline: safeTrim(structuredFromLlm?.headline) || null,
+    summary: safeTrim(structuredFromLlm?.summary) || null,
+    experiences: Array.isArray(structuredFromLlm?.experience)
+      ? structuredFromLlm.experience.map((item: any) => ({
+          company_name: safeTrim(item?.company) || null,
+          role_title: safeTrim(item?.role) || null,
+          start_date: normalizeDateForDb(item?.start),
+          end_date: normalizeDateForDb(item?.end),
+          location: safeTrim(item?.location) || null,
+          description: Array.isArray(item?.highlights) ? collapseSpaces(item.highlights.join(" · ")) || null : null,
+        }))
+      : [],
+    education: Array.isArray(structuredFromLlm?.education)
+      ? structuredFromLlm.education.map((item: any) => ({
+          institution: safeTrim(item?.institution) || null,
+          title: safeTrim(item?.degree) || null,
+          start_date: normalizeDateText(item?.start),
+          end_date: normalizeDateText(item?.end),
+          description: safeTrim(item?.notes) || null,
+        }))
+      : [],
+    languages: Array.isArray(structuredFromLlm?.languages) ? structuredFromLlm.languages : [],
+    skills: Array.isArray(structuredFromLlm?.skills)
+      ? structuredFromLlm.skills.map((item: any) => safeTrim(item)).filter(Boolean)
+      : [],
   };
 
   const warnings: string[] = [];
   if (!normalizedText) warnings.push("empty_cv_text");
+  if (!isReliableCandidateName(extractedName)) warnings.push("unreliable_candidate_name");
 
   return {
     text: normalizedText,
@@ -263,287 +435,6 @@ export async function extractStructuredCvFromBuffer(
     warnings,
     cv_sha256: buffer ? sha256Hex(buffer) : sha256Hex(""),
   };
-}
-
-function normalizeLanguageEntry(lang: any): { language: string; level: string | null } | null {
-  if (typeof lang === "string") {
-    const language = safeTrim(lang);
-    if (!language) return null;
-    return { language, level: null };
-  }
-
-  if (!lang || typeof lang !== "object") return null;
-
-  const language = safeTrim(lang.language || lang.name || lang.label);
-  if (!language) return null;
-
-  const level = safeTrim(lang.level) || null;
-
-  return { language, level };
-}
-
-async function persistImportedExperiences(params: {
-  supabase: any;
-  userId: string;
-  inviteId?: string | null;
-  rawExperiences: any[];
-}) {
-  const { supabase, userId, inviteId, rawExperiences } = params;
-  const rows = (Array.isArray(rawExperiences) ? rawExperiences : [])
-    .map((item: any) => {
-      const roleTitle = safeTrim(item?.role_title || item?.title || item?.role);
-      const companyName = safeTrim(item?.company_name || item?.company);
-      const startDate = normalizeDateForDb(item?.start_date || item?.start);
-      const endDate = normalizeDateForDb(item?.end_date || item?.end);
-      const description = safeTrim(item?.description) || (Array.isArray(item?.highlights) ? collapseSpaces(item.highlights.join(" · ")) : "");
-      if (!roleTitle || !companyName || !startDate) return null;
-      return {
-        user_id: userId,
-        role_title: roleTitle,
-        company_name: companyName,
-        start_date: startDate,
-        end_date: endDate,
-        description: description || null,
-        matched_verification_id: null,
-        confidence: null,
-      };
-    })
-    .filter(Boolean) as any[];
-
-  if (!rows.length) return { imported: 0 };
-
-  const [profileExpColumns, existingRes] = await Promise.all([
-    getTableColumns(supabase, "profile_experiences"),
-    supabase
-      .from("profile_experiences")
-      .select("role_title,company_name,start_date,end_date")
-      .eq("user_id", userId),
-  ]);
-
-  const existingRows = Array.isArray(existingRes.data) ? existingRes.data : [];
-  const exactSet = new Set(existingRows.map((row: any) => expExactSig(row)));
-  const possibleSet = new Set(existingRows.map((row: any) => expPossibleSig(row)));
-  const importedAtIso = new Date().toISOString();
-  const toInsert: any[] = [];
-
-  for (const row of rows) {
-    const exact = expExactSig(row);
-    const possible = expPossibleSig(row);
-    if (exactSet.has(exact) || possibleSet.has(possible)) continue;
-    exactSet.add(exact);
-    possibleSet.add(possible);
-
-    const nextRow: any = { ...row };
-    if (profileExpColumns.has("import_source")) nextRow.import_source = "company_cv_import";
-    if (profileExpColumns.has("import_job_id") && inviteId) nextRow.import_job_id = inviteId;
-    if (profileExpColumns.has("imported_at")) nextRow.imported_at = importedAtIso;
-    if (profileExpColumns.has("metadata")) {
-      nextRow.metadata = {
-        import_source: "company_cv_import",
-        invite_id: inviteId || null,
-        imported_at: importedAtIso,
-      };
-    }
-    toInsert.push(nextRow);
-  }
-
-  if (!toInsert.length) return { imported: 0 };
-  const { error } = await supabase.from("profile_experiences").insert(toInsert);
-  if (error) throw error;
-  return { imported: toInsert.length };
-}
-
-async function persistImportedEducation(params: {
-  supabase: any;
-  userId: string;
-  inviteId?: string | null;
-  rawEducation: any[];
-}) {
-  const { supabase, userId, inviteId, rawEducation } = params;
-  const normalized = (Array.isArray(rawEducation) ? rawEducation : [])
-    .map((item: any) => {
-      const title = safeTrim(item?.title || item?.degree);
-      const institution = safeTrim(item?.institution);
-      const description = safeTrim(item?.description || item?.notes);
-      if (!title && !institution && !description) return null;
-      return {
-        title,
-        institution,
-        start_date: normalizeDateText(item?.start_date || item?.start),
-        end_date: normalizeDateText(item?.end_date || item?.end),
-        description: description || null,
-        import_source: "company_cv_import",
-        import_job_id: inviteId || null,
-        imported_at: new Date().toISOString(),
-      };
-    })
-    .filter(Boolean) as any[];
-
-  if (!normalized.length) return { imported: 0 };
-
-  const { data: candidateProfile } = await supabase
-    .from("candidate_profiles")
-    .select("id,user_id,education")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  const currentEducation = Array.isArray(candidateProfile?.education) ? candidateProfile.education : [];
-  const exactSet = new Set(currentEducation.map((row: any) => eduExactSig(row)));
-  const possibleSet = new Set(
-    currentEducation.map((row: any) => `${normalizeRoleOrTitle(row?.title)}|${normalizeCompanyOrInstitution(row?.institution)}`)
-  );
-  const toAppend: any[] = [];
-
-  for (const row of normalized) {
-    const exact = eduExactSig(row);
-    const possible = `${normalizeRoleOrTitle(row?.title)}|${normalizeCompanyOrInstitution(row?.institution)}`;
-    if (exactSet.has(exact) || possibleSet.has(possible)) continue;
-    exactSet.add(exact);
-    possibleSet.add(possible);
-    toAppend.push(row);
-  }
-
-  if (!toAppend.length) return { imported: 0 };
-
-  const payload = {
-    user_id: userId,
-    education: [...currentEducation, ...toAppend],
-    updated_at: new Date().toISOString(),
-  };
-
-  const { error } = candidateProfile?.id
-    ? await supabase.from("candidate_profiles").update(payload).eq("id", candidateProfile.id)
-    : await supabase.from("candidate_profiles").insert(payload);
-  if (error) throw error;
-  return { imported: toAppend.length };
-}
-
-async function persistImportedLanguagesToProfile(params: {
-  supabase: any;
-  userId: string;
-  inviteId?: string | null;
-  rawLanguages: any[];
-}) {
-  const { supabase, userId, inviteId, rawLanguages } = params;
-  const normalizedList = normalizeCvLanguages(rawLanguages, 50);
-  const languageEntries = (Array.isArray(rawLanguages) ? rawLanguages : [])
-    .map(normalizeLanguageEntry)
-    .filter(Boolean) as Array<{ language: string; level: string | null }>;
-
-  if (!normalizedList.length && !languageEntries.length) return { imported: 0 };
-
-  const [profileColumns, candidateProfileColumns, profileRes, candidateProfileRes] = await Promise.all([
-    getTableColumns(supabase, "profiles"),
-    getTableColumns(supabase, "candidate_profiles"),
-    supabase.from("profiles").select("id,languages").eq("id", userId).maybeSingle(),
-    supabase.from("candidate_profiles").select("id,user_id,achievements,other_achievements").eq("user_id", userId).maybeSingle(),
-  ]);
-
-  if (profileColumns.has("languages")) {
-    const currentLanguages = Array.isArray(profileRes.data?.languages)
-      ? profileRes.data.languages.map((item: any) => safeTrim(item)).filter(Boolean)
-      : [];
-    const seen = new Set(currentLanguages.map((item: string) => item.toLowerCase()));
-    const toAppend = normalizedList.filter((item: string) => !seen.has(item.toLowerCase()));
-    if (toAppend.length) {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          languages: [...currentLanguages, ...toAppend],
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", userId);
-      if (error) throw error;
-    }
-  }
-
-  const persistenceTarget = selectLanguagesPersistenceTarget(profileColumns, candidateProfileColumns);
-  if (persistenceTarget === "skip") {
-    return { imported: normalizedList.length };
-  }
-
-  const targetColumn = persistenceTarget === "candidate_profiles.other_achievements" ? "other_achievements" : "achievements";
-  const currentAchievements = Array.isArray((candidateProfileRes.data as any)?.[targetColumn])
-    ? (candidateProfileRes.data as any)[targetColumn]
-    : [];
-  const seenAchievementKeys = new Set(
-    currentAchievements
-      .filter((item: any) => String(item?.category || "").toLowerCase() === "idioma")
-      .map((item: any) => `${safeTrim(item?.language || item?.title).toLowerCase()}::${safeTrim(item?.level).toLowerCase()}`)
-  );
-
-  const nowIso = new Date().toISOString();
-  const toAppendAchievements = (languageEntries.length ? languageEntries : normalizedList.map((language) => ({ language, level: null })))
-    .filter((item) => item.language)
-    .filter((item) => {
-      const key = `${item.language.toLowerCase()}::${(item.level || "").toLowerCase()}`;
-      if (seenAchievementKeys.has(key)) return false;
-      seenAchievementKeys.add(key);
-      return true;
-    })
-    .map((item) => ({
-      title: item.language,
-      language: item.language,
-      level: item.level || null,
-      category: "idioma",
-      issuer: null,
-      date: null,
-      description: "Idioma detectado en CV importado por empresa",
-      import_source: "company_cv_import",
-      import_job_id: inviteId || null,
-      imported_at: nowIso,
-    }));
-
-  if (toAppendAchievements.length) {
-    const payload = {
-      user_id: userId,
-      [targetColumn]: [...currentAchievements, ...toAppendAchievements],
-      updated_at: nowIso,
-    };
-    const { error } = candidateProfileRes.data
-      ? await supabase.from("candidate_profiles").update(payload).eq("user_id", userId)
-      : await supabase.from("candidate_profiles").insert(payload);
-    if (error) throw error;
-  }
-
-  return { imported: toAppendAchievements.length || normalizedList.length };
-}
-
-export async function importCandidateLanguages(candidateId: string, parsedPayload: any): Promise<void> {
-  const supabase = createServiceRoleClient();
-
-  const rawLanguages = Array.isArray(parsedPayload?.languages) ? parsedPayload.languages : [];
-  if (!rawLanguages.length) return;
-
-  const normalized = rawLanguages
-    .map(normalizeLanguageEntry)
-    .filter(Boolean) as Array<{ language: string; level: string | null }>;
-
-  if (!normalized.length) return;
-
-  const deduped = new Map<string, { language: string; level: string | null }>();
-  for (const row of normalized) {
-    const key = `${row.language.toLowerCase()}::${(row.level || "").toLowerCase()}`;
-    if (!deduped.has(key)) deduped.set(key, row);
-  }
-
-  const rows = Array.from(deduped.values()).map((row) => ({
-    user_id: candidateId,
-    language: row.language,
-    level: row.level,
-    source: "cv_parse",
-  }));
-
-  try {
-    const { error } = await supabase.from("candidate_languages").insert(rows);
-    if (!error) return;
-  } catch {}
-
-  for (const row of rows) {
-    try {
-      await supabase.from("candidate_languages").insert(row);
-    } catch {}
-  }
 }
 
 export async function persistImportedCandidateProfile(input: {
@@ -559,22 +450,99 @@ export async function persistImportedCandidateProfile(input: {
 }) {
   const supabase = input.supabase || createServiceRoleClient();
   const parsed = input.extracted ?? input.parsedPayload ?? {};
-  const mode = input.mode ?? input.source ?? "company_cv_import";
-
-  const fullName = safeTrim(parsed.full_name || parsed.name);
-  const headline = safeTrim(parsed.headline || parsed.professional_title);
-  const summary = safeTrim(parsed.summary || parsed.about);
-  const location = safeTrim(parsed.location || parsed.city);
+  const mode = input.mode === "existing_candidate" ? "existing_candidate" : "new_candidate";
   const importedAt = new Date().toISOString();
-  const candidateProfileRes = await supabase
-    .from("candidate_profiles")
-    .select("id,user_id,raw_cv_json")
-    .eq("user_id", input.userId)
-    .maybeSingle();
+  const [candidateProfileRes, profileRes, experiencesRes] = await Promise.all([
+    supabase
+      .from("candidate_profiles")
+      .select("id,user_id,raw_cv_json,achievements,other_achievements")
+      .eq("user_id", input.userId)
+      .maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("id,full_name,email,title,location,languages")
+      .eq("id", input.userId)
+      .maybeSingle(),
+    supabase
+      .from("profile_experiences")
+      .select("id,company_name,role_title,start_date,end_date,description")
+      .eq("user_id", input.userId),
+  ]);
+  const currentProfile = profileRes.data || {};
+  const currentExperiences = Array.isArray(experiencesRes.data) ? experiencesRes.data : [];
   const currentRawCvJson =
     candidateProfileRes.data?.raw_cv_json && typeof candidateProfileRes.data.raw_cv_json === "object"
       ? candidateProfileRes.data.raw_cv_json
       : {};
+  const profileLanguages = Array.isArray((currentProfile as any)?.languages)
+    ? (currentProfile as any).languages.map((item: any) => safeTrim(item)).filter(Boolean)
+    : [];
+  const achievementLanguages = [
+    ...(
+      Array.isArray((candidateProfileRes.data as any)?.achievements)
+        ? (candidateProfileRes.data as any).achievements
+        : []
+    ),
+    ...(
+      Array.isArray((candidateProfileRes.data as any)?.other_achievements)
+        ? (candidateProfileRes.data as any).other_achievements
+        : []
+    ),
+  ]
+    .filter((item: any) => String(item?.category || "").toLowerCase() === "idioma")
+    .map((item: any) => safeTrim(item?.language || item?.title))
+    .filter(Boolean);
+  const importedLanguages = normalizeCvLanguages(Array.isArray(parsed?.languages) ? parsed.languages : [], 50);
+  const mergedLanguages = Array.from(new Set([...profileLanguages, ...achievementLanguages, ...importedLanguages]));
+  const newLanguages = mergedLanguages.filter((language) => {
+    const key = language.toLowerCase();
+    return !profileLanguages.some((item: string) => item.toLowerCase() === key) &&
+      !achievementLanguages.some((item: string) => item.toLowerCase() === key);
+  });
+  const existingValidName = isReliableCandidateName((currentProfile as any)?.full_name)
+    ? sanitizeCandidateText((currentProfile as any)?.full_name)
+    : null;
+  const importedValidName = isReliableCandidateName(parsed?.full_name || parsed?.name)
+    ? sanitizeCandidateText(parsed?.full_name || parsed?.name)
+    : null;
+  const experienceRows = Array.isArray(parsed?.experiences) ? parsed.experiences : [];
+  const suggestions = experienceRows.map((row: any, index: number) =>
+    classifyCompanyImportExperienceSuggestion({
+      extracted: row,
+      existingRows: currentExperiences,
+      inviteId: String(input.inviteId || "company-cv-import"),
+      index,
+    })
+  );
+  const updateEntry = {
+    invite_id: input.inviteId ?? null,
+    imported_at: importedAt,
+    company_name: input.companyName ?? null,
+    mode,
+    candidate_identity: {
+      email: input.candidateEmail ?? currentProfile?.email ?? null,
+      display_name: resolveSafeCandidateName(importedValidName || parsed?.display_name || parsed?.full_name || parsed?.name, input.candidateEmail ?? currentProfile?.email),
+      reliable_name: importedValidName,
+      existing_candidate: mode === "existing_candidate",
+    },
+    profile_proposal: {
+      full_name: existingValidName || importedValidName || null,
+      full_name_source: existingValidName ? "existing_profile" : importedValidName ? "imported_cv" : "fallback",
+      headline: safeTrim((currentProfile as any)?.title) || safeTrim(parsed?.headline || parsed?.professional_title) || null,
+      location: safeTrim((currentProfile as any)?.location) || safeTrim(parsed?.location || parsed?.city) || null,
+      merged_languages: mergedLanguages,
+      new_languages: newLanguages,
+      summary: safeTrim(parsed?.summary || parsed?.about) || null,
+    },
+    experience_suggestions: suggestions,
+  };
+  const previousUpdates = Array.isArray((currentRawCvJson as any)?.company_cv_import_updates)
+    ? (currentRawCvJson as any).company_cv_import_updates
+    : [];
+  const nextUpdates = [
+    updateEntry,
+    ...previousUpdates.filter((entry: any) => String(entry?.invite_id || "") !== String(input.inviteId || "")),
+  ];
   const nextRawCvJson = {
     ...(currentRawCvJson || {}),
     company_cv_import: {
@@ -584,79 +552,29 @@ export async function persistImportedCandidateProfile(input: {
       candidate_email: input.candidateEmail ?? null,
       company_name: input.companyName ?? null,
       extracted_payload: parsed,
+      staged_only: true,
+      profile_proposal: updateEntry.profile_proposal,
     },
+    company_cv_import_updates: nextUpdates,
   };
 
-  try {
-    await supabase.from("candidate_profiles").upsert(
-      {
-        user_id: input.userId,
-        full_name: fullName || null,
-        headline: headline || null,
-        summary: summary || null,
-        location: location || null,
-        source: mode,
-        raw_cv_json: nextRawCvJson,
-      },
-      { onConflict: "user_id" }
-    );
-  } catch {}
-
-  try {
-    const profileFields: Record<string, any> = {
-      id: input.userId,
-      updated_at: new Date().toISOString(),
-    };
-
-    if (fullName) profileFields.full_name = fullName;
-
-    await supabase.from("profiles").upsert(profileFields, { onConflict: "id" });
-  } catch {}
-
-  let importedExperiences = 0;
-  let importedEducation = 0;
-  let importedLanguages = 0;
-
-  if (mode !== "existing_candidate") {
-    try {
-      const experienceResult = await persistImportedExperiences({
-        supabase,
-        userId: input.userId,
-        inviteId: input.inviteId,
-        rawExperiences: Array.isArray(parsed?.experiences) ? parsed.experiences : [],
-      });
-      importedExperiences = Number(experienceResult.imported || 0);
-    } catch {}
-
-    try {
-      const educationResult = await persistImportedEducation({
-        supabase,
-        userId: input.userId,
-        inviteId: input.inviteId,
-        rawEducation: Array.isArray(parsed?.education) ? parsed.education : [],
-      });
-      importedEducation = Number(educationResult.imported || 0);
-    } catch {}
-
-    try {
-      const languageResult = await persistImportedLanguagesToProfile({
-        supabase,
-        userId: input.userId,
-        inviteId: input.inviteId,
-        rawLanguages: Array.isArray(parsed?.languages) ? parsed.languages : [],
-      });
-      importedLanguages = Number(languageResult.imported || 0);
-    } catch {}
-  } else {
-    await importCandidateLanguages(input.userId, parsed);
-  }
+  await supabase.from("candidate_profiles").upsert(
+    {
+      user_id: input.userId,
+      raw_cv_json: nextRawCvJson,
+      updated_at: importedAt,
+    },
+    { onConflict: "user_id" }
+  );
 
   return {
     success: true,
     mode,
     invite_id: input.inviteId ?? null,
-    imported_experiences: importedExperiences,
-    imported_education: importedEducation,
-    imported_languages: importedLanguages || (Array.isArray(parsed?.languages) ? parsed.languages.length : 0),
+    staged_only: true,
+    imported_experiences: 0,
+    imported_education: 0,
+    imported_languages: 0,
+    pending_experience_suggestions: suggestions.filter((item: any) => String(item?.status || "pending") === "pending").length,
   };
 }

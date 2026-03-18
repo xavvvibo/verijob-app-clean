@@ -2,10 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import {
+  COMPANY_BUSINESS_MODEL_OPTIONS,
+  COMPANY_MARKET_SEGMENT_OPTIONS,
+  COMPANY_SECTOR_OPTIONS,
+  COMPANY_TYPE_OPTIONS,
+  getCompanySubsectorOptions,
+} from "@/lib/company/company-profile";
 
 type CompanyProfile = Record<string, any>;
-
-const SECTORS = ["Hostelería", "Retail", "Logística", "Construcción", "Tecnología", "Servicios", "Otro"];
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -63,7 +68,12 @@ export default function CompanyOnboardingPage() {
         contact_phone: p.contact_phone || "",
         contact_person_name: p.contact_person_name || "",
         contact_person_role: p.contact_person_role || "",
+        company_type: p.company_type || "",
         sector: p.sector || "",
+        subsector: p.subsector || "",
+        business_model: p.business_model || "",
+        market_segment: p.market_segment || "",
+        operating_address: p.operating_address || "",
       }));
       setLoading(false);
     })();
@@ -78,9 +88,21 @@ export default function CompanyOnboardingPage() {
     if (source === "company") return "panel de empresa";
     return "área privada";
   }, [source]);
+  const subsectorOptions = useMemo(() => getCompanySubsectorOptions(profile.sector), [profile.sector]);
 
   function setField(key: string, value: string) {
-    setProfile((prev) => ({ ...prev, [key]: value }));
+    setProfile((prev) => {
+      if (key === "sector") {
+        const nextSubsectors = getCompanySubsectorOptions(value);
+        const currentSubsector = String(prev.subsector || "");
+        return {
+          ...prev,
+          sector: value,
+          subsector: nextSubsectors.includes(currentSubsector) ? currentSubsector : "",
+        };
+      }
+      return { ...prev, [key]: value };
+    });
   }
 
   async function onSaveAndContinue() {
@@ -96,7 +118,12 @@ export default function CompanyOnboardingPage() {
         contact_phone: profile.contact_phone || null,
         contact_person_name: profile.contact_person_name || null,
         contact_person_role: profile.contact_person_role || null,
+        company_type: profile.company_type || null,
         sector: profile.sector || null,
+        subsector: profile.subsector || null,
+        business_model: profile.business_model || null,
+        market_segment: profile.market_segment || null,
+        operating_address: profile.operating_address || null,
       };
 
       const saveRes = await fetch("/api/company/profile", {
@@ -164,6 +191,16 @@ export default function CompanyOnboardingPage() {
             <Field label="CIF/NIF">
               <input value={profile.tax_id || ""} onChange={(e) => setField("tax_id", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm" />
             </Field>
+            <Field label="Tipo de empresa">
+              <select value={profile.company_type || ""} onChange={(e) => setField("company_type", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm">
+                <option value="">Selecciona tipo</option>
+                {COMPANY_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </Field>
             <Field label="Email corporativo">
               <input value={profile.contact_email || ""} onChange={(e) => setField("contact_email", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm" />
             </Field>
@@ -173,9 +210,39 @@ export default function CompanyOnboardingPage() {
             <Field label="Sector">
               <select value={profile.sector || ""} onChange={(e) => setField("sector", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm">
                 <option value="">Selecciona sector</option>
-                {SECTORS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
+                {COMPANY_SECTOR_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Subsector">
+              <select value={profile.subsector || ""} onChange={(e) => setField("subsector", e.target.value)} disabled={!profile.sector} className="w-full rounded-xl border px-3 py-2.5 text-sm disabled:bg-slate-50">
+                <option value="">{profile.sector ? "Selecciona subsector" : "Selecciona antes un sector"}</option>
+                {subsectorOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Modelo de negocio">
+              <select value={profile.business_model || ""} onChange={(e) => setField("business_model", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm">
+                <option value="">Selecciona modelo</option>
+                {COMPANY_BUSINESS_MODEL_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Segmento de mercado">
+              <select value={profile.market_segment || ""} onChange={(e) => setField("market_segment", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm">
+                <option value="">Selecciona segmento</option>
+                {COMPANY_MARKET_SEGMENT_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
                   </option>
                 ))}
               </select>
@@ -185,6 +252,18 @@ export default function CompanyOnboardingPage() {
             </Field>
             <Field label="Cargo persona de contacto">
               <input value={profile.contact_person_role || ""} onChange={(e) => setField("contact_person_role", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm" />
+            </Field>
+            <Field label="Dirección operativa">
+              <div className="space-y-1">
+                <input
+                  value={profile.operating_address || ""}
+                  onChange={(e) => setField("operating_address", e.target.value)}
+                  placeholder="Calle, número, nave o centro de trabajo"
+                  autoComplete="street-address"
+                  className="w-full rounded-xl border px-3 py-2.5 text-sm"
+                />
+                <p className="text-xs text-slate-500">Usa la dirección del centro operativo principal. Ciudad, provincia y código postal se completan después en el perfil.</p>
+              </div>
             </Field>
           </div>
 
@@ -206,4 +285,3 @@ export default function CompanyOnboardingPage() {
     </main>
   );
 }
-

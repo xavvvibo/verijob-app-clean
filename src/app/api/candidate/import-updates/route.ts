@@ -20,6 +20,43 @@ function pickLongerText(current: unknown, incoming: unknown) {
   return right.length > left.length ? right : left;
 }
 
+function collapseSpaces(value: unknown) {
+  return String(value || "").replace(/\s+/g, " ").trim();
+}
+
+function normalizedBase(value: unknown) {
+  return collapseSpaces(String(value || "").toLowerCase())
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[.,;:()]+/g, " ");
+}
+
+function normalizeCompanyOrInstitution(value: unknown) {
+  return normalizedBase(value);
+}
+
+function normalizeRoleOrTitle(value: unknown) {
+  return normalizedBase(value);
+}
+
+function normalizeMonth(value: unknown) {
+  const text = normalizeText(value);
+  if (!text) return "";
+  const ym = text.match(/^(\d{4})-(\d{2})/);
+  if (ym) return `${ym[1]}-${ym[2]}`;
+  const y = text.match(/^(\d{4})$/);
+  if (y) return `${y[1]}-01`;
+  return text.toLowerCase();
+}
+
+function expExactSig(row: any) {
+  return `${normalizeRoleOrTitle(row?.role_title || row?.title)}|${normalizeCompanyOrInstitution(row?.company_name || row?.company)}|${normalizeMonth(row?.start_date)}|${normalizeMonth(row?.end_date)}`;
+}
+
+function expPossibleSig(row: any) {
+  return `${normalizeRoleOrTitle(row?.role_title || row?.title)}|${normalizeCompanyOrInstitution(row?.company_name || row?.company)}`;
+}
+
 function updateSuggestionStatus(rawCvJson: any, inviteId: string, suggestionId: string, status: "accepted" | "dismissed") {
   const base = rawCvJson && typeof rawCvJson === "object" ? rawCvJson : {};
   const updates = Array.isArray(base.company_cv_import_updates) ? base.company_cv_import_updates : [];
@@ -105,7 +142,22 @@ export async function PATCH(request: Request) {
 
   if (action === "accept") {
     const extracted = suggestion?.extracted_experience || {};
+    const { data: existingRows, error: existingErr } = await admin
+      .from("profile_experiences")
+      .select("id,company_name,role_title,start_date,end_date,description")
+      .eq("user_id", user.id);
+    if (existingErr) return json(400, { error: "profile_experiences_read_failed", details: existingErr.message });
+
+    const rows = Array.isArray(existingRows) ? existingRows : [];
+    const extractedExact = expExactSig(extracted);
+    const extractedPossible = expPossibleSig(extracted);
+    const exactMatch = rows.find((row: any) => expExactSig(row) === extractedExact);
+    const possibleMatch = rows.find((row: any) => expPossibleSig(row) === extractedPossible);
+
     if (String(suggestion?.kind || "") === "new") {
+      if (exactMatch || possibleMatch) {
+        // Already present: mark accepted without creating a duplicate row.
+      } else {
       const insertPayload: any = {
         user_id: user.id,
         role_title: normalizeText(extracted?.role_title) || "Experiencia",
@@ -116,6 +168,7 @@ export async function PATCH(request: Request) {
       };
       const { error: insertErr } = await admin.from("profile_experiences").insert(insertPayload);
       if (insertErr) return json(400, { error: "profile_experience_insert_failed", details: insertErr.message });
+      }
     } else if (String(suggestion?.kind || "") === "update" && suggestion?.matched_existing?.id) {
       const { data: currentExperience, error: currentErr } = await admin
         .from("profile_experiences")

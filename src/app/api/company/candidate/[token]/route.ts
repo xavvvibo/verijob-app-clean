@@ -5,6 +5,7 @@ import { sanitizePublic } from "@/utils/sanitizePublic";
 import { resolveActiveCandidatePublicLink } from "@/lib/public/candidate-public-link";
 import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
 import { normalizeCompanyProfileAccessProductKey } from "@/lib/company/profile-access-products";
+import { resolveSafeCandidateName } from "@/lib/company-candidate-import";
 import {
   deriveCompanyCandidateAccess,
   resolveCompanyCandidateAccess,
@@ -119,7 +120,7 @@ function buildInvitePreviewPayload(inviteRow: any) {
     : [];
 
   return {
-    public_name: String(inviteRow?.candidate_name_raw || inviteRow?.candidate_email || "Candidato").trim(),
+    public_name: resolveSafeCandidateName(inviteRow?.candidate_name_raw, inviteRow?.candidate_email),
     sector: String(inviteRow?.target_role || extractedPayload?.headline || "").trim() || null,
     years_experience: Array.isArray(extractedPayload?.experiences) ? extractedPayload.experiences.length : null,
     approximate_location: String(extractedPayload?.location || extractedPayload?.experiences?.[0]?.location || "").trim() || null,
