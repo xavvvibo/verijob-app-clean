@@ -13,12 +13,12 @@ export default async function PrivateLayout({ children }: { children: ReactNode 
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role,app_role")
+    .select("role,active_company_id")
     .eq("id", user.id)
     .maybeSingle();
   const role = resolveSessionRole({
     profileRole: profile?.role,
-    profileAppRole: (profile as any)?.app_role,
+    activeCompanyId: (profile as any)?.active_company_id,
     user,
   }) || "candidate";
 

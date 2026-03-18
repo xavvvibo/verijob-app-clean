@@ -19,7 +19,7 @@ export default async function CandidateLayout({ children }: { children: React.Re
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role,app_role,onboarding_completed")
+    .select("role,active_company_id,onboarding_completed")
     .eq("id", au.user.id)
     .maybeSingle();
 

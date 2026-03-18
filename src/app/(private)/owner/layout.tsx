@@ -12,7 +12,7 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role,app_role")
+    .select("role,active_company_id")
     .eq("id", au.user.id)
     .maybeSingle();
 

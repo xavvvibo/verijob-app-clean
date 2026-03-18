@@ -20,7 +20,7 @@ export default async function CompanyLayout({ children }: Props) {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role,app_role,onboarding_completed, active_company_id")
+    .select("role,onboarding_completed, active_company_id")
     .eq("id", au.user.id)
     .maybeSingle();
 

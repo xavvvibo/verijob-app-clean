@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 import { resolveCandidateOnboardingCompleted } from "@/lib/auth/onboarding-state";
 import { resolveAuthenticatedRouting } from "@/lib/auth/post-login-redirect";
 import { resolveSessionRole } from "@/lib/auth/session-role";
@@ -21,13 +22,20 @@ export default async function AuthDebugPage() {
 
   const { data: profile, error: profileError } = await supabase
     .from("profiles")
-    .select("id,email,role,app_role,active_company_id,onboarding_completed")
+    .select("id,email,role,active_company_id,onboarding_completed")
     .eq("id", auth.user.id)
     .maybeSingle();
 
+  const admin = createServiceRoleClient();
+  const { data: profileColumns } = await admin
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", "profiles");
+  const profileColumnSet = new Set((profileColumns || []).map((row: any) => String(row?.column_name || "")));
+
   const resolvedRole = resolveSessionRole({
     profileRole: profile?.role,
-    profileAppRole: (profile as any)?.app_role,
     activeCompanyId: (profile as any)?.active_company_id,
     user: auth.user,
   });
@@ -48,7 +56,7 @@ export default async function AuthDebugPage() {
     },
     profile: {
       role: profile?.role ?? null,
-      app_role: (profile as any)?.app_role ?? null,
+      app_role: null,
       active_company_id: (profile as any)?.active_company_id ?? null,
       onboarding_completed: (profile as any)?.onboarding_completed ?? null,
     },
@@ -66,6 +74,12 @@ export default async function AuthDebugPage() {
     },
     diagnostics: {
       profile_read_error: profileError?.message || null,
+      profile_columns: {
+        role: profileColumnSet.has("role"),
+        app_role: profileColumnSet.has("app_role"),
+        active_company_id: profileColumnSet.has("active_company_id"),
+        onboarding_completed: profileColumnSet.has("onboarding_completed"),
+      },
       generated_at: new Date().toISOString(),
     },
   };

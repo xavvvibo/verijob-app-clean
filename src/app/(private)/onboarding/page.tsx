@@ -93,7 +93,7 @@ export default function OnboardingPage() {
 
       const { data: profile, error: pErr } = await supabase
         .from("profiles")
-        .select("id, role, app_role, onboarding_completed, onboarding_step")
+        .select("id, role, active_company_id, onboarding_completed, onboarding_step")
         .eq("id", user.id)
         .maybeSingle();
 

@@ -12,7 +12,7 @@ export default async function AppRootPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role,app_role,active_company_id,onboarding_completed")
+    .select("role,active_company_id,onboarding_completed")
     .eq("id", auth.user.id)
     .maybeSingle();
 
