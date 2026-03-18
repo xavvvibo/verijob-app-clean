@@ -1,5 +1,12 @@
 function normalizeRole(value: unknown) {
   const role = String(value || "").trim().toLowerCase();
+  if (!role) return "";
+  if (role === "true" || role === "1") return "true";
+  if (role === "false" || role === "0") return "false";
+  if (role.includes("superadmin") || role.includes("platform_admin") || role.includes("internal_admin")) return "admin";
+  if (role.includes("owner")) return "owner";
+  if (role.includes("company") || role.includes("empresa")) return "company";
+  if (role === "reviewer" || role === "recruiter") return "company";
   if (role === "empresa") return "company";
   if (role === "candidato") return "candidate";
   return role || "";
@@ -14,9 +21,11 @@ function knownRole(value: unknown) {
 export function resolveSessionRole(input: {
   profileRole?: unknown;
   profileAppRole?: unknown;
+  activeCompanyId?: unknown;
   user?: any;
 }) {
   const user = input.user || {};
+  const hasActiveCompany = Boolean(String(input.activeCompanyId || "").trim());
   const prioritizedCandidates = [
     input.profileAppRole,
     user?.app_metadata?.role,
@@ -33,6 +42,7 @@ export function resolveSessionRole(input: {
   if (roles.includes("admin")) return "admin";
   if (roles.includes("owner")) return "owner";
   if (roles.includes("company")) return "company";
+  if (hasActiveCompany) return "company";
   if (roles.includes("candidate")) return "candidate";
 
   const fallbackProfileRole = knownRole(input.profileRole);

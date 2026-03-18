@@ -6,6 +6,7 @@ export type AuthenticatedAppRole = "candidate" | "company" | "owner" | "admin";
 type AuthRoutingInput = {
   role?: unknown;
   app_role?: unknown;
+  active_company_id?: unknown;
   onboardingCompleted?: unknown;
   onboarding_completed?: unknown;
   currentPath?: unknown;
@@ -16,6 +17,7 @@ export function resolveAuthenticatedRouting(input: AuthRoutingInput) {
   const role = resolveSessionRole({
     profileRole: input.role,
     profileAppRole: input.app_role,
+    activeCompanyId: input.active_company_id,
     user: input.user,
   }) as AuthenticatedAppRole;
   const onboardingCompleted =
