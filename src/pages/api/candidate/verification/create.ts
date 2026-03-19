@@ -106,7 +106,7 @@ async function resolveEmploymentRecordId(params: {
     end_date: (profileExperience as any)?.end_date || null,
   }
   if (employmentColumns.has("source_experience_id")) insertPayload.source_experience_id = profileExperienceId
-  if (employmentColumns.has("verification_status")) insertPayload.verification_status = "not_requested"
+  if (employmentColumns.has("verification_status")) insertPayload.verification_status = "pending_company"
 
   const { data: createdEmployment, error: createdEmploymentError } = await params.admin
     .from("employment_records")
@@ -288,6 +288,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       ok: true,
       id: data.id,
+      employment_record_insert_payload: null,
+      employment_record_update_payload: {
+        verification_status: employmentUpdate.statusApplied,
+        last_verification_request_id: data.id,
+        last_verification_requested_at: "set",
+      },
       employment_record_status_applied: employmentUpdate.statusApplied,
       employment_record_status_warning: employmentUpdate.ok
         ? null

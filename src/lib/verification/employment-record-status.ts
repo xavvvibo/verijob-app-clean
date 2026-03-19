@@ -37,43 +37,31 @@ function buildBaseEmploymentPatch(columns: Set<string>, args: {
   return patch
 }
 
-async function applyEmploymentPatchVariants(args: {
+async function applyEmploymentPatch(args: {
   admin: any
   employmentRecordId: string
   candidateId?: string | null
-  basePatch: Record<string, any>
-  statusVariants: string[]
+  patch: Record<string, any>
 }) {
-  const columns = await getTableColumns(args.admin, "employment_records")
-  const canWriteStatus = columns.has("verification_status")
-  const variants = canWriteStatus
-    ? [...args.statusVariants.map((status) => ({ ...args.basePatch, verification_status: status })), args.basePatch]
-    : [args.basePatch]
+  let query = args.admin.from("employment_records").update(args.patch).eq("id", args.employmentRecordId)
+  if (args.candidateId) {
+    query = query.eq("candidate_id", args.candidateId)
+  }
+  const { error } = await query
 
-  let lastError: any = null
-
-  for (const patch of variants) {
-    let query = args.admin.from("employment_records").update(patch).eq("id", args.employmentRecordId)
-    if (args.candidateId) {
-      query = query.eq("candidate_id", args.candidateId)
+  if (error) {
+    return {
+      ok: false as const,
+      statusApplied: null,
+      error,
     }
-
-    const { error } = await query
-    if (!error) {
-      return {
-        ok: true as const,
-        statusApplied: Object.prototype.hasOwnProperty.call(patch, "verification_status")
-          ? patch.verification_status
-          : null,
-      }
-    }
-    lastError = error
   }
 
   return {
-    ok: false as const,
-    statusApplied: null,
-    error: lastError,
+    ok: true as const,
+    statusApplied: Object.prototype.hasOwnProperty.call(args.patch, "verification_status")
+      ? args.patch.verification_status
+      : null,
   }
 }
 
@@ -91,13 +79,15 @@ export async function markEmploymentRecordVerificationRequested(args: {
     clearResolution: true,
     verificationResult: null,
   })
+  if (columns.has("verification_status")) {
+    basePatch.verification_status = "pending_company"
+  }
 
-  return applyEmploymentPatchVariants({
+  return applyEmploymentPatch({
     admin: args.admin,
     employmentRecordId: args.employmentRecordId,
     candidateId: args.candidateId,
-    basePatch,
-    statusVariants: ["pending_company", "company_registered_pending"],
+    patch: basePatch,
   })
 }
 
@@ -120,18 +110,14 @@ export async function markEmploymentRecordVerificationDecision(args: {
   if (columns.has("verification_resolved_at") && args.decision !== "review") {
     basePatch.verification_resolved_at = args.nowIso
   }
+  if (columns.has("verification_status")) {
+    basePatch.verification_status =
+      args.decision === "approve" ? "verified" : args.decision === "reject" ? "rejected" : "reviewing"
+  }
 
-  const statusVariants =
-    args.decision === "approve"
-      ? ["verified"]
-      : args.decision === "reject"
-        ? ["rejected"]
-        : ["reviewing", "pending_company", "company_registered_pending"]
-
-  return applyEmploymentPatchVariants({
+  return applyEmploymentPatch({
     admin: args.admin,
     employmentRecordId: args.employmentRecordId,
-    basePatch,
-    statusVariants,
+    patch: basePatch,
   })
 }

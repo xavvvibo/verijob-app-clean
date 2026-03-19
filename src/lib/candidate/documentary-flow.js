@@ -43,7 +43,7 @@ export function buildEmploymentRecordDocumentaryRequestedUpdate({ verificationRe
 
 export function buildEmploymentRecordDocumentaryResolvedUpdate({ verificationRequestId, nowIso }) {
   return {
-    verification_status: "verified_document",
+    verification_status: "verified",
     last_verification_request_id: verificationRequestId,
     verification_resolved_at: nowIso,
   };
