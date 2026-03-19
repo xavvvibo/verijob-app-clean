@@ -3,7 +3,6 @@
 import { useState } from "react"
 
 export default function NewVerificationClient({ experience }: any) {
-  const [email, setEmail] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -17,8 +16,10 @@ export default function NewVerificationClient({ experience }: any) {
       return
     }
 
+    const email = experience.company_email
+
     if (!email || !email.includes("@")) {
-      setError("Email no válido")
+      setError("Email empresa no válido")
       return
     }
 
@@ -59,14 +60,6 @@ export default function NewVerificationClient({ experience }: any) {
 
   return (
     <div className="space-y-2">
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="Email verificador"
-        className="border p-2 w-full"
-      />
-
       <button
         onClick={handleSubmit}
         disabled={!canVerify || loading}
