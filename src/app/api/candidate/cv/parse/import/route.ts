@@ -81,15 +81,6 @@ function isLikelyAcademic(item: any) {
   return academicTokens.some((token) => role.includes(token)) && !company;
 }
 
-function isLikelyWorkItem(item: any) {
-  const role = normalizeRoleOrTitle(item?.role_title || item?.title);
-  const company = normalizeCompanyOrInstitution(item?.company_name || item?.company);
-  const institution = normalizeCompanyOrInstitution(item?.institution);
-  if (company) return true;
-  if (institution && !company) return false;
-  return Boolean(role);
-}
-
 function normalizeMonth(v: any) {
   const s = normalizeText(v);
   if (!s) return "";
@@ -120,6 +111,14 @@ function eduExactSig(row: any) {
   const start = normalizeMonth(row?.start_date || row?.start);
   const end = normalizeMonth(row?.end_date || row?.end);
   return `${title}|${institution}|${start}|${end}`;
+}
+
+function normalizeAchievementCategory(value: any) {
+  const raw = normalizeText(value).toLowerCase();
+  if (raw === "idioma") return "idioma";
+  if (raw === "certificacion" || raw === "certificación" || raw === "certificate" || raw === "certification") return "certificacion";
+  if (raw === "premio" || raw === "award") return "premio";
+  return "otro";
 }
 
 async function getTableColumns(supabase: any, table: string): Promise<Set<string>> {
@@ -176,10 +175,16 @@ async function persistLanguagesFromExtract(params: {
   }
 
   if (persistenceTarget === "skip") {
+    const fallbackRes = await persistAchievementsFromExtract({
+      supabase,
+      userId,
+      jobId,
+      achievementsRaw: normalizedLanguages.map((lang: string) => ({ title: lang, category: "idioma", language: lang })),
+    }).catch((e: any) => ({ imported: 0, duplicatesSkipped: normalizedLanguages.length, error: String(e?.message || e) }));
     return {
-      imported: 0,
-      duplicatesSkipped: normalizedLanguages.length,
-      error: "languages_persistence_unavailable",
+      imported: Number((fallbackRes as any)?.imported || 0),
+      duplicatesSkipped: Number((fallbackRes as any)?.duplicatesSkipped || 0),
+      error: (fallbackRes as any)?.error || null,
     };
   }
 
@@ -220,6 +225,99 @@ async function persistLanguagesFromExtract(params: {
     if (persistErr) throw new Error(`languages_candidate_profile_persist_failed:${persistErr.message}`);
   }
   return { imported: toAppend.length, duplicatesSkipped: normalizedLanguages.length - toAppend.length };
+}
+
+async function persistAchievementsFromExtract(params: {
+  supabase: any;
+  userId: string;
+  jobId: string;
+  achievementsRaw: any[];
+}) {
+  const { supabase, userId, jobId, achievementsRaw } = params;
+  const normalized = (Array.isArray(achievementsRaw) ? achievementsRaw : [])
+    .map((item: any) => {
+      const title = normalizeText(item?.title);
+      const issuer = toNullable(item?.issuer);
+      const date = toNullable(item?.date);
+      const description = toNullable(item?.description);
+      const category = normalizeAchievementCategory(item?.category);
+      if (!title && !issuer && !date && !description) return null;
+      return {
+        title: title || issuer || description || "Logro detectado",
+        language: null,
+        level: null,
+        certificate_title: category === "certificacion" ? title || null : null,
+        issuer,
+        date,
+        description,
+        category,
+        import_source: "cv_parse",
+        import_job_id: jobId,
+        imported_at: new Date().toISOString(),
+      };
+    })
+    .filter(Boolean);
+
+  if (normalized.length === 0) {
+    return { imported: 0, duplicatesSkipped: 0 };
+  }
+
+  const [candidateProfileColumns, cpRes] = await Promise.all([
+    getTableColumns(supabase, "candidate_profiles"),
+    supabase.from("candidate_profiles").select("*").eq("user_id", userId).maybeSingle(),
+  ]);
+
+  const targetCandidates = candidateProfileColumns.has("achievements")
+    ? ["achievements", "other_achievements"]
+    : candidateProfileColumns.has("other_achievements")
+      ? ["other_achievements", "achievements"]
+      : ["achievements", "other_achievements"];
+
+  let lastError: any = null;
+
+  for (const targetColumn of targetCandidates) {
+    const currentAchievements = Array.isArray((cpRes.data as any)?.[targetColumn]) ? (cpRes.data as any)[targetColumn] : [];
+    const seen = new Set(
+      currentAchievements
+        .map((item: any) => {
+          const category = normalizeAchievementCategory(item?.category);
+          const title = normalizeText(item?.title || item?.certificate_title || item?.description).toLowerCase();
+          const issuer = normalizeText(item?.issuer).toLowerCase();
+          const date = normalizeText(item?.date).toLowerCase();
+          return `${category}|${title}|${issuer}|${date}`;
+        })
+        .filter(Boolean)
+    );
+
+    const toAppend = normalized.filter((item: any) => {
+      const key = `${normalizeAchievementCategory(item?.category)}|${normalizeText(item?.title).toLowerCase()}|${normalizeText(item?.issuer).toLowerCase()}|${normalizeText(item?.date).toLowerCase()}`;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    if (toAppend.length === 0) {
+      return { imported: 0, duplicatesSkipped: normalized.length };
+    }
+
+    const payload = {
+      user_id: userId,
+      [targetColumn]: [...currentAchievements, ...toAppend],
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error: persistErr } = cpRes.data
+      ? await supabase.from("candidate_profiles").update(payload).eq("user_id", userId)
+      : await supabase.from("candidate_profiles").insert(payload);
+
+    if (!persistErr) {
+      return { imported: toAppend.length, duplicatesSkipped: normalized.length - toAppend.length };
+    }
+
+    lastError = persistErr;
+  }
+
+  throw new Error(`achievements_candidate_profile_persist_failed:${lastError?.message || "unknown_error"}`);
 }
 
 export async function POST(req: Request) {
@@ -336,12 +434,20 @@ export async function POST(req: Request) {
       }
     }
 
-    const langImport = await persistLanguagesFromExtract({
-      supabase,
-      userId: user.id,
-      jobId,
-      languagesRaw: Array.isArray(result?.languages) ? result.languages : [],
-    }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) }));
+    const [langImport, achievementsImport] = await Promise.all([
+      persistLanguagesFromExtract({
+        supabase,
+        userId: user.id,
+        jobId,
+        languagesRaw: Array.isArray(result?.languages) ? result.languages : [],
+      }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
+      persistAchievementsFromExtract({
+        supabase,
+        userId: user.id,
+        jobId,
+        achievementsRaw: Array.isArray(result?.achievements) ? result.achievements : [],
+      }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
+    ]);
 
     return NextResponse.json({
       ok: true,
@@ -351,6 +457,8 @@ export async function POST(req: Request) {
       not_selected: Math.max(totalDetected - selectedCount, 0),
       languages_imported: Number((langImport as any)?.imported || 0),
       languages_error: (langImport as any)?.error || null,
+      achievements_imported: Number((achievementsImport as any)?.imported || 0),
+      achievements_error: (achievementsImport as any)?.error || null,
     });
   }
 
@@ -433,12 +541,20 @@ export async function POST(req: Request) {
       }
     }
 
-    const langImport = await persistLanguagesFromExtract({
-      supabase,
-      userId: user.id,
-      jobId,
-      languagesRaw: Array.isArray(result?.languages) ? result.languages : [],
-    }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) }));
+    const [langImport, achievementsImport] = await Promise.all([
+      persistLanguagesFromExtract({
+        supabase,
+        userId: user.id,
+        jobId,
+        languagesRaw: Array.isArray(result?.languages) ? result.languages : [],
+      }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
+      persistAchievementsFromExtract({
+        supabase,
+        userId: user.id,
+        jobId,
+        achievementsRaw: Array.isArray(result?.achievements) ? result.achievements : [],
+      }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
+    ]);
 
     return NextResponse.json({
       ok: true,
@@ -448,6 +564,8 @@ export async function POST(req: Request) {
       not_selected: Math.max(totalDetected - selectedCount, 0),
       languages_imported: Number((langImport as any)?.imported || 0),
       languages_error: (langImport as any)?.error || null,
+      achievements_imported: Number((achievementsImport as any)?.imported || 0),
+      achievements_error: (achievementsImport as any)?.error || null,
     });
   }
 
@@ -464,12 +582,20 @@ export async function POST(req: Request) {
       });
     }
 
-    const langResult = await persistLanguagesFromExtract({
-      supabase,
-      userId: user.id,
-      jobId,
-      languagesRaw: selectedRaw,
-    });
+    const [langResult, achievementsImport] = await Promise.all([
+      persistLanguagesFromExtract({
+        supabase,
+        userId: user.id,
+        jobId,
+        languagesRaw: selectedRaw,
+      }),
+      persistAchievementsFromExtract({
+        supabase,
+        userId: user.id,
+        jobId,
+        achievementsRaw: Array.isArray(result?.achievements) ? result.achievements : [],
+      }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
+    ]);
 
     return NextResponse.json({
       ok: true,
@@ -477,6 +603,8 @@ export async function POST(req: Request) {
       imported: langResult.imported,
       duplicates_skipped: langResult.duplicatesSkipped,
       not_selected: Math.max(extractedAll.length - selectedRaw.length, 0),
+      achievements_imported: Number((achievementsImport as any)?.imported || 0),
+      achievements_error: (achievementsImport as any)?.error || null,
     });
   }
 

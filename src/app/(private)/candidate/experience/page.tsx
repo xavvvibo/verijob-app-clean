@@ -152,6 +152,9 @@ export default async function CandidateExperiencePage({
   const companyCvImportFlag = Array.isArray(resolvedSearchParams?.company_cv_import)
     ? resolvedSearchParams.company_cv_import[0]
     : resolvedSearchParams?.company_cv_import;
+  const onboardingFlag = Array.isArray(resolvedSearchParams?.onboarding)
+    ? resolvedSearchParams.onboarding[0]
+    : resolvedSearchParams?.onboarding;
   const importSummary = summarizeCompanyCvImportUpdates((candidateProfile as any)?.raw_cv_json);
 
   return (
@@ -162,7 +165,7 @@ export default async function CandidateExperiencePage({
             <div>
               <CardTitle>Mis experiencias</CardTitle>
               <div className="mt-2 text-sm text-gray-600">
-                Revisa tu historial profesional, despliega cada experiencia para editarla cuando lo necesites y decide desde ahí si quieres verificarla o vincular documentación.
+                Revisa tu historial profesional una por una. Puedes editar, eliminar, solicitar verificación o vincular documentación desde cada experiencia.
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -184,7 +187,7 @@ export default async function CandidateExperiencePage({
           <div id="cv-upload" className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
             <div className="text-sm font-semibold text-gray-900">Importa tu experiencia desde tu CV</div>
             <div className="mt-1 text-xs text-gray-600">
-              Sube tu CV y Verijob extraerá automáticamente tu historial laboral para poder verificar cada experiencia.
+              Sube tu CV y revisa después cada experiencia detectada. También importaremos la formación, los idiomas y los logros que se reconozcan correctamente.
             </div>
             <div className="mt-3">
               <CvUploadAndParse />
@@ -194,6 +197,15 @@ export default async function CandidateExperiencePage({
           <div id="manual-experience">
             <ExperienceQuickAddClient />
           </div>
+
+          {String(onboardingFlag || "") === "1" ? (
+            <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+              <p className="font-semibold">Paso 2 de 4 · Revisa tus experiencias antes de verificarlas.</p>
+              <p className="mt-1">
+                Edita o elimina cualquier experiencia antes de continuar. Si una experiencia está duplicada o es incorrecta, puedes borrarla sin fricción.
+              </p>
+            </div>
+          ) : null}
 
           {String(companyCvImportFlag || "") === "1" ? (
             <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">

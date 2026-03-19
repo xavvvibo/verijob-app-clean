@@ -161,7 +161,7 @@ export default function ExperienceQuickAddClient() {
       {message ? (
         <div className="mt-3 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
           <div className="font-semibold">{message}</div>
-          <div className="mt-1 text-xs">Siguiente paso: verifica esta experiencia con tu empresa o añade evidencia documental.</div>
+          <div className="mt-1 text-xs">Siguiente paso: revísala, corrígela si hace falta y decide después si quieres verificarla o vincular documentación.</div>
         </div>
       ) : null}
     </div>

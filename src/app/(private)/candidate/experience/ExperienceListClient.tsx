@@ -78,6 +78,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
   const [expandedId, setExpandedId] = useState<string | null>(initialRows[0]?.id || null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [editingCurrentById, setEditingCurrentById] = useState<Record<string, boolean>>({});
   const [verificationEmailById, setVerificationEmailById] = useState<Record<string, string>>({});
@@ -199,6 +200,29 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
     }
   }
 
+  async function deleteRow(row: Row) {
+    const confirmed = window.confirm(
+      `Vas a eliminar la experiencia de ${row.role_title || "puesto"} en ${row.company_name || "esta empresa"}. Esta acción no afecta a tu perfil público hasta que la lista se actualice, pero sí eliminará esta entrada de tu historial.`
+    );
+    if (!confirmed) return;
+
+    setDeletingId(row.id);
+    setMessage(null);
+
+    const { error } = await supabase.from("profile_experiences").delete().eq("id", row.id);
+    setDeletingId(null);
+
+    if (error) {
+      setMessage(`No se pudo eliminar la experiencia: ${error.message}`);
+      return;
+    }
+
+    setRows((prev) => prev.filter((entry) => entry.id !== row.id));
+    if (expandedId === row.id) setExpandedId(null);
+    if (editingId === row.id) setEditingId(null);
+    setMessage("Experiencia eliminada correctamente.");
+  }
+
   if (rows.length === 0) {
     return (
       <div className="text-sm text-gray-600">
@@ -217,6 +241,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
         const isExpanded = expandedId === row.id;
         const isEditing = editingId === row.id;
         const isSaving = savingId === row.id;
+        const isDeleting = deletingId === row.id;
         const isVerified = row.status === "Verificada";
         const verifyState = verifyStateById[row.id] || "idle";
         const verifyMessage = verifyMessageById[row.id];
@@ -358,7 +383,18 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                         >
                           Vincular documentación
                         </Link>
+                        <button
+                          type="button"
+                          onClick={() => void deleteRow(row)}
+                          disabled={isDeleting}
+                          className="inline-flex items-center justify-center rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                        >
+                          {isDeleting ? "Eliminando…" : "Eliminar experiencia"}
+                        </button>
                       </div>
+                      <p className="mt-3 text-xs text-slate-500">
+                        Si una experiencia está duplicada o es incorrecta, puedes borrarla antes de continuar.
+                      </p>
                     </div>
 
                     {!isVerified ? (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import { normalizeCvLanguages, shouldApplyParsedResultOnce } from "@/lib/candidate/cv-parse-normalize";
@@ -19,6 +19,8 @@ type ImportResult = {
   imported: number;
   duplicatesSkipped: number;
   notSelected: number;
+  languagesImported?: number;
+  achievementsImported?: number;
 };
 
 const MAX_CV_SIZE_BYTES = 8 * 1024 * 1024;
@@ -152,7 +154,7 @@ export default function CvUploadAndParse() {
   const [jobId, setJobId] = useState<string | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [importing, setImporting] = useState<null | "experiences" | "education" | "languages">(null);
-  const [dedupLoading, setDedupLoading] = useState(false);
+  const [dedupLoading] = useState(false);
 
   const [expDrafts, setExpDrafts] = useState<any[]>([]);
   const [eduDrafts, setEduDrafts] = useState<any[]>([]);
@@ -171,9 +173,7 @@ export default function CvUploadAndParse() {
   const [languagesChecked, setLanguagesChecked] = useState<boolean[]>([]);
   const [lastAppliedJobId, setLastAppliedJobId] = useState<string | null>(null);
 
-  const warnings = Array.isArray(job?.result_json?.meta?.warnings) ? job?.result_json?.meta?.warnings : [];
-
-  async function loadProfileSets() {
+  const loadProfileSets = useCallback(async () => {
     const [{ data: profileExps }, { data: profile }] = await Promise.all([
       supabase.from("profile_experiences").select("role_title,company_name,start_date,end_date").order("created_at", { ascending: false }),
       supabase.from("candidate_profiles").select("education").maybeSingle(),
@@ -186,7 +186,7 @@ export default function CvUploadAndParse() {
     setExpExistingPossible(new Set(expRows.map((x: any) => expPossibleSig(x))));
     setEduExistingExact(new Set(eduRows.map((x: any) => eduExactSig(x))));
     setEduExistingPossible(new Set(eduRows.map((x: any) => eduPossibleSig(x))));
-  }
+  }, [supabase]);
 
   function recalcStatusesAndSelection(expsArg: any[], eduArg: any[]) {
     const nextExpStatuses = expsArg.map((x) => {
@@ -272,14 +272,16 @@ export default function CvUploadAndParse() {
       const imported = Number(data?.imported ?? 0);
       const duplicatesSkipped = Number(data?.duplicates_skipped ?? 0);
       const notSelected = Number(data?.not_selected ?? 0);
+      const languagesImported = Number(data?.languages_imported ?? 0);
+      const achievementsImported = Number(data?.achievements_imported ?? 0);
 
-      setLastImport({ section, imported, duplicatesSkipped, notSelected });
+      setLastImport({ section, imported, duplicatesSkipped, notSelected, languagesImported, achievementsImported });
       setMsg(
         section === "experiences"
-          ? `${imported} experiencias importadas · ${duplicatesSkipped} omitidas por duplicadas · ${notSelected} no seleccionadas.`
+          ? `${imported} experiencias importadas · ${duplicatesSkipped} omitidas por duplicadas · ${notSelected} no seleccionadas.${languagesImported > 0 || achievementsImported > 0 ? ` Además, hemos añadido ${languagesImported} idiomas y ${achievementsImported} logros detectados.` : ""}`
           : section === "education"
-            ? `${imported} formaciones importadas · ${duplicatesSkipped} omitidas por duplicadas · ${notSelected} no seleccionadas.`
-            : `${imported} idiomas importados · ${duplicatesSkipped} omitidos por duplicados · ${notSelected} no seleccionados.`
+            ? `${imported} formaciones importadas · ${duplicatesSkipped} omitidas por duplicadas · ${notSelected} no seleccionadas.${languagesImported > 0 || achievementsImported > 0 ? ` Además, hemos añadido ${languagesImported} idiomas y ${achievementsImported} logros detectados.` : ""}`
+            : `${imported} idiomas importados · ${duplicatesSkipped} omitidos por duplicados · ${notSelected} no seleccionados.${achievementsImported > 0 ? ` También hemos añadido ${achievementsImported} logros detectados.` : ""}`
       );
 
       await loadProfileSets();
@@ -390,6 +392,7 @@ export default function CvUploadAndParse() {
 
         const casted = data as Job;
         setJob(casted);
+        const nextWarnings = Array.isArray(casted?.result_json?.meta?.warnings) ? casted.result_json.meta.warnings : [];
 
         if (casted.status === "queued") {
           setMsg("Job en cola…");
@@ -404,7 +407,7 @@ export default function CvUploadAndParse() {
           const ex = Array.isArray(casted?.result_json?.experiences) ? casted.result_json.experiences.length : 0;
           const ed = Array.isArray(casted?.result_json?.education) ? casted.result_json.education.length : 0;
 
-          if (warnings.includes("cv_text_insufficient")) {
+          if (nextWarnings.includes("cv_text_insufficient")) {
             setMsg("Procesamiento completado con aviso: el CV tiene poco texto legible y la extracción puede ser incompleta.");
           } else if (ex === 0 && ed === 0) {
             setMsg("Procesamiento completado: no se detectaron experiencias ni formación con suficiente claridad.");
@@ -430,7 +433,7 @@ export default function CvUploadAndParse() {
       alive = false;
       clearInterval(t);
     };
-  }, [jobId, supabase, lastAppliedJobId]);
+  }, [jobId, supabase, lastAppliedJobId, loadProfileSets]);
 
   const statusLabel =
     job?.status === "queued" ? "En cola" : job?.status === "processing" ? "Procesando" : job?.status === "succeeded" ? "Completado" : job?.status === "failed" ? "Fallido" : "—";
@@ -480,12 +483,20 @@ export default function CvUploadAndParse() {
                 ? "Formación"
                 : "Idiomas"}: {lastImport.imported} importadas · {lastImport.duplicatesSkipped} omitidas por duplicadas · {lastImport.notSelected} no seleccionadas.
           </div>
+          {Number(lastImport.languagesImported || 0) > 0 || Number(lastImport.achievementsImported || 0) > 0 ? (
+            <div className="mt-1">
+              También hemos añadido {Number(lastImport.languagesImported || 0)} idiomas y {Number(lastImport.achievementsImported || 0)} logros detectados al perfil.
+            </div>
+          ) : null}
           <div className="mt-2 flex flex-wrap gap-2">
             <a href="/candidate/experience" className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
               Abrir experiencias
             </a>
             <a href="/candidate/education" className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
               Abrir formación
+            </a>
+            <a href="/candidate/achievements" className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
+              Abrir idiomas y logros
             </a>
           </div>
         </div>
@@ -502,9 +513,9 @@ export default function CvUploadAndParse() {
 
           {job.status === "succeeded" ? (
             <div className="mt-3 space-y-5">
-              {warnings.length > 0 ? (
+              {(Array.isArray(job?.result_json?.meta?.warnings) ? job.result_json.meta.warnings : []).length > 0 ? (
                 <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                  {warnings.includes("cv_text_insufficient")
+                  {(Array.isArray(job?.result_json?.meta?.warnings) ? job.result_json.meta.warnings : []).includes("cv_text_insufficient")
                     ? "Aviso: el CV tiene poco texto legible. Revisa los datos extraídos antes de importarlos."
                     : "Aviso: la extracción puede estar incompleta. Revisa los datos antes de importarlos."}
                 </div>

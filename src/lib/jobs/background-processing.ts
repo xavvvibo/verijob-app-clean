@@ -85,6 +85,15 @@ function buildCvExtractionPrompt(cvText: string) {
     '  "phone": string|null,',
     '  "headline": string|null,',
     '  "languages": string[],',
+    '  "achievements": [',
+    "    {",
+    '      "title": string|null,',
+    '      "category": string|null,',
+    '      "issuer": string|null,',
+    '      "date": string|null,',
+    '      "description": string|null',
+    "    }",
+    "  ],",
     '  "experiences": [',
     "    {",
     '      "company_name": string|null,',
@@ -133,12 +142,22 @@ function readResponseOutputText(resp: any): string {
 function normalizeCvExtract(raw: any, cvText = "") {
   const experiences = Array.isArray(raw?.experiences) ? raw.experiences : [];
   const education = Array.isArray(raw?.education) ? raw.education : [];
+  const achievements = Array.isArray(raw?.achievements) ? raw.achievements : [];
   return {
     full_name: normalizeText(raw?.full_name) || null,
     email: normalizeText(raw?.email) || null,
     phone: normalizeText(raw?.phone) || null,
     headline: normalizeText(raw?.headline) || null,
     languages: normalizeCvLanguages(Array.isArray(raw?.languages) ? raw.languages : [], 30, cvText),
+    achievements: achievements
+      .map((x: any) => ({
+        title: normalizeText(x?.title) || null,
+        category: normalizeText(x?.category) || null,
+        issuer: normalizeText(x?.issuer) || null,
+        date: normalizeText(x?.date) || null,
+        description: normalizeText(x?.description) || null,
+      }))
+      .filter((x: any) => x.title || x.issuer || x.date || x.description),
     experiences: experiences.map((x: any) => ({
       company_name: normalizeText(x?.company_name) || null,
       role_title: normalizeText(x?.role_title) || null,
