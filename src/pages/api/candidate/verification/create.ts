@@ -41,7 +41,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const normalizedEmploymentRecordId = String(employment_record_id ?? "").trim()
     const normalizedEmail = String(email ?? "").trim().toLowerCase()
-    const normalizedRequestedBy = String(requested_by ?? "").trim()
+    const normalizedRequestedBy = String(requested_by ?? user.id ?? "").trim()
     const normalizedCompanyName = String(company_name ?? "").trim() || null
     const normalizedRoleTitle = String(role_title ?? "").trim() || null
 
@@ -51,10 +51,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!normalizedEmail) {
       return res.status(400).json({ error: "missing_email" })
-    }
-
-    if (!normalizedRequestedBy) {
-      return res.status(400).json({ error: "missing_requested_by" })
     }
 
     if (normalizedRequestedBy !== user.id) {
