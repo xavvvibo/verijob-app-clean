@@ -1,39 +1,37 @@
 "use client"
 
 import { useState } from "react"
+import { createClient } from "@supabase/supabase-js"
 import { buildVerificationPayload } from "@/lib/fix-verification-payload"
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+)
 
 export default function NewVerificationClient({ experience }: any) {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
-  const canVerify = !!experience?.id
-
   const handleSubmit = async () => {
     setError("")
 
-    if (!experience?.id) {
-      setError("Guarda la experiencia antes de verificar")
+    const {
+      data: { user }
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      setError("No autenticado")
       return
     }
 
-    const email = experience.company_email
+    const payload = buildVerificationPayload(experience, user.id)
 
-    if (!email || !email.includes("@")) {
-      setError("Email empresa no válido")
-      return
-    }
+    console.log("PAYLOAD_FINAL", payload)
 
     setLoading(true)
 
     try {
-      const payload = buildVerificationPayload({
-        ...experience,
-        company_email: email
-      })
-
-      console.log("PAYLOAD_CLEAN", payload)
-
       const res = await fetch("/api/candidate/verification/create", {
         method: "POST",
         headers: {
@@ -44,34 +42,25 @@ export default function NewVerificationClient({ experience }: any) {
 
       const data = await res.json()
 
-      console.log("RESPONSE_DEBUG", data)
-
       if (!res.ok) {
-        setError(data.error || "Error creando verificación")
+        setError(data.error || "Error")
         return
       }
 
       window.location.reload()
     } catch (e) {
-      setError("Error de red")
+      setError("Error red")
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="space-y-2">
-      <button
-        onClick={handleSubmit}
-        disabled={!canVerify || loading}
-        className={`px-4 py-2 text-white ${
-          !canVerify ? "bg-gray-400" : "bg-blue-600"
-        }`}
-      >
+    <div>
+      <button onClick={handleSubmit} disabled={loading}>
         Solicitar verificación
       </button>
-
-      {error && <p className="text-red-500">{error}</p>}
+      {error && <p style={{ color: "red" }}>{error}</p>}
     </div>
   )
 }
