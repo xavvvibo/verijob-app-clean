@@ -34,7 +34,7 @@ export default function NewVerificationClient({ experiences = [] }: any) {
 
     console.log("PAYLOAD_FINAL_NEW_VERIFICATION", payload)
 
-    if (!payload?.employment_record_id || !payload?.email || !payload?.requested_by) {
+    if ((!payload?.employment_record_id && !payload?.profile_experience_id) || !payload?.email || !payload?.requested_by) {
       setError("Payload incompleto")
       return
     }

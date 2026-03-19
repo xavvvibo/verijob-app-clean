@@ -42,7 +42,7 @@ async function resolveEmploymentRecordId(params: {
 }) {
   const candidateId = String(params.candidateId || "").trim()
   const directEmploymentRecordId = String(params.employmentRecordId || "").trim()
-  const profileExperienceId = String(params.profileExperienceId || "").trim()
+  const profileExperienceId = String(params.profileExperienceId || "").trim() || directEmploymentRecordId
 
   if (directEmploymentRecordId) {
     const { data: employment } = await params.admin
@@ -68,7 +68,12 @@ async function resolveEmploymentRecordId(params: {
     .maybeSingle()
 
   if (profileExperienceError || !profileExperience) {
-    return { employmentRecordId: "", profileExperienceId }
+    return {
+      employmentRecordId: "",
+      profileExperienceId,
+      resolutionError: profileExperienceError?.message || "profile_experience_not_found",
+      resolutionStep: "profile_experience_lookup",
+    }
   }
 
   const employmentColumns = await getTableColumns(params.admin, "employment_records")
@@ -113,7 +118,12 @@ async function resolveEmploymentRecordId(params: {
     .single()
 
   if (createdEmploymentError || !createdEmployment?.id) {
-    return { employmentRecordId: "", profileExperienceId }
+    return {
+      employmentRecordId: "",
+      profileExperienceId,
+      resolutionError: createdEmploymentError?.message || "employment_record_insert_failed",
+      resolutionStep: "employment_record_insert",
+    }
   }
 
   return { employmentRecordId: String(createdEmployment.id), profileExperienceId }
@@ -185,7 +195,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!normalizedEmploymentRecordId) {
       return res.status(400).json({
         error: "missing_employment_record_id",
-        details: "No se ha podido resolver un employment_record válido para esta experiencia.",
+        details: resolvedIds?.resolutionError || "No se ha podido resolver un employment_record válido para esta experiencia.",
+        resolution_step: resolvedIds?.resolutionStep || "employment_record_resolution",
       })
     }
 
