@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
+import { buildVerificationPayload } from "@/lib/fix-verification-payload";
 
 type ExperienceStatus =
   | "Sin verificar"
@@ -146,20 +147,17 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
     setVerifyMessageById((prev) => ({ ...prev, [row.id]: null }));
 
     try {
+      const payload = buildVerificationPayload({
+        ...row,
+        company_email: email,
+      });
+      console.log("PAYLOAD_CLEAN", payload);
+
       const res = await fetch("/api/candidate/verification/create", {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          employment_record_id: row.id,
-          company_name_freeform: row.company_name || "",
-          company_email: email,
-          position: row.role_title || "",
-          start_date: normalizeDateForSave(row.start_date || null),
-          end_date: row.end_date ? normalizeDateForSave(row.end_date) : null,
-          is_current: !row.end_date,
-          source_profile_experience_id: row.id,
-        }),
+        body: JSON.stringify(payload),
       });
 
       const json = await res.json().catch(() => ({}));

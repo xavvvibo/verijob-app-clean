@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { buildVerificationPayload } from "@/lib/fix-verification-payload"
 
 export default function NewVerificationClient({ experience }: any) {
   const [error, setError] = useState("")
@@ -26,19 +27,19 @@ export default function NewVerificationClient({ experience }: any) {
     setLoading(true)
 
     try {
-      const payload = {
-        employment_record_id: experience.id,
-        email: email.trim()
-      }
+      const payload = buildVerificationPayload({
+        ...experience,
+        company_email: email
+      })
 
-      console.log("PAYLOAD_DEBUG_CORRECT", payload)
+      console.log("PAYLOAD_CLEAN", payload)
 
       const res = await fetch("/api/candidate/verification/create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(payload) // 🔴 FORZADO
+        body: JSON.stringify(payload)
       })
 
       const data = await res.json()
