@@ -31,14 +31,14 @@ export default function NewVerificationClient({ experience }: any) {
         email: email.trim()
       }
 
-      console.log("PAYLOAD_DEBUG", payload)
+      console.log("PAYLOAD_DEBUG_CORRECT", payload)
 
       const res = await fetch("/api/candidate/verification/create", {
         method: "POST",
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload) // 🔴 FORZADO
       })
 
       const data = await res.json()
@@ -69,12 +69,6 @@ export default function NewVerificationClient({ experience }: any) {
       >
         Solicitar verificación
       </button>
-
-      {!canVerify && (
-        <p className="text-sm text-gray-500">
-          Guarda la experiencia antes de solicitar verificación
-        </p>
-      )}
 
       {error && <p className="text-red-500">{error}</p>}
     </div>
