@@ -28,7 +28,7 @@ export default async function CandidateExperiencePage({
     .single();
   if (!profile) redirect("/onboarding");
 
-  const [{ data: rows }, { data: importedRows }, { data: candidateProfile }] = await Promise.all([
+  const [{ data: rows }, { data: importedRows }, { data: candidateProfile }, { data: employmentRows }] = await Promise.all([
     supabase
       .from("profile_experiences")
       .select("id, role_title, company_name, start_date, end_date, description, matched_verification_id, confidence, created_at")
@@ -43,6 +43,10 @@ export default async function CandidateExperiencePage({
       .select("raw_cv_json")
       .eq("user_id", au.user.id)
       .maybeSingle(),
+    supabase
+      .from("employment_records")
+      .select("id, position, company_name_freeform, start_date, end_date")
+      .eq("candidate_id", au.user.id),
   ]);
 
   const verificationIds = (rows || []).map((x: any) => x.matched_verification_id).filter(Boolean);
@@ -79,6 +83,15 @@ export default async function CandidateExperiencePage({
     return String(v || "").trim().toLowerCase();
   }
 
+  function experienceMatchKey(input: any) {
+    return [
+      norm(input?.role_title ?? input?.position),
+      norm(input?.company_name ?? input?.company_name_freeform),
+      norm(input?.start_date),
+      norm(input?.end_date),
+    ].join("|");
+  }
+
   const importedSet = new Set(
     (importedRows || []).map((r: any) => `${norm(r?.title)}|${norm(r?.company_name)}|${norm(r?.start_date)}|${norm(r?.end_date)}`)
   );
@@ -112,8 +125,18 @@ export default async function CandidateExperiencePage({
     return "Solicitud en curso";
   }
 
+  const employmentBySignature = new Map<string, string>();
+  for (const row of employmentRows || []) {
+    const key = experienceMatchKey(row);
+    if (key && !employmentBySignature.has(key)) {
+      employmentBySignature.set(key, String((row as any)?.id || ""));
+    }
+  }
+
   const normalizedRows = (rows || []).map((r: any) => ({
     id: String(r.id),
+    profile_experience_id: String(r.id),
+    employment_record_id: employmentBySignature.get(experienceMatchKey(r)) || "",
     role_title: r.role_title ?? null,
     company_name: r.company_name ?? null,
     start_date: r.start_date ?? null,
