@@ -98,7 +98,6 @@ async function resolveEmploymentRecordId(params: {
     return { employmentRecordId: String(existingEmployment.id), profileExperienceId }
   }
 
-  const nowIso = new Date().toISOString()
   const insertPayload: Record<string, any> = {
     candidate_id: candidateId,
     position: (profileExperience as any)?.role_title || null,
@@ -107,9 +106,7 @@ async function resolveEmploymentRecordId(params: {
     end_date: (profileExperience as any)?.end_date || null,
   }
   if (employmentColumns.has("source_experience_id")) insertPayload.source_experience_id = profileExperienceId
-  if (employmentColumns.has("last_verification_requested_at")) insertPayload.last_verification_requested_at = nowIso
-  if (employmentColumns.has("is_current")) insertPayload.is_current = !(profileExperience as any)?.end_date
-  if (employmentColumns.has("company_id")) insertPayload.company_id = null
+  if (employmentColumns.has("verification_status")) insertPayload.verification_status = "not_requested"
 
   const { data: createdEmployment, error: createdEmploymentError } = await params.admin
     .from("employment_records")
@@ -123,6 +120,8 @@ async function resolveEmploymentRecordId(params: {
       profileExperienceId,
       resolutionError: createdEmploymentError?.message || "employment_record_insert_failed",
       resolutionStep: "employment_record_insert",
+      employmentRecordInsertPayload: insertPayload,
+      employmentRecordStatusAttempted: insertPayload.verification_status ?? null,
     }
   }
 
@@ -197,6 +196,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         error: "missing_employment_record_id",
         details: resolvedIds?.resolutionError || "No se ha podido resolver un employment_record válido para esta experiencia.",
         resolution_step: resolvedIds?.resolutionStep || "employment_record_resolution",
+        employment_record_insert_payload: resolvedIds?.employmentRecordInsertPayload || null,
+        employment_record_status_attempted: resolvedIds?.employmentRecordStatusAttempted ?? null,
       })
     }
 

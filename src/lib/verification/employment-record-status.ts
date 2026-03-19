@@ -97,7 +97,7 @@ export async function markEmploymentRecordVerificationRequested(args: {
     employmentRecordId: args.employmentRecordId,
     candidateId: args.candidateId,
     basePatch,
-    statusVariants: ["pending_company", "company_registered_pending", "requested"],
+    statusVariants: ["pending_company", "company_registered_pending"],
   })
 }
 
@@ -126,7 +126,7 @@ export async function markEmploymentRecordVerificationDecision(args: {
       ? ["verified"]
       : args.decision === "reject"
         ? ["rejected"]
-        : ["reviewing", "pending_company", "company_registered_pending", "requested"]
+        : ["reviewing", "pending_company", "company_registered_pending"]
 
   return applyEmploymentPatchVariants({
     admin: args.admin,
