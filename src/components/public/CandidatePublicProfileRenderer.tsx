@@ -126,7 +126,7 @@ function getModeCapabilities(mode: PublicProfilePreviewMode) {
   return {
     showTrustScore: mode !== "public",
     showContact: mode === "full",
-    maxExperiences: mode === "public" ? 4 : 24,
+    maxExperiences: mode === "public" ? 2 : 24,
   };
 }
 
@@ -303,6 +303,11 @@ export function CandidatePublicProfileRenderer({
   const isPrintMode = renderMode === "print";
   const isOpenPublicView = mode === "public" && !internalPreview;
   const displayName = isOpenPublicView ? (teaser?.public_name || teaser?.full_name) : teaser?.full_name;
+  const trustHeadline = `${Math.round(trust)} · ${trustStateLabel}`;
+  const trustSubheadline =
+    verificationSummary.verified > 0
+      ? `${verificationSummary.verified} ${verificationSummary.verified === 1 ? "experiencia verificada" : "experiencias verificadas"}`
+      : trustStateExplanation;
   const hasSecondarySummary = Boolean((qrEnabled || internalPreview) || capabilities.showContact || companyAccess);
   const hasExperiences = experiences.length > 0;
   const hasEducation = education.length > 0;
@@ -464,34 +469,55 @@ export function CandidatePublicProfileRenderer({
               </p>
             )}
 
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-              <SignalCard
-                label="Verificaciones"
-                value={verificationSummary.verified}
-                hint="Experiencias contrastadas"
-              />
-              <SignalCard
-                label="En proceso"
-                value={verificationSummary.inProcess}
-                hint="Validaciones en marcha"
-              />
-              <SignalCard
-                label="Evidencias"
-                value={verificationSummary.evidences}
-                hint="Soporte documental validado"
-              />
-              {!isOpenPublicView ? (
-                <SignalCard
-                  label="Uso empresarial"
-                  value={verificationSummary.reuse}
-                  hint="Actividad empresarial registrada"
-                />
-              ) : null}
-              <SignalCard
-                label="Confianza del perfil"
-                value={trustStateLabel}
-                hint={trustStateExplanation}
-              />
+            <div className={`mt-4 ${isOpenPublicView ? "rounded-2xl border border-blue-100 bg-blue-50/70 p-4" : "grid gap-2 sm:grid-cols-2 xl:grid-cols-4"}`}>
+              {isOpenPublicView ? (
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-900">Confianza del perfil</p>
+                    <p className="mt-2 text-2xl font-semibold text-slate-900">{trustHeadline}</p>
+                    <p className="mt-1 text-sm text-slate-700">{trustSubheadline}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                      {verificationSummary.verified} verificadas
+                    </span>
+                    <span className="rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                      {verificationSummary.inProcess} en proceso
+                    </span>
+                    <span className="rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                      {verificationSummary.evidences} con soporte documental
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <SignalCard
+                    label="Verificaciones"
+                    value={verificationSummary.verified}
+                    hint="Experiencias contrastadas"
+                  />
+                  <SignalCard
+                    label="En proceso"
+                    value={verificationSummary.inProcess}
+                    hint="Validaciones en marcha"
+                  />
+                  <SignalCard
+                    label="Evidencias"
+                    value={verificationSummary.evidences}
+                    hint="Soporte documental validado"
+                  />
+                  <SignalCard
+                    label="Uso empresarial"
+                    value={verificationSummary.reuse}
+                    hint="Actividad empresarial registrada"
+                  />
+                  <SignalCard
+                    label="Confianza del perfil"
+                    value={trustStateLabel}
+                    hint={trustStateExplanation}
+                  />
+                </>
+              )}
             </div>
 
             {!isPrintMode ? (
@@ -514,7 +540,7 @@ export function CandidatePublicProfileRenderer({
             ) : null}
         </header>
 
-        {!isPrintMode ? (
+        {!isPrintMode && !isOpenPublicView ? (
           <div className={`grid gap-4 ${hasSecondarySummary ? "xl:grid-cols-[minmax(0,1fr)_300px]" : "grid-cols-1"}`}>
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
@@ -668,12 +694,16 @@ export function CandidatePublicProfileRenderer({
                       </p>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                       <SummaryInfo label="Experiencias visibles" value={String(verificationSummary.experiences)} />
-                      <SummaryInfo label="Formación visible" value={String(Number(teaser?.education_total ?? education.length))} />
-                      <SummaryInfo
-                        label="Idiomas"
-                        value={publicLanguages.length ? publicLanguages.join(", ") : isOpenPublicView ? "No visibles" : "Pendientes"}
-                      />
-                      <SummaryInfo label="Estado de confianza" value={trustStateLabel} />
+                      {!isOpenPublicView ? (
+                        <SummaryInfo label="Formación visible" value={String(Number(teaser?.education_total ?? education.length))} />
+                      ) : null}
+                      {!isOpenPublicView ? (
+                        <SummaryInfo
+                          label="Idiomas"
+                          value={publicLanguages.length ? publicLanguages.join(", ") : "Pendientes"}
+                        />
+                      ) : null}
+                      <SummaryInfo label="Estado de confianza" value={isOpenPublicView ? "Perfil con validaciones reales" : trustStateLabel} />
                     </div>
                     {!isOpenPublicView && featuredVerifiedExperiences.length ? (
                       <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-3">
@@ -699,6 +729,52 @@ export function CandidatePublicProfileRenderer({
                     ) : null}
                   </div>
                 </Card>
+
+                {isOpenPublicView ? (
+                  <Card
+                    title="Trayectoria verificada"
+                    subtitle="Muestra resumida de la experiencia más sólida del perfil."
+                  >
+                    {experiences.length ? (
+                      <div className="space-y-3">
+                        {experiences.map((exp, index) => {
+                          const statusBadge = getStatusBadge(exp?.status_text);
+                          const trustPresentation = resolveExperienceTrustPresentation({
+                            rawStatus: exp?.status_text,
+                            evidenceCount: Number(exp?.evidence_count ?? 0),
+                          });
+                          return (
+                            <article
+                              key={String(exp?.experience_id || `public-exp-${index}`)}
+                              className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div>
+                                  <h4 className="text-base font-semibold text-slate-900">{exp?.position || "Experiencia"}</h4>
+                                  <p className="text-sm text-slate-600">{exp?.company_name || "Empresa"}</p>
+                                  <p className="mt-1 text-xs text-slate-500">{formatPeriod(exp?.start_date, exp?.end_date)}</p>
+                                </div>
+                                <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusBadge.className}`}>
+                                  {statusBadge.label}
+                                </span>
+                              </div>
+                              <p className="mt-3 text-sm text-slate-700">{trustPresentation.explanation}</p>
+                              {trustPresentation.support_label ? (
+                                <div className="mt-2">
+                                  <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-800">
+                                    {trustPresentation.support_label}
+                                  </span>
+                                </div>
+                              ) : null}
+                            </article>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <Empty text="Todavía no hay experiencias públicas destacadas." />
+                    )}
+                  </Card>
+                ) : null}
 
                 {(!isOpenPublicView && (experiences.length > 0 || internalPreview)) ? (
                   <Card
@@ -781,6 +857,7 @@ export function CandidatePublicProfileRenderer({
                   </Card>
                 ) : null}
 
+                {!isOpenPublicView ? (
                 <Card title="Datos clave" subtitle="Solo datos públicos y relevantes para evaluación profesional.">
                   <dl className="grid gap-3 text-sm sm:grid-cols-2">
                     {teaser?.location || internalPreview ? (
@@ -796,6 +873,7 @@ export function CandidatePublicProfileRenderer({
                     <Item label="Estado de perfil" value={profileStatus} />
                   </dl>
                 </Card>
+                ) : null}
 
                 {completionHints.length ? (
                   <Card title="Sugerencias de completado" subtitle="Solo visible en tu preview interna.">
@@ -962,6 +1040,28 @@ export function CandidatePublicProfileRenderer({
                       <Empty text="No hay logros públicos visibles." />
                     ) : null}
                   </div>
+                </div>
+              </Card>
+            ) : null}
+
+            {isOpenPublicView ? (
+              <Card
+                title="Este perfil incluye más experiencia verificada y contexto profesional."
+                subtitle="Regístrate o desbloquea el perfil completo para acceder a una visión más rica del candidato."
+              >
+                <div className="flex flex-wrap gap-3">
+                  <a
+                    href={loginUrl}
+                    className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+                  >
+                    Desbloquear perfil completo
+                  </a>
+                  <a
+                    href={signupUrl}
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Registrarse
+                  </a>
                 </div>
               </Card>
             ) : null}
