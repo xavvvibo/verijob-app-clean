@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { readEffectiveCompanySubscriptionState } from "@/lib/billing/effectiveSubscription";
+import { normalizeEmailDomain, normalizeHost } from "@/lib/verification/verifier-email-signal";
 
 type VerificationRequestRow = {
   id: string;
@@ -11,6 +12,9 @@ type VerificationRequestRow = {
   created_at?: string | null;
   resolved_at: string | null;
   company_name_target: string | null;
+  external_email_target?: string | null;
+  request_context?: Record<string, any> | null;
+  company_id?: string | null;
   employment_record_id?: string | null;
   employment_records:
     | {
@@ -108,17 +112,62 @@ export default async function CompanyRequestsPage({
   if (!profile?.onboarding_completed) redirect("/onboarding/company?blocked=1&source=company");
   if (!profile?.active_company_id) redirect("/company");
 
-  const { data: allData } = await supabase
+  const [{ data: allData }, { data: companyProfile }, { data: companyMembers }] = await Promise.all([
+    supabase
     .from("verification_requests")
-    .select("id,requested_by,status,requested_at,created_at,resolved_at,company_name_target,employment_record_id,employment_records(position,company_name_freeform,start_date,end_date)")
-    .eq("company_id", profile.active_company_id);
+    .select("id,requested_by,status,requested_at,created_at,resolved_at,company_name_target,external_email_target,request_context,employment_record_id,company_id,employment_records(position,company_name_freeform,start_date,end_date)")
+    .or(`company_id.eq.${profile.active_company_id},company_id.is.null`),
+    supabase
+      .from("company_profiles")
+      .select("contact_email,website_url,trade_name,legal_name")
+      .eq("company_id", profile.active_company_id)
+      .maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("email")
+      .eq("role", "company")
+      .eq("active_company_id", profile.active_company_id),
+  ])
+
+  const companyEmailDomain = normalizeEmailDomain((companyProfile as any)?.contact_email || null)
+  const companyWebsiteDomain = normalizeHost((companyProfile as any)?.website_url || null)
+  const companyMemberDomains = new Set(
+    (Array.isArray(companyMembers) ? companyMembers : [])
+      .map((row: any) => normalizeEmailDomain((row as any)?.email || null))
+      .filter(Boolean) as string[],
+  )
 
   const effectiveSubscription = await readEffectiveCompanySubscriptionState(supabase, {
     userId: user.id,
     companyId: String(profile.active_company_id),
   });
   const planActive = ["active", "trialing"].includes(String(effectiveSubscription.status || "").toLowerCase());
-  const baseRows = (allData || []) as VerificationRequestRow[];
+  const baseRows = ((allData || []) as VerificationRequestRow[]).filter((row: any) => {
+    if (String((row as any)?.company_id || "") === String(profile.active_company_id)) return true
+    const targetDomain = normalizeEmailDomain((row as any)?.external_email_target || null)
+    const requestContext = row?.request_context && typeof row.request_context === "object" ? row.request_context : {}
+    const resolution = String((requestContext as any)?.company_association_resolution || "").trim().toLowerCase()
+    return Boolean(
+      targetDomain &&
+        (
+          (companyEmailDomain && targetDomain === companyEmailDomain) ||
+          (companyWebsiteDomain && targetDomain === companyWebsiteDomain) ||
+          companyMemberDomains.has(targetDomain)
+        ),
+    ) || Boolean(
+      !String((row as any)?.company_id || "").trim() &&
+      resolution &&
+      resolution !== "unresolved" &&
+      resolution !== "ambiguous_exact_match" &&
+      resolution !== "ambiguous_domain_match" &&
+      targetDomain &&
+      (
+        (companyEmailDomain && targetDomain === companyEmailDomain) ||
+        (companyWebsiteDomain && targetDomain === companyWebsiteDomain) ||
+        companyMemberDomains.has(targetDomain)
+      ),
+    )
+  });
   const verificationIds = baseRows.map((row) => row.id);
   const candidateIds = Array.from(new Set(baseRows.map((row) => row.requested_by).filter(Boolean))) as string[];
 

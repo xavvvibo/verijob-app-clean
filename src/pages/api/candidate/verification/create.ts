@@ -8,6 +8,10 @@ import {
 } from "@/lib/verification/external-resolution"
 import { markEmploymentRecordVerificationRequested } from "@/lib/verification/employment-record-status"
 import { EMPLOYMENT_RECORD_VERIFICATION_STATUS } from "@/lib/verification/employment-record-verification-status"
+import {
+  classifyVerifierEmail,
+  resolveVerificationCompanyAssociation,
+} from "@/lib/verification/verifier-email-signal"
 import { sendTransactionalEmail } from "@/server/email/sendTransactionalEmail"
 import { buildExternalExperienceVerificationEmail } from "@/lib/email/templates/externalExperienceVerification"
 
@@ -258,6 +262,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const admin = createAdminClient()
+    const companyAssociation = await resolveVerificationCompanyAssociation({
+      admin,
+      targetEmail: normalizedEmail,
+      companyName: normalizedCompanyName,
+    })
+    const companyAssociationProfile = companyAssociation.companyId
+      ? await admin
+          .from("company_profiles")
+          .select("contact_email,website_url")
+          .eq("company_id", companyAssociation.companyId)
+          .maybeSingle()
+      : { data: null as any }
+    const verifierEmailSignal = classifyVerifierEmail({
+      email: normalizedEmail,
+      companyName: normalizedCompanyName,
+      companyWebsiteUrl: companyAssociationProfile.data?.website_url || null,
+      companyContactEmail: companyAssociationProfile.data?.contact_email || null,
+    })
     const resolvedIds = await resolveEmploymentRecordId({
       admin,
       candidateId: normalizedRequestedBy,
@@ -279,7 +301,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     let existingRequest: any = null
 
-    const activeLookup = await admin
+    let activeLookupQuery = admin
       .from("verification_requests")
       .select("id,status,resolved_at,external_resolved,external_token,external_token_expires_at")
       .eq("requested_by", normalizedRequestedBy)
@@ -289,6 +311,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .neq("status", "revoked")
       .order("created_at", { ascending: false })
       .limit(5)
+
+    activeLookupQuery = companyAssociation.companyId
+      ? activeLookupQuery.eq("company_id", companyAssociation.companyId)
+      : activeLookupQuery.is("company_id", null)
+
+    const activeLookup = await activeLookupQuery
 
     if (activeLookup.error && !isMissingExternalResolvedColumn(activeLookup.error)) {
       return res.status(400).json({
@@ -349,6 +377,45 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (existingRequest?.id) {
+      let repairedRequest = existingRequest
+      let repairedCompanyId = String((existingRequest as any)?.company_id || "").trim() || null
+
+      if (!repairedCompanyId && companyAssociation.companyId) {
+        const existingContext =
+          (existingRequest as any)?.request_context && typeof (existingRequest as any).request_context === "object"
+            ? (existingRequest as any).request_context
+            : {}
+
+        const repairPayload = {
+          company_id: companyAssociation.companyId,
+          company_name_target: normalizedCompanyName,
+          request_context: {
+            ...existingContext,
+            source: "candidate_verification_request",
+            company_email: normalizedEmail,
+            company_name: normalizedCompanyName,
+            role_title: normalizedRoleTitle,
+            company_association_resolution: companyAssociation.resolution,
+            verifier_email_signal: verifierEmailSignal,
+            owner_attention_required:
+              verifierEmailSignal.owner_attention_required || !companyAssociation.companyId,
+          },
+        }
+
+        const { error: repairError } = await admin
+          .from("verification_requests")
+          .update(repairPayload)
+          .eq("id", existingRequest.id)
+
+        if (!repairError) {
+          repairedCompanyId = companyAssociation.companyId
+          repairedRequest = {
+            ...existingRequest,
+            ...repairPayload,
+          }
+        }
+      }
+
       const employmentUpdate = await markEmploymentRecordVerificationRequested({
         admin,
         employmentRecordId: normalizedEmploymentRecordId,
@@ -365,11 +432,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .eq("user_id", normalizedRequestedBy)
       }
 
-      const emailDispatch = await dispatchVerificationEmail(existingRequest)
+      const emailDispatch = await dispatchVerificationEmail(repairedRequest)
 
       return res.status(200).json({
         ok: true,
         id: existingRequest.id,
+        verification_request_id: existingRequest.id,
+        employment_record_id: normalizedEmploymentRecordId,
+        company_id: repairedCompanyId,
         already_exists: true,
         employment_record_insert_payload: null,
         employment_record_update_payload: employmentUpdate.patchApplied,
@@ -383,6 +453,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const insertPayload = {
       employment_record_id: normalizedEmploymentRecordId,
+      company_id: companyAssociation.companyId,
       external_email_target: normalizedEmail,
       verification_channel: "email",
       status: "pending_company",
@@ -393,6 +464,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         company_email: normalizedEmail,
         company_name: normalizedCompanyName,
         role_title: normalizedRoleTitle,
+        company_association_resolution: companyAssociation.resolution,
+        verifier_email_signal: verifierEmailSignal,
+        owner_attention_required:
+          verifierEmailSignal.owner_attention_required || !companyAssociation.companyId,
       },
     }
 
@@ -431,6 +506,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       ok: true,
       id: data.id,
+      verification_request_id: data.id,
+      employment_record_id: normalizedEmploymentRecordId,
+      company_id: companyAssociation.companyId,
       employment_record_insert_payload: null,
       employment_record_update_payload: employmentUpdate.patchApplied,
       employment_record_status_applied: employmentUpdate.statusApplied,

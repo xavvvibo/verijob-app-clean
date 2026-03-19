@@ -52,8 +52,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const patch: Record<string, any> = {
       id: au.user.id,
       onboarding_completed: true,
-      onboarding_step: "achievements",
+      onboarding_step: "finish",
     };
+
+    const requestedStep = String(body?.onboarding_step || "").trim().toLowerCase();
+    if (requestedStep === "finish" || requestedStep === "verification" || requestedStep === "evidence" || requestedStep === "experience") {
+      patch.onboarding_step = requestedStep;
+    }
 
     const allowedVisibility = new Set(["private", "public", "public_anonymous"]);
     const incomingVisibility = String(body?.profile_visibility || "").trim();

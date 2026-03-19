@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/browser";
-import { TrustLevelBadge, VerificationBadge } from "@/components/brand/VerificationBadge";
+import { VerificationBadge } from "@/components/brand/VerificationBadge";
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
 
 type ProfileLite = {
@@ -36,75 +36,72 @@ type VerificationRow = {
   evidence_count: number | null;
 };
 
-type TrustBreakdown = {
-  verification?: number;
-  evidence?: number;
-  consistency?: number;
-  reuse?: number;
+type TrustState = {
+  title: string;
+  summary: string;
+  tone: string;
 };
 
 function clamp(n: number, a = 0, b = 100) {
   return Math.max(a, Math.min(b, n));
 }
 
-function scoreTone(score: number) {
-  if (score >= 80) {
+function resolveTrustState(args: {
+  verified: number;
+  inProcess: number;
+  evidences: number;
+  profileCompletionScore: number;
+}) : TrustState {
+  if (args.verified >= 2 || (args.verified >= 1 && args.evidences >= 1) || args.profileCompletionScore >= 85) {
     return {
-      ring: "stroke-green-600",
-      badge: "bg-green-50 text-green-700 border-green-100",
-      label: "Credibilidad alta",
+      title: "Alta confianza",
+      summary: "Tu perfil ya muestra señales claras de experiencia validada y credibilidad profesional.",
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
     };
   }
-  if (score >= 45) {
+  if (args.verified >= 1 || args.inProcess >= 1 || args.evidences >= 1 || args.profileCompletionScore >= 55) {
     return {
-      ring: "stroke-blue-600",
-      badge: "bg-blue-50 text-blue-700 border-blue-100",
-      label: "Credibilidad media",
+      title: "Confianza media",
+      summary: "Ya has dado pasos sólidos. Una validación más o documentación adicional reforzarán tu perfil.",
+      tone: "border-blue-200 bg-blue-50 text-blue-900",
     };
   }
   return {
-    ring: "stroke-amber-500",
-    badge: "bg-amber-50 text-amber-800 border-amber-200",
-    label: "Credibilidad en desarrollo",
+    title: "Perfil inicial",
+    summary: "Tu perfil ya está en marcha. La siguiente mejor acción es validar una experiencia o añadir documentación.",
+    tone: "border-amber-200 bg-amber-50 text-amber-900",
   };
 }
 
-function TrustRing({ score }: { score: number }) {
-  const s = clamp(score);
-  const radius = 74;
-  const stroke = 28;
-  const normalized = radius - stroke * 0.5;
-  const circumference = normalized * 2 * Math.PI;
-  const offset = circumference - (s / 100) * circumference;
-  const tone = scoreTone(s);
+function buildTrustSignals(args: { verified: number; inProcess: number; evidences: number; completed: boolean }) {
+  return [
+    `${args.verified} ${args.verified === 1 ? "experiencia verificada" : "experiencias verificadas"}`,
+    `${args.inProcess} ${args.inProcess === 1 ? "verificación en proceso" : "verificaciones en proceso"}`,
+    `${args.evidences} ${args.evidences === 1 ? "documento subido" : "documentos subidos"}`,
+    args.completed ? "Perfil completado" : "Perfil por completar",
+  ];
+}
 
+function TrustSnapshot({
+  state,
+  signals,
+}: {
+  state: TrustState;
+  signals: string[];
+}) {
   return (
-    <div className="flex flex-col items-center">
-      <div className="relative flex h-56 w-56 items-center justify-center">
-        <svg height="224" width="224" className="rotate-[-90deg]">
-          <circle stroke="#e5e7eb" fill="transparent" strokeWidth={stroke} r={normalized} cx="112" cy="112" />
-          <circle
-            strokeLinecap="round"
-            className={`${tone.ring} transition-all duration-700`}
-            fill="transparent"
-            strokeWidth={stroke}
-            strokeDasharray={circumference}
-            strokeDashoffset={offset}
-            r={normalized}
-            cx="112"
-            cy="112"
-          />
-        </svg>
-        <div className="absolute text-center">
-          <div className="text-4xl font-semibold text-gray-900 tabular-nums">{s}%</div>
-          <div className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${tone.badge}`}>
-            {tone.label}
-          </div>
-        </div>
+    <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${state.tone}`}>
+        {state.title}
       </div>
-      <p className="mt-3 text-center text-sm text-gray-600">
-        Añade evidencias o verifica tu experiencia para mejorar tu credibilidad.
-      </p>
+      <p className="mt-3 text-sm leading-6 text-slate-600">{state.summary}</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {signals.map((signal) => (
+          <span key={signal} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+            {signal}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -212,6 +209,10 @@ function formatPeriod(start?: string | null, end?: string | null) {
   const endText = end ? formatMonthYear(end) : "Actualidad";
   if (!startText && !end) return "Periodo no especificado";
   return `${startText || "Inicio no definido"} · ${endText}`;
+}
+
+function formatTimelineDate(value?: string | null) {
+  return formatMonthYear(value) || (value ? String(value) : "");
 }
 
 function AvatarView({
@@ -352,7 +353,6 @@ export default function CandidateOverview() {
   const [profileCompletion, setProfileCompletion] = useState<ProfileCompletionPayload>(null);
   const [verifications, setVerifications] = useState<VerificationRow[]>([]);
   const [trustScore, setTrustScore] = useState<number | null>(null);
-  const [trustBreakdown, setTrustBreakdown] = useState<TrustBreakdown>({});
   const [experienceCount, setExperienceCount] = useState<number>(0);
 
   useEffect(() => {
@@ -394,7 +394,6 @@ export default function CandidateOverview() {
         setCandidateProfile(profileApiRes?.profile ?? null);
         setProfileCompletion((profileApiRes?.profile_completion || null) as ProfileCompletionPayload);
         setTrustScore(typeof trustRes?.trust_score === "number" ? trustRes.trust_score : null);
-        setTrustBreakdown((trustRes?.breakdown || {}) as TrustBreakdown);
         setExperienceCount(Number(profileApiRes?.counts?.experience_count || 0));
         setError(null);
       } catch (e: any) {
@@ -416,12 +415,16 @@ export default function CandidateOverview() {
       const s = String(v.status || "").toLowerCase();
       return s === "verified" || s === "approved";
     }).length;
+    const inProcess = verifications.filter((v) => {
+      const s = String(v.status || "").toLowerCase();
+      return s.includes("pending") || s.includes("review") || s.includes("requested");
+    }).length;
     const confirmed = verifications.filter((v) => !!v.company_confirmed).length;
     const evidences = verifications.reduce((acc, v) => acc + Number(v.evidence_count || 0), 0);
     const baseScore = total ? Math.round(((verified / total) * 0.5 + (confirmed / total) * 0.3 + Math.min(1, evidences / Math.max(1, total * 2)) * 0.2) * 100) : 0;
     const score = trustScore == null ? baseScore : clamp(trustScore);
 
-    return { total, verified, confirmed, evidences, score };
+    return { total, verified, inProcess, confirmed, evidences, score };
   }, [verifications, trustScore]);
 
   const educationCount = useMemo(() => listCount(candidateProfile?.education), [candidateProfile]);
@@ -442,6 +445,9 @@ export default function CandidateOverview() {
     return rows.slice(0, 6);
   }, [candidateProfile]);
   const companyCvPendingUpdates = companyCvImportSummary.totalPendingItems;
+  const experienceTimeline = Array.isArray(candidateProfile?.experience_timeline)
+    ? candidateProfile.experience_timeline.slice(0, 4)
+    : [];
 
   const profileCompletionScore = Number(profileCompletion?.score || 0);
 
@@ -450,6 +456,52 @@ export default function CandidateOverview() {
     if (profileCompletionScore >= 55) return "Perfil en progreso";
     return "Perfil inicial";
   }, [profileCompletionScore]);
+
+  const overviewStatus = useMemo(() => {
+    if (metrics.verified > 0) return "Perfil con validación activa";
+    if (metrics.total > 0) return "Verificación en curso";
+    if (experienceCount > 0) return "Perfil iniciado";
+    return "Perfil por activar";
+  }, [experienceCount, metrics.total, metrics.verified]);
+
+  const overviewNextActions = useMemo(() => {
+    const actions: Array<{ label: string; href: string }> = [];
+    if (experienceCount === 0) {
+      actions.push({ label: "Añadir tu primera experiencia", href: "/candidate/experience?new=1#manual-experience" });
+    }
+    if (experienceCount > 0 && metrics.total === 0) {
+      actions.push({ label: "Enviar una verificación", href: "/candidate/verifications/new" });
+    }
+    if (metrics.total > 0 && metrics.evidences === 0) {
+      actions.push({ label: "Subir documentación", href: "/candidate/evidence" });
+    }
+    if (profileCompletionScore < 70) {
+      actions.push({ label: "Completar tu perfil", href: "/candidate/profile" });
+    }
+    return actions.slice(0, 3);
+  }, [experienceCount, metrics.evidences, metrics.total, profileCompletionScore]);
+
+  const trustState = useMemo(
+    () =>
+      resolveTrustState({
+        verified: metrics.verified,
+        inProcess: metrics.inProcess,
+        evidences: metrics.evidences,
+        profileCompletionScore,
+      }),
+    [metrics.evidences, metrics.inProcess, metrics.verified, profileCompletionScore]
+  );
+
+  const trustSignals = useMemo(
+    () =>
+      buildTrustSignals({
+        verified: metrics.verified,
+        inProcess: metrics.inProcess,
+        evidences: metrics.evidences,
+        completed: profileCompletionScore >= 70,
+      }),
+    [metrics.evidences, metrics.inProcess, metrics.verified, profileCompletionScore]
+  );
 
   const availabilityText = useMemo(() => {
     const raw = String(candidateProfile?.job_search_status || "").toLowerCase();
@@ -537,8 +589,9 @@ export default function CandidateOverview() {
                 <p className="mt-2 text-base text-gray-600">{profile?.title || "Profesional verificable en Verijob"}</p>
                 <p className="mt-1 text-sm text-gray-500">{profile?.location || "Ubicación no definida"}</p>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <TrustLevelBadge score={metrics.score} />
-                  <VerificationBadge tone="trust_visible">Trust Score visible para empresas registradas</VerificationBadge>
+                  <VerificationBadge tone={metrics.verified > 0 ? "company_verified" : metrics.inProcess > 0 ? "in_progress" : "trust_visible"}>
+                    {trustState.title}
+                  </VerificationBadge>
                   <VerificationBadge tone={profileCompletionScore >= 55 ? "company_verified" : "in_progress"}>
                     {profileStage}
                   </VerificationBadge>
@@ -552,10 +605,54 @@ export default function CandidateOverview() {
           </div>
 
           <div className="shrink-0 self-center">
-            <TrustRing score={metrics.score} />
+            <TrustSnapshot state={trustState} signals={trustSignals} />
           </div>
         </div>
       </header>
+
+      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Estado del perfil</p>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-900">{overviewStatus}</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              {metrics.verified > 0
+                ? "Tu perfil ya transmite confianza a las empresas con una experiencia validada."
+                : metrics.total > 0
+                  ? "Ya has enviado una solicitud. Mientras llega la respuesta, puedes reforzar tu perfil con documentación."
+                  : experienceCount > 0
+                    ? "Ya has arrancado tu perfil. El siguiente paso más útil es pedir una verificación."
+                    : "Empieza añadiendo una experiencia para activar tu perfil profesional."}
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {trustSignals.map((signal) => (
+                <span key={signal} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+                  {signal}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="min-w-[260px] rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-semibold text-slate-900">Siguientes acciones recomendadas</p>
+            <div className="mt-3 flex flex-col gap-2">
+              {overviewNextActions.length > 0 ? (
+                overviewNextActions.map((action) => (
+                  <Link
+                    key={action.href}
+                    href={action.href}
+                    className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-100"
+                  >
+                    {action.label}
+                  </Link>
+                ))
+              ) : (
+                <p className="text-sm text-slate-600">Tu perfil ya está bien encaminado. Mantén la información al día y añade otra verificación cuando puedas.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap gap-2">
@@ -570,11 +667,11 @@ export default function CandidateOverview() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-5">
-        <Kpi label="Trust Score" value={`${metrics.score}%`} />
-        <Kpi label="Progreso del perfil" value={`${profileCompletionScore}%`} />
-        <Kpi label="Verificaciones" value={metrics.total} />
-        <Kpi label="Aprobadas" value={metrics.verified} />
-        <Kpi label="Evidencias" value={metrics.evidences} />
+        <Kpi label="Confianza actual" value={trustState.title} />
+        <Kpi label="Perfil completado" value={`${profileCompletionScore}%`} />
+        <Kpi label="Experiencias verificadas" value={metrics.verified} />
+        <Kpi label="En proceso" value={metrics.inProcess} />
+        <Kpi label="Documentación" value={metrics.evidences} />
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">
@@ -598,24 +695,69 @@ export default function CandidateOverview() {
         />
       </section>
 
+      {experienceTimeline.length > 0 ? (
+        <section className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Tu trayectoria ya transmite estas señales</h2>
+              <p className="mt-1 text-sm text-gray-600">
+                Cada experiencia muestra si ya genera confianza, si está en proceso o si todavía necesita validación.
+              </p>
+            </div>
+            <Link href="/candidate/experience" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+              Ver experiencias
+            </Link>
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {experienceTimeline.map((item: any) => (
+              <article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold text-slate-900">{item.role_title || "Experiencia profesional"}</h3>
+                    <p className="mt-1 text-sm text-slate-600">{item.company_name || "Empresa no definida"}</p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {formatTimelineDate(item.start_date) || "Inicio no definido"} · {item.end_date ? formatTimelineDate(item.end_date) : "Actualidad"}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${item.status_tone}`}>
+                      {item.status_label}
+                    </span>
+                    {item.support_label ? (
+                      <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">
+                        {item.support_label}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+
+                <p className="mt-3 text-sm text-slate-700">{item.explanation}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <section className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-gray-900">Trust Score: {metrics.score} / 100</h2>
-          <p className="text-xs text-gray-500">Desglose del cálculo</p>
+          <h2 className="text-lg font-semibold text-gray-900">Qué ya transmite confianza en tu perfil</h2>
+          <p className="text-xs text-gray-500">Señales visibles para empresa</p>
         </div>
         <p className="mt-3 text-sm leading-6 text-gray-600">
-          Tu credibilidad se calcula combinando verificaciones empresariales, evidencias documentales, coherencia de historial y reutilización en procesos de selección.
+          Tu perfil gana credibilidad con experiencias verificadas, documentación útil y un historial bien completado. No necesitas entender el cálculo interno para saber qué reforzarlo.
         </p>
         <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Kpi label="Verificaciones empresariales" value={`${Number(trustBreakdown.verification ?? 0)} / 40`} />
-          <Kpi label="Evidencias documentales" value={`${Number(trustBreakdown.evidence ?? 0)} / 30`} />
-          <Kpi label="Coherencia del historial" value={`${Number(trustBreakdown.consistency ?? 0)} / 15`} />
-          <Kpi label="Reutilización por empresas" value={`${Number(trustBreakdown.reuse ?? 0)} / 15`} />
+          <Kpi label="Experiencias verificadas" value={metrics.verified} />
+          <Kpi label="Verificaciones en proceso" value={metrics.inProcess} />
+          <Kpi label="Documentos subidos" value={metrics.evidences} />
+          <Kpi label="Perfil completado" value={`${profileCompletionScore}%`} />
         </div>
         <ul className="mt-4 space-y-1 text-xs text-gray-500">
-          <li>• Más verificaciones confirmadas aumentan tu bloque de confianza empresarial.</li>
-          <li>• Evidencias vinculadas y orden temporal consistente mejoran la puntuación.</li>
-          <li>• Cuando empresas reutilizan tus verificaciones, tu perfil gana señal adicional.</li>
+          <li>• Una experiencia verificada es la señal más clara de confianza para una empresa.</li>
+          <li>• Si ya tienes una verificación en proceso, tu perfil muestra avance real.</li>
+          <li>• Añadir documentación puede reforzar tu perfil mientras esperas respuesta.</li>
         </ul>
       </section>
 

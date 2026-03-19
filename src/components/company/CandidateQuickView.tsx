@@ -4,7 +4,6 @@ import {
   computeCandidateQuickFit,
   isCandidateVerified,
   resolveCandidateApproxLocation,
-  resolveCandidateAvailableVerifications,
   resolveCandidateOperationalStateMeta,
   resolveCandidatePartialName,
   resolveCandidatePipelineBucket,
@@ -40,6 +39,76 @@ function actionClass(primary = false) {
     : "inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50";
 }
 
+function humanConfidenceSummary(approved: number, inProcess: number) {
+  if (approved >= 2 && inProcess > 0) return `${approved} experiencias verificadas · ${inProcess} en proceso`;
+  if (approved >= 2) return `${approved} experiencias verificadas`;
+  if (approved === 1 && inProcess > 0) return `1 experiencia verificada · ${inProcess} en proceso`;
+  if (approved === 1) return "1 experiencia verificada";
+  if (inProcess > 0) return `${inProcess} verificaci${inProcess === 1 ? "ón" : "ones"} en proceso`;
+  return "Sin verificaciones todavía";
+}
+
+function resolvePriorityReason(row: CompanyCandidateWorkspaceRow, approved: number, confidenceLabel: string) {
+  const stage = String(row.company_stage || "").toLowerCase();
+  if (stage === "preselected") return "Prioritario por preselección";
+  if (approved > 0) return "Prioritario por verificaciones aprobadas";
+  if (confidenceLabel === "Alta confianza") return "Prioritario por alta confianza";
+  return null;
+}
+
+function resolvePriorityFamily(row: CompanyCandidateWorkspaceRow, approved: number) {
+  const stage = String(row.company_stage || "").toLowerCase();
+  if (stage === "preselected" || stage === "saved") {
+    return {
+      label: "Prioridad de negocio",
+      tone: "border-indigo-200 bg-indigo-50 text-indigo-800",
+    };
+  }
+  if (approved > 0) {
+    return {
+      label: "Prioridad por confianza",
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    };
+  }
+  return null;
+}
+
+function resolveNextAction(args: {
+  accessStatus: string;
+  approved: number;
+  inProcess: number;
+  canOpenSummary: boolean;
+}) {
+  if (args.accessStatus === "active") {
+    return {
+      title: "Revisar perfil completo",
+      detail: "Ya tienes acceso al perfil completo y puedes decidir con toda la información disponible.",
+    };
+  }
+  if (args.approved > 0) {
+    return {
+      title: "Desbloquear perfil",
+      detail: "Ya hay señales sólidas de confianza. El siguiente paso útil es abrir el perfil completo.",
+    };
+  }
+  if (args.inProcess > 0) {
+    return {
+      title: "Esperando verificación",
+      detail: "El candidato ya tiene una validación en marcha. Puedes hacer seguimiento desde esta ficha.",
+    };
+  }
+  if (args.canOpenSummary) {
+    return {
+      title: "Sin validar todavía",
+      detail: "Revisa el resumen y decide si quieres guardar, preseleccionar o desbloquear más adelante.",
+    };
+  }
+  return {
+    title: "Sin validar todavía",
+    detail: "Todavía no hay señales fuertes de confianza. Puedes guardar el candidato o esperar más contexto.",
+  };
+}
+
 export default function CandidateQuickView({
   row,
   open,
@@ -65,6 +134,20 @@ export default function CandidateQuickView({
   const verified = isCandidateVerified(row);
   const stage = String(row.company_stage || "none").toLowerCase();
   const canOpenSummary = Boolean(row.candidate_public_token);
+  const approved = Number(row.approved_verifications || 0);
+  const totalVerifications = Number(row.total_verifications || 0);
+  const inProcess = Math.max(0, totalVerifications - approved);
+  const unverified = Math.max(0, Number((row as any).experience_count || 0) - totalVerifications);
+  const confidenceLabel = fit.label;
+  const confidenceSummary = humanConfidenceSummary(approved, inProcess);
+  const priorityReason = resolvePriorityReason(row, approved, confidenceLabel);
+  const priorityFamily = resolvePriorityFamily(row, approved);
+  const nextAction = resolveNextAction({
+    accessStatus: String(row.access_status || "").toLowerCase(),
+    approved,
+    inProcess,
+    canOpenSummary,
+  });
   const accessActionLabel =
     row.access_status === "active"
       ? "Ver perfil completo"
@@ -92,7 +175,7 @@ export default function CandidateQuickView({
           <section className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
             <div className="flex flex-wrap items-center gap-2">
               <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${fit.tone}`} title={fit.reasons.join(" · ")}>
-                {fit.label}
+                {confidenceLabel}
               </span>
               <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${operational.tone}`}>
                 {operational.label}
@@ -103,13 +186,24 @@ export default function CandidateQuickView({
               <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
                 {accessLabel(row.access_status)}
               </span>
+              {priorityReason ? (
+                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                  {priorityReason}
+                </span>
+              ) : null}
+              {priorityFamily ? (
+                <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${priorityFamily.tone}`}>
+                  {priorityFamily.label}
+                </span>
+              ) : null}
             </div>
+            <p className="mt-3 text-sm font-medium text-slate-800">{confidenceSummary}</p>
+            <p className="mt-1 text-xs font-medium text-slate-500">
+              {approved > 0 ? "Alta confianza" : inProcess > 0 ? "Verificación en proceso" : "Sin validar todavía"}
+            </p>
             <p className="mt-3 text-sm text-slate-700">{fit.summary}</p>
             <p className="mt-2 text-xs text-slate-500">
               El encaje rápido se apoya en trust score, verificaciones registradas, preparación del perfil y momento real del pipeline.
-            </p>
-            <p className="mt-1 text-xs text-slate-500">
-              El trust score resume credibilidad del perfil con verificaciones, evidencias y consistencia general del candidato.
             </p>
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-sm font-semibold text-slate-900">Accesos a perfiles disponibles: {availableProfileAccesses}</p>
@@ -136,16 +230,16 @@ export default function CandidateQuickView({
 
           <section className="grid gap-3 md:grid-cols-3">
             <article className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Trust score</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-900">{row.trust_score ?? "—"}</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Confianza actual</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">{confidenceLabel}</p>
             </article>
             <article className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Verificaciones disponibles</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-900">{resolveCandidateAvailableVerifications(row)}</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">Verificaciones aprobadas</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">{approved}</p>
             </article>
             <article className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-xs uppercase tracking-wide text-slate-500">Perfil</p>
-              <p className="mt-2 text-2xl font-semibold text-slate-900">{profileReadiness === "complete" ? "Listo" : "Incompleto"}</p>
+              <p className="text-xs uppercase tracking-wide text-slate-500">En proceso</p>
+              <p className="mt-2 text-2xl font-semibold text-slate-900">{inProcess}</p>
             </article>
           </section>
 
@@ -157,16 +251,17 @@ export default function CandidateQuickView({
                 <li>• Estado del pipeline: {resolveCandidatePipelineLabel(pipeline)}</li>
                 <li>• Perfil verificable: {profileReadiness === "complete" ? "sí" : "todavía no"}</li>
                 <li>• Estado verificado: {verified ? "con señales verificadas" : "sin validación aprobada todavía"}</li>
-                <li>• Verificaciones disponibles: {resolveCandidateAvailableVerifications(row)}</li>
+                <li>• Verificaciones aprobadas: {approved}</li>
+                <li>• Verificaciones en proceso: {inProcess}</li>
+                <li>• Experiencias sin validar: {unverified}</li>
                 <li>• Última actividad: {formatDate(row.last_activity_at || row.created_at)}</li>
                 {row.access_granted_at ? <li>• Perfil desbloqueado desde: {formatDate(row.access_granted_at)}</li> : null}
               </ul>
             </article>
             <article className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-              <h3 className="text-base font-semibold text-slate-900">Qué hacer ahora</h3>
-              <p className="mt-2 text-sm text-slate-600">
-                Usa esta vista para decidir si merece la pena acceder al perfil completo o seguir moviendo el candidato dentro del pipeline interno.
-              </p>
+              <h3 className="text-base font-semibold text-slate-900">Siguiente mejor acción</h3>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{nextAction.title}</p>
+              <p className="mt-1 text-sm text-slate-600">{nextAction.detail}</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {canOpenSummary ? (
                   <a href={`/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}`} className={actionClass()}>

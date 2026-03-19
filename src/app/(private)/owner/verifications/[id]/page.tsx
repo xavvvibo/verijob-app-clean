@@ -69,6 +69,11 @@ export default async function OwnerVerificationDetailPage({ params }: { params: 
   const employment = employmentRes.data as any;
   const evidences = Array.isArray(evidencesRes.data) ? evidencesRes.data : [];
   const requestContext = verification.request_context && typeof verification.request_context === "object" ? verification.request_context : {};
+  const verifierEmailSignal =
+    requestContext?.verifier_email_signal && typeof requestContext.verifier_email_signal === "object"
+      ? requestContext.verifier_email_signal
+      : {};
+  const attentionReasons = Array.isArray(verifierEmailSignal?.reasons) ? verifierEmailSignal.reasons : [];
   const companyDisplayName = resolveCompanyDisplayName(
     company
       ? {
@@ -95,6 +100,7 @@ export default async function OwnerVerificationDetailPage({ params }: { params: 
         <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <Card label="Estado" value={String(verification.status || "—")} />
           <Card label="Método" value={String(verification.verification_channel || "email")} />
+          <Card label="Clase email" value={String(verifierEmailSignal?.classification || "unknown")} note={attentionReasons.join(", ") || undefined} />
           <Card label="Candidato" value={candidate?.full_name || candidate?.email || "Sin candidato"} />
           <Card label="Empresa" value={companyDisplayName} />
           <Card label="Experiencia" value={employment?.position || String((requestContext as any)?.role_title || "Experiencia no indicada")} />

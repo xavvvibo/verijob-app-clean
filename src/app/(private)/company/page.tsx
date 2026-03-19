@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import CandidateQuickView from "@/components/company/CandidateQuickView";
@@ -127,6 +128,8 @@ type NotificationItem = {
   type: "onboarding" | "experiences" | "verification" | "evidences";
 };
 
+type CandidateFocusTab = "priority" | "verified" | "in_process" | "unverified";
+
 function formatDate(value?: string | null) {
   if (!value) return "Sin fecha";
   const date = new Date(value);
@@ -206,6 +209,73 @@ function MetricCard({ title, value, helper }: { title: string; value: string; he
   );
 }
 
+function humanConfidenceSummary(approved: number, inProcess: number) {
+  if (approved >= 2 && inProcess > 0) return `${approved} experiencias verificadas · ${inProcess} en proceso`;
+  if (approved >= 2) return `${approved} experiencias verificadas`;
+  if (approved === 1 && inProcess > 0) return `1 experiencia verificada · ${inProcess} en proceso`;
+  if (approved === 1) return "1 experiencia verificada";
+  if (inProcess > 0) return `${inProcess} verificaci${inProcess === 1 ? "ón" : "ones"} en proceso`;
+  return "Sin verificaciones todavía";
+}
+
+function resolvePriorityReason(row: CandidateImportRow, approved: number, fitLabel: string) {
+  const stage = String(row.company_stage || "").toLowerCase();
+  if (stage === "preselected") return "Prioritario por preselección";
+  if (approved > 0) return "Prioritario por verificaciones aprobadas";
+  if (fitLabel === "Alta confianza") return "Prioritario por alta confianza";
+  return null;
+}
+
+function resolvePriorityFamily(row: CandidateImportRow, approved: number) {
+  const stage = String(row.company_stage || "").toLowerCase();
+  if (stage === "preselected" || stage === "saved") {
+    return {
+      label: "Prioridad de negocio",
+      tone: "border-indigo-200 bg-indigo-50 text-indigo-800",
+    };
+  }
+  if (approved > 0) {
+    return {
+      label: "Prioridad por confianza",
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    };
+  }
+  return null;
+}
+
+function candidateEmptyState(tab: CandidateFocusTab) {
+  if (tab === "verified") {
+    return {
+      title: "Todavía no hay candidatos verificados",
+      detail: "Empieza revisando perfiles en proceso o importando nuevos candidatos con señales de confianza.",
+      href: "/company/candidates",
+      cta: "Importar candidato",
+    };
+  }
+  if (tab === "priority") {
+    return {
+      title: "No hay candidatos prioritarios ahora mismo",
+      detail: "Revisa candidatos en proceso o desbloquea perfiles para generar una cola de decisión más fuerte.",
+      href: "/company/candidates",
+      cta: "Revisar candidatos en proceso",
+    };
+  }
+  if (tab === "in_process") {
+    return {
+      title: "No hay verificaciones en proceso ahora mismo",
+      detail: "Cuando un candidato esté validando experiencia, aparecerá aquí para que puedas seguir su avance.",
+      href: "/company/requests",
+      cta: "Revisar solicitudes",
+    };
+  }
+  return {
+    title: "No hay candidatos sin validar en esta vista",
+    detail: "Importa nuevos candidatos o vuelve a revisar tu base completa para ampliar la cobertura.",
+    href: "/company/candidates",
+    cta: "Importar candidato",
+  };
+}
+
 export const dynamic = "force-dynamic";
 
 export default function CompanyDashboard() {
@@ -218,6 +288,8 @@ export default function CompanyDashboard() {
   const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [quickViewRow, setQuickViewRow] = useState<CandidateImportRow | null>(null);
+  const [candidateTab, setCandidateTab] = useState<CandidateFocusTab>("priority");
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -268,13 +340,9 @@ export default function CompanyDashboard() {
   }
 
   useEffect(() => {
-    let alive = true;
     (async () => {
       await loadDashboardData();
     })();
-    return () => {
-      alive = false;
-    };
   }, []);
 
   useEffect(() => {
@@ -327,23 +395,20 @@ export default function CompanyDashboard() {
     ? profileData?.profile_completion?.checklist?.slice(0, 4)
     : [];
   const kpis = dashboard?.kpis || null;
-  const recentRequests = Array.isArray(dashboard?.recent_requests) ? dashboard.recent_requests : [];
-  const imports = Array.isArray(candidateData?.imports) ? candidateData.imports : [];
+  const recentRequests = useMemo(
+    () => (Array.isArray(dashboard?.recent_requests) ? dashboard.recent_requests : []),
+    [dashboard?.recent_requests]
+  );
+  const imports = useMemo(
+    () => (Array.isArray(candidateData?.imports) ? candidateData.imports : []),
+    [candidateData?.imports]
+  );
   const importsAvailable = candidateData?.imports_meta?.available !== false;
-  const verificationActivity = dashboard?.verification_activity || { pending: 0, verified: 0, rejected: 0 };
   const availableProfileAccesses = Number(candidateData?.available_profile_accesses ?? dashboard?.available_profile_accesses ?? 0);
-  const verificationTotal = Math.max(1, Number(verificationActivity.pending || 0) + Number(verificationActivity.verified || 0) + Number(verificationActivity.rejected || 0));
   const seatsLimit = Number(teamData?.plan?.seats_limit || 0);
   const seatsUsed = Number(teamData?.plan?.seats_used || 0);
   const pendingInvitations = Number(teamData?.plan?.pending_invitations || 0);
   const seatUsagePct = seatsLimit > 0 ? Math.round(((seatsUsed + pendingInvitations) / seatsLimit) * 100) : 0;
-
-  const pipeline = useMemo(() => {
-    const byReview = Number(kpis?.pending_requests || 0) + imports.filter((item) => item.display_status === "new").length;
-    const validating = imports.filter((item) => item.display_status === "in_review").length;
-    const ready = imports.filter((item) => item.display_status === "ready").length;
-    return { byReview, validating, ready };
-  }, [imports, kpis?.pending_requests]);
 
   const priorities = useMemo<PriorityItem[]>(() => {
     const items: PriorityItem[] = [];
@@ -414,6 +479,39 @@ export default function CompanyDashboard() {
       .sort((a, b) => Date.parse(String(b.last_activity_at || b.created_at || 0)) - Date.parse(String(a.last_activity_at || a.created_at || 0)))
       .slice(0, 5);
   }, [imports]);
+  const candidateDecisionRows = useMemo(() => {
+    return imports
+      .map((item) => {
+        const fit = computeCandidateQuickFit(item);
+        const approved = Math.max(0, Number(item.approved_verifications || 0));
+        const total = Math.max(0, Number(item.total_verifications || 0));
+        const inProcess = Math.max(0, total - approved);
+        const unverified = total === 0 ? 1 : 0;
+        const confidenceLabel =
+          fit.level === "high" ? "Alta confianza" : fit.level === "medium" ? "Confianza media" : "Sin validar";
+        const priorityWeight =
+          (fit.level === "high" ? 300 : fit.level === "medium" ? 200 : 100) +
+          approved * 25 +
+          (String(item.company_stage || "").toLowerCase() === "preselected" ? 10 : 0);
+
+        return { row: item, fit, approved, inProcess, unverified, confidenceLabel, priorityWeight };
+      })
+      .filter((item) => {
+        if (candidateTab === "verified") return item.approved > 0 || item.fit.level === "high";
+        if (candidateTab === "in_process") {
+          return item.inProcess > 0 || String(item.row.display_status || "").toLowerCase() === "in_review";
+        }
+        if (candidateTab === "unverified") return item.approved === 0 && item.inProcess === 0;
+        return true;
+      })
+      .sort((a, b) => {
+        return (
+          b.priorityWeight - a.priorityWeight ||
+          Date.parse(String(b.row.last_activity_at || b.row.created_at || 0)) -
+            Date.parse(String(a.row.last_activity_at || a.row.created_at || 0))
+        );
+      });
+  }, [candidateTab, imports]);
 
   const notifications = useMemo<NotificationItem[]>(() => {
     return imports
@@ -512,6 +610,8 @@ export default function CompanyDashboard() {
       .slice(0, 5);
   }, [imports]);
   const recentAccessPurchases = Array.isArray(dashboard?.recent_access_purchases) ? dashboard.recent_access_purchases : [];
+  const activeCandidateCount = imports.length;
+  const verifiedCandidateCount = imports.filter((item) => Number(item.approved_verifications || 0) > 0).length;
 
   function markNotificationRead(id: string) {
     setReadNotificationIds((prev) => {
@@ -522,6 +622,46 @@ export default function CompanyDashboard() {
       } catch {}
       return next;
     });
+  }
+
+  async function handleSetCandidateStage(inviteId: string, stage: "saved" | "preselected" | "none") {
+    setActionLoading(inviteId);
+    try {
+      const res = await fetch("/api/company/candidate-imports", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ invite_id: inviteId, company_stage: stage }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body?.user_message || body?.details || body?.error || "No se pudo actualizar el candidato.");
+      }
+
+      setCandidateData((prev) => {
+        const imports = Array.isArray(prev?.imports) ? prev.imports : [];
+        return {
+          ...(prev || {}),
+          imports: imports.map((row) =>
+            String((row as any)?.id || "") === inviteId
+              ? {
+                  ...row,
+                  company_stage: stage,
+                  last_activity_at: body?.invite?.last_activity_at || new Date().toISOString(),
+                }
+              : row,
+          ),
+        };
+      });
+
+      setQuickViewRow((prev) =>
+        prev && String(prev.id) === inviteId ? { ...prev, company_stage: stage } : prev,
+      );
+    } catch (error: any) {
+      setErrorMessage(error?.message || "No se pudo actualizar el estado interno del candidato.");
+    } finally {
+      setActionLoading(null);
+    }
   }
 
   return (
@@ -562,12 +702,26 @@ export default function CompanyDashboard() {
             ) : null}
           </div>
           <div className="flex flex-wrap gap-2">
-            <a href="/company/requests" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black transition">Revisar solicitudes</a>
-            <a href="/company/candidates" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">Abrir base RRHH</a>
+            <Link href="/company/candidates" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black transition">Importar candidato</Link>
+            <a href="/company/requests" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">Revisar solicitudes</a>
             <a href="/company/subscription" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">Plan, capacidad y accesos</a>
           </div>
         </div>
         {errorMessage ? <p className="mt-4 text-sm text-rose-600">{errorMessage}</p> : null}
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Candidatos activos</p>
+            <p className="mt-2 text-3xl font-semibold text-slate-900">{activeCandidateCount}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Perfiles verificados</p>
+            <p className="mt-2 text-3xl font-semibold text-slate-900">{verifiedCandidateCount}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Accesos disponibles</p>
+            <p className="mt-2 text-3xl font-semibold text-slate-900">{availableProfileAccesses}</p>
+          </div>
+        </div>
       </section>
 
       <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -655,44 +809,172 @@ export default function CompanyDashboard() {
         <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-slate-900">Pipeline RRHH ligero</h2>
-              <p className="mt-1 text-sm text-slate-600">Vista mínima de trabajo sin convertir VERIJOB en un ATS nuevo.</p>
+              <h2 className="text-lg font-semibold text-slate-900">Candidatos para decidir</h2>
+              <p className="mt-1 text-sm text-slate-600">Vista priorizada por confianza para decidir rápido a quién abrir, guardar o preseleccionar.</p>
             </div>
-            <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir candidatos</a>
+            <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir base completa</a>
           </div>
 
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
-            <a href="/company/candidates?pipeline=review" className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <p className="text-xs uppercase tracking-wide text-amber-800">Por revisar</p>
-              <p className="mt-2 text-3xl font-semibold text-amber-900">{pipeline.byReview}</p>
-              <p className="mt-1 text-sm text-amber-900/80">Solicitudes pendientes e importaciones esperando siguiente paso.</p>
-            </a>
-            <a href="/company/candidates?pipeline=validation" className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
-              <p className="text-xs uppercase tracking-wide text-blue-800">En validación</p>
-              <p className="mt-2 text-3xl font-semibold text-blue-900">{pipeline.validating}</p>
-              <p className="mt-1 text-sm text-blue-900/80">Perfiles ya moviéndose en revisión o validación documental.</p>
-            </a>
-            <a href="/company/candidates?pipeline=decision" className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
-              <p className="text-xs uppercase tracking-wide text-emerald-800">Listos para decisión</p>
-              <p className="mt-2 text-3xl font-semibold text-emerald-900">{pipeline.ready}</p>
-              <p className="mt-1 text-sm text-emerald-900/80">Perfiles que ya merece la pena abrir y decidir.</p>
-            </a>
-          </div>
-
-          <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="mt-5 flex flex-wrap gap-2">
             {[
-              { label: "Pendientes", value: Number(verificationActivity.pending || 0), tone: "bg-amber-500" },
-              { label: "Confirmadas", value: Number(verificationActivity.verified || 0), tone: "bg-emerald-500" },
-              { label: "Rechazadas", value: Number(verificationActivity.rejected || 0), tone: "bg-rose-500" },
-            ].map((item) => (
-              <div key={item.label}>
-                <div className="mb-1 flex items-center justify-between text-sm">
-                  <span className="font-medium text-slate-900">{item.label}</span>
-                  <span className="text-slate-500">{item.value}</span>
-                </div>
-                <ProgressBar value={(item.value / verificationTotal) * 100} tone={item.tone} />
-              </div>
+              { key: "priority", label: "Prioritarios" },
+              { key: "verified", label: "Verificados" },
+              { key: "in_process", label: "En proceso" },
+              { key: "unverified", label: "Sin validar" },
+            ].map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setCandidateTab(tab.key as CandidateFocusTab)}
+                className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                  candidateTab === tab.key
+                    ? "border-slate-900 bg-slate-900 text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                }`}
+              >
+                {tab.label}
+              </button>
             ))}
+          </div>
+
+          {candidateTab === "priority" ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800">
+                Prioridad de negocio: guardado o preselección
+              </span>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
+                Prioridad por confianza: verificaciones aprobadas o alta confianza
+              </span>
+            </div>
+          ) : null}
+
+          <div className="mt-5 space-y-4">
+            {!importsAvailable ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+                La base RRHH aún no está activada en esta base. El panel queda preparado para operar en cuanto la importación esté disponible.
+              </div>
+            ) : candidateDecisionRows.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5">
+                <p className="text-sm font-semibold text-slate-900">{candidateEmptyState(candidateTab).title}</p>
+                <p className="mt-2 text-sm text-slate-600">{candidateEmptyState(candidateTab).detail}</p>
+                <Link
+                  href={candidateEmptyState(candidateTab).href}
+                  className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+                >
+                  {candidateEmptyState(candidateTab).cta}
+                </Link>
+              </div>
+            ) : (
+              candidateDecisionRows.slice(0, 8).map(({ row, fit, approved, inProcess, unverified, confidenceLabel }) => {
+                const operational = resolveCandidateOperationalStateMeta(row);
+                const displayName = resolveCandidateDisplayName(row);
+                const stage = String(row.company_stage || "none").toLowerCase();
+                const confidenceSummary = humanConfidenceSummary(approved, inProcess);
+                const priorityReason = candidateTab === "priority" ? resolvePriorityReason(row, approved, confidenceLabel) : null;
+                const priorityFamily = candidateTab === "priority" ? resolvePriorityFamily(row, approved) : null;
+                const progressLabel =
+                  approved > 0
+                    ? "Alta confianza"
+                    : inProcess > 0
+                      ? "Verificación en proceso"
+                      : "Perfil sin validar todavía";
+                return (
+                  <article
+                    key={row.id}
+                    className="cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 p-5 transition hover:border-slate-300 hover:bg-white"
+                    onClick={() => setQuickViewRow(row)}
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-lg font-semibold text-slate-900">{displayName}</h3>
+                          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${fit.tone}`}>{confidenceLabel}</span>
+                          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${operational.tone}`}>{operational.label}</span>
+                          {priorityReason ? (
+                            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+                              {priorityReason}
+                            </span>
+                          ) : null}
+                          {priorityFamily ? (
+                            <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${priorityFamily.tone}`}>
+                              {priorityFamily.label}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-2 text-sm font-medium text-slate-800">{row.target_role || "Puesto no definido"}</p>
+                        <p className="mt-1 text-sm text-slate-600">{row.candidate_email || "Email no disponible"}</p>
+                        <p className="mt-2 text-sm text-slate-700">{confidenceSummary}</p>
+                        <p className="mt-1 text-xs font-medium text-slate-500">{progressLabel}</p>
+                      </div>
+                      <div className="text-right text-xs text-slate-500">
+                        Última actividad
+                        <div className="mt-1 font-semibold text-slate-700">{formatDate(row.last_activity_at || row.created_at)}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="text-xs uppercase tracking-wide text-slate-500">Experiencias verificadas</div>
+                        <div className="mt-2 text-2xl font-semibold text-slate-900">{approved}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="text-xs uppercase tracking-wide text-slate-500">En proceso</div>
+                        <div className="mt-2 text-2xl font-semibold text-slate-900">{inProcess}</div>
+                      </div>
+                      <div className="rounded-xl border border-slate-200 bg-white p-3">
+                        <div className="text-xs uppercase tracking-wide text-slate-500">Sin validar</div>
+                        <div className="mt-2 text-2xl font-semibold text-slate-900">{unverified}</div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setQuickViewRow(row);
+                        }}
+                        className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+                      >
+                        Abrir ficha
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setQuickViewRow(row);
+                        }}
+                        className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                      >
+                        Desbloquear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleSetCandidateStage(row.id, stage === "saved" ? "none" : "saved");
+                        }}
+                        disabled={actionLoading === row.id}
+                        className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        {stage === "saved" ? "Quitar guardado" : "Guardar"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleSetCandidateStage(row.id, stage === "preselected" ? "none" : "preselected");
+                        }}
+                        disabled={actionLoading === row.id}
+                        className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        {stage === "preselected" ? "Quitar preselección" : "Preseleccionar"}
+                      </button>
+                    </div>
+                  </article>
+                );
+              })
+            )}
           </div>
         </article>
 
@@ -1011,6 +1293,8 @@ export default function CompanyDashboard() {
         row={quickViewRow}
         open={Boolean(quickViewRow)}
         onClose={() => setQuickViewRow(null)}
+        onSetStage={handleSetCandidateStage}
+        actionLoading={actionLoading}
         availableProfileAccesses={availableProfileAccesses}
       />
     </div>

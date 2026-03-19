@@ -6,6 +6,7 @@ import {
   EVIDENCE_VALIDATION_INTERNAL,
 } from "@/lib/candidate/evidence-types";
 import { isVerifiedEmploymentRecordStatus } from "@/lib/verification/employment-record-verification-status";
+import { verificationTrustWeightForSignal } from "@/lib/verification/verifier-email-signal";
 
 type TrustBreakdown = {
   verification: number;
@@ -95,7 +96,7 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
       .eq("candidate_id", candidateId),
     admin
       .from("verification_requests")
-      .select("id,status,requested_by")
+      .select("id,status,requested_by,employment_record_id,request_context,resolved_at,created_at")
       .eq("requested_by", candidateId),
     admin
       .from("evidences")
@@ -107,12 +108,35 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
   const verifications = Array.isArray(verificationRows) ? verificationRows : [];
   const evidences = Array.isArray(evidenceRows) ? evidenceRows : [];
 
-  const verifiedEmploymentCount = employment.filter((row: any) => {
-    return isVerifiedEmploymentRecordStatus(row?.verification_status);
-  }).length;
+  const verificationByEmployment = new Map<string, any[]>();
+  for (const row of verifications) {
+    const employmentRecordId = String((row as any)?.employment_record_id || "").trim();
+    if (!employmentRecordId) continue;
+    verificationByEmployment.set(employmentRecordId, [...(verificationByEmployment.get(employmentRecordId) || []), row]);
+  }
 
-  const verificationBlock =
-    verifiedEmploymentCount >= 3 ? 40 : verifiedEmploymentCount === 2 ? 30 : verifiedEmploymentCount === 1 ? 20 : 0;
+  const weightedVerifiedEmployment = employment.reduce((acc, row: any) => {
+    if (!isVerifiedEmploymentRecordStatus(row?.verification_status)) return acc;
+
+    const related = (verificationByEmployment.get(String(row?.id || "")) || []).slice().sort((a: any, b: any) => {
+      const aTs = Date.parse(String(a?.resolved_at || a?.created_at || "")) || 0;
+      const bTs = Date.parse(String(b?.resolved_at || b?.created_at || "")) || 0;
+      return bTs - aTs;
+    });
+    const verifiedRequest = related.find((item: any) => String(item?.status || "").toLowerCase() === "verified");
+    const signal =
+      verifiedRequest?.request_context && typeof verifiedRequest.request_context === "object"
+        ? (verifiedRequest.request_context as any)?.verifier_email_signal || null
+        : null;
+    const weight = signal ? verificationTrustWeightForSignal(signal) : 1;
+    return acc + weight;
+  }, 0);
+
+  const rejectedVerificationCount = verifications.filter((row: any) => String(row?.status || "").toLowerCase() === "rejected").length;
+
+  const verificationBlockBase =
+    weightedVerifiedEmployment >= 3 ? 40 : weightedVerifiedEmployment >= 2 ? 30 : weightedVerifiedEmployment >= 1 ? 20 : weightedVerifiedEmployment > 0 ? 10 : 0;
+  const verificationBlock = Math.max(0, verificationBlockBase - Math.min(10, rejectedVerificationCount * 5));
 
   const usableEvidences = evidences.filter((row: any) => {
     const status = normalizeValidationStatus(row?.validation_status);
@@ -165,7 +189,7 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
       evidence: evidenceBlock,
       consistency: consistencyBlock,
       reuse: reuseBlock,
-      approved: verifiedEmploymentCount,
+      approved: Number(weightedVerifiedEmployment.toFixed(2)),
       confirmed: verifications.filter((row: any) => normalizeText(row?.status) === "verified").length,
       evidences: usableEvidences.length,
       reuseEvents,

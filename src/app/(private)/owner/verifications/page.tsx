@@ -24,6 +24,21 @@ function canonicalStatus(raw: unknown, revokedAt: unknown) {
   return "draft";
 }
 
+function needsOwnerAttention(row: any) {
+  const requestContext = row?.request_context && typeof row.request_context === "object" ? row.request_context : {}
+  const verifierEmailSignal =
+    requestContext?.verifier_email_signal && typeof requestContext.verifier_email_signal === "object"
+      ? requestContext.verifier_email_signal
+      : {}
+  const reasons = Array.isArray(verifierEmailSignal?.reasons) ? verifierEmailSignal.reasons : []
+  return Boolean(
+    requestContext?.owner_attention_required ||
+      verifierEmailSignal?.owner_attention_required ||
+      reasons.length > 0 ||
+      !row?.company_id,
+  )
+}
+
 function statusLabel(raw: string) {
   const v = String(raw || "").toLowerCase();
   if (v === "draft") return "Borrador";
@@ -103,7 +118,7 @@ export default async function OwnerVerificationsPage({
     .order("requested_at", { ascending: false })
     .limit(500);
 
-  const rows = Array.isArray(requests) ? requests : [];
+  const rows = (Array.isArray(requests) ? requests : []).filter((row: any) => needsOwnerAttention(row));
 
   const userIds = Array.from(new Set(rows.map((r: any) => r.requested_by).filter(Boolean))).filter(Boolean);
   const companyIds = Array.from(new Set(rows.map((r: any) => r.company_id).filter(Boolean)));
@@ -148,6 +163,11 @@ export default async function OwnerVerificationsPage({
     const companyProfile = companyProfiles.get(String(row.company_id || "")) as any;
     const employment = employmentById.get(String(row.employment_record_id || "")) as any;
     const requestContext = row?.request_context && typeof row.request_context === "object" ? row.request_context : {};
+    const verifierEmailSignal =
+      requestContext?.verifier_email_signal && typeof requestContext.verifier_email_signal === "object"
+        ? requestContext.verifier_email_signal
+        : {};
+    const attentionReasons = Array.isArray(verifierEmailSignal?.reasons) ? verifierEmailSignal.reasons : [];
     const roleTitle = String((requestContext as any)?.role_title || "").trim();
     const companyNameFromContext = String((requestContext as any)?.company_name || "").trim();
     const candidateName = String(profile?.full_name || profile?.email || "").trim();
@@ -171,6 +191,8 @@ export default async function OwnerVerificationsPage({
       companyName,
       experienceLabel,
       evidenceCount: evidencesByVerification.get(String(row.id)) || 0,
+      attentionReasons,
+      verifierEmailClass: String(verifierEmailSignal?.classification || "unknown"),
     };
   });
 
@@ -210,9 +232,9 @@ export default async function OwnerVerificationsPage({
   return (
     <div className="space-y-5">
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Cola de verificaciones</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Cola de incidencias de verificación</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Cola operativa de revisión owner con estado real, método, trazabilidad temporal y acceso rápido a candidato, empresa y evidencias.
+          Owner solo supervisa verificaciones con señales de riesgo, asociación dudosa o necesidad de revisión extraordinaria.
         </p>
         {requestsError ? <p className="mt-2 text-xs font-medium text-rose-700">No se pudo cargar la cola: {requestsError.message}</p> : null}
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -346,6 +368,7 @@ export default async function OwnerVerificationsPage({
                   <th className="px-3 py-3">Empresa</th>
                   <th className="px-3 py-3">Experiencia</th>
                   <th className="px-3 py-3">Método</th>
+                  <th className="px-3 py-3">Señal email</th>
                   <th className="px-3 py-3">Estado</th>
                   <th className="px-3 py-3">Evidencias</th>
                   <th className="px-3 py-3">Creada</th>
@@ -370,6 +393,12 @@ export default async function OwnerVerificationsPage({
                       <td className="px-3 py-3">{entry.companyName || "Empresa"}</td>
                       <td className="px-3 py-3">{entry.experienceLabel}</td>
                       <td className="px-3 py-3">{methodLabel(entry.method)}</td>
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-slate-900">{entry.verifierEmailClass}</div>
+                        <div className="text-xs text-slate-500">
+                          {entry.attentionReasons.length ? entry.attentionReasons.join(", ") : "sin flags"}
+                        </div>
+                      </td>
                       <td className="px-3 py-3">
                         <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(entry.status)}`}>
                           {statusLabel(entry.status)}

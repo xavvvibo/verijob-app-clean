@@ -28,7 +28,7 @@ type SubscriptionStatePayload = {
 const PUBLIC_PROFILE_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es";
 
 const previewModes: Array<{ value: PublicProfilePreviewMode; label: string }> = [
-  { value: "public", label: "Vista pública" },
+  { value: "public", label: "Vista pública resumida" },
   { value: "full", label: "Vista completa" },
 ];
 
@@ -149,7 +149,7 @@ export default function CandidatePublicProfilePage() {
         <header className="rounded-2xl border border-gray-200 bg-white p-6">
           <h1 className="text-2xl font-semibold text-gray-900">Perfil público</h1>
           <p className="mt-2 text-sm text-gray-600">
-            Así verán tu perfil las empresas cuando compartas tu enlace verificable.
+            Así verán tu perfil las empresas cuando compartas tu enlace verificable, con la misma lectura de confianza por experiencia que ya ves en tu perfil.
           </p>
 
           <div className="mt-4 max-w-sm">
@@ -167,10 +167,12 @@ export default function CandidatePublicProfilePage() {
             </select>
           </div>
 
-          <p className="mt-4 text-sm text-blue-900">
-            La vista previa muestra dos estados reales y distintos: la vista pública que compartes por enlace y la
-            vista completa con más señales y datos de contacto permitidos.
-          </p>
+          <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+            <p className="font-semibold">Esta vista previa usa el mismo renderer real del perfil público.</p>
+            <p className="mt-1">
+              Verás exactamente la misma jerarquía de confianza por experiencia: verificadas primero, luego las reforzadas con documentación, después las que están en proceso y al final las que aún no están validadas.
+            </p>
+          </div>
         </header>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -195,6 +197,15 @@ export default function CandidatePublicProfilePage() {
           <p className="mt-1 text-sm text-gray-600">
             Este es tu enlace público verificable. El QR está disponible con los planes Pro y Pro+.
           </p>
+
+          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <p className="font-semibold text-slate-900">Qué se ve en cada vista</p>
+            <ul className="mt-2 space-y-1.5 text-xs leading-5 text-slate-600">
+              <li>Vista pública resumida: señales de confianza y trayectoria profesional sin parecer un CV completo.</li>
+              <li>Vista completa: más detalle por experiencia y datos visibles según permisos y plan.</li>
+              <li>Los estados por experiencia mantienen el mismo lenguaje: Alta confianza, Verificación en proceso, Confianza media y Sin validar todavía.</li>
+            </ul>
+          </div>
 
           <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Enlace público</div>

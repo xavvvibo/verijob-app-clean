@@ -4,6 +4,7 @@ import { createServiceRoleClient } from "@/utils/supabase/service";
 import { buildCandidateProfileCompletionModel } from "@/lib/candidate/profile-completion";
 import { normalizeCandidatePhone } from "@/lib/phone";
 import { buildIdentityRecord } from "@/lib/security/identity";
+import { buildCandidateExperienceTrustTimeline } from "@/lib/candidate/experience-trust";
 
 const PROFILE_PERSONAL_FIELDS = [
   "full_name",
@@ -117,7 +118,7 @@ function buildAchievementsCatalog(profile: any, candidateProfile: any) {
 }
 
 async function readProfileAndCandidateProfile(supabase: any, userId: string) {
-  const [profileRes, candidateProfileRes, identityRes, experienceCountRes, evidenceCountRes] = await Promise.all([
+  const [profileRes, candidateProfileRes, identityRes, experienceCountRes, evidenceCountRes, profileExperiencesRes, employmentRecordsRes, verificationSummariesRes] = await Promise.all([
     supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
     supabase.from("candidate_profiles").select("*").eq("user_id", userId).maybeSingle(),
     supabase
@@ -127,6 +128,20 @@ async function readProfileAndCandidateProfile(supabase: any, userId: string) {
       .maybeSingle(),
     supabase.from("profile_experiences").select("id", { count: "exact", head: true }).eq("user_id", userId),
     supabase.from("evidences").select("id", { count: "exact", head: true }).eq("uploaded_by", userId),
+    supabase
+      .from("profile_experiences")
+      .select("id, role_title, company_name, start_date, end_date, description, matched_verification_id, created_at")
+      .eq("user_id", userId)
+      .order("start_date", { ascending: false }),
+    supabase
+      .from("employment_records")
+      .select("id, position, company_name_freeform, start_date, end_date, verification_status, last_verification_request_id")
+      .eq("candidate_id", userId)
+      .order("start_date", { ascending: false }),
+    supabase
+      .from("verification_summary")
+      .select("verification_id, status, evidence_count, evidences_count")
+      .eq("candidate_id", userId),
   ]);
 
   if (profileRes.error) {
@@ -144,11 +159,23 @@ async function readProfileAndCandidateProfile(supabase: any, userId: string) {
   if (evidenceCountRes.error) {
     return { error: NextResponse.json({ error: evidenceCountRes.error.message }, { status: 400 }) };
   }
+  if (profileExperiencesRes.error) {
+    return { error: NextResponse.json({ error: profileExperiencesRes.error.message }, { status: 400 }) };
+  }
+  if (employmentRecordsRes.error) {
+    return { error: NextResponse.json({ error: employmentRecordsRes.error.message }, { status: 400 }) };
+  }
+  if (verificationSummariesRes.error) {
+    return { error: NextResponse.json({ error: verificationSummariesRes.error.message }, { status: 400 }) };
+  }
 
   return {
     profile: profileRes.data || null,
     candidateProfile: candidateProfileRes.data || null,
     identity: identityRes.data || null,
+    profileExperiences: profileExperiencesRes.data || [],
+    employmentRecords: employmentRecordsRes.data || [],
+    verificationSummaries: verificationSummariesRes.data || [],
     counts: {
       experience_count: Number(experienceCountRes.count || 0),
       evidence_count: Number(evidenceCountRes.count || 0),
@@ -202,8 +229,13 @@ export async function GET() {
   const admin = createServiceRoleClient();
   const read = await readProfileAndCandidateProfile(admin, user.id);
   if ((read as any).error) return (read as any).error;
-  const { profile, candidateProfile, identity, counts } = read as any;
+  const { profile, candidateProfile, identity, counts, profileExperiences, employmentRecords, verificationSummaries } = read as any;
   const achievementsCatalog = buildAchievementsCatalog(profile, candidateProfile);
+  const experienceTimeline = buildCandidateExperienceTrustTimeline({
+    profileExperiences: profileExperiences || [],
+    employmentRecords: employmentRecords || [],
+    verificationSummaries: verificationSummaries || [],
+  });
   const profileCompletion = buildCandidateProfileCompletionModel({
     profile,
     candidateProfile,
@@ -233,6 +265,7 @@ export async function GET() {
       languages: achievementsCatalog.languages.map((item) => formatLanguageLabel(item) || item.title).filter(Boolean),
       achievements: achievementsCatalog.all,
       achievements_catalog: achievementsCatalog,
+      experience_timeline: experienceTimeline,
     },
     profile_completion: profileCompletion,
     counts,

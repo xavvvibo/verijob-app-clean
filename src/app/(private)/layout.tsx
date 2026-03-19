@@ -2,8 +2,7 @@ import { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { resolveSessionRole } from "@/lib/auth/session-role";
-import Sidebar from "./_components/layout/Sidebar";
-import Topbar from "./_components/layout/Topbar";
+import PrivateShell from "./_components/layout/PrivateShell";
 
 export default async function PrivateLayout({ children }: { children: ReactNode }) {
   const supabase = await createClient();
@@ -22,13 +21,5 @@ export default async function PrivateLayout({ children }: { children: ReactNode 
     user,
   }) || "candidate";
 
-  return (
-    <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", minHeight: "100vh", background: "#F8FAFC" }}>
-      <Sidebar role={role} />
-      <div>
-        <Topbar role={role} />
-        <main style={{ padding: "32px" }}>{children}</main>
-      </div>
-    </div>
-  );
+  return <PrivateShell role={role}>{children}</PrivateShell>;
 }

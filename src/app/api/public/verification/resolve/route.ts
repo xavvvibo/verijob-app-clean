@@ -6,6 +6,11 @@ import {
   isMissingExternalResolvedColumn,
   isVerificationExternallyResolved,
 } from "@/lib/verification/external-resolution";
+import { markEmploymentRecordVerificationDecision } from "@/lib/verification/employment-record-status";
+import {
+  classifyVerifierEmail,
+  resolveVerificationCompanyAssociation,
+} from "@/lib/verification/verifier-email-signal";
 
 type ResolvePayload = {
   token?: string;
@@ -92,6 +97,26 @@ export async function POST(req: Request) {
     let snapshotCompanyName: string | null = companyNameInput || asText(requestRow.company_name_target, 180) || null;
     let snapshotCompanyVerificationStatus: string = "unverified";
 
+    if (!snapshotCompanyId) {
+      const association = await resolveVerificationCompanyAssociation({
+        admin,
+        targetEmail: requestRow.external_email_target,
+        companyName: snapshotCompanyName,
+      });
+      snapshotCompanyId = association.companyId;
+      const previousContext =
+        requestRow.request_context && typeof requestRow.request_context === "object"
+          ? requestRow.request_context
+          : {};
+      requestRow = {
+        ...requestRow,
+        request_context: {
+          ...previousContext,
+          company_association_resolution: association.resolution,
+        },
+      };
+    }
+
     if (!snapshotCompanyId && requestRow.external_email_target) {
       const { data: matchedProfile } = await admin
         .from("profiles")
@@ -106,19 +131,23 @@ export async function POST(req: Request) {
       }
     }
 
+    let companyProfile: any = null;
+    let company: any = null;
     if (snapshotCompanyId) {
       snapshotCompanyVerificationStatus = "verified_paid";
-      const { data: company } = await admin
+      const { data: companyRow } = await admin
         .from("companies")
         .select("name,company_verification_status")
         .eq("id", snapshotCompanyId)
         .maybeSingle();
+      company = companyRow;
 
-      const { data: companyProfile } = await admin
+      const { data: companyProfileRow } = await admin
         .from("company_profiles")
-        .select("trade_name,legal_name")
+        .select("trade_name,legal_name,contact_email,website_url")
         .eq("company_id", snapshotCompanyId)
         .maybeSingle();
+      companyProfile = companyProfileRow;
 
       snapshotCompanyName =
         snapshotCompanyName ||
@@ -139,8 +168,19 @@ export async function POST(req: Request) {
       .filter(Boolean)
       .join(" | ");
 
+    const verifierEmailSignal = classifyVerifierEmail({
+      email: requestRow.external_email_target,
+      companyName: snapshotCompanyName,
+      companyWebsiteUrl: companyProfile?.website_url || null,
+      companyContactEmail: companyProfile?.contact_email || null,
+    });
+
     const requestContext = {
       ...(requestRow.request_context || {}),
+      company_association_resolution: snapshotCompanyId ? "resolved_on_external_reply" : "unresolved",
+      verifier_email_signal: verifierEmailSignal,
+      owner_attention_required:
+        verifierEmailSignal.owner_attention_required || !snapshotCompanyId,
       external_resolution: {
         resolved_at: resolvedAt,
         verifier_name: verifierName,
@@ -154,6 +194,7 @@ export async function POST(req: Request) {
       external_resolved: true,
       resolved_at: resolvedAt,
       resolution_notes: resolutionNotes,
+      company_id: snapshotCompanyId,
       company_id_snapshot: snapshotCompanyId,
       company_name_snapshot: snapshotCompanyName,
       company_verification_status_snapshot: normalizeCompanyVerificationStatusSnapshot(snapshotCompanyVerificationStatus),
@@ -180,10 +221,20 @@ export async function POST(req: Request) {
     if (updateRequestErr) return json(400, { error: "request_update_failed", detail: updateRequestErr.message });
 
     if (requestRow.employment_record_id) {
-      const { error: updateEmploymentErr } = await admin
+      const employmentUpdate = await markEmploymentRecordVerificationDecision({
+        admin,
+        employmentRecordId: String(requestRow.employment_record_id),
+        verificationRequestId: String(requestRow.id),
+        nowIso: resolvedAt,
+        decision: decision === "confirm" ? "approve" : "reject",
+      });
+      if (!employmentUpdate.ok) {
+        return json(400, { error: "employment_update_failed", detail: employmentUpdate.error?.message || "employment_status_update_failed" });
+      }
+
+      const { error: patchEmploymentErr } = await admin
         .from("employment_records")
         .update({
-          verification_status: nextStatus,
           verification_result: nextStatus,
           verification_resolved_at: resolvedAt,
           verified_by_company_id: snapshotCompanyId,
@@ -192,8 +243,8 @@ export async function POST(req: Request) {
         })
         .eq("id", requestRow.employment_record_id);
 
-      if (updateEmploymentErr) {
-        return json(400, { error: "employment_update_failed", detail: updateEmploymentErr.message });
+      if (patchEmploymentErr) {
+        return json(400, { error: "employment_update_failed", detail: patchEmploymentErr.message });
       }
     }
 

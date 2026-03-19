@@ -1,503 +1,125 @@
-"use client";
+import { redirect } from "next/navigation"
+import { createServerSupabaseClient } from "@/utils/supabase/server"
+import CandidateOnboardingFlow from "./CandidateOnboardingFlow"
 
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { createClient } from "@/utils/supabase/client";
-import { vjEvents } from "@/lib/analytics";
-import { resolveAuthenticatedRouting } from "@/lib/auth/post-login-redirect";
-import CvUploadAndParse from "@/components/candidate/profile/CvUploadAndParse";
+export const dynamic = "force-dynamic"
+export const revalidate = 0
 
-export const dynamic = "force-dynamic";
-
-type StepKey = "cv" | "experience" | "education" | "achievements" | "finish";
-
-const STEP_ORDER: StepKey[] = ["cv", "experience", "education", "achievements", "finish"];
-
-function normalizeStep(value: string | null | undefined): StepKey {
-  const raw = String(value || "").toLowerCase();
-  if (raw === "experience") return "experience";
-  if (raw === "education") return "education";
-  if (raw === "achievements") return "achievements";
-  if (raw === "finish" || raw === "final") return "finish";
-  return "cv";
+function norm(value: unknown) {
+  return String(value || "").trim().toLowerCase()
 }
 
-function nextStep(step: StepKey): StepKey {
-  const idx = STEP_ORDER.indexOf(step);
-  return STEP_ORDER[Math.min(idx + 1, STEP_ORDER.length - 1)] || "finish";
+function matchKey(input: any) {
+  return [
+    norm(input?.role_title ?? input?.position),
+    norm(input?.company_name ?? input?.company_name_freeform),
+    norm(input?.start_date),
+    norm(input?.end_date),
+  ].join("|")
 }
 
-function StepCard({
-  title,
-  description,
-  status,
-}: {
-  title: string;
-  description: string;
-  status: "pending" | "current" | "done";
-}) {
-  const badgeClass =
-    status === "done"
-      ? "bg-emerald-50 text-emerald-700"
-      : status === "current"
-      ? "bg-blue-50 text-blue-700"
-      : "bg-amber-50 text-amber-700";
+export default async function CandidateOnboardingPage() {
+  const supabase = await createServerSupabaseClient()
+  const { data: auth } = await supabase.auth.getUser()
+  if (!auth?.user) redirect("/login?next=/onboarding")
 
-  const badgeLabel = status === "done" ? "Revisado" : status === "current" ? "En curso" : "Pendiente";
-
-  return (
-    <div className="rounded-2xl border bg-white p-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="text-sm font-semibold text-slate-900">{title}</div>
-        <div className={`rounded-full px-2.5 py-1 text-xs font-medium ${badgeClass}`}>{badgeLabel}</div>
-      </div>
-      <p className="mt-2 text-sm text-slate-600">{description}</p>
-    </div>
-  );
-}
-
-export default function OnboardingPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const supabase = useMemo(() => createClient(), []);
-
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [currentStep, setCurrentStep] = useState<StepKey>("cv");
-
-  const blockedGate = searchParams.get("blocked") === "1";
-  const blockedSource = searchParams.get("source");
-  const sourceLabel =
-    blockedSource === "candidate"
-      ? "perfil candidato"
-      : blockedSource === "dashboard"
-      ? "dashboard"
-      : "otras secciones privadas";
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function boot() {
-      setErr(null);
-      setLoading(true);
-
-      const { data: au } = await supabase.auth.getUser();
-      const user = au.user;
-
-      if (!user) {
-        if (!cancelled) router.replace("/login?next=/onboarding");
-        return;
-      }
-
-      const { data: profile, error: pErr } = await supabase
-        .from("profiles")
-        .select("id, role, active_company_id, onboarding_completed, onboarding_step")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      if (pErr) {
-        if (!cancelled) setErr("No se pudo leer tu perfil. Intenta recargar.");
-      } else {
-        const routing = resolveAuthenticatedRouting({ ...(profile || {}), user });
-        if (routing.destination !== "/onboarding") {
-          if (!cancelled) router.replace(routing.destination);
-          return;
-        }
-        if (!cancelled) {
-          const stepFromUrl = normalizeStep(searchParams.get("step"));
-          const stepFromProfile = normalizeStep(profile?.onboarding_step);
-          setCurrentStep(searchParams.get("step") ? stepFromUrl : stepFromProfile);
-        }
-      }
-
-      if (!cancelled && !pErr) {
-        setLoading(false);
-      } else if (!cancelled && pErr) {
-        setLoading(false);
-      }
-    }
-
-    boot();
-    return () => {
-      cancelled = true;
-    };
-  }, [router, searchParams, supabase]);
-
-  const stepIndex = STEP_ORDER.indexOf(currentStep);
-  const progressPct = Math.round(((stepIndex + 1) / STEP_ORDER.length) * 100);
-
-  async function persistStep(step: StepKey) {
-    const { data: au } = await supabase.auth.getUser();
-    const user = au.user;
-    if (!user) {
-      router.replace("/login?next=/onboarding");
-      return false;
-    }
-
-    const { error } = await supabase
+  const [{ data: profile }, { data: experiences }, { data: employmentRows }, { data: verificationRows }, { data: evidenceRows }, { data: candidateProfile }] = await Promise.all([
+    supabase
       .from("profiles")
-      .upsert(
-        {
-          id: user.id,
-          onboarding_step: step,
-        },
-        { onConflict: "id" },
-      );
+      .select("id,role,full_name,onboarding_step,onboarding_completed")
+      .eq("id", auth.user.id)
+      .maybeSingle(),
+    supabase
+      .from("profile_experiences")
+      .select("id,role_title,company_name,start_date,end_date,description,matched_verification_id,created_at")
+      .eq("user_id", auth.user.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("employment_records")
+      .select("id,position,company_name_freeform,start_date,end_date,last_verification_request_id")
+      .eq("candidate_id", auth.user.id),
+    supabase
+      .from("verification_requests")
+      .select("id,status,requested_at,resolved_at,external_email_target,employment_record_id,created_at,revoked_at")
+      .eq("requested_by", auth.user.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("evidences")
+      .select("id,verification_request_id,document_type,evidence_type,created_at,validation_status")
+      .eq("uploaded_by", auth.user.id)
+      .order("created_at", { ascending: false })
+      .limit(12),
+    supabase
+      .from("candidate_profiles")
+      .select("trust_score")
+      .eq("user_id", auth.user.id)
+      .maybeSingle(),
+  ])
 
-    if (error) {
-      setErr(error.message || "No se pudo guardar el avance.");
-      return false;
-    }
+  if (!profile) redirect("/login?next=/onboarding")
+  if (String(profile.role || "").toLowerCase() === "company") redirect("/onboarding/company")
+  if (profile.onboarding_completed) redirect("/candidate/overview")
 
-    return true;
-  }
-
-  async function moveTo(step: StepKey, analyticsStep?: "experience" | "education" | "achievements") {
-    setErr(null);
-    setSaving(true);
-    try {
-      const ok = await persistStep(step);
-      if (!ok) return;
-      if (analyticsStep) {
-        vjEvents.onboarding_step_completed(analyticsStep);
-        vjEvents.profile_section_completed(analyticsStep);
-      }
-      setCurrentStep(step);
-    } catch (e: any) {
-      setErr(e?.message || "No se pudo actualizar el onboarding.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function onFinish() {
-    setErr(null);
-    setSaving(true);
-
-    try {
-      const { data: au } = await supabase.auth.getUser();
-      const user = au.user;
-      if (!user) {
-        router.replace("/login?next=/onboarding");
-        return;
-      }
-
-      const ok = await persistStep("finish");
-      if (!ok) return;
-
-      const completeRes = await fetch("/api/onboarding/complete", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ onboarding_step: "finish" }),
-      });
-      const completeData = await completeRes.json().catch(() => ({}));
-      if (!completeRes.ok) {
-        throw new Error(completeData?.details || completeData?.error || "No se pudo completar el onboarding.");
-      }
-
-      vjEvents.onboarding_step_completed("achievements");
-      vjEvents.profile_section_completed("achievements");
-      vjEvents.onboarding_completed("candidate");
-
-      router.replace("/candidate/profile");
-      router.refresh();
-    } catch (e: any) {
-      setErr(e?.message || "No se pudo completar el onboarding.");
-    } finally {
-      setSaving(false);
+  const employmentBySignature = new Map<string, string>()
+  for (const row of employmentRows || []) {
+    const key = matchKey(row)
+    if (key && !employmentBySignature.has(key)) {
+      employmentBySignature.set(key, String((row as any)?.id || ""))
     }
   }
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-slate-50 px-6 py-10">
-        <div className="mx-auto max-w-3xl rounded-3xl border bg-white p-8 shadow-sm">
-          <div className="text-sm text-slate-600">Cargando…</div>
-        </div>
-      </main>
-    );
+  const mappedExperiences = (experiences || []).map((row: any) => ({
+    id: String(row.id),
+    profile_experience_id: String(row.id),
+    employment_record_id: employmentBySignature.get(matchKey(row)) || "",
+    role_title: row.role_title || "",
+    company_name: row.company_name || "",
+    start_date: row.start_date || "",
+    end_date: row.end_date || "",
+    description: row.description || "",
+    matched_verification_id: row.matched_verification_id ? String(row.matched_verification_id) : "",
+  }))
+
+  const primaryExperience = mappedExperiences[0] || null
+  const verificationByEmploymentId = new Map<string, any>()
+  for (const row of verificationRows || []) {
+    const key = String((row as any)?.employment_record_id || "")
+    if (key && !verificationByEmploymentId.has(key) && !(row as any)?.revoked_at) {
+      verificationByEmploymentId.set(key, row)
+    }
   }
+  const primaryVerification =
+    (primaryExperience?.employment_record_id && verificationByEmploymentId.get(primaryExperience.employment_record_id)) ||
+    ((verificationRows || []).find((row: any) => !(row as any)?.revoked_at) ?? null)
 
   return (
-    <main className="min-h-screen bg-slate-50 px-6 py-10">
-      <div className="mx-auto max-w-6xl">
-        <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-          <section className="rounded-3xl border bg-white p-8 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Onboarding candidato
-            </div>
-            <h1 className="mt-3 text-3xl font-semibold text-slate-900">
-              Completa tu perfil inicial sin bloquear tu edición
-            </h1>
-            <p className="mt-3 text-sm text-slate-600">
-              Empieza importando tu CV o continúa de forma manual. Puedes saltar pasos y volver más tarde a cualquier sección.
-            </p>
-            {blockedGate ? (
-              <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-                <div className="font-semibold">Tu cuenta aún no ha terminado el onboarding</div>
-                <p className="mt-1">
-                  Hemos bloqueado temporalmente el acceso al {sourceLabel} para evitar acciones con el perfil incompleto.
-                  Aun así, ya puedes abrir experiencia, formación y logros para completar tu información real.
-                </p>
-              </div>
-            ) : null}
-
-            <div className="mt-6">
-              <div className="mb-2 flex items-center justify-between text-sm text-slate-600">
-                <span>Progreso orientativo</span>
-                <span>{progressPct}%</span>
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-2 rounded-full bg-slate-900" style={{ width: `${progressPct}%` }} />
-              </div>
-            </div>
-
-            <div className="mt-8 space-y-4">
-              {[
-                {
-                  key: "cv",
-                  title: "1. Importar CV",
-                  description: "Sube tu CV para extraer experiencia, formación e idiomas automáticamente. Puedes omitirlo.",
-                },
-                {
-                  key: "experience",
-                  title: "2. Experiencia laboral",
-                  description: "Abre la sección real de experiencia para añadir, editar y guardar tu historial profesional.",
-                },
-                {
-                  key: "education",
-                  title: "3. Formación académica",
-                  description: "Añade estudios desde la ruta real de educación. No hace falta completarlo todo ahora.",
-                },
-                {
-                  key: "achievements",
-                  title: "4. Idiomas y otros logros",
-                  description: "Gestiona idiomas, certificaciones y otros logros desde la sección específica.",
-                },
-                {
-                  key: "finish",
-                  title: "5. Finalizar onboarding",
-                  description: "Cierra el perfil inicial y sigue completándolo después desde tu área candidata.",
-                },
-              ].map((step, index) => (
-                <StepCard
-                  key={step.key}
-                  title={step.title}
-                  description={step.description}
-                  status={index < stepIndex ? "done" : index === stepIndex ? "current" : "pending"}
-                />
-              ))}
-            </div>
-          </section>
-
-          <section id="onboarding-action-panel" className="rounded-3xl border bg-white p-8 shadow-sm">
-            <div className="text-sm font-semibold text-slate-900">
-              Paso actual: {
-                currentStep === "cv"
-                  ? "Importar CV"
-                  : currentStep === "experience"
-                  ? "Experiencia laboral"
-                  : currentStep === "education"
-                  ? "Formación académica"
-                  : currentStep === "achievements"
-                  ? "Idiomas y otros logros"
-                  : "Finalizar onboarding"
-              }
-            </div>
-
-            {currentStep === "cv" ? (
-              <div className="mt-6 space-y-5">
-                <div className="rounded-2xl border bg-slate-50 p-4">
-                  <div className="text-base font-semibold text-slate-900">Importa tu CV para empezar más rápido</div>
-                  <p className="mt-2 text-sm text-slate-600">
-                    Puedes subir tu CV, extraer información automáticamente o saltar este paso y completar el onboarding manualmente.
-                  </p>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="rounded-2xl border border-slate-200 p-4">
-                    <div className="text-sm font-semibold text-slate-900">Subir CV</div>
-                    <p className="mt-2 text-sm text-slate-600">Carga un PDF o DOCX para arrancar con datos reales.</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 p-4">
-                    <div className="text-sm font-semibold text-slate-900">Extraer información automáticamente</div>
-                    <p className="mt-2 text-sm text-slate-600">La experiencia, la formación y los idiomas se preparan para que puedas revisarlos.</p>
-                  </div>
-                  <div className="rounded-2xl border border-slate-200 p-4">
-                    <div className="text-sm font-semibold text-slate-900">Omitir este paso</div>
-                    <p className="mt-2 text-sm text-slate-600">Puedes seguir manualmente y volver a importar tu CV más adelante.</p>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 p-4">
-                  <CvUploadAndParse />
-                </div>
-
-                <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-slate-700">
-                  Cuando termines de importar, revisa experiencia, formación e idiomas antes de cerrar el onboarding. Si prefieres, puedes seguir manualmente desde ahora mismo.
-                </div>
-
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => moveTo("experience")}
-                    className="inline-flex w-full items-center justify-center rounded-xl border border-slate-200 px-4 py-3 text-sm font-medium text-slate-900 disabled:opacity-60"
-                  >
-                    {saving ? "Guardando…" : "Omitir este paso"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={saving}
-                    onClick={() => moveTo("experience")}
-                    className="inline-flex w-full items-center justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
-                  >
-                    Continuar al siguiente paso
-                  </button>
-                </div>
-              </div>
-            ) : null}
-
-            {currentStep === "experience" ? (
-              <div className="mt-6 space-y-5">
-                <p className="text-sm text-slate-600">
-                  Abre la sección real de experiencia para añadir, editar y guardar tus empleos. Puedes volver aquí después sin perder el hilo del onboarding.
-                </p>
-                <Link
-                  href="/candidate/experience"
-                  className="inline-flex w-full items-center justify-center rounded-xl border px-4 py-3 text-sm font-medium text-slate-900"
-                >
-                  Ir a experiencia laboral
-                </Link>
-                <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-slate-700">
-                  Puedes volver aquí cuando quieras. Si todavía no añades nada, también puedes continuar manualmente.
-                </div>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => moveTo(nextStep("experience"), "experience")}
-                  className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
-                >
-                  {saving ? "Guardando…" : "Continuar a formación académica"}
-                </button>
-              </div>
-            ) : null}
-
-            {currentStep === "education" ? (
-              <div className="mt-6 space-y-5">
-                <p className="text-sm text-slate-600">
-                  Añade tus estudios desde la ruta real de educación. Puedes guardar uno, varios o ninguno por ahora y continuar sin bloquearte.
-                </p>
-                <Link
-                  href="/candidate/education"
-                  className="inline-flex w-full items-center justify-center rounded-xl border px-4 py-3 text-sm font-medium text-slate-900"
-                >
-                  Añadir estudios
-                </Link>
-                <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-slate-700">
-                  Si lo prefieres, continúa y vuelve más tarde. El perfil seguirá siendo editable.
-                </div>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => moveTo(nextStep("education"), "education")}
-                  className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
-                >
-                  {saving ? "Guardando…" : "Continuar a idiomas y logros"}
-                </button>
-              </div>
-            ) : null}
-
-            {currentStep === "achievements" ? (
-              <div className="mt-6 space-y-5">
-                <p className="text-sm text-slate-600">
-                  Esta sección ya separa idiomas, certificaciones y otros logros. Entra y añade solo lo que tengas listo ahora.
-                </p>
-                <div className="grid gap-3">
-                  <Link
-                    href="/candidate/achievements?open=language"
-                    className="inline-flex w-full items-center justify-center rounded-xl border px-4 py-3 text-sm font-medium text-slate-900"
-                  >
-                    Añadir idioma
-                  </Link>
-                  <Link
-                    href="/candidate/achievements?open=certification"
-                    className="inline-flex w-full items-center justify-center rounded-xl border px-4 py-3 text-sm font-medium text-slate-900"
-                  >
-                    Añadir certificación
-                  </Link>
-                  <Link
-                    href="/candidate/achievements?open=achievement"
-                    className="inline-flex w-full items-center justify-center rounded-xl border px-4 py-3 text-sm font-medium text-slate-900"
-                  >
-                    Añadir logro
-                  </Link>
-                </div>
-                <div className="rounded-2xl border bg-slate-50 p-4 text-sm text-slate-700">
-                  Los idiomas se mostrarán con formato laboral claro, por ejemplo <span className="font-semibold">English — C2</span>.
-                </div>
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={() => moveTo(nextStep("achievements"), "achievements")}
-                  className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
-                >
-                  {saving ? "Guardando…" : "Ir al paso final"}
-                </button>
-              </div>
-            ) : null}
-
-            {currentStep === "finish" ? (
-              <div className="mt-6 space-y-5">
-                <div className="rounded-2xl border bg-emerald-50 p-4 text-emerald-900">
-                  <div className="text-base font-semibold">Tu perfil inicial está listo</div>
-                  <p className="mt-2 text-sm">
-                    Ya puedes cerrar este onboarding y seguir completando tu perfil cuando quieras.
-                  </p>
-                </div>
-
-                <div className="grid gap-3">
-                  <Link
-                    href="/candidate/profile"
-                    className="inline-flex w-full items-center justify-center rounded-xl border px-4 py-3 text-sm font-medium text-slate-900"
-                  >
-                    Ver perfil
-                  </Link>
-                  <Link
-                    href="/candidate/experience"
-                    className="inline-flex w-full items-center justify-center rounded-xl border px-4 py-3 text-sm font-medium text-slate-900"
-                  >
-                    Añadir más información
-                  </Link>
-                  <Link
-                    href="/candidate/verifications/new"
-                    className="inline-flex w-full items-center justify-center rounded-xl border px-4 py-3 text-sm font-medium text-slate-900"
-                  >
-                    Solicitar verificación
-                  </Link>
-                </div>
-
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={onFinish}
-                  className="w-full rounded-xl bg-slate-950 px-4 py-3 text-sm font-medium text-white disabled:opacity-60"
-                >
-                  {saving ? "Finalizando…" : "Finalizar onboarding"}
-                </button>
-              </div>
-            ) : null}
-
-            {err ? (
-              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                {err}
-              </div>
-            ) : null}
-          </section>
-        </div>
-      </div>
-    </main>
-  );
+    <CandidateOnboardingFlow
+      initialProfile={{
+        fullName: String(profile.full_name || "").trim() || null,
+        onboardingStep: String(profile.onboarding_step || "").trim() || null,
+      }}
+      initialExperience={primaryExperience}
+      initialVerification={
+        primaryVerification
+          ? {
+              id: String((primaryVerification as any).id || ""),
+              status: String((primaryVerification as any).status || ""),
+              requested_at: (primaryVerification as any).requested_at || null,
+              resolved_at: (primaryVerification as any).resolved_at || null,
+              external_email_target: String((primaryVerification as any).external_email_target || "").trim() || null,
+              employment_record_id: String((primaryVerification as any).employment_record_id || "").trim() || null,
+            }
+          : null
+      }
+      initialEvidence={
+        (evidenceRows || []).map((row: any) => ({
+          id: String(row.id),
+          document_type: String(row.document_type || row.evidence_type || "Documento"),
+          created_at: row.created_at || null,
+          validation_status: String(row.validation_status || "").trim() || null,
+        }))
+      }
+      initialTrustScore={Number((candidateProfile as any)?.trust_score ?? 0) || 0}
+    />
+  )
 }
