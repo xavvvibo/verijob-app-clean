@@ -6,6 +6,29 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+async function getEmploymentOwnerId(employment_record_id: string) {
+  const ownerColumnVariants = [
+    "candidate_id",
+    "user_id",
+    "profile_id",
+    "requested_by",
+  ]
+
+  for (const col of ownerColumnVariants) {
+    const { data, error } = await supabase
+      .from("employment_records")
+      .select(`id, ${col}`)
+      .eq("id", employment_record_id)
+      .maybeSingle()
+
+    if (!error && data && (data as any)[col]) {
+      return (data as any)[col]
+    }
+  }
+
+  return null
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "method_not_allowed" })
@@ -28,21 +51,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
+    const requestedBy = await getEmploymentOwnerId(employment_record_id)
+
     const variants = [
       {
         employment_record_id,
-        company_email: email,
-        status: "pending",
+        external_email_target: email,
+        verification_channel: "email",
+        status: "pending_company",
+        ...(requestedBy ? { requested_by: requestedBy } : {}),
       },
       {
         employment_record_id,
-        verifier_email: email,
-        status: "pending",
+        external_email_target: email,
+        verification_channel: "email",
+        status: "requested",
+        ...(requestedBy ? { requested_by: requestedBy } : {}),
       },
       {
         employment_record_id,
-        email,
-        status: "pending",
+        external_email_target: email,
+        status: "pending_company",
+        ...(requestedBy ? { requested_by: requestedBy } : {}),
+      },
+      {
+        employment_record_id,
+        external_email_target: email,
+        status: "requested",
+        ...(requestedBy ? { requested_by: requestedBy } : {}),
       },
     ]
 
@@ -82,6 +118,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       db_details: lastError?.details ?? null,
       db_hint: lastError?.hint ?? null,
       db_code: lastError?.code ?? null,
+      requested_by: requestedBy,
     })
   } catch (e: any) {
     console.error("VERIFICATION_CREATE_EXCEPTION", e)
