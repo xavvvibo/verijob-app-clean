@@ -1,11 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { createClient } from "@supabase/supabase-js"
+import crypto from "crypto"
 import { createPagesRouteClient } from "@/utils/supabase/pages"
 import {
   isMissingExternalResolvedColumn,
   isVerificationExternallyResolved,
 } from "@/lib/verification/external-resolution"
 import { markEmploymentRecordVerificationRequested } from "@/lib/verification/employment-record-status"
+import { sendTransactionalEmail } from "@/server/email/sendTransactionalEmail"
+import { buildExternalExperienceVerificationEmail } from "@/lib/email/templates/externalExperienceVerification"
 
 function norm(value: unknown) {
   return String(value || "").trim().toLowerCase()
@@ -18,6 +21,61 @@ function experienceMatchKey(input: any) {
     norm(input?.start_date),
     norm(input?.end_date),
   ].join("|")
+}
+
+function getAppUrl() {
+  return String(process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es").replace(/\/+$/, "")
+}
+
+function newExternalToken() {
+  return crypto.randomBytes(16).toString("hex")
+}
+
+async function ensureVerificationRequestExternalToken(args: {
+  admin: any
+  verificationRequestId: string
+  existingToken?: string | null
+  existingExpiresAt?: string | null
+}) {
+  const existingToken = String(args.existingToken || "").trim()
+  const existingExpiresAt = String(args.existingExpiresAt || "").trim()
+  if (existingToken) {
+    return {
+      ok: true as const,
+      token: existingToken,
+      expiresAt: existingExpiresAt || null,
+      updated: false,
+      error: null,
+    }
+  }
+
+  const token = newExternalToken()
+  const expiresAt = new Date(Date.now() + 1000 * 60 * 60 * 24 * 14).toISOString()
+  const { error } = await args.admin
+    .from("verification_requests")
+    .update({
+      external_token: token,
+      external_token_expires_at: expiresAt,
+    })
+    .eq("id", args.verificationRequestId)
+
+  if (error) {
+    return {
+      ok: false as const,
+      token: null,
+      expiresAt: null,
+      updated: false,
+      error,
+    }
+  }
+
+  return {
+    ok: true as const,
+    token,
+    expiresAt,
+    updated: true,
+    error: null,
+  }
 }
 
 async function resolveEmploymentRecordId(params: {
@@ -222,7 +280,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const activeLookup = await admin
       .from("verification_requests")
-      .select("id,status,resolved_at,external_resolved")
+      .select("id,status,resolved_at,external_resolved,external_token,external_token_expires_at")
       .eq("requested_by", normalizedRequestedBy)
       .eq("employment_record_id", normalizedEmploymentRecordId)
       .eq("verification_channel", "email")
@@ -241,6 +299,54 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const candidateExistingRows = Array.isArray(activeLookup.data) ? activeLookup.data : []
     existingRequest = candidateExistingRows.find((row: any) => !isVerificationExternallyResolved(row)) || null
 
+    const candidateProfileLookup = await admin
+      .from("profiles")
+      .select("full_name")
+      .eq("id", normalizedRequestedBy)
+      .maybeSingle()
+    const candidateName = String(candidateProfileLookup.data?.full_name || "").trim() || "Candidato"
+
+    const dispatchVerificationEmail = async (verificationRequest: any) => {
+      const tokenResult = await ensureVerificationRequestExternalToken({
+        admin,
+        verificationRequestId: String(verificationRequest?.id || ""),
+        existingToken: verificationRequest?.external_token || null,
+        existingExpiresAt: verificationRequest?.external_token_expires_at || null,
+      })
+
+      if (!tokenResult.ok || !tokenResult.token) {
+        return {
+          email_dispatch_attempted: false,
+          email_dispatch_provider: "resend",
+          email_dispatch_result: "token_generation_failed",
+          email_dispatch_error: tokenResult.error?.message || "external_token_update_failed",
+          verification_link: null,
+        }
+      }
+
+      const verificationLink = `${getAppUrl()}/verify-experience/${tokenResult.token}`
+      const tpl = buildExternalExperienceVerificationEmail({
+        candidateName,
+        companyName: normalizedCompanyName,
+        roleTitle: normalizedRoleTitle,
+        verificationLink,
+      })
+      const sent = await sendTransactionalEmail({
+        to: normalizedEmail,
+        subject: tpl.subject,
+        html: tpl.html,
+        text: tpl.text,
+      })
+
+      return {
+        email_dispatch_attempted: true,
+        email_dispatch_provider: sent.provider,
+        email_dispatch_result: sent.ok ? "sent" : sent.skipped ? "skipped" : "failed",
+        email_dispatch_error: sent.error || null,
+        verification_link: verificationLink,
+      }
+    }
+
     if (existingRequest?.id) {
       if (profileExperienceIdForUpdate) {
         await admin
@@ -250,10 +356,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           .eq("user_id", normalizedRequestedBy)
       }
 
+      const emailDispatch = await dispatchVerificationEmail(existingRequest)
+
       return res.status(200).json({
         ok: true,
         id: existingRequest.id,
         already_exists: true,
+        ...emailDispatch,
       })
     }
 
@@ -302,6 +411,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         .eq("user_id", normalizedRequestedBy)
     }
 
+    const emailDispatch = await dispatchVerificationEmail(data)
+
     return res.status(200).json({
       ok: true,
       id: data.id,
@@ -311,6 +422,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       employment_record_status_warning: employmentUpdate.ok
         ? null
         : employmentUpdate.error?.message || "employment_record_status_update_failed",
+      ...emailDispatch,
     })
   } catch (e: any) {
     return res.status(500).json({
