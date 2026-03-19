@@ -26,6 +26,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
+    // 🔴 INSERT ROBUSTO (sin campos problemáticos)
     const { data, error } = await supabase
       .from("verification_requests")
       .insert({
@@ -37,13 +38,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .single()
 
     if (error) {
+      console.error("INSERT_ERROR", error)
+
       return res.status(400).json({
         error: "verification_insert_failed",
-        details: error.message
+        details: error.message,
+        code: error.code
       })
     }
 
-    return res.status(200).json({ ok: true, data })
+    return res.status(200).json({
+      ok: true,
+      data
+    })
   } catch (e: any) {
     return res.status(500).json({
       error: "internal_error",
