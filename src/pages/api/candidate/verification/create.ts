@@ -5,6 +5,7 @@ import {
   isMissingExternalResolvedColumn,
   isVerificationExternallyResolved,
 } from "@/lib/verification/external-resolution"
+import { markEmploymentRecordVerificationRequested } from "@/lib/verification/employment-record-status"
 
 async function getTableColumns(supabase: any, tableName: string) {
   try {
@@ -106,7 +107,6 @@ async function resolveEmploymentRecordId(params: {
     end_date: (profileExperience as any)?.end_date || null,
   }
   if (employmentColumns.has("source_experience_id")) insertPayload.source_experience_id = profileExperienceId
-  if (employmentColumns.has("verification_status")) insertPayload.verification_status = "requested"
   if (employmentColumns.has("last_verification_requested_at")) insertPayload.last_verification_requested_at = nowIso
   if (employmentColumns.has("is_current")) insertPayload.is_current = !(profileExperience as any)?.end_date
   if (employmentColumns.has("company_id")) insertPayload.company_id = null
@@ -268,15 +268,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
-    await admin
-      .from("employment_records")
-      .update({
-        last_verification_request_id: data.id,
-        verification_status: "requested",
-        last_verification_requested_at: new Date().toISOString(),
-      })
-      .eq("id", normalizedEmploymentRecordId)
-      .eq("candidate_id", normalizedRequestedBy)
+    const employmentUpdate = await markEmploymentRecordVerificationRequested({
+      admin,
+      employmentRecordId: normalizedEmploymentRecordId,
+      candidateId: normalizedRequestedBy,
+      verificationRequestId: data.id,
+      nowIso: new Date().toISOString(),
+    })
 
     if (profileExperienceIdForUpdate) {
       await admin
@@ -289,6 +287,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(200).json({
       ok: true,
       id: data.id,
+      employment_record_status_applied: employmentUpdate.statusApplied,
+      employment_record_status_warning: employmentUpdate.ok
+        ? null
+        : employmentUpdate.error?.message || "employment_record_status_update_failed",
     })
   } catch (e: any) {
     return res.status(500).json({

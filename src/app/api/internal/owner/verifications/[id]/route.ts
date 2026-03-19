@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireOwner } from "@/app/api/internal/owner/_lib";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
+import { markEmploymentRecordVerificationDecision } from "@/lib/verification/employment-record-status";
 
 function json(status: number, body: any) {
   const res = NextResponse.json(body, { status });
@@ -42,6 +43,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (decision === "reject" && !rejectionReason) {
     return json(400, { error: "rejected_reason_required" });
   }
+  const typedDecision = decision as "approve" | "reject" | "review";
 
   const { data: current, error: currentErr } = await owner.admin
     .from("verification_requests")
@@ -86,28 +88,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (!updated) return json(409, { error: "verification_update_no_rows" });
 
   if (updated.employment_record_id) {
-    const employmentPatch: Record<string, any> = {
-      last_verification_request_id: verificationId,
-    };
-    if (decision === "approve") {
-      employmentPatch.verification_status = "verified";
-      employmentPatch.verification_result = "approved";
-      employmentPatch.verification_resolved_at = now;
-    } else if (decision === "reject") {
-      employmentPatch.verification_status = "rejected";
-      employmentPatch.verification_result = "rejected";
-      employmentPatch.verification_resolved_at = now;
-    } else {
-      employmentPatch.verification_status = "requested";
-      employmentPatch.verification_result = null;
-      employmentPatch.verification_resolved_at = null;
+    const employmentUpdate = await markEmploymentRecordVerificationDecision({
+      admin: owner.admin,
+      employmentRecordId: String(updated.employment_record_id),
+      verificationRequestId: verificationId,
+      nowIso: now,
+      decision: typedDecision,
+    });
+    if (!employmentUpdate.ok) {
+      return json(400, { error: "employment_update_failed", details: employmentUpdate.error?.message || "employment_status_update_failed" });
     }
-
-    const { error: employmentErr } = await owner.admin
-      .from("employment_records")
-      .update(employmentPatch)
-      .eq("id", updated.employment_record_id);
-    if (employmentErr) return json(400, { error: "employment_update_failed", details: employmentErr.message });
   }
 
   const targetUserId = String(updated.requested_by || owner.ownerId);
