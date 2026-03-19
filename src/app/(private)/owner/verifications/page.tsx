@@ -72,6 +72,8 @@ export default async function OwnerVerificationsPage({
   const q = String(sp.q || "").trim().toLowerCase();
   const focus = String(sp.focus || "").trim();
 
+  // Server-rendered owner filter page needs a request-time cutoff for range filters.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
   const fromMs =
     rangeFilter === "7d"
@@ -384,7 +386,7 @@ export default async function OwnerVerificationsPage({
                             href={`/owner/verifications/${row.id}`}
                             className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                           >
-                            Abrir ficha
+                            {entry.status === "pending_company" || entry.status === "reviewing" || entry.status === "draft" ? "Revisar / operar" : "Abrir ficha"}
                           </Link>
                           {row.requested_by ? (
                             <Link href={`/owner/users/${row.requested_by}`} className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50">

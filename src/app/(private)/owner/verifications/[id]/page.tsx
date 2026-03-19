@@ -7,6 +7,7 @@ import {
   isMissingExternalResolvedColumn,
   isVerificationExternallyResolved,
 } from "@/lib/verification/external-resolution";
+import OwnerVerificationActionsClient from "./OwnerVerificationActionsClient";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +119,11 @@ export default async function OwnerVerificationDetailPage({ params }: { params: 
           </Link>
         </div>
       </section>
+
+      <OwnerVerificationActionsClient
+        verificationId={String(verification.id)}
+        currentStatus={String(verification.status || "draft")}
+      />
 
       <section className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

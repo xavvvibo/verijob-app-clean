@@ -8,6 +8,7 @@ import {
 } from "@/lib/verification/external-resolution";
 
 const ACTIVE_STATUSES = new Set(["pending", "pending_company", "sent", "opened", "reviewing"]);
+const LEGACY_COMPANY_VERIFICATION_STATUSES = new Set(["unverified", "verified_document", "verified_paid"]);
 
 function asText(value: unknown) {
   return String(value || "").trim();
@@ -15,6 +16,121 @@ function asText(value: unknown) {
 
 function newToken() {
   return crypto.randomBytes(16).toString("hex");
+}
+
+function normalizeCompanyVerificationStatusSnapshot(value: unknown) {
+  const status = asText(value).toLowerCase();
+  if (!status) return null;
+  if (LEGACY_COMPANY_VERIFICATION_STATUSES.has(status)) return status;
+  if (status === "registered_in_verijob") return "verified_paid";
+  if (status === "unverified_external") return "unverified";
+  return "unverified";
+}
+
+function missingColumnFromError(error: any) {
+  const message = String(error?.message || "");
+  const match = message.match(/column ["']?([a-zA-Z0-9_]+)["']? does not exist/i);
+  return match?.[1] ? String(match[1]) : null;
+}
+
+function buildInsertVariants(payload: Record<string, any>) {
+  const without = (source: Record<string, any>, keys: string[]) => {
+    const next = { ...source };
+    for (const key of keys) delete next[key];
+    return next;
+  };
+
+  return [
+    { label: "full", payload },
+    { label: "without_verification_type", payload: without(payload, ["verification_type"]) },
+    {
+      label: "without_snapshots",
+      payload: without(payload, [
+        "verification_type",
+        "company_id_snapshot",
+        "company_name_snapshot",
+        "company_verification_status_snapshot",
+        "snapshot_at",
+      ]),
+    },
+    {
+      label: "without_external_fields",
+      payload: without(payload, [
+        "verification_type",
+        "company_id_snapshot",
+        "company_name_snapshot",
+        "company_verification_status_snapshot",
+        "snapshot_at",
+        "external_email_target",
+        "external_token",
+        "external_token_expires_at",
+      ]),
+    },
+    {
+      label: "minimal_legacy",
+      payload: {
+        employment_record_id: payload.employment_record_id,
+        company_id: payload.company_id,
+        company_email_target: payload.company_email_target,
+        company_name_target: payload.company_name_target,
+        requested_by: payload.requested_by,
+        verification_channel: payload.verification_channel,
+        status: payload.status,
+        requested_at: payload.requested_at,
+        request_context: payload.request_context,
+      },
+    },
+  ];
+}
+
+function shouldRetryVerificationInsert(error: any) {
+  const code = String(error?.code || "").trim();
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    code === "42703" ||
+    code === "PGRST204" ||
+    message.includes("does not exist") ||
+    message.includes("column") ||
+    message.includes("schema cache") ||
+    message.includes("violates check constraint")
+  );
+}
+
+async function insertVerificationRequestCompat(admin: any, payload: Record<string, any>) {
+  const attempts: Array<{ label: string; error?: string | null; missing_column?: string | null }> = [];
+  let lastError: any = null;
+
+  for (const variant of buildInsertVariants(payload)) {
+    const { data, error } = await admin
+      .from("verification_requests")
+      .insert(variant.payload)
+      .select()
+      .single();
+
+    if (!error && data) {
+      return {
+        data,
+        attempts,
+      };
+    }
+
+    lastError = error;
+    attempts.push({
+      label: variant.label,
+      error: String(error?.message || "unknown_error"),
+      missing_column: missingColumnFromError(error),
+    });
+
+    if (!shouldRetryVerificationInsert(error)) {
+      break;
+    }
+  }
+
+  return {
+    data: null,
+    error: lastError,
+    attempts,
+  };
 }
 
 async function resolveRegisteredCompanyTarget(admin: any, companyEmail: string) {
@@ -207,7 +323,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       external_token_expires_at: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
       company_id_snapshot: targetCompany.companyId,
       company_name_snapshot: targetCompany.companyNameSnapshot || companyName || null,
-      company_verification_status_snapshot: targetCompany.companyVerificationStatusSnapshot,
+      company_verification_status_snapshot: normalizeCompanyVerificationStatusSnapshot(targetCompany.companyVerificationStatusSnapshot),
       snapshot_at: targetCompany.companyId ? requestedAt : null,
       request_context: {
         source: "candidate_experience_request",
@@ -221,15 +337,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     };
 
-    const { data, error } = await admin
-      .from("verification_requests")
-      .insert(insertPayload)
-      .select()
-      .single();
+    const insertResult = await insertVerificationRequestCompat(admin, insertPayload);
+    const data = insertResult.data;
+    const error = (insertResult as any).error;
 
     if (error) {
-      console.error("verification_create_error", error);
-      return res.status(500).json({ error: "verification_create_failed", details: error.message });
+      console.error("verification_create_error", {
+        error,
+        attempts: insertResult.attempts,
+        user_id: userId,
+        company_email: companyEmail,
+        employment_record_id: employmentRecordId || null,
+        source_profile_experience_id: verifiedProfileExperienceId || null,
+      });
+      return res.status(500).json({
+        error: "verification_create_failed",
+        details: error.message,
+        diagnostic_code: "verification_insert_compat_failed",
+      });
     }
 
     if (verifiedProfileExperienceId) {

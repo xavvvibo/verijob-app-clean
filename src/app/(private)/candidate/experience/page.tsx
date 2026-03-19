@@ -4,6 +4,7 @@ import DashboardShell from  "@/app/_components/DashboardShell";
 import { Card, CardTitle } from  "@/app/_components/ui";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import CvUploadAndParse from "@/components/candidate/profile/CvUploadAndParse";
+import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
 import ExperienceQuickAddClient from "./ExperienceQuickAddClient";
 import ExperienceListClient from "./ExperienceListClient";
 
@@ -27,16 +28,22 @@ export default async function CandidateExperiencePage({
     .single();
   if (!profile) redirect("/onboarding");
 
-  const { data: rows } = await supabase
-    .from("profile_experiences")
-    .select("id, role_title, company_name, start_date, end_date, description, matched_verification_id, confidence, created_at")
-    .eq("user_id", au.user.id)
-    .order("created_at", { ascending: false });
-
-  const { data: importedRows } = await supabase
-    .from("experiences")
-    .select("title,company_name,start_date,end_date")
-    .eq("user_id", au.user.id);
+  const [{ data: rows }, { data: importedRows }, { data: candidateProfile }] = await Promise.all([
+    supabase
+      .from("profile_experiences")
+      .select("id, role_title, company_name, start_date, end_date, description, matched_verification_id, confidence, created_at")
+      .eq("user_id", au.user.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("experiences")
+      .select("title,company_name,start_date,end_date")
+      .eq("user_id", au.user.id),
+    supabase
+      .from("candidate_profiles")
+      .select("raw_cv_json")
+      .eq("user_id", au.user.id)
+      .maybeSingle(),
+  ]);
 
   const verificationIds = (rows || []).map((x: any) => x.matched_verification_id).filter(Boolean);
   const verificationMap = new Map<string, { status: string | null; is_revoked: boolean | null; requested_at?: string | null; resolved_at?: string | null }>();
@@ -122,6 +129,7 @@ export default async function CandidateExperiencePage({
   const companyCvImportFlag = Array.isArray(resolvedSearchParams?.company_cv_import)
     ? resolvedSearchParams.company_cv_import[0]
     : resolvedSearchParams?.company_cv_import;
+  const importSummary = summarizeCompanyCvImportUpdates((candidateProfile as any)?.raw_cv_json);
 
   return (
     <DashboardShell title="Experiencia">
@@ -167,6 +175,23 @@ export default async function CandidateExperiencePage({
           {String(companyCvImportFlag || "") === "1" ? (
             <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
               Hemos cargado la información detectada en tu CV importado por empresa. Revisa ahora cada experiencia, corrige lo que haga falta y luego solicita verificación o vincula evidencia documental.
+            </div>
+          ) : null}
+
+          {(importSummary.importedFromCompanyCv || importSummary.updatesCount > 0) ? (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-semibold">Tienes una importación o actualización pendiente procedente de empresa.</p>
+              <p className="mt-1">
+                No se ha aplicado automáticamente. Revisa la propuesta antes de validar experiencias o pedir verificaciones nuevas.
+              </p>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-900">
+                  Pendientes: {importSummary.totalPendingItems || importSummary.updatesCount}
+                </span>
+                <Link href="/candidate/import-updates" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">
+                  Revisar propuesta
+                </Link>
+              </div>
             </div>
           ) : null}
 

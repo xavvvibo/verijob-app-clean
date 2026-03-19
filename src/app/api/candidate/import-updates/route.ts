@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,44 @@ function json(status: number, body: any) {
 
 function normalizeText(value: unknown) {
   return String(value || "").trim();
+}
+
+function parseLanguageValue(value: string) {
+  const normalized = normalizeText(value);
+  if (!normalized) return null;
+  const separator = normalized.includes(" — ") ? " — " : normalized.includes(" - ") ? " - " : null;
+  if (!separator) {
+    return {
+      title: normalized,
+      language: normalized,
+      level: null,
+      category: "idioma" as const,
+    };
+  }
+  const [languageRaw, levelRaw] = normalized.split(separator, 2);
+  const language = normalizeText(languageRaw);
+  const level = normalizeText(levelRaw) || null;
+  if (!language) return null;
+  return {
+    title: language,
+    language,
+    level,
+    category: "idioma" as const,
+  };
+}
+
+function normalizeLanguageAchievement(item: any) {
+  const category = normalizeText(item?.category).toLowerCase();
+  const language = normalizeText(item?.language || item?.title);
+  const level = normalizeText(item?.level) || null;
+  if (category !== "idioma" || !language) return null;
+  return {
+    ...item,
+    title: language,
+    language,
+    level,
+    category: "idioma" as const,
+  };
 }
 
 function pickLongerText(current: unknown, incoming: unknown) {
@@ -114,14 +153,13 @@ export async function GET() {
 
   const rawCvJson = candidateProfile?.raw_cv_json && typeof candidateProfile.raw_cv_json === "object" ? candidateProfile.raw_cv_json : {};
   const updates = Array.isArray((rawCvJson as any)?.company_cv_import_updates) ? (rawCvJson as any).company_cv_import_updates : [];
+  const summary = summarizeCompanyCvImportUpdates(rawCvJson);
 
   return json(200, {
     updates,
     experiences: Array.isArray(experiences) ? experiences : [],
-    pending_count: updates.reduce((acc: number, entry: any) => {
-      const suggestions = Array.isArray(entry?.experience_suggestions) ? entry.experience_suggestions : [];
-      return acc + suggestions.filter((suggestion: any) => String(suggestion?.status || "pending") === "pending").length;
-    }, 0),
+    pending_count: summary.totalPendingItems,
+    summary,
   });
 }
 
@@ -171,8 +209,12 @@ export async function PATCH(request: Request) {
       return json(400, { error: "no_languages_to_apply" });
     }
 
-    const { data: profileRow, error: profileErr } = await admin.from("profiles").select("languages").eq("id", user.id).maybeSingle();
+    const [{ data: profileRow, error: profileErr }, { data: candidateProfileRow, error: candidateProfileErr }] = await Promise.all([
+      admin.from("profiles").select("languages").eq("id", user.id).maybeSingle(),
+      admin.from("candidate_profiles").select("id,achievements,other_achievements,certifications,raw_cv_json").eq("user_id", user.id).maybeSingle(),
+    ]);
     if (profileErr) return json(400, { error: "profile_read_failed", details: profileErr.message });
+    if (candidateProfileErr) return json(400, { error: "candidate_profile_read_failed", details: candidateProfileErr.message });
 
     const currentLanguages = Array.isArray((profileRow as any)?.languages)
       ? (profileRow as any).languages.map((item: any) => normalizeText(item)).filter(Boolean)
@@ -192,14 +234,50 @@ export async function PATCH(request: Request) {
       .eq("id", user.id);
     if (profileUpdateErr) return json(400, { error: "profile_languages_update_failed", details: profileUpdateErr.message });
 
+    const currentAchievements = Array.isArray((candidateProfileRow as any)?.achievements)
+      ? (candidateProfileRow as any).achievements
+      : [];
+    const existingLanguageMap = new Map(
+      currentAchievements
+        .map((item: any) => normalizeLanguageAchievement(item))
+        .filter(Boolean)
+        .map((item: any) => [`${String(item.language).toLowerCase()}|${String(item.level || "").toLowerCase()}`, item])
+    );
+
+    for (const language of mergedLanguages) {
+      const parsedLanguage = parseLanguageValue(language);
+      if (!parsedLanguage) continue;
+      const key = `${parsedLanguage.language.toLowerCase()}|${String(parsedLanguage.level || "").toLowerCase()}`;
+      if (!existingLanguageMap.has(key)) {
+        existingLanguageMap.set(key, parsedLanguage);
+      }
+    }
+
+    const nonLanguageAchievements = currentAchievements.filter((item: any) => !normalizeLanguageAchievement(item));
+    const nextAchievements = [
+      ...nonLanguageAchievements,
+      ...Array.from(existingLanguageMap.values()),
+    ];
+
     const nextRawCvJson = updateProfileProposal(rawCvJson, inviteId, {
       languages_applied_at: new Date().toISOString(),
       languages_applied_count: newLanguages.length,
     });
-    const { error: profileProposalErr } = await admin
-      .from("candidate_profiles")
-      .update({ raw_cv_json: nextRawCvJson, updated_at: new Date().toISOString() })
-      .eq("user_id", user.id);
+    const candidateProfilePatch: Record<string, any> = {
+      raw_cv_json: nextRawCvJson,
+      achievements: nextAchievements,
+      updated_at: new Date().toISOString(),
+      user_id: user.id,
+    };
+    const candidateProfileWrite = (candidateProfileRow as any)?.id
+      ? await admin
+          .from("candidate_profiles")
+          .update(candidateProfilePatch)
+          .eq("user_id", user.id)
+      : await admin
+          .from("candidate_profiles")
+          .insert(candidateProfilePatch);
+    const profileProposalErr = candidateProfileWrite.error;
     if (profileProposalErr) {
       return json(400, { error: "candidate_profile_update_failed", details: profileProposalErr.message });
     }

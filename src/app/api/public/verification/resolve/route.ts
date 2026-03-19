@@ -16,9 +16,20 @@ type ResolvePayload = {
   company_name?: string;
 };
 
+const LEGACY_COMPANY_VERIFICATION_STATUSES = new Set(["unverified", "verified_document", "verified_paid"]);
+
 function asText(value: unknown, max = 300) {
   const text = String(value || "").trim();
   return text ? text.slice(0, max) : null;
+}
+
+function normalizeCompanyVerificationStatusSnapshot(value: unknown) {
+  const status = String(value || "").trim().toLowerCase();
+  if (!status) return null;
+  if (LEGACY_COMPANY_VERIFICATION_STATUSES.has(status)) return status;
+  if (status === "registered_in_verijob") return "verified_paid";
+  if (status === "unverified_external") return "unverified";
+  return "unverified";
 }
 
 function json(status: number, body: any) {
@@ -79,7 +90,7 @@ export async function POST(req: Request) {
 
     let snapshotCompanyId: string | null = requestRow.company_id ? String(requestRow.company_id) : null;
     let snapshotCompanyName: string | null = companyNameInput || asText(requestRow.company_name_target, 180) || null;
-    let snapshotCompanyVerificationStatus: string = "unverified_external";
+    let snapshotCompanyVerificationStatus: string = "unverified";
 
     if (!snapshotCompanyId && requestRow.external_email_target) {
       const { data: matchedProfile } = await admin
@@ -91,12 +102,12 @@ export async function POST(req: Request) {
 
       if ((matchedProfile as any)?.active_company_id) {
         snapshotCompanyId = String((matchedProfile as any).active_company_id);
-        snapshotCompanyVerificationStatus = "registered_in_verijob";
+        snapshotCompanyVerificationStatus = "verified_paid";
       }
     }
 
     if (snapshotCompanyId) {
-      snapshotCompanyVerificationStatus = "registered_in_verijob";
+      snapshotCompanyVerificationStatus = "verified_paid";
       const { data: company } = await admin
         .from("companies")
         .select("name,company_verification_status")
@@ -114,7 +125,7 @@ export async function POST(req: Request) {
         resolveCompanyDisplayName({ ...(company || {}), ...(companyProfile || {}) } as any, "Tu empresa");
 
       const companyStatus = asText((company as any)?.company_verification_status, 60);
-      if (companyStatus) snapshotCompanyVerificationStatus = companyStatus;
+      if (companyStatus) snapshotCompanyVerificationStatus = normalizeCompanyVerificationStatusSnapshot(companyStatus) || "unverified";
     }
 
     const resolvedAt = new Date().toISOString();
@@ -145,7 +156,7 @@ export async function POST(req: Request) {
       resolution_notes: resolutionNotes,
       company_id_snapshot: snapshotCompanyId,
       company_name_snapshot: snapshotCompanyName,
-      company_verification_status_snapshot: snapshotCompanyVerificationStatus,
+      company_verification_status_snapshot: normalizeCompanyVerificationStatusSnapshot(snapshotCompanyVerificationStatus),
       snapshot_at: resolvedAt,
       request_context: requestContext,
     };
@@ -176,7 +187,7 @@ export async function POST(req: Request) {
           verification_result: nextStatus,
           verification_resolved_at: resolvedAt,
           verified_by_company_id: snapshotCompanyId,
-          company_verification_status_snapshot: snapshotCompanyVerificationStatus,
+          company_verification_status_snapshot: normalizeCompanyVerificationStatusSnapshot(snapshotCompanyVerificationStatus),
           last_verification_request_id: requestRow.id,
         })
         .eq("id", requestRow.employment_record_id);

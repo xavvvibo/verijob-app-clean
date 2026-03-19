@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/browser";
 import { TrustLevelBadge, VerificationBadge } from "@/components/brand/VerificationBadge";
+import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
 
 type ProfileLite = {
   full_name?: string | null;
@@ -428,23 +429,19 @@ export default function CandidateOverview() {
     () => listCount(candidateProfile?.achievements_catalog?.all || candidateProfile?.achievements || candidateProfile?.certifications),
     [candidateProfile]
   );
+  const companyCvImportSummary = useMemo(
+    () => summarizeCompanyCvImportUpdates(candidateProfile?.raw_cv_json),
+    [candidateProfile]
+  );
   const importedFromCompanyCv =
-    searchParams.get("company_cv_import") === "1" || Boolean(candidateProfile?.raw_cv_json?.company_cv_import);
+    searchParams.get("company_cv_import") === "1" || companyCvImportSummary.importedFromCompanyCv || companyCvImportSummary.updatesCount > 0;
   const importedExperiences = useMemo(() => {
     const rows = Array.isArray(candidateProfile?.raw_cv_json?.company_cv_import?.extracted_payload?.experiences)
       ? candidateProfile.raw_cv_json.company_cv_import.extracted_payload.experiences
       : [];
     return rows.slice(0, 6);
   }, [candidateProfile]);
-  const companyCvPendingUpdates = useMemo(() => {
-    const updates = Array.isArray(candidateProfile?.raw_cv_json?.company_cv_import_updates)
-      ? candidateProfile.raw_cv_json.company_cv_import_updates
-      : [];
-    return updates.reduce((acc: number, entry: any) => {
-      const suggestions = Array.isArray(entry?.experience_suggestions) ? entry.experience_suggestions : [];
-      return acc + suggestions.filter((item: any) => String(item?.status || "pending") === "pending" && String(item?.kind || "") !== "duplicate").length;
-    }, 0);
-  }, [candidateProfile]);
+  const companyCvPendingUpdates = companyCvImportSummary.totalPendingItems;
 
   const profileCompletionScore = Number(profileCompletion?.score || 0);
 
@@ -491,6 +488,15 @@ export default function CandidateOverview() {
               </span>
               <Link href="/candidate/import-updates" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">
                 Revisar y actualizar mi perfil
+              </Link>
+            </div>
+          ) : companyCvImportSummary.updatesCount > 0 ? (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-900">
+                Importación pendiente de revisión
+              </span>
+              <Link href="/candidate/import-updates" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">
+                Ver propuesta de cambios
               </Link>
             </div>
           ) : importedExperiences.length ? (

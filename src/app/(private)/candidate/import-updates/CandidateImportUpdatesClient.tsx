@@ -45,6 +45,16 @@ type UpdateEntry = {
   experience_suggestions?: Suggestion[];
 };
 
+type UpdatesSummary = {
+  importedFromCompanyCv?: boolean;
+  updatesCount?: number;
+  pendingEntries?: number;
+  pendingExperienceSuggestions?: number;
+  pendingLanguageProposals?: number;
+  pendingProfileProposals?: number;
+  totalPendingItems?: number;
+};
+
 function formatDate(value: string | null | undefined) {
   if (!value) return "Sin fecha";
   const date = new Date(value);
@@ -127,6 +137,7 @@ export default function CandidateImportUpdatesClient() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [proposalLoadingId, setProposalLoadingId] = useState<string | null>(null);
+  const [summary, setSummary] = useState<UpdatesSummary | null>(null);
 
   async function load() {
     setLoading(true);
@@ -136,6 +147,7 @@ export default function CandidateImportUpdatesClient() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.details || data?.error || "No se pudieron cargar las actualizaciones.");
       setUpdates(Array.isArray(data?.updates) ? data.updates : []);
+      setSummary(data?.summary && typeof data.summary === "object" ? data.summary : null);
     } catch (e: any) {
       setError(e?.message || "No se pudieron cargar las actualizaciones.");
     } finally {
@@ -189,10 +201,8 @@ export default function CandidateImportUpdatesClient() {
     }
   }
 
-  const pendingCount = updates.reduce((acc, entry) => {
-    const suggestions = Array.isArray(entry.experience_suggestions) ? entry.experience_suggestions : [];
-    return acc + suggestions.filter((item) => item.status === "pending" && item.kind !== "duplicate").length;
-  }, 0);
+  const pendingCount = Number(summary?.totalPendingItems || 0);
+  const pendingEntries = Number(summary?.pendingEntries || 0);
 
   return (
     <div className="space-y-6">
@@ -204,6 +214,9 @@ export default function CandidateImportUpdatesClient() {
         <div className="mt-4 flex flex-wrap gap-3">
           <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
             Pendientes: {pendingCount}
+          </span>
+          <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+            Importaciones en revisión: {pendingEntries}
           </span>
           <Link href="/candidate/experience" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
             Revisar y actualizar mi perfil
