@@ -1,6 +1,10 @@
 import type { NextApiRequest, NextApiResponse } from "next"
 import { createClient } from "@supabase/supabase-js"
 import { createPagesRouteClient } from "@/utils/supabase/pages"
+import {
+  isMissingExternalResolvedColumn,
+  isVerificationExternallyResolved,
+} from "@/lib/verification/external-resolution"
 
 function createAdminClient() {
   return createClient(
@@ -58,6 +62,43 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const admin = createAdminClient()
+    let existingRequest: any = null
+
+    const activeLookup = await admin
+      .from("verification_requests")
+      .select("id,status,resolved_at,external_resolved")
+      .eq("requested_by", normalizedRequestedBy)
+      .eq("employment_record_id", normalizedEmploymentRecordId)
+      .eq("verification_channel", "email")
+      .eq("external_email_target", normalizedEmail)
+      .neq("status", "revoked")
+      .order("created_at", { ascending: false })
+      .limit(5)
+
+    if (activeLookup.error && !isMissingExternalResolvedColumn(activeLookup.error)) {
+      return res.status(400).json({
+        error: "verification_lookup_failed",
+        details: activeLookup.error.message,
+      })
+    }
+
+    const candidateExistingRows = Array.isArray(activeLookup.data) ? activeLookup.data : []
+    existingRequest = candidateExistingRows.find((row: any) => !isVerificationExternallyResolved(row)) || null
+
+    if (existingRequest?.id) {
+      await admin
+        .from("profile_experiences")
+        .update({ matched_verification_id: existingRequest.id })
+        .eq("id", normalizedEmploymentRecordId)
+        .eq("user_id", normalizedRequestedBy)
+
+      return res.status(200).json({
+        ok: true,
+        id: existingRequest.id,
+        already_exists: true,
+      })
+    }
+
     const insertPayload = {
       employment_record_id: normalizedEmploymentRecordId,
       external_email_target: normalizedEmail,
@@ -86,6 +127,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         code: error.code,
       })
     }
+
+    await admin
+      .from("profile_experiences")
+      .update({ matched_verification_id: data.id })
+      .eq("id", normalizedEmploymentRecordId)
+      .eq("user_id", normalizedRequestedBy)
 
     return res.status(200).json({
       ok: true,

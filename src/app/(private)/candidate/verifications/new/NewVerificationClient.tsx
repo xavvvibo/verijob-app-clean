@@ -44,6 +44,7 @@ export default function NewVerificationClient({ experiences = [] }: any) {
     try {
       const res = await fetch("/api/candidate/verification/create", {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
@@ -54,7 +55,7 @@ export default function NewVerificationClient({ experiences = [] }: any) {
       console.log("VERIFICATION_RESPONSE_NEW_VERIFICATION", data)
 
       if (!res.ok) {
-        setError(data?.error || "Error")
+        setError(data?.details || data?.error || "Error")
         return
       }
 
