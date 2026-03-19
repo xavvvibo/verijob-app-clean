@@ -1,67 +1,35 @@
-async function getTableColumns(admin: any, tableName: string) {
-  try {
-    const { data, error } = await admin
-      .from("information_schema.columns")
-      .select("column_name")
-      .eq("table_schema", "public")
-      .eq("table_name", tableName)
-
-    if (error || !Array.isArray(data)) return new Set<string>()
-    return new Set(data.map((row: any) => String(row?.column_name || "").trim()).filter(Boolean))
-  } catch {
-    return new Set<string>()
-  }
-}
-
-function buildBaseEmploymentPatch(columns: Set<string>, args: {
-  verificationRequestId: string
-  nowIso: string
-  clearResolution?: boolean
-  verificationResult?: string | null
-}) {
-  const patch: Record<string, any> = {}
-
-  if (columns.has("last_verification_request_id")) {
-    patch.last_verification_request_id = args.verificationRequestId
-  }
-  if (columns.has("last_verification_requested_at")) {
-    patch.last_verification_requested_at = args.nowIso
-  }
-  if (columns.has("verification_result")) {
-    patch.verification_result = args.verificationResult ?? null
-  }
-  if (columns.has("verification_resolved_at") && args.clearResolution) {
-    patch.verification_resolved_at = null
-  }
-
-  return patch
-}
-
-async function applyEmploymentPatch(args: {
+async function updateEmploymentRecordWithFallbacks(args: {
   admin: any
   employmentRecordId: string
   candidateId?: string | null
-  patch: Record<string, any>
+  patches: Array<Record<string, any>>
 }) {
-  let query = args.admin.from("employment_records").update(args.patch).eq("id", args.employmentRecordId)
-  if (args.candidateId) {
-    query = query.eq("candidate_id", args.candidateId)
-  }
-  const { error } = await query
+  let lastError: any = null
 
-  if (error) {
-    return {
-      ok: false as const,
-      statusApplied: null,
-      error,
+  for (const patch of args.patches) {
+    let query = args.admin.from("employment_records").update(patch).eq("id", args.employmentRecordId)
+    if (args.candidateId) {
+      query = query.eq("candidate_id", args.candidateId)
     }
+
+    const { error } = await query
+    if (!error) {
+      return {
+        ok: true as const,
+        statusApplied: Object.prototype.hasOwnProperty.call(patch, "verification_status")
+          ? patch.verification_status
+          : null,
+        patchApplied: patch,
+      }
+    }
+    lastError = error
   }
 
   return {
-    ok: true as const,
-    statusApplied: Object.prototype.hasOwnProperty.call(args.patch, "verification_status")
-      ? args.patch.verification_status
-      : null,
+    ok: false as const,
+    statusApplied: null,
+    patchApplied: null,
+    error: lastError,
   }
 }
 
@@ -72,22 +40,27 @@ export async function markEmploymentRecordVerificationRequested(args: {
   verificationRequestId: string
   nowIso: string
 }) {
-  const columns = await getTableColumns(args.admin, "employment_records")
-  const basePatch = buildBaseEmploymentPatch(columns, {
-    verificationRequestId: args.verificationRequestId,
-    nowIso: args.nowIso,
-    clearResolution: true,
-    verificationResult: null,
-  })
-  if (columns.has("verification_status")) {
-    basePatch.verification_status = "pending_company"
-  }
-
-  return applyEmploymentPatch({
+  return updateEmploymentRecordWithFallbacks({
     admin: args.admin,
     employmentRecordId: args.employmentRecordId,
     candidateId: args.candidateId,
-    patch: basePatch,
+    patches: [
+      {
+        verification_status: "pending_company",
+        last_verification_request_id: args.verificationRequestId,
+        last_verification_requested_at: args.nowIso,
+        verification_result: null,
+        verification_resolved_at: null,
+      },
+      {
+        verification_status: "pending_company",
+        last_verification_request_id: args.verificationRequestId,
+        last_verification_requested_at: args.nowIso,
+      },
+      {
+        verification_status: "pending_company",
+      },
+    ],
   })
 }
 
@@ -98,26 +71,47 @@ export async function markEmploymentRecordVerificationDecision(args: {
   nowIso: string
   decision: "approve" | "reject" | "review"
 }) {
-  const columns = await getTableColumns(args.admin, "employment_records")
-  const basePatch = buildBaseEmploymentPatch(columns, {
-    verificationRequestId: args.verificationRequestId,
-    nowIso: args.nowIso,
-    clearResolution: args.decision === "review",
-    verificationResult:
-      args.decision === "approve" ? "approved" : args.decision === "reject" ? "rejected" : null,
-  })
+  const verificationStatus =
+    args.decision === "approve" ? "verified" : args.decision === "reject" ? "rejected" : "reviewing"
 
-  if (columns.has("verification_resolved_at") && args.decision !== "review") {
-    basePatch.verification_resolved_at = args.nowIso
-  }
-  if (columns.has("verification_status")) {
-    basePatch.verification_status =
-      args.decision === "approve" ? "verified" : args.decision === "reject" ? "rejected" : "reviewing"
-  }
+  const patches =
+    args.decision === "review"
+      ? [
+          {
+            verification_status: verificationStatus,
+            last_verification_request_id: args.verificationRequestId,
+            last_verification_requested_at: args.nowIso,
+            verification_result: null,
+            verification_resolved_at: null,
+          },
+          {
+            verification_status: verificationStatus,
+            last_verification_request_id: args.verificationRequestId,
+            last_verification_requested_at: args.nowIso,
+          },
+          {
+            verification_status: verificationStatus,
+          },
+        ]
+      : [
+          {
+            verification_status: verificationStatus,
+            last_verification_request_id: args.verificationRequestId,
+            verification_result: args.decision === "approve" ? "approved" : "rejected",
+            verification_resolved_at: args.nowIso,
+          },
+          {
+            verification_status: verificationStatus,
+            last_verification_request_id: args.verificationRequestId,
+          },
+          {
+            verification_status: verificationStatus,
+          },
+        ]
 
-  return applyEmploymentPatch({
+  return updateEmploymentRecordWithFallbacks({
     admin: args.admin,
     employmentRecordId: args.employmentRecordId,
-    patch: basePatch,
+    patches,
   })
 }

@@ -7,21 +7,6 @@ import {
 } from "@/lib/verification/external-resolution"
 import { markEmploymentRecordVerificationRequested } from "@/lib/verification/employment-record-status"
 
-async function getTableColumns(supabase: any, tableName: string) {
-  try {
-    const { data, error } = await supabase
-      .from("information_schema.columns")
-      .select("column_name")
-      .eq("table_schema", "public")
-      .eq("table_name", tableName)
-
-    if (error || !Array.isArray(data)) return new Set<string>()
-    return new Set(data.map((row: any) => String(row?.column_name || "").trim()).filter(Boolean))
-  } catch {
-    return new Set<string>()
-  }
-}
-
 function norm(value: unknown) {
   return String(value || "").trim().toLowerCase()
 }
@@ -77,18 +62,27 @@ async function resolveEmploymentRecordId(params: {
     }
   }
 
-  const employmentColumns = await getTableColumns(params.admin, "employment_records")
-  const selectColumns = ["id", "candidate_id", "position", "company_name_freeform", "start_date", "end_date"]
-  if (employmentColumns.has("source_experience_id")) selectColumns.push("source_experience_id")
-
-  const { data: employmentRows } = await params.admin
+  const employmentRowsQuery = await params.admin
     .from("employment_records")
-    .select(selectColumns.join(","))
+    .select("id,candidate_id,position,company_name_freeform,start_date,end_date,source_experience_id")
     .eq("candidate_id", candidateId)
 
+  const employmentRowsFallback = employmentRowsQuery.error
+    ? await params.admin
+        .from("employment_records")
+        .select("id,candidate_id,position,company_name_freeform,start_date,end_date")
+        .eq("candidate_id", candidateId)
+    : null
+
+  const employmentRows = Array.isArray(employmentRowsQuery.data)
+    ? employmentRowsQuery.data
+    : Array.isArray(employmentRowsFallback?.data)
+      ? employmentRowsFallback.data
+      : []
+
   const profileExperienceKey = experienceMatchKey(profileExperience)
-  const existingEmployment = (Array.isArray(employmentRows) ? employmentRows : []).find((row: any) => {
-    if (employmentColumns.has("source_experience_id") && String((row as any)?.source_experience_id || "") === profileExperienceId) {
+  const existingEmployment = employmentRows.find((row: any) => {
+    if (String((row as any)?.source_experience_id || "") === profileExperienceId) {
       return true
     }
     return experienceMatchKey(row) === profileExperienceKey
@@ -104,15 +98,38 @@ async function resolveEmploymentRecordId(params: {
     company_name_freeform: (profileExperience as any)?.company_name || null,
     start_date: (profileExperience as any)?.start_date || null,
     end_date: (profileExperience as any)?.end_date || null,
+    verification_status: "pending_company",
+    source_experience_id: profileExperienceId,
   }
-  if (employmentColumns.has("source_experience_id")) insertPayload.source_experience_id = profileExperienceId
-  if (employmentColumns.has("verification_status")) insertPayload.verification_status = "pending_company"
 
-  const { data: createdEmployment, error: createdEmploymentError } = await params.admin
+  let createdEmployment: any = null
+  let createdEmploymentError: any = null
+  let attemptedInsertPayload: Record<string, any> = { ...insertPayload }
+
+  const primaryInsert = await params.admin
     .from("employment_records")
     .insert(insertPayload)
     .select("id")
     .single()
+
+  createdEmployment = primaryInsert.data
+  createdEmploymentError = primaryInsert.error
+
+  if (
+    createdEmploymentError &&
+    /source_experience_id/i.test(String(createdEmploymentError?.message || ""))
+  ) {
+    const fallbackInsertPayload = { ...insertPayload }
+    delete fallbackInsertPayload.source_experience_id
+    attemptedInsertPayload = fallbackInsertPayload
+    const fallbackInsert = await params.admin
+      .from("employment_records")
+      .insert(fallbackInsertPayload)
+      .select("id")
+      .single()
+    createdEmployment = fallbackInsert.data
+    createdEmploymentError = fallbackInsert.error
+  }
 
   if (createdEmploymentError || !createdEmployment?.id) {
     return {
@@ -120,8 +137,8 @@ async function resolveEmploymentRecordId(params: {
       profileExperienceId,
       resolutionError: createdEmploymentError?.message || "employment_record_insert_failed",
       resolutionStep: "employment_record_insert",
-      employmentRecordInsertPayload: insertPayload,
-      employmentRecordStatusAttempted: insertPayload.verification_status ?? null,
+      employmentRecordInsertPayload: attemptedInsertPayload,
+      employmentRecordStatusAttempted: attemptedInsertPayload.verification_status ?? null,
     }
   }
 
@@ -289,11 +306,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       ok: true,
       id: data.id,
       employment_record_insert_payload: null,
-      employment_record_update_payload: {
-        verification_status: employmentUpdate.statusApplied,
-        last_verification_request_id: data.id,
-        last_verification_requested_at: "set",
-      },
+      employment_record_update_payload: employmentUpdate.patchApplied,
       employment_record_status_applied: employmentUpdate.statusApplied,
       employment_record_status_warning: employmentUpdate.ok
         ? null
