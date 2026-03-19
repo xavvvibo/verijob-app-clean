@@ -7,12 +7,7 @@ const supabase = createClient(
 )
 
 async function getEmploymentOwnerId(employment_record_id: string) {
-  const ownerColumnVariants = [
-    "candidate_id",
-    "user_id",
-    "profile_id",
-    "requested_by",
-  ]
+  const ownerColumnVariants = ["candidate_id", "user_id", "profile_id", "requested_by"]
 
   for (const col of ownerColumnVariants) {
     const { data, error } = await supabase
@@ -53,32 +48,28 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const requestedBy = await getEmploymentOwnerId(employment_record_id)
 
+    const basePayload = {
+      employment_record_id,
+      external_email_target: email,
+      ...(requestedBy ? { requested_by: requestedBy } : {}),
+    }
+
     const variants = [
       {
-        employment_record_id,
-        external_email_target: email,
+        ...basePayload,
+        verification_channel: "email",
+      },
+      {
+        ...basePayload,
         verification_channel: "email",
         status: "pending_company",
-        ...(requestedBy ? { requested_by: requestedBy } : {}),
       },
       {
-        employment_record_id,
-        external_email_target: email,
-        verification_channel: "email",
-        status: "requested",
-        ...(requestedBy ? { requested_by: requestedBy } : {}),
+        ...basePayload,
       },
       {
-        employment_record_id,
-        external_email_target: email,
+        ...basePayload,
         status: "pending_company",
-        ...(requestedBy ? { requested_by: requestedBy } : {}),
-      },
-      {
-        employment_record_id,
-        external_email_target: email,
-        status: "requested",
-        ...(requestedBy ? { requested_by: requestedBy } : {}),
       },
     ]
 
