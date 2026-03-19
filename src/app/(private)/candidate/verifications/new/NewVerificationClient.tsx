@@ -1,17 +1,15 @@
 "use client"
 
-import { useState } from "react"
-import { createClient } from "@supabase/supabase-js"
+import { useMemo, useState } from "react"
 import { buildVerificationPayload } from "@/lib/fix-verification-payload"
+import { createClient } from "@/utils/supabase/client"
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
-export default function NewVerificationClient({ experience }: any) {
+export default function NewVerificationClient({ experiences = [] }: any) {
+  const supabase = useMemo(() => createClient(), [])
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+  const [experienceId, setExperienceId] = useState(String(experiences[0]?.id ?? ""))
+  const [email, setEmail] = useState("")
 
   const handleSubmit = async () => {
     setError("")
@@ -25,7 +23,14 @@ export default function NewVerificationClient({ experience }: any) {
       return
     }
 
-    const payload = buildVerificationPayload(experience, user.id)
+    const experience = experiences.find((row: any) => String(row?.id) === experienceId)
+
+    if (!experience) {
+      setError("Selecciona una experiencia")
+      return
+    }
+
+    const payload = buildVerificationPayload(experience, user.id, email)
 
     console.log("PAYLOAD_FINAL_NEW_VERIFICATION", payload)
 
@@ -62,10 +67,48 @@ export default function NewVerificationClient({ experience }: any) {
   }
 
   return (
-    <div>
-      <button onClick={handleSubmit} disabled={loading}>
-        Solicitar verificación
+    <div className="space-y-4 rounded-2xl border border-gray-200 bg-white p-4">
+      <div>
+        <label className="mb-1 block text-sm font-semibold text-gray-900">Experiencia</label>
+        <select
+          value={experienceId}
+          onChange={(e) => setExperienceId(e.target.value)}
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        >
+          <option value="">Selecciona una experiencia</option>
+          {experiences.map((experience: any) => (
+            <option key={experience.id} value={experience.id}>
+              {[experience.role_title, experience.company_name].filter(Boolean).join(" - ")}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div>
+        <label className="mb-1 block text-sm font-semibold text-gray-900">Email corporativo</label>
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="rrhh@empresa.com"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+        />
+      </div>
+
+      <button
+        onClick={handleSubmit}
+        disabled={loading || experiences.length === 0}
+        className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:bg-gray-400"
+      >
+        {loading ? "Enviando..." : "Solicitar verificación"}
       </button>
+
+      {experiences.length === 0 ? (
+        <p className="text-sm text-gray-600">
+          Primero crea una experiencia en tu perfil para poder solicitar una verificación.
+        </p>
+      ) : null}
+
       {error && <p style={{ color: "red" }}>{error}</p>}
     </div>
   )
