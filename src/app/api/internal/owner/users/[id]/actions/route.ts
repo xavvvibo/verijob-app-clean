@@ -586,7 +586,7 @@ export async function POST(req: Request, ctx: any) {
 
     const { data: updated, error: updateErr } = await owner.admin
       .from("employment_records")
-      .update({ verification_status: "reviewing" })
+      .update({ verification_status: "verification_requested" })
       .eq("id", experienceId)
       .select("id,candidate_id,verification_status")
       .single();
@@ -595,7 +595,7 @@ export async function POST(req: Request, ctx: any) {
     const logged = await logOwnerAction(owner, targetUserId, ACTION_MARK_EXPERIENCE, reason, {
       experience_id: experienceId,
       before_status: (experienceRow as any)?.verification_status || null,
-      after_status: (updated as any)?.verification_status || "reviewing",
+      after_status: (updated as any)?.verification_status || "verification_requested",
     });
     if (!logged.ok) return json(500, { error: "owner_action_log_failed", details: logged.error.message });
 

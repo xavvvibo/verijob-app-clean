@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { createClient as createSbAdmin } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/server";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
+import { EMPLOYMENT_RECORD_VERIFICATION_STATUS } from "@/lib/verification/employment-record-verification-status";
 
 function extractIdFromUrl(req: Request): string | null {
   try {
@@ -129,6 +130,30 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }
   if (!updated) {
     return NextResponse.json({ error: "Verification not found", route_version: ROUTE_VERSION }, { status: 404 });
+  }
+
+  const { data: activeRequests } = await admin
+    .from("verification_requests")
+    .select("id,status,revoked_at,resolved_at")
+    .eq("employment_record_id", employmentRecordId)
+    .is("revoked_at", null)
+    .neq("id", verificationId);
+
+  const hasActiveRequest = (Array.isArray(activeRequests) ? activeRequests : []).some((row: any) => {
+    const status = String(row?.status || "").toLowerCase();
+    return !row?.revoked_at && !row?.resolved_at && status !== "revoked" && status !== "verified" && status !== "rejected";
+  });
+
+  if (!hasActiveRequest) {
+    await admin
+      .from("employment_records")
+      .update({
+        verification_status: EMPLOYMENT_RECORD_VERIFICATION_STATUS.UNVERIFIED,
+        verification_result: null,
+        verification_resolved_at: null,
+      })
+      .eq("id", employmentRecordId)
+      .eq("candidate_id", user.id);
   }
 
   await recalculateAndPersistCandidateTrustScore(String(user.id)).catch(() => {});

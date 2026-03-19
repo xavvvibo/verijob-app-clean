@@ -2,6 +2,10 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { normalizePublicLanguages } from "@/lib/public/profile-languages";
+import {
+  EMPLOYMENT_RECORD_VERIFICATION_STATUS,
+  normalizeEmploymentRecordVerificationStatus,
+} from "@/lib/verification/employment-record-verification-status";
 
 export type PublicProfilePreviewMode = "public" | "registered" | "requesting" | "full";
 
@@ -1025,25 +1029,18 @@ function resolveProfilePresentationState({
 }
 
 function getStatusBadge(statusText?: string | null) {
-  const status = String(statusText || "").toLowerCase().trim();
+  const status = normalizeEmploymentRecordVerificationStatus(statusText);
 
-  if (status === "verified" || status === "approved") {
+  if (status === EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFIED) {
     return { label: "Verificada", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
   }
-  if (status === "reviewing") {
-    return { label: "En revisión", className: "border-amber-200 bg-amber-50 text-amber-700" };
+  if (status === EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFICATION_REQUESTED) {
+    return { label: "Verificación solicitada", className: "border-amber-200 bg-amber-50 text-amber-700" };
   }
-  if (status === "pending_company") {
-    return { label: "Pendiente empresa", className: "border-slate-300 bg-slate-100 text-slate-700" };
-  }
-  if (status === "rejected") {
+  if (status === EMPLOYMENT_RECORD_VERIFICATION_STATUS.REJECTED) {
     return { label: "Rechazada", className: "border-rose-200 bg-rose-50 text-rose-700" };
   }
-  if (status === "revoked") {
-    return { label: "Revocada", className: "border-rose-200 bg-rose-50 text-rose-700" };
-  }
-
-  return { label: "En validación", className: "border-slate-300 bg-slate-100 text-slate-700" };
+  return { label: "Sin verificar", className: "border-slate-300 bg-slate-100 text-slate-700" };
 }
 
 function getCompanyStatusBadge(statusText?: string | null) {

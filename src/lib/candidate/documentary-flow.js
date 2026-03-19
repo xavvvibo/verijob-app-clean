@@ -35,7 +35,7 @@ export function buildDocumentaryVerificationInsert({
 
 export function buildEmploymentRecordDocumentaryRequestedUpdate({ verificationRequestId, nowIso }) {
   return {
-    verification_status: "reviewing",
+    verification_status: "verification_requested",
     last_verification_request_id: verificationRequestId,
     last_verification_requested_at: nowIso,
   };
@@ -51,7 +51,7 @@ export function buildEmploymentRecordDocumentaryResolvedUpdate({ verificationReq
 
 export function buildEmploymentRecordDocumentaryPendingReviewUpdate({ verificationRequestId, nowIso }) {
   return {
-    verification_status: "reviewing",
+    verification_status: "verification_requested",
     last_verification_request_id: verificationRequestId,
     last_verification_requested_at: nowIso,
   };

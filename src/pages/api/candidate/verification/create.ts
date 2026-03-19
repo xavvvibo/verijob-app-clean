@@ -7,6 +7,7 @@ import {
   isVerificationExternallyResolved,
 } from "@/lib/verification/external-resolution"
 import { markEmploymentRecordVerificationRequested } from "@/lib/verification/employment-record-status"
+import { EMPLOYMENT_RECORD_VERIFICATION_STATUS } from "@/lib/verification/employment-record-verification-status"
 import { sendTransactionalEmail } from "@/server/email/sendTransactionalEmail"
 import { buildExternalExperienceVerificationEmail } from "@/lib/email/templates/externalExperienceVerification"
 
@@ -156,7 +157,7 @@ async function resolveEmploymentRecordId(params: {
     company_name_freeform: (profileExperience as any)?.company_name || null,
     start_date: (profileExperience as any)?.start_date || null,
     end_date: (profileExperience as any)?.end_date || null,
-    verification_status: "pending_company",
+    verification_status: EMPLOYMENT_RECORD_VERIFICATION_STATUS.UNVERIFIED,
     source_experience_id: profileExperienceId,
   }
 
@@ -348,6 +349,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (existingRequest?.id) {
+      const employmentUpdate = await markEmploymentRecordVerificationRequested({
+        admin,
+        employmentRecordId: normalizedEmploymentRecordId,
+        candidateId: normalizedRequestedBy,
+        verificationRequestId: existingRequest.id,
+        nowIso: new Date().toISOString(),
+      })
+
       if (profileExperienceIdForUpdate) {
         await admin
           .from("profile_experiences")
@@ -362,6 +371,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ok: true,
         id: existingRequest.id,
         already_exists: true,
+        employment_record_insert_payload: null,
+        employment_record_update_payload: employmentUpdate.patchApplied,
+        employment_record_status_applied: employmentUpdate.statusApplied,
+        employment_record_status_warning: employmentUpdate.ok
+          ? null
+          : employmentUpdate.error?.message || "employment_record_status_update_failed",
         ...emailDispatch,
       })
     }

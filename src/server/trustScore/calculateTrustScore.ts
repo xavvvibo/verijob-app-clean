@@ -5,6 +5,7 @@ import {
   normalizeValidationStatus,
   EVIDENCE_VALIDATION_INTERNAL,
 } from "@/lib/candidate/evidence-types";
+import { isVerifiedEmploymentRecordStatus } from "@/lib/verification/employment-record-verification-status";
 
 type TrustBreakdown = {
   verification: number;
@@ -107,8 +108,7 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
   const evidences = Array.isArray(evidenceRows) ? evidenceRows : [];
 
   const verifiedEmploymentCount = employment.filter((row: any) => {
-    const status = normalizeText(row?.verification_status);
-    return status === "verified" || status === "approved" || status === "verified_document";
+    return isVerifiedEmploymentRecordStatus(row?.verification_status);
   }).length;
 
   const verificationBlock =

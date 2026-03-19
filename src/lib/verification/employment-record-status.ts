@@ -1,3 +1,5 @@
+import { EMPLOYMENT_RECORD_VERIFICATION_STATUS } from "@/lib/verification/employment-record-verification-status"
+
 async function updateEmploymentRecordWithFallbacks(args: {
   admin: any
   employmentRecordId: string
@@ -46,19 +48,19 @@ export async function markEmploymentRecordVerificationRequested(args: {
     candidateId: args.candidateId,
     patches: [
       {
-        verification_status: "pending_company",
+        verification_status: EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFICATION_REQUESTED,
         last_verification_request_id: args.verificationRequestId,
         last_verification_requested_at: args.nowIso,
         verification_result: null,
         verification_resolved_at: null,
       },
       {
-        verification_status: "pending_company",
+        verification_status: EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFICATION_REQUESTED,
         last_verification_request_id: args.verificationRequestId,
         last_verification_requested_at: args.nowIso,
       },
       {
-        verification_status: "pending_company",
+        verification_status: EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFICATION_REQUESTED,
       },
     ],
   })
@@ -72,7 +74,11 @@ export async function markEmploymentRecordVerificationDecision(args: {
   decision: "approve" | "reject" | "review"
 }) {
   const verificationStatus =
-    args.decision === "approve" ? "verified" : args.decision === "reject" ? "rejected" : "reviewing"
+    args.decision === "approve"
+      ? EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFIED
+      : args.decision === "reject"
+        ? EMPLOYMENT_RECORD_VERIFICATION_STATUS.REJECTED
+        : EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFICATION_REQUESTED
 
   const patches =
     args.decision === "review"

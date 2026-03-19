@@ -109,7 +109,7 @@ export async function setCompanyVerificationStatus(input: SetCompanyVerification
   if (error) throw new Error(error.message);
 
   const normalizedEmploymentStatus =
-    nextStatus === "verified" ? "verified" : nextStatus === "rejected" ? "rejected" : "pending_company";
+    nextStatus === "verified" ? "verified" : nextStatus === "rejected" ? "rejected" : "verification_requested";
 
   if (vr.employment_record_id) {
     const { error: erErr } = await supabase

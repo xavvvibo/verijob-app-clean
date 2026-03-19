@@ -610,9 +610,10 @@ function statusLabel(status?: string | null) {
   const s = String(status || "").toLowerCase();
   if (s === "verified" || s === "approved") return "Verificada";
   if (s === "reviewing") return "En revisión";
-  if (s === "pending_company") return "Pendiente empresa";
+  if (s === "pending_company" || s === "verification_requested") return "Verificación solicitada";
   if (s === "rejected") return "Rechazada";
   if (s === "revoked") return "Revocada";
+  if (s === "unverified") return "Sin verificar";
   return "En validación";
 }
 
@@ -620,7 +621,7 @@ function statusClass(status?: string | null) {
   const s = String(status || "").toLowerCase();
   if (s === "verified" || s === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-700";
   if (s === "reviewing") return "border-amber-200 bg-amber-50 text-amber-700";
-  if (s === "pending_company") return "border-slate-300 bg-slate-100 text-slate-700";
+  if (s === "pending_company" || s === "verification_requested") return "border-slate-300 bg-slate-100 text-slate-700";
   if (s === "rejected" || s === "revoked") return "border-rose-200 bg-rose-50 text-rose-700";
   return "border-slate-300 bg-slate-100 text-slate-700";
 }

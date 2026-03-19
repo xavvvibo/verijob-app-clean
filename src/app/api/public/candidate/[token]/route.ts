@@ -5,6 +5,11 @@ import { normalizePublicLanguages } from "@/lib/public/profile-languages";
 import { resolveActiveCandidatePublicLink } from "@/lib/public/candidate-public-link";
 import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
 import { getCandidatePlanCapabilities } from "@/lib/billing/planCapabilities";
+import {
+  EMPLOYMENT_RECORD_VERIFICATION_STATUS,
+  isVerifiedEmploymentRecordStatus,
+  normalizeEmploymentRecordVerificationStatus,
+} from "@/lib/verification/employment-record-verification-status";
 
 type Params = { token: string };
 
@@ -15,8 +20,7 @@ function json(status: number, body: any) {
 }
 
 function isVerifiedStatus(status: any) {
-  const s = String(status || "").toLowerCase();
-  return s === "approved" || s === "verified";
+  return isVerifiedEmploymentRecordStatus(status);
 }
 
 function isEducationVerification(row: any) {
@@ -274,12 +278,15 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
 
   const experiencesFromEmployment = (Array.isArray(employmentRecords) ? employmentRecords : []).map((record: any) => {
     const linkedVerification = verificationById.get(String(record?.last_verification_request_id || ""));
-    const statusText = String(
+    const statusTextRaw = String(
       linkedVerification?.status_effective ||
       linkedVerification?.status ||
       record?.verification_status ||
       "unknown"
     );
+    const statusText = linkedVerification?.status_effective || linkedVerification?.status
+      ? statusTextRaw
+      : normalizeEmploymentRecordVerificationStatus(statusTextRaw);
     const score = Number(linkedVerification?.score ?? 0);
     const evidenceCount = Number(
       linkedVerification?.evidence_count ?? linkedVerification?.evidences_count ?? 0
@@ -325,7 +332,10 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     const badges = new Set<string>();
     const method = String(linkedVerification?.verification_channel || "").toLowerCase();
     const status = String(item?.status_text || "").toLowerCase();
-    if (status === "verified" || status === "approved") badges.add("Verificado por empresa");
+    const normalizedEmploymentStatus = normalizeEmploymentRecordVerificationStatus(status);
+    if (status === "verified" || status === "approved" || normalizedEmploymentStatus === EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFIED) {
+      badges.add("Verificado por empresa");
+    }
     if (method === "documentary") badges.add("Verificación documental");
     for (const ev of linkedEvidences) {
       const b = toEvidenceVerificationBadge((ev as any)?.document_type || (ev as any)?.evidence_type);
@@ -336,7 +346,10 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       ...item,
       verification_method: method || null,
       verification_badges: Array.from(badges),
-      is_verified: status === "verified" || status === "approved",
+      is_verified:
+        status === "verified" ||
+        status === "approved" ||
+        normalizedEmploymentStatus === EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFIED,
     };
   });
 
