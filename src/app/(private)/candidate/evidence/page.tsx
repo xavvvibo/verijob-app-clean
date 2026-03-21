@@ -18,6 +18,9 @@ type EvidenceItem = {
   status: string;
   reason: string | null;
   created_at: string | null;
+  scope_label: string;
+  processing_label: string;
+  trust_label: string | null;
 };
 
 type ExperienceOption = {
@@ -98,6 +101,27 @@ export default async function CandidateEvidencePage(props: any) {
             : null,
     });
     const scope = String(r?.document_scope || vr?.request_context?.documentary_scope || "").toLowerCase();
+    const processingStatus = String(processing?.status || "").toLowerCase();
+    const linkState = String(processing?.link_state || "").toLowerCase();
+    const scopeLabel = scope === "global" ? "Evidencia global" : "Evidencia asociada a una experiencia";
+    const processingLabel =
+      processingStatus === "queued"
+        ? "Archivo recibido. Pendiente de análisis."
+        : processingStatus === "processing"
+          ? "Documento en análisis."
+          : processingStatus === "processed" && linkState === "auto_linked"
+            ? "Documento procesado y vinculado automáticamente."
+            : processingStatus === "processed"
+              ? "Documento procesado. Está pendiente de revisión."
+              : processingStatus === "failed"
+                ? "No pudimos completar el análisis automático. Queda pendiente de revisión."
+                : "Documento registrado.";
+    const trustLabel =
+      String(r?.validation_status || "").toLowerCase() === "approved"
+        ? "Ya está reforzando tu Trust Score."
+        : Number(r?.trust_weight ?? 0) > 0
+          ? "Puede reforzar tu Trust Score cuando termine la validación."
+          : null;
     return {
       id: r.id,
       document_name: getEvidenceTypeLabel(r?.document_type || r?.evidence_type),
@@ -109,6 +133,9 @@ export default async function CandidateEvidencePage(props: any) {
       status: ui.status,
       reason: ui.reason || null,
       created_at: r.created_at || null,
+      scope_label: scopeLabel,
+      processing_label: processingLabel,
+      trust_label: trustLabel,
     };
   });
 

@@ -295,6 +295,7 @@ async function writeProfileRow(args: {
   select: string;
 }) {
   const workingPayload = { ...args.payload };
+  let workingSelect = args.select;
   let attempts = 0;
 
   while (attempts < 4) {
@@ -303,7 +304,7 @@ async function writeProfileRow(args: {
       .from("profiles")
       .update(workingPayload)
       .eq("id", args.userId)
-      .select(args.select)
+      .select(workingSelect)
       .maybeSingle();
 
     if (!res.error) {
@@ -311,11 +312,28 @@ async function writeProfileRow(args: {
     }
 
     const missingColumn = extractMissingColumnName(res.error);
-    if (!missingColumn || !Object.prototype.hasOwnProperty.call(workingPayload, missingColumn)) {
-      return res;
+    if (
+      missingColumn &&
+      Object.prototype.hasOwnProperty.call(workingPayload, missingColumn)
+    ) {
+      delete workingPayload[missingColumn];
+      continue;
     }
 
-    delete workingPayload[missingColumn];
+    if (missingColumn && workingSelect.split(",").map((item) => item.trim()).includes(missingColumn)) {
+      workingSelect = workingSelect
+        .split(",")
+        .map((item) => item.trim())
+        .filter((item) => item && item !== missingColumn)
+        .join(",");
+      if (!workingSelect) workingSelect = "id";
+      continue;
+    }
+
+    if (!missingColumn) {
+      return res;
+    }
+    return res;
   }
 
   return { data: null, error: { message: "profile_write_retry_exhausted" } };
@@ -440,6 +458,7 @@ export async function PUT(req: Request) {
     achievementsInput.map(normalizeAchievement).filter(Boolean) as AchievementItem[]
   );
   const certifications = normalizedAchievements.filter((item) => item.category === "certificacion");
+  const nonLanguageAchievements = normalizedAchievements.filter((item) => item.category !== "idioma");
   const normalizedLanguages = dedupeAchievements(
     normalizedAchievements
       .filter((item) => item.category === "idioma")
@@ -478,9 +497,9 @@ export async function PUT(req: Request) {
       (hasAchievementsInput || hasCertificationsInput) &&
       candidateProfileColumns.has("other_achievements") &&
       CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("other_achievements") &&
-      !CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("achievements")
+      !candidateProfileColumns.has("achievements")
     ) {
-      payload.other_achievements = normalizedAchievements;
+      payload.other_achievements = nonLanguageAchievements;
     }
     if (
       (hasAchievementsInput || hasCertificationsInput) &&

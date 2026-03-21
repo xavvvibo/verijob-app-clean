@@ -5,6 +5,16 @@ import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
 
 export const dynamic = "force-dynamic";
 
+function isUuid(value: unknown) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
+}
+
+function makeFallbackCompanyName(emailRaw: unknown) {
+  const email = String(emailRaw || "").trim().toLowerCase();
+  const local = email.split("@")[0] || "empresa";
+  return `Empresa ${local.slice(0, 40)}`;
+}
+
 function json(status: number, body: any) {
   return NextResponse.json(body, { status });
 }
@@ -29,7 +39,7 @@ export async function POST() {
     if (profileErr) return json(400, { error: "profiles_read_failed", details: profileErr.message });
     if (String(profile?.role || "").toLowerCase() !== "company") return json(403, { error: "forbidden_role" });
 
-    let companyId = profile?.active_company_id ? String(profile.active_company_id) : null;
+    let companyId = isUuid(profile?.active_company_id) ? String(profile.active_company_id) : null;
     if (!companyId) {
       const { data: membership } = await admin
         .from("company_members")
@@ -42,6 +52,35 @@ export async function POST() {
         companyId = String(membership.company_id);
         await admin.from("profiles").update({ active_company_id: companyId }).eq("id", user.id);
       }
+    }
+    if (!companyId) {
+      const { data: createdCompany, error: createCompanyErr } = await admin
+        .from("companies")
+        .insert({ name: makeFallbackCompanyName(user.email) })
+        .select("id")
+        .single();
+      if (createCompanyErr || !createdCompany?.id) {
+        return json(400, { error: "companies_create_failed", details: createCompanyErr?.message || null });
+      }
+      companyId = String(createdCompany.id);
+      const { error: membershipInsertErr } = await admin.from("company_members").insert({
+        company_id: companyId,
+        user_id: user.id,
+        role: "admin",
+      });
+      if (membershipInsertErr) {
+        return json(400, { error: "company_members_insert_failed", details: membershipInsertErr.message });
+      }
+      await admin.from("profiles").update({ active_company_id: companyId }).eq("id", user.id);
+      await admin
+        .from("company_profiles")
+        .upsert(
+          {
+            company_id: companyId,
+            contact_email: user.email || null,
+          },
+          { onConflict: "company_id" },
+        );
     }
     if (!companyId) return json(400, { error: "no_active_company" });
 

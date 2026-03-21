@@ -16,6 +16,9 @@ type EvidenceItem = {
   status: string;
   reason: string | null;
   created_at: string | null;
+  scope_label: string;
+  processing_label: string;
+  trust_label: string | null;
 };
 
 type ExperienceOption = {
@@ -351,10 +354,13 @@ export default function EvidenceListClient({
                 <div>
                   <h3 className="text-sm font-semibold text-gray-900">{it.document_name}</h3>
                   <p className="mt-1 text-xs text-gray-600">Tipo documental: {it.document_type}</p>
+                  <p className="mt-1 text-xs text-gray-600">Cobertura: {it.scope_label}</p>
                   <p className="mt-1 text-xs text-gray-600">Asociación: {it.experience}</p>
                   <p className="mt-1 text-xs text-gray-600">Estado: {it.status}</p>
+                  <p className="mt-1 text-xs text-gray-600">Procesamiento: {it.processing_label}</p>
                   <p className="mt-1 text-xs text-gray-600">Subida: {formatEsDate(it.created_at)}</p>
                   {it.reason ? <p className="mt-1 text-xs text-gray-600">Detalle: {it.reason}</p> : null}
+                  {it.trust_label ? <p className="mt-1 text-xs font-medium text-indigo-700">{it.trust_label}</p> : null}
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <button

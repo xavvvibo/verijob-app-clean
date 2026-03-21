@@ -56,6 +56,15 @@ function normalizeText(value: unknown) {
   return String(value || "").trim();
 }
 
+function toUiSaveError(message: unknown) {
+  const raw = normalizeText(message).toLowerCase();
+  if (!raw) return "No se pudieron guardar los idiomas y logros.";
+  if (raw.includes("candidate_profile_write_failed")) return "No se pudieron guardar todavía tus idiomas y logros. Vuelve a intentarlo.";
+  if (raw.includes("candidate_profile_persistence_mismatch")) return "Guardamos los cambios, pero no pudimos confirmarlos al volver a leer el perfil. Recarga y vuelve a intentarlo.";
+  if (raw.includes("profile_languages_update")) return "No se pudieron actualizar los idiomas del perfil. Vuelve a intentarlo.";
+  return normalizeText(message) || "No se pudieron guardar los idiomas y logros.";
+}
+
 function normalizeAchievements(raw: any): AchievementItem[] {
   if (!Array.isArray(raw)) return [];
   return raw.map((x: any) => {
@@ -387,7 +396,7 @@ export default function CandidateAchievementsPage() {
     const j = await r.json().catch(() => ({}));
     setSaving(false);
     if (!r.ok) {
-      setMessage(j?.error || "No se pudieron guardar los idiomas y logros.");
+      setMessage(toUiSaveError(j?.details || j?.error));
       return;
     }
 

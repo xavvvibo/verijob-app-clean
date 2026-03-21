@@ -1,4 +1,6 @@
 import mammoth from "mammoth";
+import * as pdfParseModule from "pdf-parse";
+import * as pdfParseDebugModule from "pdf-parse-debugging-disabled";
 
 export class CvExtractionError extends Error {
   code: string;
@@ -13,6 +15,15 @@ export class CvExtractionError extends Error {
 }
 
 const MAX_CV_SIZE_BYTES = 8 * 1024 * 1024;
+
+async function tryParsePdfWith(moduleName: string, buf: Buffer) {
+  const parserModule = moduleName === "pdf-parse" ? pdfParseModule : pdfParseDebugModule;
+  const parser: any = (parserModule as any)?.default || parserModule;
+  const out = await parser(buf as any);
+  const text = (out?.text || "").toString().trim();
+  if (!text) throw new Error("empty_pdf_text");
+  return text;
+}
 
 function validateCvBuffer(buf: Buffer, filename?: string) {
   const name = (filename || "").toLowerCase();
@@ -55,12 +66,11 @@ export async function extractCvTextFromBuffer(buf: Buffer, filename?: string): P
 
   if (looksPdfByName || isPdfByMagic) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const pdfParse: any = require("pdf-parse-debugging-disabled");
-      const out = await pdfParse(buf);
-      const text = (out?.text || "").toString().trim();
-      if (!text) throw new Error("empty_pdf_text");
-      return text;
+      try {
+        return await tryParsePdfWith("pdf-parse-debugging-disabled", buf);
+      } catch {
+        return await tryParsePdfWith("pdf-parse", buf);
+      }
     } catch (e: any) {
       throw new CvExtractionError(
         "pdf_extract_failed",
@@ -91,10 +101,12 @@ export async function extractCvTextFromBuffer(buf: Buffer, filename?: string): P
   } catch {}
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const pdfParse: any = require("pdf-parse-debugging-disabled");
-    const out = await pdfParse(buf);
-    const text = (out?.text || "").toString().trim();
+    const text = await tryParsePdfWith("pdf-parse-debugging-disabled", buf);
+    if (text) return text;
+  } catch {}
+
+  try {
+    const text = await tryParsePdfWith("pdf-parse", buf);
     if (text) return text;
   } catch {}
 

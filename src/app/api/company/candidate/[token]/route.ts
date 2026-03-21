@@ -395,11 +395,15 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     .select("*")
     .eq("candidate_id", link.candidate_id);
 
-  const [experienceCountRes, linkedInviteRes] = await Promise.all([
+  const [experienceCountRes, employmentRowsRes, linkedInviteRes] = await Promise.all([
     service
       .from("profile_experiences")
-      .select("id,start_date,end_date,location,position,company_name")
+      .select("id,start_date,end_date,location,role_title,company_name,created_at")
       .eq("user_id", link.candidate_id),
+    service
+      .from("employment_records")
+      .select("id,start_date,end_date,position,company_name_freeform")
+      .eq("candidate_id", link.candidate_id),
     service
       .from("company_candidate_import_invites")
       .select("id,status,accepted_at,updated_at,target_role,candidate_name_raw,candidate_email,extracted_payload_json")
@@ -486,8 +490,21 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     profile_status: profileStatus,
   };
   const breakdownRaw = (candidateProfile as any)?.trust_score_breakdown || {};
-  const experienceRows = Array.isArray(experienceCountRes.data) ? experienceCountRes.data : [];
-  const experienceCount = experienceRows.length;
+  const profileExperienceRows = Array.isArray(experienceCountRes.data) ? experienceCountRes.data : [];
+  const employmentRows = Array.isArray(employmentRowsRes.data) ? employmentRowsRes.data : [];
+  const experienceRows =
+    profileExperienceRows.length > 0
+      ? profileExperienceRows
+      : employmentRows.map((row: any) => ({
+          id: row?.id,
+          start_date: row?.start_date,
+          end_date: row?.end_date,
+          location: null,
+          role_title: row?.position,
+          company_name: row?.company_name_freeform,
+          created_at: null,
+        }));
+  const experienceCount = Math.max(profileExperienceRows.length, employmentRows.length);
   const profileLanguages = Array.isArray((profile as any)?.languages)
     ? (profile as any).languages.map((x: any) => String(x || "").trim()).filter(Boolean)
     : [];
@@ -544,6 +561,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const importStatus = String((linkedInviteRes.data as any)?.status || "").toLowerCase();
   const hasUnlockableProfileSignals =
     experienceCount > 0 ||
+    employmentRows.length > 0 ||
     totalVerifications > 0 ||
     trustScore > 0 ||
     (Array.isArray((candidateProfile as any)?.education) && (candidateProfile as any).education.length > 0) ||

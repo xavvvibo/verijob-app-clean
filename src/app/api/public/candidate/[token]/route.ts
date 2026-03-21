@@ -246,7 +246,19 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const verifiedRows = rows.filter((r: any) => isVerifiedStatus(r?.status));
   const verifiedWork = verifiedRows.filter((r: any) => !isEducationVerification(r)).length;
   const verifiedEducation = verifiedRows.filter((r: any) => isEducationVerification(r)).length;
-  const totalVerifications = verifiedWork + verifiedEducation;
+  const { data: employmentRecords } = await admin
+    .from("employment_records")
+    .select("id,position,company_name_freeform,start_date,end_date,verification_status,last_verification_request_id,company_verification_status_snapshot")
+    .eq("candidate_id", candidateId)
+    .order("start_date", { ascending: false })
+    .limit(24);
+
+  const employmentRows = Array.isArray(employmentRecords) ? employmentRecords : [];
+  const verifiedEmploymentFromRecords = employmentRows.filter((record: any) =>
+    isVerifiedEmploymentRecordStatus(record?.verification_status),
+  ).length;
+  const publicVerifiedExperienceCount = Math.max(verifiedRows.length, verifiedEmploymentFromRecords);
+  const totalVerifications = Math.max(verifiedWork + verifiedEducation, verifiedEmploymentFromRecords);
 
   const confirmed = rows.filter((r: any) => !!r?.company_confirmed).length;
   const evidences = rows.reduce(
@@ -269,24 +281,16 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     trustScore,
   });
 
-  const { data: employmentRecords } = await admin
-    .from("employment_records")
-    .select("id,position,company_name_freeform,start_date,end_date,verification_status,last_verification_request_id,company_verification_status_snapshot")
-    .eq("candidate_id", candidateId)
-    .order("start_date", { ascending: false })
-    .limit(24);
-
-  const experiencesFromEmployment = (Array.isArray(employmentRecords) ? employmentRecords : []).map((record: any) => {
+  const experiencesFromEmployment = employmentRows.map((record: any) => {
     const linkedVerification = verificationById.get(String(record?.last_verification_request_id || ""));
-    const statusTextRaw = String(
-      linkedVerification?.status_effective ||
-      linkedVerification?.status ||
-      record?.verification_status ||
-      "unknown"
-    );
-    const statusText = linkedVerification?.status_effective || linkedVerification?.status
-      ? statusTextRaw
-      : normalizeEmploymentRecordVerificationStatus(statusTextRaw);
+    const recordStatus = normalizeEmploymentRecordVerificationStatus(record?.verification_status || null);
+    const summaryStatusRaw = String(linkedVerification?.status_effective || linkedVerification?.status || "").trim();
+    const statusText =
+      recordStatus === EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFIED
+        ? EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFIED
+        : recordStatus === EMPLOYMENT_RECORD_VERIFICATION_STATUS.REJECTED
+          ? EMPLOYMENT_RECORD_VERIFICATION_STATUS.REJECTED
+          : summaryStatusRaw || recordStatus;
     const score = Number(linkedVerification?.score ?? 0);
     const evidenceCount = Number(
       linkedVerification?.evidence_count ?? linkedVerification?.evidences_count ?? 0
@@ -418,7 +422,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     summary: internalPreviewAllowed ? profileSummary : null,
     trust_score: trustScore,
     experiences_total: rows.length,
-    verified_experiences: verifiedRows.length,
+    verified_experiences: publicVerifiedExperienceCount,
     confirmed_experiences: confirmed,
     evidences_total: evidences,
     evidences_count: evidences,
@@ -475,7 +479,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       experiences: internalPreviewAllowed ? experiencesEnriched : [],
       verifications: {
         total: totalVerifications,
-        verified_work_count: verifiedWork,
+        verified_work_count: Math.max(verifiedWork, verifiedEmploymentFromRecords),
         verified_education_count: internalPreviewAllowed ? verifiedEducation : 0,
         confirmed_experiences: confirmed,
         evidences_total: evidences,

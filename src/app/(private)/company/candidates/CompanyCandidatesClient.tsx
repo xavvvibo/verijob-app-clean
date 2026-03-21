@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import CandidateQuickView from "@/components/company/CandidateQuickView";
 import ProfileUnlockAction from "@/components/company/ProfileUnlockAction";
+import { normalizeCandidatePublicToken } from "@/lib/public/candidate-public-link";
 import {
   computeCandidateQuickFit,
   isCandidateVerified,
@@ -236,7 +237,7 @@ export default function CompanyCandidatesClient() {
 
   function openCandidate(event: React.FormEvent) {
     event.preventDefault();
-    const value = token.trim();
+    const value = normalizeCandidatePublicToken(token);
     if (!value) {
       setError("Introduce un token válido para abrir el candidato.");
       return;

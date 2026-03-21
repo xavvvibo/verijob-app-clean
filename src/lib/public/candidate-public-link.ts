@@ -18,11 +18,41 @@ export type CandidatePublicLinkResolveResult =
 export function normalizeCandidatePublicToken(raw: unknown) {
   const base = String(raw || "").trim();
   if (!base) return "";
-  try {
-    return decodeURIComponent(base).trim();
-  } catch {
-    return base;
+  const decoded = (() => {
+    try {
+      return decodeURIComponent(base).trim();
+    } catch {
+      return base;
+    }
+  })();
+
+  const extractFromPath = (input: string) => {
+    const cleaned = input.split("?")[0]?.split("#")[0] || "";
+    const parts = cleaned.split("/").filter(Boolean);
+    if (!parts.length) return "";
+    const pIndex = parts.findIndex((part) => part === "p");
+    if (pIndex >= 0 && parts[pIndex + 1]) return parts[pIndex + 1];
+    const publicCandidateIndex = parts.findIndex((part) => part === "public-candidate");
+    if (publicCandidateIndex >= 0 && parts[publicCandidateIndex + 1]) return parts[publicCandidateIndex + 1];
+    const companyCandidateIndex = parts.findIndex((part, index) => part === "candidate" && parts[index - 1] === "company");
+    if (companyCandidateIndex >= 0 && parts[companyCandidateIndex + 1]) return parts[companyCandidateIndex + 1];
+    return "";
+  };
+
+  if (/^https?:\/\//i.test(decoded)) {
+    try {
+      const url = new URL(decoded);
+      const extracted = extractFromPath(url.pathname);
+      if (extracted) return extracted;
+    } catch {
+      const extracted = extractFromPath(decoded.replace(/^https?:\/\//i, ""));
+      if (extracted) return extracted;
+    }
   }
+
+  const extracted = extractFromPath(decoded);
+  if (extracted) return extracted;
+  return decoded;
 }
 
 export function isCandidatePublicTokenFormat(token: string) {
@@ -75,4 +105,3 @@ export async function resolveActiveCandidatePublicLink(admin: any, rawToken: unk
     },
   };
 }
-

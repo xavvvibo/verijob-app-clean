@@ -49,16 +49,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
+    const requestedStep = String(body?.onboarding_step || "").trim().toLowerCase();
+    const nextStep =
+      requestedStep === "finish" || requestedStep === "verification" || requestedStep === "evidence" || requestedStep === "experience"
+        ? requestedStep
+        : "finish";
+
     const patch: Record<string, any> = {
       id: au.user.id,
-      onboarding_completed: true,
-      onboarding_step: "finish",
+      onboarding_completed: nextStep === "finish",
+      onboarding_step: nextStep,
     };
-
-    const requestedStep = String(body?.onboarding_step || "").trim().toLowerCase();
-    if (requestedStep === "finish" || requestedStep === "verification" || requestedStep === "evidence" || requestedStep === "experience") {
-      patch.onboarding_step = requestedStep;
-    }
 
     const allowedVisibility = new Set(["private", "public", "public_anonymous"]);
     const incomingVisibility = String(body?.profile_visibility || "").trim();

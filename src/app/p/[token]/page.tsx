@@ -1,5 +1,6 @@
 export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { CandidatePublicProfileRenderer } from "@/components/public/CandidatePublicProfileRenderer";
 
 type Ctx = { params: Promise<{ token: string }> };
@@ -18,8 +19,12 @@ export default async function PublicCandidateProfilePage({
   const qs = (await searchParams) || {};
   const printFlag = String(qs.print || qs.cv || "").toLowerCase();
   const printMode = printFlag === "1" || printFlag === "true" || printFlag === "pdf";
-  const base =
-    process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es";
+  const h = await headers();
+  const host = h.get("x-forwarded-host") || h.get("host");
+  const proto = h.get("x-forwarded-proto") || "https";
+  const base = host
+    ? `${proto}://${host}`
+    : process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es";
 
   const res = await fetch(`${base}/api/public/candidate/${token}`, { cache: "no-store" });
   const body = await res.json().catch(() => ({}));
