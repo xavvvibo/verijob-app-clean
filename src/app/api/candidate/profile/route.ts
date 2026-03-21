@@ -6,6 +6,16 @@ import { normalizeCandidatePhone } from "@/lib/phone";
 import { buildIdentityRecord } from "@/lib/security/identity";
 import { buildCandidateExperienceTrustTimeline } from "@/lib/candidate/experience-trust";
 
+async function getTableColumns(admin: any, tableName: string) {
+  const { data, error } = await admin
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", tableName);
+  if (error || !Array.isArray(data)) return new Set<string>();
+  return new Set(data.map((row: any) => String(row?.column_name || "")));
+}
+
 const PROFILE_PERSONAL_FIELDS = [
   "full_name",
   "phone",
@@ -19,7 +29,6 @@ const CANDIDATE_PROFILE_MUTABLE_FIELDS = [
   "achievements",
   "other_achievements",
   "certifications",
-  "updated_at",
 ] as const;
 
 function normalizeText(value: unknown) {
@@ -310,6 +319,10 @@ export async function PUT(req: Request) {
   const read = await readProfileAndCandidateProfile(admin, user.id);
   if ((read as any).error) return (read as any).error;
   const { profile, candidateProfile, counts } = read as any;
+  const [candidateProfileColumns, profileColumns] = await Promise.all([
+    getTableColumns(admin, "candidate_profiles"),
+    getTableColumns(admin, "profiles"),
+  ]);
 
   const hasAchievementsInput = Object.prototype.hasOwnProperty.call(body || {}, "achievements");
   const hasCertificationsInput = Object.prototype.hasOwnProperty.call(body || {}, "certifications");
@@ -341,31 +354,43 @@ export async function PUT(req: Request) {
   if (hasCandidateProfileInput) {
     const payload: Record<string, any> = {
       user_id: user.id,
-      summary: typeof body?.summary === "string" ? body.summary : candidateProfile?.summary ?? null,
-      updated_at: new Date().toISOString(),
     };
-    if (CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("education")) {
+    if (candidateProfileColumns.has("summary")) {
+      payload.summary = typeof body?.summary === "string" ? body.summary : candidateProfile?.summary ?? null;
+    }
+    if (candidateProfileColumns.has("education") && CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("education")) {
       payload.education = Array.isArray(body?.education)
         ? body.education
         : Array.isArray(candidateProfile?.education)
           ? candidateProfile.education
           : [];
     }
-    if ((hasAchievementsInput || hasCertificationsInput) && CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("achievements")) {
+    if (
+      (hasAchievementsInput || hasCertificationsInput) &&
+      candidateProfileColumns.has("achievements") &&
+      CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("achievements")
+    ) {
       payload.achievements = normalizedAchievements;
     }
     if (
       (hasAchievementsInput || hasCertificationsInput) &&
+      candidateProfileColumns.has("other_achievements") &&
       CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("other_achievements") &&
       !CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("achievements")
     ) {
       payload.other_achievements = normalizedAchievements;
     }
-    if ((hasAchievementsInput || hasCertificationsInput) && CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("certifications")) {
+    if (
+      (hasAchievementsInput || hasCertificationsInput) &&
+      candidateProfileColumns.has("certifications") &&
+      CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("certifications")
+    ) {
       payload.certifications = certifications;
     }
 
-    if (candidateProfile?.id) {
+    if (Object.keys(payload).length === 1 && payload.user_id) {
+      nextCandidateProfile = candidateProfile || { user_id: user.id };
+    } else if (candidateProfile?.id) {
       const res = await admin
         .from("candidate_profiles")
         .update(payload)
@@ -418,7 +443,9 @@ export async function PUT(req: Request) {
     typeof body?.identity_value === "string" &&
     body.identity_value.trim().length > 0;
   if (Object.keys(nextProfilePatch).length) {
-    nextProfilePatch.updated_at = new Date().toISOString();
+    if (profileColumns.has("updated_at")) {
+      nextProfilePatch.updated_at = new Date().toISOString();
+    }
     const profileUpdate = await admin
       .from("profiles")
       .update(nextProfilePatch)
@@ -440,13 +467,16 @@ export async function PUT(req: Request) {
     Object.assign(profile, profileUpdate.data || {});
   }
 
-  if ((hasAchievementsInput || hasCertificationsInput) && Object.prototype.hasOwnProperty.call(profile || {}, "languages")) {
+  if ((hasAchievementsInput || hasCertificationsInput) && profileColumns.has("languages")) {
+    const profileLanguagesPatch: Record<string, any> = {
+      languages: normalizedLanguages,
+    };
+    if (profileColumns.has("updated_at")) {
+      profileLanguagesPatch.updated_at = new Date().toISOString();
+    }
     const profileLanguagesUpdate = await admin
       .from("profiles")
-      .update({
-        languages: normalizedLanguages,
-        updated_at: new Date().toISOString(),
-      })
+      .update(profileLanguagesPatch)
       .eq("id", user.id)
       .select("id, languages")
       .maybeSingle();
