@@ -119,23 +119,49 @@ export default function EvidenceListClient({
       });
       const fileHash = await sha256Hex(file);
 
-      const formData = new FormData();
-      formData.set("file", file);
-      formData.set("mime", file.type || "application/octet-stream");
-      formData.set("employment_record_id", requiresExperience ? employmentRecordId : "");
-      formData.set("evidence_type", normalizeEvidenceType(selectedEvidenceType));
-      formData.set("file_sha256", fileHash);
-
-      const uploadRes = await fetch("/api/candidate/evidence/upload", {
+      const prepareRes = await fetch("/api/candidate/evidence/upload", {
         method: "POST",
         credentials: "include",
-        body: formData,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          employment_record_id: requiresExperience ? employmentRecordId : null,
+          mime: file.type || "application/octet-stream",
+          size_bytes: file.size,
+          filename: file.name,
+          evidence_type: normalizeEvidenceType(selectedEvidenceType),
+          file_sha256: fileHash,
+        }),
       });
-      const uploadJson = await uploadRes.json().catch(() => ({}));
-      if (!uploadRes.ok) {
-        throw new Error(uploadJson?.error || "No se pudo subir la evidencia.");
+      const prepareJson = await prepareRes.json().catch(() => ({}));
+      if (!prepareRes.ok || !prepareJson?.signed_url || !prepareJson?.storage_path || !prepareJson?.verification_request_id) {
+        throw new Error(prepareJson?.error || "No se pudo preparar la subida de la evidencia.");
       }
-      if (uploadJson?.processing?.deferred) {
+
+      const binaryUploadRes = await fetch(prepareJson.signed_url, {
+        method: "PUT",
+        headers: { "content-type": file.type || "application/octet-stream" },
+        body: file,
+      });
+      if (!binaryUploadRes.ok) {
+        throw new Error("No se pudo subir el archivo al almacenamiento.");
+      }
+
+      const confirmRes = await fetch("/api/candidate/evidence/confirm", {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          verification_request_id: prepareJson.verification_request_id,
+          storage_path: prepareJson.storage_path,
+          evidence_type: normalizeEvidenceType(selectedEvidenceType),
+          file_sha256: fileHash,
+        }),
+      });
+      const confirmJson = await confirmRes.json().catch(() => ({}));
+      if (!confirmRes.ok) {
+        throw new Error(confirmJson?.error || "No se pudo registrar la evidencia.");
+      }
+      if (confirmJson?.processing?.deferred) {
         const evidenceLabel = getEvidenceTypeLabel(selectedEvidenceType);
         const targetContext = requiresExperience && selectedExperienceLabel
           ? ` para ${selectedExperienceLabel}`
@@ -149,7 +175,7 @@ export default function EvidenceListClient({
         window.location.reload();
         return;
       }
-      const linkState = String(uploadJson?.documentary_processing?.link_state || "");
+      const linkState = String(confirmJson?.documentary_processing?.link_state || "");
       const evidenceLabel = getEvidenceTypeLabel(selectedEvidenceType);
       const targetContext = requiresExperience && selectedExperienceLabel
         ? ` para ${selectedExperienceLabel}`

@@ -12,8 +12,31 @@ async function getTableColumns(admin: any, tableName: string) {
     .select("column_name")
     .eq("table_schema", "public")
     .eq("table_name", tableName);
-  if (error || !Array.isArray(data)) return new Set<string>();
-  return new Set(data.map((row: any) => String(row?.column_name || "")));
+  if (!error && Array.isArray(data) && data.length > 0) {
+    return new Set(data.map((row: any) => String(row?.column_name || "")));
+  }
+  if (tableName === "candidate_profiles") {
+    return new Set([
+      "user_id",
+      "summary",
+      "education",
+      "achievements",
+      "other_achievements",
+      "certifications",
+    ]);
+  }
+  if (tableName === "profiles") {
+    return new Set([
+      "id",
+      "full_name",
+      "phone",
+      "title",
+      "location",
+      "languages",
+      "updated_at",
+    ]);
+  }
+  return new Set<string>();
 }
 
 const PROFILE_PERSONAL_FIELDS = [

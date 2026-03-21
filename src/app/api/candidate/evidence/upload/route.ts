@@ -338,6 +338,69 @@ export async function POST(req: Request) {
       return json(401, { error: "unauthorized", details: userErr?.message || null });
     }
 
+    const contentType = req.headers.get("content-type") || "";
+
+    if (contentType.includes("application/json")) {
+      const body = await req.json().catch(() => ({}));
+      const mime = String(body?.mime ?? "").trim();
+      const sizeBytes = Number(body?.size_bytes ?? 0);
+      const filename = safeFilename(String(body?.filename ?? "file"));
+      const evidenceType = normalizeEvidenceType(body?.evidence_type);
+      const evidenceConfig = getEvidenceTypeConfig(evidenceType);
+      const employmentRecordRef = String(body?.employment_record_id ?? "").trim();
+      const verificationRequestId = String(body?.verification_request_id ?? "").trim();
+      const fileSha256 = String(body?.file_sha256 ?? "").trim().toLowerCase() || null;
+
+      if (!ALLOWED_MIME.has(mime)) return json(400, { error: "Tipo de archivo no permitido", mime });
+      if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) return json(400, { error: "size_bytes inválido" });
+      if (sizeBytes > MAX_MB * 1024 * 1024) return json(400, { error: "Archivo demasiado grande", max_mb: MAX_MB });
+      if (!isHexSha256(fileSha256 || undefined)) return json(400, { error: "file_sha256 inválido" });
+      if (!verificationRequestId && !employmentRecordRef && requiresExperienceAssociation(evidenceType)) {
+        return json(400, { error: "Selecciona una experiencia para este tipo de documento" });
+      }
+
+      const context = await resolveDocumentaryContext({
+        admin,
+        supabase,
+        userId: user.id,
+        evidenceType,
+        employmentRecordRef,
+        verificationRequestId,
+      });
+      if ((context as any).error) return json(400, (context as any).error);
+
+      const bucketError = await ensureEvidenceBucket(admin);
+      if (bucketError) {
+        return json(400, {
+          error: "No se pudo preparar el almacenamiento de evidencias",
+          details: bucketError.message,
+          bucket: BUCKET,
+        });
+      }
+
+      const storagePath = `evidence/${user.id}/${(context as any).verificationRequestId}/${randomUUID()}.${extFromMime(mime, filename)}`;
+      const signed = await admin.storage.from(BUCKET).createSignedUploadUrl(storagePath);
+      if (signed.error || !signed.data?.signedUrl) {
+        return json(400, {
+          error: "No se pudo generar signed upload URL",
+          details: signed.error?.message || null,
+          bucket: BUCKET,
+        });
+      }
+
+      return json(200, {
+        ok: true,
+        signed_url: signed.data.signedUrl,
+        token: signed.data.token,
+        storage_path: storagePath,
+        verification_request_id: (context as any).verificationRequestId,
+        employment_record_id: (context as any).employmentRecordId,
+        evidence_type: evidenceType,
+        evidence_type_label: evidenceConfig.label,
+        file_sha256: fileSha256,
+      });
+    }
+
     const formData = await req.formData();
     const file = formData.get("file");
     const mime = String(formData.get("mime") || (file instanceof File ? file.type : "") || "").trim();
