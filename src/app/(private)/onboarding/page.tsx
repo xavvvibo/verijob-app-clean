@@ -18,7 +18,20 @@ function matchKey(input: any) {
   ].join("|")
 }
 
-export default async function CandidateOnboardingPage() {
+export default async function CandidateOnboardingPage(props: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const resolvedSearchParams = (await props?.searchParams) || {}
+  const blockedFlag = Array.isArray(resolvedSearchParams?.blocked)
+    ? resolvedSearchParams.blocked[0]
+    : resolvedSearchParams?.blocked
+  const sourceFlag = Array.isArray(resolvedSearchParams?.source)
+    ? resolvedSearchParams.source[0]
+    : resolvedSearchParams?.source
+  if (String(blockedFlag || "") === "1" && String(sourceFlag || "") === "candidate") {
+    redirect("/onboarding")
+  }
+
   const supabase = await createServerSupabaseClient()
   const { data: auth } = await supabase.auth.getUser()
   if (!auth?.user) redirect("/login?next=/onboarding")
