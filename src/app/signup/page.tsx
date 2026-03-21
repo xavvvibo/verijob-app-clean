@@ -1,23 +1,9 @@
 import SignupClient from "./SignupClient";
 import PublicAuthShell from "@/components/public/PublicAuthShell";
-import { createClient } from "@/utils/supabase/server";
-import { redirect } from "next/navigation";
-import { resolveAuthenticatedRouting } from "@/lib/auth/post-login-redirect";
 
 export const dynamic = "force-dynamic";
 
-export default async function SignupPage() {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (auth?.user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role,active_company_id,onboarding_completed")
-      .eq("id", auth.user.id)
-      .maybeSingle();
-    redirect(resolveAuthenticatedRouting({ ...(profile || {}), user: auth.user }).destination);
-  }
-
+export default function SignupPage() {
   return (
     <PublicAuthShell
       title="Activa tu acceso a VERIJOB en minutos"
