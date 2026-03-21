@@ -91,19 +91,12 @@ export default function CandidateEducationPage() {
   async function save() {
     setSaving(true);
     setMessage(null);
-    const profileRes = await fetch("/api/candidate/profile", { credentials: "include", cache: "no-store" as any });
-    const profileJson = await profileRes.json().catch(() => ({}));
-
-    const body = {
-      summary: profileJson?.profile?.summary ?? null,
-      certifications: Array.isArray(profileJson?.profile?.certifications) ? profileJson.profile.certifications : [],
-      education: toPayload(items),
-    };
-
     const r = await fetch("/api/candidate/profile", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        education: toPayload(items),
+      }),
     });
 
     const j = await r.json().catch(() => ({}));

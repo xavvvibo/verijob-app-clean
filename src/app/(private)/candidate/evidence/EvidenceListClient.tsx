@@ -55,6 +55,35 @@ function writeHiddenIds(ids: Set<string>) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(Array.from(ids)));
 }
 
+async function prepareEvidenceUpload(payload: Record<string, any>) {
+  const endpoints = [
+    "/api/candidate/evidence/upload",
+    "/api/candidate/evidence/upload-url",
+  ];
+
+  let lastError = "No se pudo preparar la subida de la evidencia.";
+
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const json = await response.json().catch(() => ({}));
+      if (response.ok && json?.signed_url && json?.storage_path && json?.verification_request_id) {
+        return json;
+      }
+      lastError = String(json?.error || json?.details || lastError).trim() || lastError;
+    } catch (error: any) {
+      lastError = String(error?.message || error || lastError).trim() || lastError;
+    }
+  }
+
+  throw new Error(lastError);
+}
+
 async function sha256Hex(file: File) {
   const buffer = await file.arrayBuffer();
   const digest = await crypto.subtle.digest("SHA-256", buffer);
@@ -119,23 +148,14 @@ export default function EvidenceListClient({
       });
       const fileHash = await sha256Hex(file);
 
-      const prepareRes = await fetch("/api/candidate/evidence/upload", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          employment_record_id: requiresExperience ? employmentRecordId : null,
-          mime: file.type || "application/octet-stream",
-          size_bytes: file.size,
-          filename: file.name,
-          evidence_type: normalizeEvidenceType(selectedEvidenceType),
-          file_sha256: fileHash,
-        }),
+      const prepareJson = await prepareEvidenceUpload({
+        employment_record_id: requiresExperience ? employmentRecordId : null,
+        mime: file.type || "application/octet-stream",
+        size_bytes: file.size,
+        filename: file.name,
+        evidence_type: normalizeEvidenceType(selectedEvidenceType),
+        file_sha256: fileHash,
       });
-      const prepareJson = await prepareRes.json().catch(() => ({}));
-      if (!prepareRes.ok || !prepareJson?.signed_url || !prepareJson?.storage_path || !prepareJson?.verification_request_id) {
-        throw new Error(prepareJson?.error || "No se pudo preparar la subida de la evidencia.");
-      }
 
       const binaryUploadRes = await fetch(prepareJson.signed_url, {
         method: "PUT",

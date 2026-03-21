@@ -376,19 +376,12 @@ export default function CandidateAchievementsPage() {
     setSaving(true);
     setMessage(null);
 
-    const profileRes = await fetch("/api/candidate/profile", { credentials: "include", cache: "no-store" as any });
-    const profileJson = await profileRes.json().catch(() => ({}));
-
-    const body = {
-      summary: profileJson?.profile?.summary ?? null,
-      education: Array.isArray(profileJson?.profile?.education) ? profileJson.profile.education : [],
-      achievements: toPayload(items),
-    };
-
     const r = await fetch("/api/candidate/profile", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({
+        achievements: toPayload(items),
+      }),
     });
 
     const j = await r.json().catch(() => ({}));

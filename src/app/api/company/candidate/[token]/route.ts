@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { sanitizePublic } from "@/utils/sanitizePublic";
-import { resolveActiveCandidatePublicLink } from "@/lib/public/candidate-public-link";
+import { normalizeCandidatePublicToken, resolveActiveCandidatePublicLink } from "@/lib/public/candidate-public-link";
 import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
 import { normalizeCompanyProfileAccessProductKey } from "@/lib/company/profile-access-products";
 import { resolveSafeCandidateName } from "@/lib/company-candidate-import-shared";
@@ -199,6 +199,7 @@ async function resolveConsumptionSource(args: {
 
 export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const { token: tokenParam } = await ctx.params;
+  const normalizedToken = normalizeCandidatePublicToken(tokenParam);
   const url = new URL(req.url);
   const mode = url.searchParams.get("mode") === "full" ? "full" : "preview";
   logCompanyCandidateResponse("request", { token: tokenParam, mode });
@@ -221,7 +222,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   const service = createServiceRoleClient();
   const activeCompanyId = String((requesterProfile as any)?.active_company_id || "");
 
-  const linkResolved = await resolveActiveCandidatePublicLink(service, tokenParam);
+  const linkResolved = await resolveActiveCandidatePublicLink(service, normalizedToken);
   let link = linkResolved.ok ? linkResolved.link : null;
   let unresolvedInvitePreview: any = null;
 
@@ -230,7 +231,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       service
         .from("candidate_public_links")
         .select("id,candidate_id,expires_at,is_active,created_at")
-        .eq("public_token", tokenParam)
+        .eq("public_token", normalizedToken)
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
@@ -238,7 +239,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
         .from("company_candidate_import_invites")
         .select("id,linked_user_id,candidate_name_raw,candidate_email,target_role,created_at,updated_at,accepted_at,parse_status,status,extracted_payload_json")
         .eq("company_id", activeCompanyId)
-        .eq("invite_token", tokenParam)
+        .eq("invite_token", normalizedToken)
         .order("updated_at", { ascending: false })
         .limit(1)
         .maybeSingle(),
@@ -541,11 +542,18 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     (completionSignals.reduce((acc, value) => acc + value, 0) / Math.max(1, completionSignals.length)) * 100
   );
   const importStatus = String((linkedInviteRes.data as any)?.status || "").toLowerCase();
+  const hasUnlockableProfileSignals =
+    experienceCount > 0 ||
+    totalVerifications > 0 ||
+    trustScore > 0 ||
+    (Array.isArray((candidateProfile as any)?.education) && (candidateProfile as any).education.length > 0) ||
+    languagesDetected.length > 0 ||
+    Boolean((profile as any)?.title) ||
+    Boolean((profile as any)?.location);
   const companyImportInProgress =
     importStatus === "emailed" ||
     importStatus === "uploaded" ||
-    importStatus === "accepted" ||
-    (Boolean((candidateProfile as any)?.raw_cv_json?.company_cv_import) && onboardingCompletion < 70);
+    (importStatus === "accepted" && !hasUnlockableProfileSignals && onboardingCompletion < 70);
   const profileState =
     companyImportInProgress
       ? "en_construccion"

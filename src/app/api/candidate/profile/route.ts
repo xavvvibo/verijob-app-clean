@@ -242,6 +242,85 @@ function sameJson(a: unknown, b: unknown) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
+function extractMissingColumnName(error: any) {
+  const message = String(error?.message || "");
+  const match = message.match(/column ["']?([a-zA-Z0-9_]+)["']? .* does not exist/i);
+  return match?.[1] ? String(match[1]) : null;
+}
+
+async function writeCandidateProfileRow(args: {
+  admin: any;
+  userId: string;
+  candidateProfile: any;
+  payload: Record<string, any>;
+}) {
+  const workingPayload = { ...args.payload };
+  let attempts = 0;
+
+  while (attempts < 4) {
+    attempts += 1;
+    const res = args.candidateProfile?.id
+      ? await args.admin
+          .from("candidate_profiles")
+          .update(workingPayload)
+          .eq("id", args.candidateProfile.id)
+          .eq("user_id", args.userId)
+          .select("*")
+          .maybeSingle()
+      : await args.admin
+          .from("candidate_profiles")
+          .insert(workingPayload)
+          .select("*")
+          .single();
+
+    if (!res.error) {
+      return res;
+    }
+
+    const missingColumn = extractMissingColumnName(res.error);
+    if (!missingColumn || !Object.prototype.hasOwnProperty.call(workingPayload, missingColumn) || missingColumn === "user_id") {
+      return res;
+    }
+
+    delete workingPayload[missingColumn];
+  }
+
+  return { data: null, error: { message: "candidate_profile_write_retry_exhausted" } };
+}
+
+async function writeProfileRow(args: {
+  admin: any;
+  userId: string;
+  payload: Record<string, any>;
+  select: string;
+}) {
+  const workingPayload = { ...args.payload };
+  let attempts = 0;
+
+  while (attempts < 4) {
+    attempts += 1;
+    const res = await args.admin
+      .from("profiles")
+      .update(workingPayload)
+      .eq("id", args.userId)
+      .select(args.select)
+      .maybeSingle();
+
+    if (!res.error) {
+      return res;
+    }
+
+    const missingColumn = extractMissingColumnName(res.error);
+    if (!missingColumn || !Object.prototype.hasOwnProperty.call(workingPayload, missingColumn)) {
+      return res;
+    }
+
+    delete workingPayload[missingColumn];
+  }
+
+  return { data: null, error: { message: "profile_write_retry_exhausted" } };
+}
+
 function buildRequestedPersonalSnapshot(body: any, currentProfile: any) {
   const next: Record<string, any> = {};
   for (const field of PROFILE_PERSONAL_FIELDS) {
@@ -413,27 +492,18 @@ export async function PUT(req: Request) {
 
     if (Object.keys(payload).length === 1 && payload.user_id) {
       nextCandidateProfile = candidateProfile || { user_id: user.id };
-    } else if (candidateProfile?.id) {
-      const res = await admin
-        .from("candidate_profiles")
-        .update(payload)
-        .eq("id", candidateProfile.id)
-        .eq("user_id", user.id)
-        .select("*")
-        .maybeSingle();
+    } else {
+      const res = await writeCandidateProfileRow({
+        admin,
+        userId: user.id,
+        candidateProfile,
+        payload,
+      });
       writeError = res.error;
       nextCandidateProfile = res.data;
       if (!writeError && !nextCandidateProfile) {
-        writeError = { message: "candidate_profile_update_no_rows" };
+        writeError = { message: candidateProfile?.id ? "candidate_profile_update_no_rows" : "candidate_profile_insert_no_rows" };
       }
-    } else {
-      const res = await admin
-        .from("candidate_profiles")
-        .insert(payload)
-        .select("*")
-        .single();
-      writeError = res.error;
-      nextCandidateProfile = res.data;
     }
   }
 
@@ -469,12 +539,12 @@ export async function PUT(req: Request) {
     if (profileColumns.has("updated_at")) {
       nextProfilePatch.updated_at = new Date().toISOString();
     }
-    const profileUpdate = await admin
-      .from("profiles")
-      .update(nextProfilePatch)
-      .eq("id", user.id)
-      .select("id, full_name, phone, title, location")
-      .maybeSingle();
+    const profileUpdate = await writeProfileRow({
+      admin,
+      userId: user.id,
+      payload: nextProfilePatch,
+      select: "id, full_name, phone, title, location",
+    });
     if (profileUpdate.error) {
       return NextResponse.json(
         { error: "profile_update_failed", details: profileUpdate.error.message },
@@ -497,12 +567,12 @@ export async function PUT(req: Request) {
     if (profileColumns.has("updated_at")) {
       profileLanguagesPatch.updated_at = new Date().toISOString();
     }
-    const profileLanguagesUpdate = await admin
-      .from("profiles")
-      .update(profileLanguagesPatch)
-      .eq("id", user.id)
-      .select("id, languages")
-      .maybeSingle();
+    const profileLanguagesUpdate = await writeProfileRow({
+      admin,
+      userId: user.id,
+      payload: profileLanguagesPatch,
+      select: "id, languages",
+    });
     if (profileLanguagesUpdate.error) {
       return NextResponse.json(
         { error: "profile_languages_update_failed", details: profileLanguagesUpdate.error.message },
