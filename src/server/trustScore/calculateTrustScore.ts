@@ -133,6 +133,10 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
   }, 0);
 
   const rejectedVerificationCount = verifications.filter((row: any) => String(row?.status || "").toLowerCase() === "rejected").length;
+  const explicitAwardedTrustFloor = verifications.reduce((acc, row: any) => {
+    if (String(row?.status || "").toLowerCase() !== "verified") return acc;
+    return Math.max(acc, Number((row as any)?.trust_score_awarded ?? 0) || 0);
+  }, 0);
 
   const verificationBlockBase =
     weightedVerifiedEmployment >= 3 ? 40 : weightedVerifiedEmployment >= 2 ? 30 : weightedVerifiedEmployment >= 1 ? 20 : weightedVerifiedEmployment > 0 ? 10 : 0;
@@ -180,7 +184,7 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
 
   const reuseBlock = reuseEvents >= 4 ? 15 : reuseEvents >= 2 ? 10 : reuseEvents >= 1 ? 5 : 0;
 
-  const score = clamp(Math.round(verificationBlock + evidenceBlock + consistencyBlock + reuseBlock));
+  const score = clamp(Math.max(Math.round(verificationBlock + evidenceBlock + consistencyBlock + reuseBlock), explicitAwardedTrustFloor));
 
   return {
     score,

@@ -233,9 +233,84 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (!resolvedVerificationRequestId && !resolvedEmploymentRecordId && !requiresExperienceAssociation(evidence_type)) {
+      const { data: anchorEmployment } = await admin
+        .from("employment_records")
+        .select("id")
+        .eq("candidate_id", auth.user.id)
+        .order("start_date", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      resolvedEmploymentRecordId = String((anchorEmployment as any)?.id || "").trim();
+
+      if (!resolvedEmploymentRecordId) {
+        const { data: profileExperience } = await admin
+          .from("profile_experiences")
+          .select("id,role_title,company_name,start_date,end_date")
+          .eq("user_id", auth.user.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (profileExperience?.id) {
+          const insertPayload: Record<string, any> = {
+            candidate_id: auth.user.id,
+            position: (profileExperience as any)?.role_title || null,
+            company_name_freeform: (profileExperience as any)?.company_name || null,
+            start_date: (profileExperience as any)?.start_date || null,
+            end_date: (profileExperience as any)?.end_date || null,
+            verification_status: "unverified",
+            source_experience_id: String((profileExperience as any)?.id || ""),
+          };
+
+          let createdEmployment: any = null;
+          let createdEmploymentError: any = null;
+          let attemptedInsertPayload = { ...insertPayload };
+
+          const primaryInsert = await admin
+            .from("employment_records")
+            .insert(insertPayload)
+            .select("id")
+            .single();
+          createdEmployment = primaryInsert.data;
+          createdEmploymentError = primaryInsert.error;
+
+          if (createdEmploymentError && /source_experience_id/i.test(String(createdEmploymentError?.message || ""))) {
+            const fallbackInsertPayload = { ...insertPayload };
+            delete fallbackInsertPayload.source_experience_id;
+            attemptedInsertPayload = fallbackInsertPayload;
+            const fallbackInsert = await admin
+              .from("employment_records")
+              .insert(fallbackInsertPayload)
+              .select("id")
+              .single();
+            createdEmployment = fallbackInsert.data;
+            createdEmploymentError = fallbackInsert.error;
+          }
+
+          if (createdEmploymentError || !createdEmployment?.id) {
+            return json(res, 400, {
+              error: "No se pudo crear employment_record para la evidencia global",
+              route: "/pages/api/candidate/evidence/upload-url",
+              details: createdEmploymentError?.message || null,
+              employment_record_insert_payload: attemptedInsertPayload,
+            });
+          }
+
+          resolvedEmploymentRecordId = String(createdEmployment.id);
+        }
+      }
+
+      if (!resolvedEmploymentRecordId) {
+        return json(res, 400, {
+          error: "Necesitas al menos una experiencia para subir esta evidencia global",
+          route: "/pages/api/candidate/evidence/upload-url",
+        });
+      }
+
       const nowIso = new Date().toISOString();
       const payload = buildDocumentaryVerificationInsert({
-        employmentRecordId: null,
+        employmentRecordId: resolvedEmploymentRecordId,
         userId: auth.user.id,
         companyName: "Historial laboral",
         position: "Evidencia global",
@@ -293,7 +368,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const storage_path = `evidence/${userId}/${resolvedVerificationRequestId}/${uuid}.${ext}`;
     const evidence_client_ref = createHash("sha256").update(storage_path).digest("hex").slice(0, 16);
 
-    const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(storage_path);
+    const { data, error } = await admin.storage.from(BUCKET).createSignedUploadUrl(storage_path);
 
     if (error || !data?.signedUrl) {
       return json(res, 400, {
