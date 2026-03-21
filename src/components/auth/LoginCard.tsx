@@ -66,6 +66,8 @@ function getEmailRedirectTo() {
 export default function LoginCard() {
   const sp = useSearchParams();
   const mode = sp.get("mode");
+  const forceLogin = sp.get("force") === "1";
+  const logoutParam = sp.get("logout") === "1";
   const rawNext = sp.get("next");
   const next = useMemo(() => safeNext(rawNext), [rawNext]);
   const signupHref = useMemo(() => {
@@ -85,6 +87,26 @@ export default function LoginCard() {
   const [notice, setNotice] = useState<string | null>(null);
   const [otpExpiresAt, setOtpExpiresAt] = useState<number | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
+
+  useEffect(() => {
+    if (!forceLogin && !logoutParam) return;
+    let alive = true;
+    (async () => {
+      try {
+        const supabase = createClient();
+        await supabase.auth.signOut().catch(() => null);
+      } finally {
+        if (!alive) return;
+        if (logoutParam) {
+          setNotice("Has cerrado sesión correctamente.");
+          setError(null);
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [forceLogin, logoutParam]);
 
   useEffect(() => {
     if (!otpExpiresAt) {

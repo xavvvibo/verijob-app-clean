@@ -86,9 +86,10 @@ export default function Topbar({ role }: { role?: Role }) {
     if (loggingOut) return;
     setLoggingOut(true);
     try {
-      await fetch("/api/auth/logout", { method: "POST" }).catch(() => null);
+      await supabase.auth.signOut().catch(() => null);
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => null);
     } finally {
-      window.location.href = "/login";
+      window.location.href = "/login?logout=1";
     }
   }
 
