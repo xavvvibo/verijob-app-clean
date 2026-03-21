@@ -7,7 +7,7 @@ import { buildVerificationPayload } from "@/lib/fix-verification-payload";
 
 type ExperienceStatus =
   | "Sin verificar"
-  | "Verificación solicitada"
+  | "Validación solicitada"
   | "En revisión"
   | "Verificada"
   | "Revocada";
@@ -68,7 +68,7 @@ function statusClasses(status: ExperienceStatus) {
   if (status === "Verificada") return "border-emerald-200 bg-emerald-50 text-emerald-800";
   if (status === "Revocada") return "border-rose-200 bg-rose-50 text-rose-700";
   if (status === "En revisión") return "border-amber-200 bg-amber-50 text-amber-800";
-  if (status === "Verificación solicitada") return "border-sky-200 bg-sky-50 text-sky-800";
+  if (status === "Validación solicitada") return "border-sky-200 bg-sky-50 text-sky-800";
   return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
@@ -130,10 +130,10 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
   }
 
   async function requestVerification(row: Row) {
-    const email = String(verificationEmailById[row.id] || "").trim().toLowerCase();
-    if (!EMAIL_RE.test(email)) {
+    const Email = String(verificationEmailById[row.id] || "").trim().toLowerCase();
+    if (!EMAIL_RE.test(Email)) {
       setVerifyStateById((prev) => ({ ...prev, [row.id]: "error" }));
-      setVerifyMessageById((prev) => ({ ...prev, [row.id]: "Introduce un email válido." }));
+      setVerifyMessageById((prev) => ({ ...prev, [row.id]: "Introduce un Email válido." }));
       return;
     }
 
@@ -152,10 +152,10 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
       const payload = buildVerificationPayload(
         {
           ...row,
-          company_email: email,
+          company_Email: Email,
         },
         user.id,
-        email,
+        Email,
       );
       console.log("PAYLOAD_FINAL_EXPERIENCE_LIST", payload);
 
@@ -168,7 +168,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
 
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(json?.details || json?.error || "No hemos podido enviar la solicitud. Revisa el email o inténtalo de nuevo.");
+        throw new Error(json?.details || json?.error || "No hemos podido enviar la solicitud. Revisa el Email o inténtalo de nuevo.");
       }
 
       setRows((prev) =>
@@ -176,7 +176,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
           entry.id === row.id
             ? {
                 ...entry,
-                status: "Verificación solicitada",
+                status: "Validación solicitada",
                 last_action: json?.already_exists === true ? "Solicitud activa reutilizada" : "Solicitud enviada",
               }
             : entry,
@@ -188,14 +188,14 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
         ...prev,
         [row.id]:
           json?.already_exists === true
-            ? "Ya existía una solicitud activa para esta experiencia y este email. Hemos reutilizado la solicitud existente."
+            ? "Ya existía una solicitud activa para esta experiencia y este Email. Hemos reutilizado la solicitud existente."
             : "Solicitud enviada correctamente.",
       }));
     } catch (err: any) {
       setVerifyStateById((prev) => ({ ...prev, [row.id]: "error" }));
       setVerifyMessageById((prev) => ({
         ...prev,
-        [row.id]: err?.message || "No hemos podido enviar la solicitud. Revisa el email o inténtalo de nuevo.",
+        [row.id]: err?.message || "No hemos podido enviar la solicitud. Revisa el Email o inténtalo de nuevo.",
       }));
     }
   }
@@ -401,14 +401,14 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                       <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
                         <div className="text-sm font-semibold text-sky-900">Solicitar verificación</div>
                         <p className="mt-1 text-xs text-sky-800">
-                          Indica el email de la empresa o de la persona que puede validar esta experiencia.
+                          Indica el Email de la empresa o de la persona que puede validar esta experiencia.
                         </p>
                         <label className="mt-3 block">
                           <div className="text-xs font-semibold text-gray-900">Email verificador</div>
                           <input
                             id={`verification-contact-${row.id}`}
                             type="text"
-                            inputMode="email"
+                            inputMode="Email"
                             name={`verification-contact-${row.id}`}
                             autoComplete={`section-verification-${row.id} off`}
                             autoCapitalize="none"

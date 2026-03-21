@@ -11,8 +11,8 @@ function toEsDate(value?: string | null) {
 function mapStatus(statusRaw: unknown, revokedAt?: string | null) {
   if (revokedAt) return "Revocada";
   const status = String(statusRaw || "").toLowerCase();
-  if (status === "verified" || status === "approved") return "Verificada por empresa vía email corporativo";
-  if (status === "pending_company") return "Pendiente de respuesta de empresa";
+  if (status === "verified" || status === "approved") return "Verificada por empresa vía Email corporativo";
+  if (status === "pending_company") return "Pendiente de validación";
   if (status === "reviewing") return "En revisión";
   if (status === "rejected") return "Rechazada";
   if (status === "revoked") return "Revocada";
@@ -24,7 +24,7 @@ function mapCompanyVerificationStatus(statusRaw: unknown) {
   if (status === "registered_in_verijob") return "Empresa registrada en VERIJOB";
   if (status === "verified_paid") return "Empresa con plan activo";
   if (status === "verified_document") return "Empresa verificadora validada documentalmente";
-  if (status === "unverified_external") return "Verificación por email corporativo";
+  if (status === "unverified_external") return "Verificación por Email corporativo";
   if (status === "unverified") return "Empresa no verificada";
   return "Estado de empresa no disponible";
 }
@@ -121,7 +121,7 @@ export default async function CandidateVerificationPage(props: any) {
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="border border-gray-200 rounded-2xl p-4">
             <div className="text-xs text-gray-500">Canal</div>
-            <div className="mt-1 text-sm font-semibold text-gray-900">{vr.verification_channel || "email"}</div>
+            <div className="mt-1 text-sm font-semibold text-gray-900">{vr.verification_channel || "Email"}</div>
           </div>
           <div className="border border-gray-200 rounded-2xl p-4">
             <div className="text-xs text-gray-500">Creada</div>
