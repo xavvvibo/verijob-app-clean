@@ -1,8 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/utils/supabase/client"
 
 type Step = "intro" | "experience" | "verification" | "done"
 
@@ -95,7 +94,6 @@ export default function CandidateOnboardingFlow({
   initialTrustScore: number
 }) {
   const router = useRouter()
-  const supabase = useMemo(() => createClient(), [])
   const [step, setStep] = useState<Step>(
     deriveInitialStep({
       onboardingStep: initialProfile.onboardingStep,
@@ -108,14 +106,20 @@ export default function CandidateOnboardingFlow({
   const [message, setMessage] = useState<string | null>(null)
 
   async function persistOnboardingStep(nextStep: "experience" | "verification" | "evidence" | "finish") {
-    const { data: auth } = await supabase.auth.getUser()
-    if (!auth?.user) {
+    const res = await fetch("/api/onboarding/complete", {
+      method: "POST",
+      credentials: "include",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ onboarding_step: nextStep }),
+    })
+    const body = await res.json().catch(() => ({}))
+    if (res.status === 401) {
       router.replace("/login?next=/onboarding")
       return false
     }
-
-    const { error } = await supabase.from("profiles").update({ onboarding_step: nextStep }).eq("id", auth.user.id)
-    if (error) throw new Error(error.message || "No se ha podido guardar el avance.")
+    if (!res.ok) {
+      throw new Error(body?.details || body?.error || "No se ha podido guardar el avance.")
+    }
     return true
   }
 
@@ -123,6 +127,7 @@ export default function CandidateOnboardingFlow({
     try {
       setMessage(null)
       await persistOnboardingStep("experience")
+      document.cookie = "candidate_onboarding_access=1; Path=/; Max-Age=1800; SameSite=Lax"
       router.push(target === "cv" ? "/candidate/experience?onboarding=1#cv-upload" : "/candidate/experience?onboarding=1&new=1#manual-experience")
     } catch (error: any) {
       setMessage(error?.message || "No hemos podido abrir tu bandeja de experiencias.")
@@ -145,16 +150,7 @@ export default function CandidateOnboardingFlow({
     setMessage(null)
     try {
       await persistOnboardingStep("finish")
-      const res = await fetch("/api/onboarding/complete", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ onboarding_step: "finish" }),
-      })
-      const body = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        throw new Error(body?.details || body?.error || "No hemos podido cerrar tu onboarding.")
-      }
+      document.cookie = "candidate_onboarding_access=; Path=/; Max-Age=0; SameSite=Lax"
       setStep("done")
     } catch (error: any) {
       setMessage(error?.message || "Tu perfil está en marcha, pero no hemos podido cerrar el onboarding.")

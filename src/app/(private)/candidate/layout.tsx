@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 
 export const metadata: Metadata = {
@@ -12,6 +13,7 @@ export const revalidate = 0;
 
 export default async function CandidateLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createServerSupabaseClient();
+  const cookieStore = await cookies();
   const { data: au } = await supabase.auth.getUser();
 
   if (!au.user) redirect("/login?next=/candidate/overview");
@@ -28,7 +30,9 @@ export default async function CandidateLayout({ children }: { children: React.Re
   if (role === "company") redirect("/company?forbidden=1&from=candidate");
   if (role === "owner") redirect("/owner?forbidden=1&from=candidate");
 
-  if (!profile?.onboarding_completed) {
+  const onboardingAccessGranted = cookieStore.get("candidate_onboarding_access")?.value === "1";
+
+  if (!profile?.onboarding_completed && !onboardingAccessGranted) {
     redirect("/onboarding?blocked=1&source=candidate");
   }
 

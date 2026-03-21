@@ -253,7 +253,7 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
                 </div>
 
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Trust Score técnico</div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Nivel de confianza</div>
                   <div className="mt-1 text-sm font-semibold text-slate-900">
                     {requestRow.verification_confidence_score ?? 0}/100
                   </div>
