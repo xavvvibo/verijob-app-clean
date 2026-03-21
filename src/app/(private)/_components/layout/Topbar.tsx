@@ -6,6 +6,7 @@ import { usePathname, useSearchParams } from "next/navigation";
 import CommandSearch from "@/components/global/CommandSearch";
 import { createClient } from "@/utils/supabase/client";
 import { getCandidatePlanLabel } from "@/lib/candidate/plan-label";
+import NotificationsBell from "./NotificationsBell";
 
 type Role = "candidate" | "company" | "owner" | string | null | undefined;
 
@@ -116,6 +117,7 @@ export default function Topbar({ role }: { role?: Role }) {
           </div>
 
           <div className="ml-auto flex items-center gap-2 lg:gap-3">
+  <NotificationsBell />
             {isCandidateArea ? (
               <>
                 <Link
