@@ -288,6 +288,8 @@ export async function PUT(req: Request) {
   if ((read as any).error) return (read as any).error;
   const { profile, candidateProfile, counts } = read as any;
 
+  const hasAchievementsInput = Object.prototype.hasOwnProperty.call(body || {}, "achievements");
+  const hasCertificationsInput = Object.prototype.hasOwnProperty.call(body || {}, "certifications");
   const achievementsInput = Array.isArray(body?.achievements)
     ? body.achievements
     : Array.isArray(body?.certifications)
@@ -316,11 +318,19 @@ export async function PUT(req: Request) {
           ? candidateProfile.education
           : [];
     }
-    if (CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("achievements")) payload.achievements = normalizedAchievements;
-    if (CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("other_achievements") && !CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("achievements")) {
+    if ((hasAchievementsInput || hasCertificationsInput) && CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("achievements")) {
+      payload.achievements = normalizedAchievements;
+    }
+    if (
+      (hasAchievementsInput || hasCertificationsInput) &&
+      CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("other_achievements") &&
+      !CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("achievements")
+    ) {
       payload.other_achievements = normalizedAchievements;
     }
-    if (CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("certifications")) payload.certifications = certifications;
+    if ((hasAchievementsInput || hasCertificationsInput) && CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("certifications")) {
+      payload.certifications = certifications;
+    }
 
     if (candidateProfile?.id) {
       const res = await admin
@@ -507,6 +517,23 @@ export async function PUT(req: Request) {
           {
             error: "candidate_profile_persistence_mismatch",
             details: "La formación no quedó persistida tras la relectura.",
+          },
+          { status: 409 }
+        );
+      }
+    }
+    if (hasAchievementsInput || hasCertificationsInput) {
+      const requestedAchievements = normalizedAchievements;
+      const persistedAchievements = Array.isArray(persistedCandidateProfile?.achievements)
+        ? persistedCandidateProfile.achievements.map(normalizeAchievement).filter(Boolean)
+        : Array.isArray(persistedCandidateProfile?.other_achievements)
+          ? persistedCandidateProfile.other_achievements.map(normalizeAchievement).filter(Boolean)
+          : [];
+      if (!sameJson(requestedAchievements, persistedAchievements)) {
+        return NextResponse.json(
+          {
+            error: "candidate_profile_persistence_mismatch",
+            details: "Los idiomas y logros no quedaron persistidos tras la relectura.",
           },
           { status: 409 }
         );
