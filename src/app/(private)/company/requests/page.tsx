@@ -73,10 +73,6 @@ function formatDate(value: string | null) {
   return d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function periodLabel(startDate: string | null, endDate: string | null) {
-  return `${formatDate(startDate)} — ${endDate ? formatDate(endDate) : "Actualidad"}`;
-}
-
 function isPendingStatus(value: string | null) {
   const status = String(value || "").toLowerCase();
   return status === "pending_company" || status === "reviewing";
@@ -114,9 +110,9 @@ export default async function CompanyRequestsPage({
 
   const [{ data: allData }, { data: companyProfile }, { data: companyMembers }] = await Promise.all([
     supabase
-    .from("verification_requests")
-    .select("id,requested_by,status,requested_at,created_at,resolved_at,company_name_target,external_email_target,request_context,employment_record_id,company_id,employment_records(position,company_name_freeform,start_date,end_date)")
-    .or(`company_id.eq.${profile.active_company_id},company_id.is.null`),
+      .from("verification_requests")
+      .select("id,requested_by,status,requested_at,created_at,resolved_at,company_name_target,external_email_target,request_context,employment_record_id,company_id,employment_records(position,company_name_freeform,start_date,end_date)")
+      .or(`company_id.eq.${profile.active_company_id},company_id.is.null`),
     supabase
       .from("company_profiles")
       .select("contact_email,website_url,trade_name,legal_name")
@@ -127,26 +123,27 @@ export default async function CompanyRequestsPage({
       .select("email")
       .eq("role", "company")
       .eq("active_company_id", profile.active_company_id),
-  ])
+  ]);
 
-  const companyEmailDomain = normalizeEmailDomain((companyProfile as any)?.contact_email || null)
-  const companyWebsiteDomain = normalizeHost((companyProfile as any)?.website_url || null)
+  const companyEmailDomain = normalizeEmailDomain((companyProfile as any)?.contact_email || null);
+  const companyWebsiteDomain = normalizeHost((companyProfile as any)?.website_url || null);
   const companyMemberDomains = new Set(
     (Array.isArray(companyMembers) ? companyMembers : [])
       .map((row: any) => normalizeEmailDomain((row as any)?.email || null))
       .filter(Boolean) as string[],
-  )
+  );
 
   const effectiveSubscription = await readEffectiveCompanySubscriptionState(supabase, {
     userId: user.id,
     companyId: String(profile.active_company_id),
   });
   const planActive = ["active", "trialing"].includes(String(effectiveSubscription.status || "").toLowerCase());
+
   const baseRows = ((allData || []) as VerificationRequestRow[]).filter((row: any) => {
-    if (String((row as any)?.company_id || "") === String(profile.active_company_id)) return true
-    const targetDomain = normalizeEmailDomain((row as any)?.external_email_target || null)
-    const requestContext = row?.request_context && typeof row.request_context === "object" ? row.request_context : {}
-    const resolution = String((requestContext as any)?.company_association_resolution || "").trim().toLowerCase()
+    if (String((row as any)?.company_id || "") === String(profile.active_company_id)) return true;
+    const targetDomain = normalizeEmailDomain((row as any)?.external_email_target || null);
+    const requestContext = row?.request_context && typeof row.request_context === "object" ? row.request_context : {};
+    const resolution = String((requestContext as any)?.company_association_resolution || "").trim().toLowerCase();
     return Boolean(
       targetDomain &&
         (
@@ -166,8 +163,9 @@ export default async function CompanyRequestsPage({
         (companyWebsiteDomain && targetDomain === companyWebsiteDomain) ||
         companyMemberDomains.has(targetDomain)
       ),
-    )
+    );
   });
+
   const verificationIds = baseRows.map((row) => row.id);
   const candidateIds = Array.from(new Set(baseRows.map((row) => row.requested_by).filter(Boolean))) as string[];
 
@@ -214,7 +212,7 @@ export default async function CompanyRequestsPage({
     return {
       verification_id: row.id,
       candidate_id: row.requested_by,
-      candidate_name: row.requested_by ? candidateNameMap.get(row.requested_by) || null : null,
+      candidate_name: row.requested_by ? candidateNameMap.get(row.requested_by) || row.requested_by : null,
       position: employment?.position || null,
       status_effective: statusEffective,
       start_date: employment?.start_date || null,
@@ -274,14 +272,11 @@ export default async function CompanyRequestsPage({
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Solicitudes</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Inbox operativa para revisar solicitudes que llegan cuando un candidato pide validar una experiencia frente a tu empresa.
-        </p>
-        <p className="mt-2 text-sm text-slate-600">
-          Esta pantalla no crea solicitudes manualmente: aquí gestionas las que ya han llegado desde el flujo del candidato y sus verificaciones.
+          Revisa aquí las validaciones que llegan desde los candidatos y actúa sobre las que estén pendientes.
         </p>
         {!planActive ? (
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            Puedes revisar y resolver las solicitudes recibidas aunque tu empresa esté en plan Free. El plan afecta a accesos a perfiles, colaboración y capacidad operativa adicional, no a responder validaciones ya recibidas en esta bandeja.
+            Puedes revisar y resolver solicitudes aunque tu empresa esté en plan Free.
             <Link href="/company/upgrade" className="ml-2 font-semibold underline underline-offset-2">
               Ver opciones
             </Link>
@@ -326,65 +321,63 @@ export default async function CompanyRequestsPage({
 
       <section className="space-y-4">
         {filtered.length === 0 ? (
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-600 shadow-sm">
-            <p>No hay solicitudes en esta vista ahora mismo.</p>
-            <p className="mt-2">Cuando lleguen nuevas verificaciones o evidencias útiles, aparecerán aquí con prioridad operativa.</p>
+          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-500 shadow-sm">
+            No hay solicitudes para este filtro.
           </div>
-        ) : (
-          filtered.map((row) => (
-            <article key={row.verification_id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h2 className="text-lg font-semibold text-slate-900">{row.candidate_name || row.candidate_id || "Candidato"}</h2>
-                    <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(row.status_effective)}`}>
-                      {statusLabel(row.status_effective)}
-                    </span>
-                    {row.evidence_count > 0 ? (
-                      <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-800">
-                        {row.evidence_count} evidencias
-                      </span>
-                    ) : null}
-                    {row.reuse_events > 0 ? (
-                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800">
-                        {row.reuse_events} usos históricos
-                      </span>
-                    ) : null}
+        ) : null}
+
+        {filtered.map((row) => (
+          <article key={row.verification_id} className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="truncate text-lg font-semibold text-slate-900">
+                    {row.candidate_name || "Candidato"}
                   </div>
-                  <p className="mt-2 text-sm text-slate-700">{row.position || "Puesto no especificado"} · {row.company_name_freeform || "Empresa no especificada"}</p>
-                  <p className="mt-1 text-sm text-slate-500">{periodLabel(row.start_date, row.end_date)}</p>
+                  <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(row.status_effective)}`}>
+                    {statusLabel(row.status_effective)}
+                  </span>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <a href={`/company/verification/${row.verification_id}`} className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
-                    Revisar y resolver
-                  </a>
-                  <a href={`/api/verification/${row.verification_id}/summary`} target="_blank" rel="noreferrer" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50">
-                    Ver resumen JSON
-                  </a>
+
+                <div className="mt-2 text-sm text-slate-700">
+                  {row.position || "Puesto no especificado"} · {row.company_name_freeform || "Empresa"}
+                </div>
+
+                <div className="mt-1 text-sm text-slate-500">
+                  {row.start_date ? formatDate(row.start_date) : "No disponible"} — {row.end_date ? formatDate(row.end_date) : "Actualidad"}
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-3 md:grid-cols-4 text-sm">
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="text-slate-500">Recibida</div>
-                  <div className="mt-1 font-semibold text-slate-900">{formatDate(row.requested_at)}</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="text-slate-500">Resuelta</div>
-                  <div className="mt-1 font-semibold text-slate-900">{formatDate(row.resolved_at)}</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="text-slate-500">Evidencias</div>
-                  <div className="mt-1 font-semibold text-slate-900">{row.evidence_count}</div>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="text-slate-500">Acciones registradas</div>
-                  <div className="mt-1 font-semibold text-slate-900">{row.actions_count}</div>
-                </div>
+              <div className="flex flex-wrap gap-2">
+                <Link
+                  href={`/company/verification/${row.verification_id}`}
+                  className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
+                >
+                  {isPendingStatus(row.status_effective) ? "Revisar y resolver" : "Abrir solicitud"}
+                </Link>
               </div>
-            </article>
-          ))
-        )}
+            </div>
+
+            <div className="mt-5 grid gap-3 md:grid-cols-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Recibida</div>
+                <div className="mt-2 text-sm font-semibold text-slate-900">{formatDate(row.requested_at)}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Resuelta</div>
+                <div className="mt-2 text-sm font-semibold text-slate-900">{formatDate(row.resolved_at)}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Evidencias</div>
+                <div className="mt-2 text-sm font-semibold text-slate-900">{row.evidence_count}</div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Acciones registradas</div>
+                <div className="mt-2 text-sm font-semibold text-slate-900">{row.actions_count}</div>
+              </div>
+            </div>
+          </article>
+        ))}
       </section>
     </div>
   );
