@@ -20,7 +20,6 @@ async function getTableColumns(admin: any, tableName: string) {
       "user_id",
       "summary",
       "education",
-      "achievements",
       "other_achievements",
       "certifications",
     ]);
@@ -49,7 +48,6 @@ const PROFILE_PERSONAL_FIELDS = [
 const CANDIDATE_PROFILE_MUTABLE_FIELDS = [
   "summary",
   "education",
-  "achievements",
   "other_achievements",
   "certifications",
 ] as const;
@@ -144,9 +142,6 @@ function dedupeAchievements(items: AchievementItem[]) {
 }
 
 function buildAchievementsCatalog(profile: any, candidateProfile: any) {
-  const achievements = Array.isArray(candidateProfile?.achievements)
-    ? candidateProfile.achievements.map(normalizeAchievement).filter(Boolean)
-    : [];
   const otherAchievements = Array.isArray(candidateProfile?.other_achievements)
     ? candidateProfile.other_achievements.map(normalizeAchievement).filter(Boolean)
     : [];
@@ -159,7 +154,6 @@ function buildAchievementsCatalog(profile: any, candidateProfile: any) {
 
   const merged = dedupeAchievements([
     ...profileLanguages,
-    ...achievements,
     ...otherAchievements,
     ...certificationsLegacy,
   ] as AchievementItem[]);
@@ -488,16 +482,8 @@ export async function PUT(req: Request) {
     }
     if (
       (hasAchievementsInput || hasCertificationsInput) &&
-      candidateProfileColumns.has("achievements") &&
-      CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("achievements")
-    ) {
-      payload.achievements = normalizedAchievements;
-    }
-    if (
-      (hasAchievementsInput || hasCertificationsInput) &&
       candidateProfileColumns.has("other_achievements") &&
-      CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("other_achievements") &&
-      !candidateProfileColumns.has("achievements")
+      CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("other_achievements")
     ) {
       payload.other_achievements = nonLanguageAchievements;
     }

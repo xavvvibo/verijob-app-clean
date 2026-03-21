@@ -404,7 +404,7 @@ export async function persistImportedCandidateProfile(input: {
   const [candidateProfileRes, profileRes, experiencesRes] = await Promise.all([
     supabase
       .from("candidate_profiles")
-      .select("id,user_id,raw_cv_json,achievements,other_achievements")
+      .select("id,user_id,raw_cv_json,other_achievements")
       .eq("user_id", input.userId)
       .maybeSingle(),
     supabase
@@ -427,11 +427,6 @@ export async function persistImportedCandidateProfile(input: {
     ? (currentProfile as any).languages.map((item: any) => safeTrim(item)).filter(Boolean)
     : [];
   const achievementLanguages = [
-    ...(
-      Array.isArray((candidateProfileRes.data as any)?.achievements)
-        ? (candidateProfileRes.data as any).achievements
-        : []
-    ),
     ...(
       Array.isArray((candidateProfileRes.data as any)?.other_achievements)
         ? (candidateProfileRes.data as any).other_achievements

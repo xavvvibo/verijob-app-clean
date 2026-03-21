@@ -188,7 +188,7 @@ async function persistLanguagesFromExtract(params: {
     };
   }
 
-  const targetColumn = persistenceTarget === "candidate_profiles.other_achievements" ? "other_achievements" : "achievements";
+  const targetColumn = "other_achievements";
   const currentAchievements = Array.isArray((cpRes.data as any)?.[targetColumn]) ? (cpRes.data as any)[targetColumn] : [];
   const currentLangSet = new Set(
     currentAchievements
@@ -267,13 +267,15 @@ async function persistAchievementsFromExtract(params: {
     supabase.from("candidate_profiles").select("*").eq("user_id", userId).maybeSingle(),
   ]);
 
-  const targetCandidates = candidateProfileColumns.has("achievements")
-    ? ["achievements", "other_achievements"]
-    : candidateProfileColumns.has("other_achievements")
-      ? ["other_achievements", "achievements"]
-      : ["achievements", "other_achievements"];
+  const targetCandidates = candidateProfileColumns.has("other_achievements")
+    ? ["other_achievements"]
+    : [];
 
   let lastError: any = null;
+
+  if (!targetCandidates.length) {
+    throw new Error("achievements_candidate_profile_column_missing:other_achievements");
+  }
 
   for (const targetColumn of targetCandidates) {
     const currentAchievements = Array.isArray((cpRes.data as any)?.[targetColumn]) ? (cpRes.data as any)[targetColumn] : [];

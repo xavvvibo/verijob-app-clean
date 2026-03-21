@@ -386,7 +386,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
   const { data: candidateProfile } = await service
     .from("candidate_profiles")
-    .select("allow_company_email_contact,allow_company_phone_contact,job_search_status,availability_start,preferred_workday,preferred_roles,work_zones,availability_schedule,trust_score,trust_score_breakdown,education,achievements,raw_cv_json")
+    .select("allow_company_email_contact,allow_company_phone_contact,job_search_status,availability_start,preferred_workday,preferred_roles,work_zones,availability_schedule,trust_score,trust_score_breakdown,education,other_achievements,raw_cv_json")
     .eq("user_id", link.candidate_id)
     .maybeSingle();
 

@@ -151,7 +151,6 @@ export function selectLanguagesPersistenceTarget(profileColumns, candidateProfil
   const candidateSet =
     candidateProfileColumns instanceof Set ? candidateProfileColumns : new Set(candidateProfileColumns || []);
   if (profileSet.has("languages")) return "profiles.languages";
-  if (candidateSet.has("achievements")) return "candidate_profiles.achievements";
   if (candidateSet.has("other_achievements")) return "candidate_profiles.other_achievements";
   return "skip";
 }

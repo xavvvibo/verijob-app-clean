@@ -211,7 +211,7 @@ export async function PATCH(request: Request) {
 
     const [{ data: profileRow, error: profileErr }, { data: candidateProfileRow, error: candidateProfileErr }] = await Promise.all([
       admin.from("profiles").select("languages").eq("id", user.id).maybeSingle(),
-      admin.from("candidate_profiles").select("id,achievements,other_achievements,certifications,raw_cv_json").eq("user_id", user.id).maybeSingle(),
+      admin.from("candidate_profiles").select("id,other_achievements,certifications,raw_cv_json").eq("user_id", user.id).maybeSingle(),
     ]);
     if (profileErr) return json(400, { error: "profile_read_failed", details: profileErr.message });
     if (candidateProfileErr) return json(400, { error: "candidate_profile_read_failed", details: candidateProfileErr.message });
@@ -234,8 +234,8 @@ export async function PATCH(request: Request) {
       .eq("id", user.id);
     if (profileUpdateErr) return json(400, { error: "profile_languages_update_failed", details: profileUpdateErr.message });
 
-    const currentAchievements = Array.isArray((candidateProfileRow as any)?.achievements)
-      ? (candidateProfileRow as any).achievements
+    const currentAchievements = Array.isArray((candidateProfileRow as any)?.other_achievements)
+      ? (candidateProfileRow as any).other_achievements
       : [];
     const existingLanguageMap = new Map(
       currentAchievements
@@ -265,7 +265,7 @@ export async function PATCH(request: Request) {
     });
     const candidateProfilePatch: Record<string, any> = {
       raw_cv_json: nextRawCvJson,
-      achievements: nextAchievements,
+      other_achievements: nextAchievements,
       updated_at: new Date().toISOString(),
       user_id: user.id,
     };
