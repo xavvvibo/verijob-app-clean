@@ -140,7 +140,7 @@ async function readProfileAndCandidateProfile(supabase: any, userId: string) {
       .order("start_date", { ascending: false }),
     supabase
       .from("verification_summary")
-      .select("verification_id, status, evidence_count, evidences_count")
+      .select("verification_id, status, evidence_count")
       .eq("candidate_id", userId),
   ]);
 

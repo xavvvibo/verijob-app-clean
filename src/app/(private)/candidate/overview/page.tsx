@@ -85,16 +85,32 @@ function buildTrustSignals(args: { verified: number; inProcess: number; evidence
 function TrustSnapshot({
   state,
   signals,
+  score,
 }: {
   state: TrustState;
   signals: string[];
+  score: number;
 }) {
+  const safeScore = clamp(score);
+  const progressStyle = {
+    background: `conic-gradient(rgb(15 23 42) ${safeScore * 3.6}deg, rgb(226 232 240) 0deg)`,
+  };
   return (
     <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${state.tone}`}>
-        {state.title}
+      <div className="flex items-center gap-4">
+        <div className="relative flex h-24 w-24 items-center justify-center rounded-full" style={progressStyle}>
+          <div className="flex h-16 w-16 flex-col items-center justify-center rounded-full bg-white text-slate-900">
+            <span className="text-2xl font-semibold tabular-nums">{safeScore}</span>
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Trust</span>
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${state.tone}`}>
+            {state.title}
+          </div>
+          <p className="mt-3 text-sm leading-6 text-slate-600">{state.summary}</p>
+        </div>
       </div>
-      <p className="mt-3 text-sm leading-6 text-slate-600">{state.summary}</p>
       <div className="mt-4 flex flex-wrap gap-2">
         {signals.map((signal) => (
           <span key={signal} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
@@ -605,7 +621,7 @@ export default function CandidateOverview() {
           </div>
 
           <div className="shrink-0 self-center">
-            <TrustSnapshot state={trustState} signals={trustSignals} />
+            <TrustSnapshot state={trustState} signals={trustSignals} score={metrics.score} />
           </div>
         </div>
       </header>
