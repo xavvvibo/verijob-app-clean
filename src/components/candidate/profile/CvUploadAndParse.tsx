@@ -256,7 +256,13 @@ export default function CvUploadAndParse() {
 
     if (selectedItems.length === 0) {
       setImporting(null);
-      setMsg(section === "experiences" ? "No hay experiencias seleccionadas para importar." : "No hay formaciones seleccionadas para importar.");
+      setMsg(
+        section === "experiences"
+          ? "No hay experiencias seleccionadas para importar."
+          : section === "education"
+            ? "No hay formaciones seleccionadas para importar."
+            : "No hay idiomas seleccionados para importar."
+      );
       return;
     }
 

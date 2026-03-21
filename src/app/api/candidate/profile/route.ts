@@ -44,6 +44,27 @@ type AchievementItem = {
   category: AchievementCategory;
 };
 
+function normalizeProfileLanguage(raw: any): AchievementItem | null {
+  const language =
+    normalizeText(
+      typeof raw === "string"
+        ? raw
+        : raw?.language || raw?.name || raw?.title
+    ) || null;
+  const level = normalizeText(typeof raw === "object" ? raw?.level : null) || null;
+  if (!language) return null;
+  return {
+    title: language,
+    language,
+    level,
+    certificate_title: null,
+    issuer: null,
+    date: null,
+    description: null,
+    category: "idioma",
+  };
+}
+
 function formatLanguageLabel(item: Partial<AchievementItem>) {
   const language = normalizeText(item.language || item.title);
   const level = normalizeText(item.level);
@@ -100,7 +121,9 @@ function buildAchievementsCatalog(profile: any, candidateProfile: any) {
   const certificationsLegacy = Array.isArray(candidateProfile?.certifications)
     ? candidateProfile.certifications.map(normalizeAchievement).filter(Boolean)
     : [];
-  const profileLanguages: AchievementItem[] = [];
+  const profileLanguages = Array.isArray(profile?.languages)
+    ? profile.languages.map(normalizeProfileLanguage).filter(Boolean)
+    : [];
 
   const merged = dedupeAchievements([
     ...profileLanguages,
@@ -302,6 +325,16 @@ export async function PUT(req: Request) {
     achievementsInput.map(normalizeAchievement).filter(Boolean) as AchievementItem[]
   );
   const certifications = normalizedAchievements.filter((item) => item.category === "certificacion");
+  const normalizedLanguages = dedupeAchievements(
+    normalizedAchievements
+      .filter((item) => item.category === "idioma")
+      .map((item) => ({
+        ...item,
+        title: normalizeText(item.language || item.title),
+        language: normalizeText(item.language || item.title) || null,
+      }))
+      .filter((item) => item.language)
+  ).map((item) => formatLanguageLabel(item) || normalizeText(item.language || item.title));
 
   let writeError: any = null;
   let nextCandidateProfile: any = candidateProfile || null;
@@ -405,6 +438,31 @@ export async function PUT(req: Request) {
       );
     }
     Object.assign(profile, profileUpdate.data || {});
+  }
+
+  if ((hasAchievementsInput || hasCertificationsInput) && Object.prototype.hasOwnProperty.call(profile || {}, "languages")) {
+    const profileLanguagesUpdate = await admin
+      .from("profiles")
+      .update({
+        languages: normalizedLanguages,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", user.id)
+      .select("id, languages")
+      .maybeSingle();
+    if (profileLanguagesUpdate.error) {
+      return NextResponse.json(
+        { error: "profile_languages_update_failed", details: profileLanguagesUpdate.error.message },
+        { status: 400 }
+      );
+    }
+    if (!profileLanguagesUpdate.data) {
+      return NextResponse.json(
+        { error: "profile_languages_update_no_rows", details: "No se actualizó ninguna fila de idiomas en profiles." },
+        { status: 400 }
+      );
+    }
+    Object.assign(profile, profileLanguagesUpdate.data || {});
   }
 
   let requestedIdentitySnapshot:
@@ -524,11 +582,7 @@ export async function PUT(req: Request) {
     }
     if (hasAchievementsInput || hasCertificationsInput) {
       const requestedAchievements = normalizedAchievements;
-      const persistedAchievements = Array.isArray(persistedCandidateProfile?.achievements)
-        ? persistedCandidateProfile.achievements.map(normalizeAchievement).filter(Boolean)
-        : Array.isArray(persistedCandidateProfile?.other_achievements)
-          ? persistedCandidateProfile.other_achievements.map(normalizeAchievement).filter(Boolean)
-          : [];
+      const persistedAchievements = buildAchievementsCatalog(persistedProfile, persistedCandidateProfile).all;
       if (!sameJson(requestedAchievements, persistedAchievements)) {
         return NextResponse.json(
           {
