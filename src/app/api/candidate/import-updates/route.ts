@@ -13,44 +13,6 @@ function normalizeText(value: unknown) {
   return String(value || "").trim();
 }
 
-function parseLanguageValue(value: string) {
-  const normalized = normalizeText(value);
-  if (!normalized) return null;
-  const separator = normalized.includes(" — ") ? " — " : normalized.includes(" - ") ? " - " : null;
-  if (!separator) {
-    return {
-      title: normalized,
-      language: normalized,
-      level: null,
-      category: "idioma" as const,
-    };
-  }
-  const [languageRaw, levelRaw] = normalized.split(separator, 2);
-  const language = normalizeText(languageRaw);
-  const level = normalizeText(levelRaw) || null;
-  if (!language) return null;
-  return {
-    title: language,
-    language,
-    level,
-    category: "idioma" as const,
-  };
-}
-
-function normalizeLanguageAchievement(item: any) {
-  const category = normalizeText(item?.category).toLowerCase();
-  const language = normalizeText(item?.language || item?.title);
-  const level = normalizeText(item?.level) || null;
-  if (category !== "idioma" || !language) return null;
-  return {
-    ...item,
-    title: language,
-    language,
-    level,
-    category: "idioma" as const,
-  };
-}
-
 function pickLongerText(current: unknown, incoming: unknown) {
   const left = normalizeText(current);
   const right = normalizeText(incoming);
@@ -211,7 +173,7 @@ export async function PATCH(request: Request) {
 
     const [{ data: profileRow, error: profileErr }, { data: candidateProfileRow, error: candidateProfileErr }] = await Promise.all([
       admin.from("profiles").select("languages").eq("id", user.id).maybeSingle(),
-      admin.from("candidate_profiles").select("id,other_achievements,certifications,raw_cv_json").eq("user_id", user.id).maybeSingle(),
+      admin.from("candidate_profiles").select("id,certifications,raw_cv_json").eq("user_id", user.id).maybeSingle(),
     ]);
     if (profileErr) return json(400, { error: "profile_read_failed", details: profileErr.message });
     if (candidateProfileErr) return json(400, { error: "candidate_profile_read_failed", details: candidateProfileErr.message });
@@ -234,38 +196,12 @@ export async function PATCH(request: Request) {
       .eq("id", user.id);
     if (profileUpdateErr) return json(400, { error: "profile_languages_update_failed", details: profileUpdateErr.message });
 
-    const currentAchievements = Array.isArray((candidateProfileRow as any)?.other_achievements)
-      ? (candidateProfileRow as any).other_achievements
-      : [];
-    const existingLanguageMap = new Map(
-      currentAchievements
-        .map((item: any) => normalizeLanguageAchievement(item))
-        .filter(Boolean)
-        .map((item: any) => [`${String(item.language).toLowerCase()}|${String(item.level || "").toLowerCase()}`, item])
-    );
-
-    for (const language of mergedLanguages) {
-      const parsedLanguage = parseLanguageValue(language);
-      if (!parsedLanguage) continue;
-      const key = `${parsedLanguage.language.toLowerCase()}|${String(parsedLanguage.level || "").toLowerCase()}`;
-      if (!existingLanguageMap.has(key)) {
-        existingLanguageMap.set(key, parsedLanguage);
-      }
-    }
-
-    const nonLanguageAchievements = currentAchievements.filter((item: any) => !normalizeLanguageAchievement(item));
-    const nextAchievements = [
-      ...nonLanguageAchievements,
-      ...Array.from(existingLanguageMap.values()),
-    ];
-
     const nextRawCvJson = updateProfileProposal(rawCvJson, inviteId, {
       languages_applied_at: new Date().toISOString(),
       languages_applied_count: newLanguages.length,
     });
     const candidateProfilePatch: Record<string, any> = {
       raw_cv_json: nextRawCvJson,
-      other_achievements: nextAchievements,
       updated_at: new Date().toISOString(),
       user_id: user.id,
     };

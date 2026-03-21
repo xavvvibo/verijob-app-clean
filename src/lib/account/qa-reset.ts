@@ -248,7 +248,6 @@ export async function resetCandidateAccountForQa(args: {
       "raw_cv_json",
       "trust_score",
       "trust_score_breakdown",
-      "other_achievements",
       "headline",
       "location",
       "phone",
@@ -340,7 +339,7 @@ export async function resetCandidateAccountForQa(args: {
     admin.from("profiles").select("avatar_url,onboarding_completed").eq("id", userId).maybeSingle(),
     admin
       .from("candidate_profiles")
-      .select("education,other_achievements,certifications,trust_score")
+      .select("education,certifications,trust_score")
       .eq("user_id", userId)
       .maybeSingle(),
     admin.from("profile_experiences").select("id", { count: "exact", head: true }).eq("user_id", userId),
@@ -349,7 +348,7 @@ export async function resetCandidateAccountForQa(args: {
 
   const postCandidateProfile = postCandidateProfileRes.data || {};
   const educationCount = Array.isArray((postCandidateProfile as any)?.education) ? (postCandidateProfile as any).education.length : 0;
-  const achievementsRaw = Array.isArray((postCandidateProfile as any)?.other_achievements) ? (postCandidateProfile as any).other_achievements : [];
+  const achievementsRaw: any[] = [];
   const certificationsRaw = Array.isArray((postCandidateProfile as any)?.certifications) ? (postCandidateProfile as any).certifications : [];
   const achievementsCount = achievementsRaw.length + certificationsRaw.length;
 

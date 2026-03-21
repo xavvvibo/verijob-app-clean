@@ -146,11 +146,8 @@ export function shouldApplyParsedResultOnce({ nextJobId, lastAppliedJobId }) {
   return Boolean(nextId) && nextId !== lastId;
 }
 
-export function selectLanguagesPersistenceTarget(profileColumns, candidateProfileColumns) {
+export function selectLanguagesPersistenceTarget(profileColumns) {
   const profileSet = profileColumns instanceof Set ? profileColumns : new Set(profileColumns || []);
-  const candidateSet =
-    candidateProfileColumns instanceof Set ? candidateProfileColumns : new Set(candidateProfileColumns || []);
   if (profileSet.has("languages")) return "profiles.languages";
-  if (candidateSet.has("other_achievements")) return "candidate_profiles.other_achievements";
   return "skip";
 }

@@ -404,7 +404,7 @@ export async function persistImportedCandidateProfile(input: {
   const [candidateProfileRes, profileRes, experiencesRes] = await Promise.all([
     supabase
       .from("candidate_profiles")
-      .select("id,user_id,raw_cv_json,other_achievements")
+      .select("id,user_id,raw_cv_json")
       .eq("user_id", input.userId)
       .maybeSingle(),
     supabase
@@ -426,26 +426,15 @@ export async function persistImportedCandidateProfile(input: {
   const profileLanguages = Array.isArray((currentProfile as any)?.languages)
     ? (currentProfile as any).languages.map((item: any) => safeTrim(item)).filter(Boolean)
     : [];
-  const achievementLanguages = [
-    ...(
-      Array.isArray((candidateProfileRes.data as any)?.other_achievements)
-        ? (candidateProfileRes.data as any).other_achievements
-        : []
-    ),
-  ]
-    .filter((item: any) => String(item?.category || "").toLowerCase() === "idioma")
-    .map((item: any) => safeTrim(item?.language || item?.title))
-    .filter(Boolean);
   const importedLanguages = normalizeCvLanguages(
     Array.isArray(parsed?.languages) ? parsed.languages : [],
     50,
     safeTrim(parsed?.summary || parsed?.raw_text || parsed?.cv_text || parsed?.text)
   );
-  const mergedLanguages = Array.from(new Set([...profileLanguages, ...achievementLanguages, ...importedLanguages]));
+  const mergedLanguages = Array.from(new Set([...profileLanguages, ...importedLanguages]));
   const newLanguages = mergedLanguages.filter((language) => {
     const key = language.toLowerCase();
-    return !profileLanguages.some((item: string) => item.toLowerCase() === key) &&
-      !achievementLanguages.some((item: string) => item.toLowerCase() === key);
+    return !profileLanguages.some((item: string) => item.toLowerCase() === key);
   });
   const existingValidName = isReliableCandidateName((currentProfile as any)?.full_name)
     ? sanitizeCandidateText((currentProfile as any)?.full_name)

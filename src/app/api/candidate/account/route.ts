@@ -183,8 +183,7 @@ export async function POST(request: Request) {
     const candidatePatch: Record<string, any> = {};
     if (candidateProfileColumns.has("summary")) candidatePatch.summary = null;
     if (candidateProfileColumns.has("education")) candidatePatch.education = [];
-    if (candidateProfileColumns.has("achievements")) candidatePatch.achievements = [];
-    if (candidateProfileColumns.has("other_achievements")) candidatePatch.other_achievements = [];
+    if (candidateProfileColumns.has("certifications")) candidatePatch.certifications = [];
     if (candidateProfileColumns.has("job_search_status")) candidatePatch.job_search_status = "no_disponible";
     if (candidateProfileColumns.has("preferred_workday")) candidatePatch.preferred_workday = "flexible";
     if (candidateProfileColumns.has("preferred_roles")) candidatePatch.preferred_roles = [];

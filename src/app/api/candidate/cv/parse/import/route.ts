@@ -148,13 +148,11 @@ async function persistLanguagesFromExtract(params: {
     return { imported: 0, duplicatesSkipped: 0 };
   }
 
-  const [profileColumns, candidateProfileColumns, cpRes] = await Promise.all([
+  const [profileColumns] = await Promise.all([
     getTableColumns(supabase, "profiles"),
-    getTableColumns(supabase, "candidate_profiles"),
-    supabase.from("candidate_profiles").select("*").eq("user_id", userId).maybeSingle(),
   ]);
 
-  const persistenceTarget = selectLanguagesPersistenceTarget(profileColumns, candidateProfileColumns);
+  const persistenceTarget = selectLanguagesPersistenceTarget(profileColumns);
   if (persistenceTarget === "profiles.languages") {
     const { data: profileRow } = await supabase.from("profiles").select("languages").eq("id", userId).maybeSingle();
     const current = Array.isArray((profileRow as any)?.languages)
@@ -188,43 +186,7 @@ async function persistLanguagesFromExtract(params: {
     };
   }
 
-  const targetColumn = "other_achievements";
-  const currentAchievements = Array.isArray((cpRes.data as any)?.[targetColumn]) ? (cpRes.data as any)[targetColumn] : [];
-  const currentLangSet = new Set(
-    currentAchievements
-      .filter((x: any) => String(x?.category || "").toLowerCase() === "idioma")
-      .map((x: any) => normalizeText(x?.language || x?.title).toLowerCase())
-      .filter(Boolean)
-  );
-  const toAppend = normalizedLanguages.filter((lang: string) => !currentLangSet.has(lang.toLowerCase()));
-
-  if (toAppend.length > 0) {
-    const nowIso = new Date().toISOString();
-    const merged = [
-      ...currentAchievements,
-      ...toAppend.map((lang: string) => ({
-        title: lang,
-        language: lang,
-        category: "idioma",
-        issuer: null,
-        date: null,
-        description: null,
-        import_source: "cv_parse",
-        import_job_id: jobId,
-        imported_at: nowIso,
-      })),
-    ];
-    const payload = {
-      user_id: userId,
-      [targetColumn]: merged,
-      updated_at: nowIso,
-    };
-    const { error: persistErr } = cpRes.data
-      ? await supabase.from("candidate_profiles").update(payload).eq("user_id", userId)
-      : await supabase.from("candidate_profiles").insert(payload);
-    if (persistErr) throw new Error(`languages_candidate_profile_persist_failed:${persistErr.message}`);
-  }
-  return { imported: toAppend.length, duplicatesSkipped: normalizedLanguages.length - toAppend.length };
+  return { imported: 0, duplicatesSkipped: normalizedLanguages.length };
 }
 
 async function persistAchievementsFromExtract(params: {
@@ -267,14 +229,14 @@ async function persistAchievementsFromExtract(params: {
     supabase.from("candidate_profiles").select("*").eq("user_id", userId).maybeSingle(),
   ]);
 
-  const targetCandidates = candidateProfileColumns.has("other_achievements")
-    ? ["other_achievements"]
+  const targetCandidates = candidateProfileColumns.has("certifications")
+    ? ["certifications"]
     : [];
 
   let lastError: any = null;
 
   if (!targetCandidates.length) {
-    throw new Error("achievements_candidate_profile_column_missing:other_achievements");
+    return { imported: 0, duplicatesSkipped: normalized.length };
   }
 
   for (const targetColumn of targetCandidates) {

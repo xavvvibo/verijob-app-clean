@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 type AchievementCategory = "certificacion" | "premio" | "idioma" | "otro";
-type EditorMode = "language" | "certification" | "achievement";
+type EditorMode = "language" | "certification";
 
 type AchievementItem = {
   title: string;
@@ -39,17 +39,6 @@ const EMPTY_CERTIFICATION: AchievementItem = {
   date: "",
   description: "",
   category: "certificacion",
-};
-
-const EMPTY_ACHIEVEMENT: AchievementItem = {
-  title: "",
-  language: "",
-  level: "",
-  certificate_title: "",
-  issuer: "",
-  date: "",
-  description: "",
-  category: "otro",
 };
 
 function normalizeText(value: unknown) {
@@ -135,8 +124,7 @@ function toPayload(items: AchievementItem[]) {
 
 function buildNewItem(mode: EditorMode): AchievementItem {
   if (mode === "language") return { ...EMPTY_LANGUAGE };
-  if (mode === "certification") return { ...EMPTY_CERTIFICATION };
-  return { ...EMPTY_ACHIEVEMENT };
+  return { ...EMPTY_CERTIFICATION };
 }
 
 function Field({
@@ -261,30 +249,6 @@ function CertificationForm({
   );
 }
 
-function AchievementForm({
-  item,
-  onChange,
-}: {
-  item: AchievementItem;
-  onChange: (patch: Partial<AchievementItem>) => void;
-}) {
-  return (
-    <div className="grid gap-3 md:grid-cols-2">
-      <Field label="Título" value={item.title} onChange={(value) => onChange({ title: value })} />
-      <Field label="Tipo o categoría (opcional)" value={item.issuer} onChange={(value) => onChange({ issuer: value })} placeholder="Ej.: premio, curso, reconocimiento" />
-      <Field label="Fecha / año" value={item.date} onChange={(value) => onChange({ date: value })} placeholder="YYYY o YYYY-MM" />
-      <div className="md:col-span-2">
-        <TextAreaField
-          label="Descripción"
-          value={item.description}
-          onChange={(value) => onChange({ description: value })}
-          placeholder="Explica brevemente el logro y por qué aporta valor profesional."
-        />
-      </div>
-    </div>
-  );
-}
-
 function EditorCard({
   title,
   subtitle,
@@ -318,7 +282,6 @@ function EditorCard({
       <div className="mt-4">
         {mode === "language" ? <LanguageForm item={item} onChange={onChange} /> : null}
         {mode === "certification" ? <CertificationForm item={item} onChange={onChange} /> : null}
-        {mode === "achievement" ? <AchievementForm item={item} onChange={onChange} /> : null}
       </div>
     </article>
   );
@@ -332,12 +295,14 @@ export default function CandidateAchievementsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [supportsCertifications, setSupportsCertifications] = useState(false);
 
   useEffect(() => {
     (async () => {
       const r = await fetch("/api/candidate/profile", { credentials: "include", cache: "no-store" as any });
       const j = await r.json().catch(() => ({}));
       setItems(normalizeAchievements(j?.profile?.achievements_catalog?.all || j?.profile?.achievements || j?.profile?.certifications));
+      setSupportsCertifications(Boolean(j?.profile?.achievements_support?.certifications));
       setLoading(false);
     })();
   }, []);
@@ -348,18 +313,14 @@ export default function CandidateAchievementsPage() {
     if (!open) return;
     if (open === "language" && items.some((item) => item.category === "idioma" && !item.language && !item.level && !item.description)) return;
     if (open === "certification" && items.some((item) => item.category === "certificacion" && !item.title && !item.issuer && !item.description)) return;
-    if (open === "achievement" && items.some((item) => item.category !== "idioma" && item.category !== "certificacion" && !item.title && !item.description)) return;
     if (open === "language") add("language");
-    if (open === "certification") add("certification");
-    if (open === "achievement") add("achievement");
+    if (open === "certification" && supportsCertifications) add("certification");
     window.history.replaceState({}, "", pathname);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, pathname, router, searchParams]);
+  }, [loading, pathname, router, searchParams, supportsCertifications]);
 
   const languages = useMemo(() => items.filter((item) => item.category === "idioma"), [items]);
   const certifications = useMemo(() => items.filter((item) => item.category === "certificacion"), [items]);
-  const achievements = useMemo(() => items.filter((item) => item.category !== "idioma" && item.category !== "certificacion"), [items]);
-
   function update(index: number, patch: Partial<AchievementItem>) {
     setItems((prev) => {
       const next = [...prev];
@@ -389,7 +350,10 @@ export default function CandidateAchievementsPage() {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        achievements: toPayload(items),
+        languages: toPayload(items.filter((item) => item.category === "idioma")),
+        certifications: supportsCertifications
+          ? toPayload(items.filter((item) => item.category === "certificacion"))
+          : [],
       }),
     });
 
@@ -401,24 +365,25 @@ export default function CandidateAchievementsPage() {
     }
 
     setItems(normalizeAchievements(j?.profile?.achievements_catalog?.all || j?.profile?.achievements || j?.profile?.certifications));
+    setSupportsCertifications(Boolean(j?.profile?.achievements_support?.certifications));
     router.replace(`${pathname}?saved=1`, { scroll: false });
-    setMessage("Idiomas y logros guardados correctamente.");
+    setMessage(supportsCertifications ? "Idiomas y certificaciones guardados correctamente." : "Idiomas guardados correctamente.");
   }
 
   return (
     <div className="space-y-4">
       <header className="rounded-2xl border border-gray-200 bg-white p-5">
-        <h1 className="text-2xl font-semibold text-gray-900">Idiomas, certificaciones y otros logros</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Idiomas y certificaciones</h1>
         <p className="mt-2 text-sm text-gray-600">
-          Separa idiomas, certificaciones y logros para que tu perfil se lea con claridad y valor profesional real.
+          Gestiona las señales profesionales que hoy sí están soportadas por tu perfil.
         </p>
         <p className="mt-2 text-xs text-gray-500">
-          Los idiomas se presentan como señal laboral con nivel visible. Las certificaciones y los logros quedan separados para que el perfil no mezcle cosas distintas.
+          Los idiomas se guardan en tu perfil general y las certificaciones se mantienen separadas cuando están disponibles.
         </p>
       </header>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-5">
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className={`grid gap-3 ${supportsCertifications ? "md:grid-cols-2" : "md:grid-cols-1"}`}>
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Idiomas</div>
             <div className="mt-2 text-2xl font-semibold text-gray-900">{languages.length}</div>
@@ -431,6 +396,7 @@ export default function CandidateAchievementsPage() {
               Añadir idioma
             </button>
           </div>
+          {supportsCertifications ? (
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Certificaciones</div>
             <div className="mt-2 text-2xl font-semibold text-gray-900">{certifications.length}</div>
@@ -443,24 +409,13 @@ export default function CandidateAchievementsPage() {
               Añadir certificación
             </button>
           </div>
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Otros logros</div>
-            <div className="mt-2 text-2xl font-semibold text-gray-900">{achievements.length}</div>
-            <p className="mt-2 text-sm text-gray-600">Añade premios, hitos o méritos que refuercen tu perfil.</p>
-            <button
-              type="button"
-              onClick={() => add("achievement")}
-              className="mt-4 inline-flex rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
-            >
-              Añadir logro
-            </button>
-          </div>
+          ) : null}
         </div>
 
         {loading ? <p className="mt-4 text-sm text-gray-600">Cargando…</p> : null}
 
         {!loading && items.length === 0 ? (
-          <p className="mt-4 text-sm text-gray-600">Todavía no has añadido idiomas, certificaciones o logros.</p>
+          <p className="mt-4 text-sm text-gray-600">Todavía no has añadido idiomas{supportsCertifications ? " o certificaciones" : ""}.</p>
         ) : null}
 
         <div className="mt-6 space-y-6">
@@ -488,6 +443,7 @@ export default function CandidateAchievementsPage() {
             </div>
           </section>
 
+          {supportsCertifications ? (
           <section>
             <div className="mb-3">
               <h2 className="text-base font-semibold text-gray-900">Certificaciones</h2>
@@ -511,30 +467,14 @@ export default function CandidateAchievementsPage() {
               {!certifications.length ? <p className="text-sm text-gray-500">Aún no has añadido certificaciones.</p> : null}
             </div>
           </section>
-
-          <section>
-            <div className="mb-3">
-              <h2 className="text-base font-semibold text-gray-900">Otros logros</h2>
-              <p className="text-sm text-gray-600">Usa esta sección para premios, hitos, cursos u otros méritos profesionales.</p>
-            </div>
-            <div className="space-y-3">
-              {achievements.map((item) => {
-                const index = items.indexOf(item);
-                return (
-                  <EditorCard
-                    key={`achievement-${index}`}
-                    title={itemPrimaryLabel(item)}
-                    subtitle="Logro profesional"
-                    item={item}
-                    mode="achievement"
-                    onChange={(patch) => update(index, patch)}
-                    onRemove={() => remove(index)}
-                  />
-                );
-              })}
-              {!achievements.length ? <p className="text-sm text-gray-500">Aún no has añadido otros logros.</p> : null}
-            </div>
-          </section>
+          ) : (
+            <section className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <h2 className="text-base font-semibold text-amber-900">Logros adicionales no disponibles</h2>
+              <p className="mt-1 text-sm text-amber-800">
+                Tu perfil actual permite guardar idiomas{supportsCertifications ? " y certificaciones" : ""}. Los otros logros no se guardan todavía en la base de datos activa.
+              </p>
+            </section>
+          )}
         </div>
 
         <div className="mt-6 flex items-center gap-3">

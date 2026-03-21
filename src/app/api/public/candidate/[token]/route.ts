@@ -68,13 +68,6 @@ function asText(v: unknown, max = 300) {
   return String(v || "").trim().slice(0, max);
 }
 
-function formatLanguageEntry(item: any) {
-  const language = asText(item?.language || item?.title, 120);
-  const level = asText(item?.level, 40);
-  if (!language) return null;
-  return level ? `${language} — ${level}` : language;
-}
-
 function formatAchievementEntry(item: any) {
   const category = asText(item?.category, 40).toLowerCase();
   if (category === "idioma") return null;
@@ -195,8 +188,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     "preferred_workday",
     "preferred_roles",
     "work_zones",
-    candidateProfileColumns.has("achievements") ? "achievements" : null,
-    candidateProfileColumns.has("other_achievements") ? "other_achievements" : null,
+    candidateProfileColumns.has("certifications") ? "certifications" : null,
   ]
     .filter(Boolean)
     .join(",");
@@ -268,11 +260,9 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
 
   const candidateProfile = (cp as any) || null;
   const educationTotal = Array.isArray(candidateProfile?.education) ? candidateProfile.education.length : 0;
-  const achievementsRaw = Array.isArray(candidateProfile?.achievements)
-    ? candidateProfile.achievements
-    : Array.isArray(candidateProfile?.other_achievements)
-      ? candidateProfile.other_achievements
-      : [];
+  const certificationsRaw = Array.isArray(candidateProfile?.certifications)
+    ? candidateProfile.certifications
+    : [];
 
   const trustScore = Number(candidateProfile?.trust_score ?? 0);
   const profileStatus = resolveProfileStatus({
@@ -366,18 +356,10 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     description: asText(item?.description || item?.notes, 500) || null,
   }));
 
-  const rawAchievements = asArray(candidateProfile?.achievements).length
-    ? asArray(candidateProfile?.achievements)
-    : asArray(candidateProfile?.other_achievements);
-  const achievementLanguages = rawAchievements
-    .filter((item: any) => asText(item?.category, 40).toLowerCase() === "idioma")
-    .map((item: any) => formatLanguageEntry(item))
-    .filter(Boolean);
-  const achievementItems = rawAchievements
+  const achievementItems = certificationsRaw
     .map((item: any) => formatAchievementEntry(item))
     .filter(Boolean);
   const publicLanguages = normalizePublicLanguages([
-    ...achievementLanguages,
     ...normalizePublicLanguages((profile as any)?.languages),
   ]);
 
@@ -427,7 +409,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     evidences_total: evidences,
     evidences_count: evidences,
     education_total: internalPreviewAllowed ? educationTotal : 0,
-    achievements_total: internalPreviewAllowed ? achievementsRaw.length : 0,
+    achievements_total: internalPreviewAllowed ? certificationsRaw.length : 0,
     verified_work_count: verifiedWork,
     verified_education_count: internalPreviewAllowed ? verifiedEducation : 0,
     total_verifications: totalVerifications,
