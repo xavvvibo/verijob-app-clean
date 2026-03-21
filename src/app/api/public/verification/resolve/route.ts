@@ -11,6 +11,8 @@ import {
   classifyVerifierEmail,
   resolveVerificationCompanyAssociation,
 } from "@/lib/verification/verifier-email-signal";
+import { computeVerificationConfidence } from "@/lib/verification/confidence";
+import { createNotification } from "@/lib/notifications/createNotification";
 
 type ResolvePayload = {
   token?: string;
@@ -137,7 +139,7 @@ export async function POST(req: Request) {
       snapshotCompanyVerificationStatus = "verified_paid";
       const { data: companyRow } = await admin
         .from("companies")
-        .select("name,company_verification_status")
+        .select("name")
         .eq("id", snapshotCompanyId)
         .maybeSingle();
       company = companyRow;
@@ -152,21 +154,10 @@ export async function POST(req: Request) {
       snapshotCompanyName =
         snapshotCompanyName ||
         resolveCompanyDisplayName({ ...(company || {}), ...(companyProfile || {}) } as any, "Tu empresa");
-
-      const companyStatus = asText((company as any)?.company_verification_status, 60);
-      if (companyStatus) snapshotCompanyVerificationStatus = normalizeCompanyVerificationStatusSnapshot(companyStatus) || "unverified";
     }
 
     const resolvedAt = new Date().toISOString();
     const nextStatus = decision === "confirm" ? "verified" : "rejected";
-    const resolutionNotes = [
-      `Resolución externa por enlace seguro`,
-      `Nombre: ${verifierName}`,
-      `Cargo: ${verifierRole}`,
-      comment ? `Comentario: ${comment}` : null,
-    ]
-      .filter(Boolean)
-      .join(" | ");
 
     const verifierEmailSignal = classifyVerifierEmail({
       email: requestRow.external_email_target,
@@ -175,17 +166,46 @@ export async function POST(req: Request) {
       companyContactEmail: companyProfile?.contact_email || null,
     });
 
+    const confidence = computeVerificationConfidence({
+      externalEmailTarget: requestRow.external_email_target,
+      claimedCompanyName: requestRow.company_name_target,
+      associatedCompanyName: snapshotCompanyName,
+      companyWebsiteUrl: companyProfile?.website_url || null,
+      companyContactEmail: companyProfile?.contact_email || null,
+      companyId: snapshotCompanyId,
+    });
+
+    const documentaryRecommendation =
+      confidence.level === "high"
+        ? null
+        : "Confianza no alta. Recomendado aportar documentación para consolidar esta experiencia.";
+
+    const resolutionNotes = [
+      `Resolución externa por enlace seguro`,
+      `Nombre: ${verifierName}`,
+      `Cargo: ${verifierRole}`,
+      `Confidence: ${confidence.level} (${confidence.score})`,
+      `Trust awarded: ${confidence.trustScoreAwarded}`,
+      documentaryRecommendation,
+      comment ? `Comentario: ${comment}` : null,
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
     const requestContext = {
       ...(requestRow.request_context || {}),
       company_association_resolution: snapshotCompanyId ? "resolved_on_external_reply" : "unresolved",
       verifier_email_signal: verifierEmailSignal,
-      owner_attention_required:
-        verifierEmailSignal.owner_attention_required || !snapshotCompanyId,
+      owner_attention_required: confidence.ownerAttentionRequired,
+      verifier_company_match_note: confidence.matchNote,
       external_resolution: {
         resolved_at: resolvedAt,
         verifier_name: verifierName,
         verifier_role: verifierRole,
         comment: comment || null,
+        confidence_level: confidence.level,
+        confidence_score: confidence.score,
+        trust_score_awarded: confidence.trustScoreAwarded,
       },
     };
 
@@ -200,6 +220,12 @@ export async function POST(req: Request) {
       company_verification_status_snapshot: normalizeCompanyVerificationStatusSnapshot(snapshotCompanyVerificationStatus),
       snapshot_at: resolvedAt,
       request_context: requestContext,
+      verification_confidence_level: confidence.level,
+      verification_confidence_score: confidence.score,
+      trust_score_awarded: confidence.trustScoreAwarded,
+      owner_attention_required: confidence.ownerAttentionRequired,
+      verifier_email_domain: confidence.verifierEmailDomain,
+      verifier_company_match_note: confidence.matchNote,
     };
 
     let updateRequestErr: any = null;
@@ -232,15 +258,21 @@ export async function POST(req: Request) {
         return json(400, { error: "employment_update_failed", detail: employmentUpdate.error?.message || "employment_status_update_failed" });
       }
 
+      const patchEmployment: Record<string, any> = {
+        verification_result: nextStatus,
+        verification_resolved_at: resolvedAt,
+        verified_by_company_id: snapshotCompanyId,
+        company_verification_status_snapshot: normalizeCompanyVerificationStatusSnapshot(snapshotCompanyVerificationStatus),
+        last_verification_request_id: requestRow.id,
+      };
+
+      if (confidence.level === "high") {
+        patchEmployment.verification_status = nextStatus;
+      }
+
       const { error: patchEmploymentErr } = await admin
         .from("employment_records")
-        .update({
-          verification_result: nextStatus,
-          verification_resolved_at: resolvedAt,
-          verified_by_company_id: snapshotCompanyId,
-          company_verification_status_snapshot: normalizeCompanyVerificationStatusSnapshot(snapshotCompanyVerificationStatus),
-          last_verification_request_id: requestRow.id,
-        })
+        .update(patchEmployment)
         .eq("id", requestRow.employment_record_id);
 
       if (patchEmploymentErr) {
@@ -248,8 +280,63 @@ export async function POST(req: Request) {
       }
     }
 
-    if (requestRow.requested_by) {
+    if (requestRow.requested_by && confidence.level === "high" && confidence.trustScoreAwarded > 0) {
       await recalculateAndPersistCandidateTrustScore(String(requestRow.requested_by)).catch(() => {});
+    }
+
+    if (requestRow.requested_by) {
+      await createNotification({
+        admin,
+        userId: String(requestRow.requested_by),
+        type: "verification_resolved",
+        title: decision === "confirm" ? "Experiencia verificada" : "Experiencia rechazada",
+        body:
+          decision === "confirm"
+            ? confidence.level === "high"
+              ? "La experiencia ha sido verificada con alta confianza."
+              : "La experiencia ha sido verificada, pero sin confianza alta. Te recomendamos aportar documentación."
+            : "La experiencia ha sido rechazada por la persona verificadora.",
+        entityType: "verification_request",
+        entityId: String(requestRow.id),
+      });
+    }
+
+    if (snapshotCompanyId) {
+      const { data: companyMembers } = await admin
+        .from("company_members")
+        .select("user_id,role")
+        .eq("company_id", snapshotCompanyId);
+
+      for (const row of companyMembers || []) {
+        await createNotification({
+          admin,
+          userId: String((row as any).user_id),
+          type: "verification_resolved_company",
+          title: decision === "confirm" ? "Solicitud resuelta: confirmada" : "Solicitud resuelta: rechazada",
+          body: `${String(snapshotCompanyName || requestRow.company_name_target || "Empresa")} · confianza ${confidence.level}.`,
+          entityType: "verification_request",
+          entityId: String(requestRow.id),
+        });
+      }
+    }
+
+    if (confidence.ownerAttentionRequired) {
+      const { data: owners } = await admin
+        .from("profiles")
+        .select("id")
+        .eq("role", "owner");
+
+      for (const owner of owners || []) {
+        await createNotification({
+          admin,
+          userId: String((owner as any).id),
+          type: "low_confidence_verification",
+          title: "Warning: verificación con baja confianza",
+          body: `${String(requestRow.company_name_target || "Experiencia")} · dominio verificador ${confidence.verifierEmailDomain || "desconocido"} · se recomienda revisión manual o documentación.`,
+          entityType: "verification_request",
+          entityId: String(requestRow.id),
+        });
+      }
     }
 
     return json(200, {
@@ -260,6 +347,14 @@ export async function POST(req: Request) {
         company_id: snapshotCompanyId,
         company_name: snapshotCompanyName,
         company_verification_status: snapshotCompanyVerificationStatus,
+      },
+      confidence: {
+        level: confidence.level,
+        score: confidence.score,
+        trust_score_awarded: confidence.trustScoreAwarded,
+        owner_attention_required: confidence.ownerAttentionRequired,
+        verifier_email_domain: confidence.verifierEmailDomain,
+        match_note: confidence.matchNote,
       },
     });
   } catch (error: any) {

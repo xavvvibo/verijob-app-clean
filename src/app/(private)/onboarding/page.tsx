@@ -18,20 +18,7 @@ function matchKey(input: any) {
   ].join("|")
 }
 
-export default async function CandidateOnboardingPage(props: {
-  searchParams?: Promise<Record<string, string | string[] | undefined>>
-}) {
-  const resolvedSearchParams = (await props?.searchParams) || {}
-  const blockedFlag = Array.isArray(resolvedSearchParams?.blocked)
-    ? resolvedSearchParams.blocked[0]
-    : resolvedSearchParams?.blocked
-  const sourceFlag = Array.isArray(resolvedSearchParams?.source)
-    ? resolvedSearchParams.source[0]
-    : resolvedSearchParams?.source
-  if (String(blockedFlag || "") === "1" && String(sourceFlag || "") === "candidate") {
-    redirect("/onboarding")
-  }
-
+export default async function CandidateOnboardingPage() {
   const supabase = await createServerSupabaseClient()
   const { data: auth } = await supabase.auth.getUser()
   if (!auth?.user) redirect("/login?next=/onboarding")
@@ -70,8 +57,13 @@ export default async function CandidateOnboardingPage(props: {
   ])
 
   if (!profile) redirect("/login?next=/onboarding")
-  if (String(profile.role || "").toLowerCase() === "company") redirect("/onboarding/company")
-  if (profile.onboarding_completed) redirect("/candidate/overview")
+
+  const role = String(profile.role || "").toLowerCase()
+  if (role === "company") redirect("/onboarding/company")
+
+  if (profile.onboarding_completed) {
+    redirect("/candidate/overview")
+  }
 
   const employmentBySignature = new Map<string, string>()
   for (const row of employmentRows || []) {
@@ -95,12 +87,14 @@ export default async function CandidateOnboardingPage(props: {
 
   const primaryExperience = mappedExperiences[0] || null
   const verificationByEmploymentId = new Map<string, any>()
+
   for (const row of verificationRows || []) {
     const key = String((row as any)?.employment_record_id || "")
     if (key && !verificationByEmploymentId.has(key) && !(row as any)?.revoked_at) {
       verificationByEmploymentId.set(key, row)
     }
   }
+
   const primaryVerification =
     (primaryExperience?.employment_record_id && verificationByEmploymentId.get(primaryExperience.employment_record_id)) ||
     ((verificationRows || []).find((row: any) => !(row as any)?.revoked_at) ?? null)

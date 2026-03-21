@@ -8,16 +8,23 @@ export const revalidate = 0;
 export default async function DashboardRouter() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+
   if (!user) redirect("/login");
 
-  const { data: profile, error: profileError } = await supabase
+  const { data: profile } = await supabase
     .from("profiles")
     .select("role, active_company_id, onboarding_completed")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (profileError) {
-    redirect(resolveAuthenticatedRouting({ user, currentPath: "/dashboard" }).destination);
+  const role = String(profile?.role || "").toLowerCase();
+
+  if (role === "candidate" && profile?.onboarding_completed) {
+    redirect("/candidate/overview");
+  }
+
+  if (role === "candidate" && !profile?.onboarding_completed) {
+    redirect("/onboarding");
   }
 
   const routing = resolveAuthenticatedRouting({
@@ -25,6 +32,6 @@ export default async function DashboardRouter() {
     user,
     currentPath: "/dashboard",
   });
-  if (routing.shouldRedirect) redirect(routing.destination);
+
   redirect(routing.destination);
 }
