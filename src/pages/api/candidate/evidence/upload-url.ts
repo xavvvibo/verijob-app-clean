@@ -57,6 +57,24 @@ function isUuid(v: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 }
 
+async function ensureEvidenceBucket(admin: any) {
+  const { error } = await admin.storage.createBucket(BUCKET, {
+    public: false,
+    fileSizeLimit: `${MAX_MB}MB`,
+    allowedMimeTypes: Array.from(ALLOWED_MIME),
+  });
+  if (!error) return null;
+  const message = String(error.message || "").toLowerCase();
+  if (
+    message.includes("already exists") ||
+    message.includes("duplicate") ||
+    message.includes("exists")
+  ) {
+    return null;
+  }
+  return error;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -79,7 +97,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : (req.body || {});
 
     const verification_request_id = String(body?.verification_request_id ?? "").trim();
-    const employment_record_id = String(body?.employment_record_id ?? "").trim();
+    const employment_record_ref = String(body?.employment_record_id ?? "").trim();
     const mime = String(body?.mime ?? "").trim();
     const size_bytes = Number(body?.size_bytes ?? 0);
     const original_name = safeFilename(String(body?.filename ?? "file"));
@@ -87,7 +105,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const evidenceConfig = getEvidenceTypeConfig(evidence_type);
     const file_sha256 = body?.file_sha256 ? String(body.file_sha256).toLowerCase() : null;
 
-    if (!verification_request_id && !employment_record_id && requiresExperienceAssociation(evidence_type)) {
+    if (!verification_request_id && !employment_record_ref && requiresExperienceAssociation(evidence_type)) {
       return json(res, 400, {
         error: "Selecciona una experiencia para este tipo de documento",
         route: "/pages/api/candidate/evidence/upload-url",
@@ -110,13 +128,87 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     let resolvedVerificationRequestId = verification_request_id;
-    let resolvedEmploymentRecordId = employment_record_id;
+    let resolvedEmploymentRecordId = employment_record_ref.startsWith("profile:")
+      ? ""
+      : employment_record_ref;
+    const resolvedProfileExperienceId = employment_record_ref.startsWith("profile:")
+      ? employment_record_ref.replace(/^profile:/, "").trim()
+      : "";
 
     if (resolvedEmploymentRecordId && !isUuid(resolvedEmploymentRecordId)) {
       return json(res, 400, {
         error: "employment_record_id inválido",
         route: "/pages/api/candidate/evidence/upload-url",
       });
+    }
+
+    if (resolvedProfileExperienceId && !isUuid(resolvedProfileExperienceId)) {
+      return json(res, 400, {
+        error: "profile_experience_id inválido",
+        route: "/pages/api/candidate/evidence/upload-url",
+      });
+    }
+
+    if (!resolvedEmploymentRecordId && resolvedProfileExperienceId) {
+      const { data: profileExperience, error: profileExperienceErr } = await admin
+        .from("profile_experiences")
+        .select("id,role_title,company_name,start_date,end_date,user_id")
+        .eq("id", resolvedProfileExperienceId)
+        .maybeSingle();
+
+      if (profileExperienceErr) {
+        return json(res, 400, {
+          error: "Error consultando profile_experiences",
+          route: "/pages/api/candidate/evidence/upload-url",
+          details: profileExperienceErr.message,
+        });
+      }
+
+      if (!profileExperience || String((profileExperience as any).user_id || "") !== auth.user.id) {
+        return json(res, 404, {
+          error: "profile_experience no encontrada o sin acceso",
+          route: "/pages/api/candidate/evidence/upload-url",
+        });
+      }
+
+      const insertPayload: Record<string, any> = {
+        candidate_id: auth.user.id,
+        position: (profileExperience as any)?.role_title || null,
+        company_name_freeform: (profileExperience as any)?.company_name || null,
+        start_date: (profileExperience as any)?.start_date || null,
+        end_date: (profileExperience as any)?.end_date || null,
+        verification_status: "unverified",
+        source_experience_id: String((profileExperience as any)?.id || ""),
+      };
+
+      let createdEmployment: any = null;
+      let createdEmploymentError: any = null;
+
+      const primaryInsert = await admin.from("employment_records").insert(insertPayload).select("id").single();
+      createdEmployment = primaryInsert.data;
+      createdEmploymentError = primaryInsert.error;
+
+      if (createdEmploymentError && /source_experience_id/i.test(String(createdEmploymentError?.message || ""))) {
+        const fallbackInsertPayload = { ...insertPayload };
+        delete fallbackInsertPayload.source_experience_id;
+        const fallbackInsert = await admin
+          .from("employment_records")
+          .insert(fallbackInsertPayload)
+          .select("id")
+          .single();
+        createdEmployment = fallbackInsert.data;
+        createdEmploymentError = fallbackInsert.error;
+      }
+
+      if (createdEmploymentError || !createdEmployment?.id) {
+        return json(res, 400, {
+          error: "No se pudo crear employment_record para la evidencia",
+          route: "/pages/api/candidate/evidence/upload-url",
+          details: createdEmploymentError?.message || null,
+        });
+      }
+
+      resolvedEmploymentRecordId = String(createdEmployment.id);
     }
 
     if (resolvedEmploymentRecordId) {
@@ -368,13 +460,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const storage_path = `evidence/${userId}/${resolvedVerificationRequestId}/${uuid}.${ext}`;
     const evidence_client_ref = createHash("sha256").update(storage_path).digest("hex").slice(0, 16);
 
-    const { data, error } = await admin.storage.from(BUCKET).createSignedUploadUrl(storage_path);
+    let { data, error } = await admin.storage.from(BUCKET).createSignedUploadUrl(storage_path);
+
+    if (error && /bucket/i.test(String(error.message || ""))) {
+      const bucketEnsureError = await ensureEvidenceBucket(admin);
+      if (!bucketEnsureError) {
+        const retry = await admin.storage.from(BUCKET).createSignedUploadUrl(storage_path);
+        data = retry.data;
+        error = retry.error;
+      }
+    }
 
     if (error || !data?.signedUrl) {
       return json(res, 400, {
         error: "No se pudo generar signed upload URL",
         route: "/pages/api/candidate/evidence/upload-url",
         details: error?.message ?? null,
+        bucket: BUCKET,
       });
     }
 

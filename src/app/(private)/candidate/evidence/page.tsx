@@ -51,6 +51,12 @@ export default async function CandidateEvidencePage(props: any) {
     .eq("candidate_id", au.user.id)
     .order("start_date", { ascending: false });
 
+  const { data: profileExperienceRows } = await supabase
+    .from("profile_experiences")
+    .select("id,role_title,company_name,start_date,end_date")
+    .eq("user_id", au.user.id)
+    .order("start_date", { ascending: false });
+
   const experienceOptions: ExperienceOption[] = (employmentRows || []).map((row: any) => {
     const position = String(row.position || "Experiencia").trim();
     const company = String(row.company_name_freeform || "Empresa").trim();
@@ -60,6 +66,20 @@ export default async function CandidateEvidencePage(props: any) {
       label: `${position} — ${company} (${period})`,
     };
   });
+
+  if (experienceOptions.length === 0) {
+    experienceOptions.push(
+      ...((profileExperienceRows || []).map((row: any) => {
+        const position = String(row.role_title || "Experiencia").trim();
+        const company = String(row.company_name || "Empresa").trim();
+        const period = [row.start_date || "—", row.end_date || "Actualidad"].join(" · ");
+        return {
+          id: `profile:${String(row.id)}`,
+          label: `${position} — ${company} (${period})`,
+        };
+      }) as ExperienceOption[]),
+    );
+  }
 
   const items: EvidenceItem[] = (evidences || []).map((r: any) => {
     const vr = Array.isArray(r.verification_requests) ? r.verification_requests[0] : r.verification_requests;

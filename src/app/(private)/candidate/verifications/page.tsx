@@ -44,7 +44,7 @@ export default async function CandidateVerificationsPage() {
   const { data: rows, error } = await supabase
     .from("verification_requests")
     .select(
-      "id,status,revoked_at,verification_channel,requested_at,created_at,company_name_target,company_Email_target,external_Email_target,request_context,company_verification_status_snapshot",
+      "id,status,revoked_at,verification_channel,requested_at,created_at,company_name_target,external_email_target,request_context,company_verification_status_snapshot",
     )
     .eq("requested_by", au.user.id)
     .order("requested_at", { ascending: false, nullsFirst: false })
@@ -95,7 +95,7 @@ export default async function CandidateVerificationsPage() {
                 <tr key={row.id}>
                   <td className="px-4 py-3 text-slate-900">
                     <div className="font-medium">{row.company_name_target || "Empresa"}</div>
-                    <div className="text-xs text-slate-500">{row.company_Email_target || row.external_Email_target || "Sin Email"}</div>
+                    <div className="text-xs text-slate-500">{row.external_email_target || "Sin Email"}</div>
                   </td>
                   <td className="px-4 py-3 text-slate-700">{statusLabel(row.status)}</td>
                   <td className="px-4 py-3 text-slate-700">{row.verification_channel || "Email"}</td>
