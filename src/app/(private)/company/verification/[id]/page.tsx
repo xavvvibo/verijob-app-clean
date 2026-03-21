@@ -11,9 +11,9 @@ type PageProps = {
 };
 
 function fmtDate(v?: string | null) {
-  if (!v) return "No disponible";
+  if (!v) return "Pendiente";
   const t = Date.parse(v);
-  if (Number.isNaN(t)) return "No disponible";
+  if (Number.isNaN(t)) return "Pendiente";
   return new Date(t).toLocaleDateString("es-ES", {
     day: "2-digit",
     month: "short",
@@ -149,8 +149,8 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
     requestRow.company_name_target ||
     "Empresa";
 
-  const candidateName = candidateProfile?.full_name || "Candidato";
-  const roleLabel = employment?.position || "Puesto no especificado";
+  const candidateName = candidateProfile?.full_name || "Persona candidata";
+  const roleLabel = employment?.position || "Puesto pendiente de completar";
   const periodLabel = `${fmtDate(employment?.start_date)} — ${employment?.end_date ? fmtDate(employment?.end_date) : "Actualidad"}`;
   const receivedAt = requestRow.requested_at || requestRow.created_at || summary?.created_at || null;
 
@@ -159,9 +159,9 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
       <div className="flex items-center justify-between gap-4">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
-            Solicitud de validación
+            Verificación recibida
           </div>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-900">Detalle de validación</h1>
+          <h1 className="mt-2 text-3xl font-semibold text-slate-900">Validación de experiencia</h1>
           <p className="mt-2 text-sm text-slate-600">
             Revisa el estado, la confianza de la validación y decide si necesitas documentación adicional.
           </p>
@@ -190,14 +190,14 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
               </span>
             ) : (
               <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                No suma confianza
+                No suma Trust Score
               </span>
             )}
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Candidato</div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">Persona candidata</div>
               <div className="mt-2 text-base font-semibold text-slate-900">{candidateName}</div>
             </div>
 
@@ -241,19 +241,19 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
 
           <div className="mt-6 space-y-4">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-sm font-semibold text-slate-900">Señal de confianza</div>
+              <div className="text-sm font-semibold text-slate-900">Nivel de confianza</div>
               <p className="mt-2 text-sm text-slate-600">{confidence.helper}</p>
 
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Dominio del verificador</div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Dominio verificador verificador del verificador</div>
                   <div className="mt-1 text-sm font-semibold text-slate-900">
-                    {requestRow.verifier_email_domain || "No disponible"}
+                    {requestRow.verifier_email_domain || "Pendiente"}
                   </div>
                 </div>
 
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Score de confianza</div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Trust Score técnico</div>
                   <div className="mt-1 text-sm font-semibold text-slate-900">
                     {requestRow.verification_confidence_score ?? 0}/100
                   </div>
@@ -269,7 +269,7 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
 
             {requestRow.owner_attention_required ? (
               <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                <div className="text-sm font-semibold text-amber-900">Revisión manual recomendada</div>
+                <div className="text-sm font-semibold text-amber-900">Revisión adicional recomendada</div>
                 <p className="mt-2 text-sm text-amber-800">
                   Esta validación necesita una revisión adicional. Conviene pedir documentación antes de darla por consolidada.
                 </p>
@@ -278,16 +278,16 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
 
             {String(requestRow.verification_confidence_level || "").toLowerCase() !== "high" ? (
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="text-sm font-semibold text-slate-900">Siguiente paso recomendado</div>
+                <div className="text-sm font-semibold text-slate-900">Siguiente paso sugerido</div>
                 <p className="mt-2 text-sm text-slate-600">
-                  Solicita documentación para reforzar esta experiencia y mejorar su calidad probatoria.
+                  Solicita documentación para reforzar esta experiencia si necesitas una prueba más sólida.
                 </p>
               </div>
             ) : null}
 
             {requestRow.resolution_notes ? (
               <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="text-sm font-semibold text-slate-900">Notas de resolución</div>
+                <div className="text-sm font-semibold text-slate-900">Detalle registrado</div>
                 <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">
                   {requestRow.resolution_notes}
                 </p>
@@ -298,7 +298,7 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
 
         <div className="space-y-6">
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="text-sm font-semibold text-slate-900">Acción</div>
+            <div className="text-sm font-semibold text-slate-900">Qué puedes hacer</div>
             <p className="mt-2 text-sm text-slate-600">
               Confirma o rechaza esta experiencia. La resolución quedará registrada para el candidato y para tu equipo.
             </p>
@@ -309,7 +309,7 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="text-sm font-semibold text-slate-900">Resumen rápido</div>
+            <div className="text-sm font-semibold text-slate-900">Resumen</div>
             <div className="mt-4 space-y-3 text-sm text-slate-600">
               <div className="flex items-center justify-between gap-4">
                 <span>Estado</span>
@@ -328,7 +328,7 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">
-                <span>Dominio</span>
+                <span>Dominio verificador verificador</span>
                 <span className="font-semibold text-slate-900">
                   {requestRow.verifier_email_domain || "—"}
                 </span>

@@ -100,9 +100,9 @@ export default function ResolveExperienceForm({
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
       <div className="mb-6">
-        <h2 className="text-lg font-semibold text-slate-900">Responder validación</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Responder solicitud</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">
-          Indica si puedes confirmar esta experiencia. Cuanta más coherencia exista entre empresa, dominio y validación, mayor será la confianza del resultado.
+          Indica si puedes confirmar esta experiencia. Cuanta mayor sea la coherencia entre empresa, dominio y validación, mayor será la confianza del resultado.
         </p>
       </div>
 
@@ -136,7 +136,7 @@ export default function ResolveExperienceForm({
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">Tu nombre</label>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Nombre de quien valida</label>
               <input
                 value={verifierName}
                 onChange={(e) => setVerifierName(e.target.value)}
@@ -147,7 +147,7 @@ export default function ResolveExperienceForm({
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">Tu cargo</label>
+              <label className="mb-2 block text-sm font-medium text-slate-700">Cargo en la empresa</label>
               <input
                 value={verifierRole}
                 onChange={(e) => setVerifierRole(e.target.value)}
@@ -225,18 +225,18 @@ export default function ResolveExperienceForm({
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Dominio del verificador</div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">Dominio verificador</div>
               <div className="mt-2 text-sm font-semibold text-slate-900">
                 {result?.confidence?.verifier_email_domain || "No disponible"}
               </div>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Impacto en confianza</div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">Impacto en Trust Score</div>
               <div className="mt-2 text-sm font-semibold text-slate-900">
                 {Number(result?.confidence?.trust_score_awarded || 0) > 0
                   ? `+${result?.confidence?.trust_score_awarded} puntos`
-                  : "No suma confianza"}
+                  : "No suma Trust Score"}
               </div>
             </div>
           </div>

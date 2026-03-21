@@ -24,7 +24,7 @@ function mapCompanyVerificationStatus(statusRaw: unknown) {
   if (status === "registered_in_verijob") return "Empresa registrada en VERIJOB";
   if (status === "verified_paid") return "Empresa con plan activo";
   if (status === "verified_document") return "Empresa verificadora validada documentalmente";
-  if (status === "unverified_external") return "Verificación por Email corporativo";
+  if (status === "unverified_external") return "Validación por Email corporativo";
   if (status === "unverified") return "Empresa no verificada";
   return "Estado de empresa no disponible";
 }

@@ -67,9 +67,9 @@ function statusClass(v: string | null) {
 }
 
 function formatDate(value: string | null) {
-  if (!value) return "No disponible";
+  if (!value) return "Pendiente";
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "No disponible";
+  if (Number.isNaN(d.getTime())) return "Pendiente";
   return d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
@@ -270,9 +270,9 @@ export default async function CompanyRequestsPage({
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Solicitudes</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Solicitudes de validación de validación</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Revisa aquí las validaciones que llegan desde los candidatos y actúa sobre las que estén pendientes.
+          Revisa aquí las solicitudes de validación que llegan desde candidatos y gestiona las que estén pendientes.
         </p>
         {!planActive ? (
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -340,11 +340,11 @@ export default async function CompanyRequestsPage({
                 </div>
 
                 <div className="mt-2 text-sm text-slate-700">
-                  {row.position || "Puesto no especificado"} · {row.company_name_freeform || "Empresa"}
+                  {row.position || "Puesto pendiente de completar"} · {row.company_name_freeform || "Empresa"}
                 </div>
 
                 <div className="mt-1 text-sm text-slate-500">
-                  {row.start_date ? formatDate(row.start_date) : "No disponible"} — {row.end_date ? formatDate(row.end_date) : "Actualidad"}
+                  {row.start_date ? formatDate(row.start_date) : "Pendiente"} — {row.end_date ? formatDate(row.end_date) : "Actualidad"}
                 </div>
               </div>
 
@@ -353,7 +353,7 @@ export default async function CompanyRequestsPage({
                   href={`/company/verification/${row.verification_id}`}
                   className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
                 >
-                  {isPendingStatus(row.status_effective) ? "Revisar y resolver" : "Abrir solicitud"}
+                  {isPendingStatus(row.status_effective) ? "Abrir y resolver" : "Ver detalle"}
                 </Link>
               </div>
             </div>
@@ -372,7 +372,7 @@ export default async function CompanyRequestsPage({
                 <div className="mt-2 text-sm font-semibold text-slate-900">{row.evidence_count}</div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Acciones registradas</div>
+                <div className="text-xs uppercase tracking-wide text-slate-500">Actividad</div>
                 <div className="mt-2 text-sm font-semibold text-slate-900">{row.actions_count}</div>
               </div>
             </div>

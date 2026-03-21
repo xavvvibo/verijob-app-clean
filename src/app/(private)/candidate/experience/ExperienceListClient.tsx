@@ -152,7 +152,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
       const payload = buildVerificationPayload(
         {
           ...row,
-          company_Email: Email,
+          company_email: Email,
         },
         user.id,
         Email,
@@ -177,7 +177,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
             ? {
                 ...entry,
                 status: "Validación solicitada",
-                last_action: json?.already_exists === true ? "Solicitud activa reutilizada" : "Solicitud enviada",
+                last_action: json?.already_exists === true ? "Validación en curso reutilizada" : "Solicitud enviada",
               }
             : entry,
         ),
@@ -189,7 +189,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
         [row.id]:
           json?.already_exists === true
             ? "Ya existía una solicitud activa para esta experiencia y este Email. Hemos reutilizado la solicitud existente."
-            : "Solicitud enviada correctamente.",
+            : "Solicitud enviada correctamente",
       }));
     } catch (err: any) {
       setVerifyStateById((prev) => ({ ...prev, [row.id]: "error" }));
@@ -407,8 +407,8 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                           <div className="text-xs font-semibold text-gray-900">Email verificador</div>
                           <input
                             id={`verification-contact-${row.id}`}
-                            type="text"
-                            inputMode="Email"
+                            type="email"
+                            inputMode="email"
                             name={`verification-contact-${row.id}`}
                             autoComplete={`section-verification-${row.id} off`}
                             autoCapitalize="none"
@@ -439,7 +439,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                             {verifyState === "loading"
                               ? "Enviando solicitud…"
                               : verifyState === "success"
-                                ? "Solicitud activa"
+                                ? "Validación en curso"
                                 : "Solicitar verificación"}
                           </button>
                         </div>

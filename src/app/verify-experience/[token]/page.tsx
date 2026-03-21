@@ -159,14 +159,14 @@ export default async function VerifyExperiencePage({ params }: PageProps) {
       <div className="mx-auto max-w-4xl space-y-6">
         <header className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
           <div className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">VERIJOB</div>
-          <h1 className="mt-3 text-3xl font-semibold text-slate-900">Validación de experiencia laboral</h1>
+          <h1 className="mt-3 text-3xl font-semibold text-slate-900">Confirmación de experiencia laboral</h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-            El candidato ha pedido confirmar si trabajó en esta experiencia. Tu respuesta quedará registrada como validación de esa experiencia concreta.
+            La persona candidata ha pedido confirmar esta experiencia. Tu respuesta quedará registrada solo para esta experiencia concreta.
           </p>
         </header>
 
         <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Resumen de la solicitud</h2>
+          <h2 className="text-lg font-semibold text-slate-900">Datos de la solicitud</h2>
 
           <div className="mt-5 grid gap-4 md:grid-cols-3">
             <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -186,7 +186,7 @@ export default async function VerifyExperiencePage({ params }: PageProps) {
           </div>
 
           <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-            Tu respuesta valida esta experiencia laboral concreta. El sistema registrará también la empresa y el dominio desde el que se responde para calcular el nivel de confianza de la validación.
+            Tu respuesta se aplicará solo a esta experiencia. Verijob también registrará el dominio y la coherencia de la validación para calcular su nivel de confianza.
           </div>
         </section>
 

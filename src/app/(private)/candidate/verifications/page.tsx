@@ -21,7 +21,7 @@ function companySignalLabel(status: string | null | undefined) {
   if (raw === "registered_in_verijob") return "Empresa registrada en VERIJOB";
   if (raw === "verified_document") return "Empresa verificadora validada documentalmente";
   if (raw === "verified_paid") return "Empresa con plan activo";
-  if (raw === "unverified_external") return "Verificación por Email corporativo";
+  if (raw === "unverified_external") return "Validación por Email corporativo";
   return "Sin señal adicional";
 }
 
