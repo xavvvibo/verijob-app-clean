@@ -19,46 +19,55 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       storage_path,
     } = req.body
 
+    // 🔐 obtener usuario real desde auth header (si existe)
+    const authHeader = req.headers.authorization
+    let uploaded_by = null
+
+    if (authHeader) {
+      const token = authHeader.replace("Bearer ", "")
+      const { data } = await supabase.auth.getUser(token)
+      uploaded_by = data?.user?.id || null
+    }
+
+    if (!uploaded_by) {
+      return res.status(401).json({
+        ok: false,
+        stage: "missing_user",
+      })
+    }
+
     // 🔎 CHECK VR EXISTE
-    const { data: vrCheck, error: vrError } = await supabase
+    const { data: vrCheck } = await supabase
       .from("verification_requests")
       .select("id")
       .eq("id", verification_request_id)
       .maybeSingle()
 
-    if (vrError) {
-      return res.status(500).json({
-        ok: false,
-        stage: "vr_check_error",
-        error: vrError,
-      })
-    }
-
     if (!vrCheck) {
       return res.status(400).json({
         ok: false,
         stage: "verification_request_not_found",
-        verification_request_id,
       })
     }
 
-    // 🧱 INSERT MINIMAL (SIN CAMPOS OPCIONALES)
-    const { data: inserted, error: insertError } = await supabase
+    // 🧱 INSERT CON uploaded_by (FIX)
+    const { data: inserted, error } = await supabase
       .from("evidences")
       .insert({
         verification_request_id,
         evidence_type,
         file_sha256,
         storage_path,
+        uploaded_by, // 🔥 FIX CLAVE
       })
       .select("id")
       .maybeSingle()
 
-    if (insertError) {
+    if (error) {
       return res.status(500).json({
         ok: false,
         stage: "insert_evidence",
-        error: insertError,
+        error,
       })
     }
 
