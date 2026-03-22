@@ -3,8 +3,14 @@
 import { useEffect, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 
-export default function EvidenceListClient() {
-  const [items, setItems] = useState<any[]>([])
+type Props = {
+  initialItems: any[]
+  experienceOptions: any[]
+  preselectedExperienceId?: string
+}
+
+export default function EvidenceListClient({ initialItems }: Props) {
+  const [items, setItems] = useState<any[]>(initialItems || [])
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -48,7 +54,8 @@ export default function EvidenceListClient() {
         <div key={e.id} style={{ marginBottom: 10 }}>
           <strong>{e.evidence_type}</strong>
           <div>
-            Experiencia: {e.verification_requests?.employment_record_id || "no vinculada"}
+            Experiencia:{" "}
+            {e.verification_requests?.employment_record_id || "no vinculada"}
           </div>
         </div>
       ))}
