@@ -469,6 +469,35 @@ function detectLaborRelationshipPattern(value, provinceMeta = {}) {
   return { matched: reasons.length > 0, reasons };
 }
 
+function detectStructuralLaborPattern(value, startDate, endDate, provinceMeta = {}) {
+  const raw = String(value || "");
+  if (!raw.trim()) return { matched: false, reasons: [] };
+
+  const reasons = [];
+  const dateTokens = extractDateTokens(raw);
+  const hasTemporalWindow = Boolean(startDate || endDate);
+  const hasDatePair = dateTokens.length >= 2;
+  const hasContributionCode =
+    /\b(?:ccc|c\.?c\.?c\.?|codigo cuenta cotizacion|código cuenta cotización)\b/i.test(raw) ||
+    /\b\d{2}\d{6,}\b/.test(raw);
+  const hasLifeReportSequence =
+    /\b\d{2}\d{6,}\b.*?(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}-\d{2}).*?(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}-\d{2}|\bactualidad\b)?/i.test(
+      raw,
+    ) ||
+    /\b(?:alta|baja)\b.*?(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}-\d{2})/i.test(raw);
+
+  if (hasDatePair) reasons.push("date_pair");
+  if (hasContributionCode) reasons.push("contribution_code");
+  if (hasLifeReportSequence) reasons.push("vida_laboral_sequence");
+  if (provinceMeta?.province_hint) reasons.push(`province:${provinceMeta.province_hint.toLowerCase()}`);
+
+  const matched =
+    hasTemporalWindow &&
+    ((hasDatePair && hasContributionCode) || hasLifeReportSequence || (hasDatePair && provinceMeta?.province_hint));
+
+  return { matched, reasons };
+}
+
 function isVidaLaboralLegalNoise(value) {
   const normalized = normalizeText(value);
   if (!normalized) return false;
@@ -704,6 +733,7 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
     const selfEmployment = detectSelfEmployment(segment);
     const provinceMeta = extractProvincePrefixFromContributionCode(segment);
     const laborPattern = detectLaborRelationshipPattern(segment, provinceMeta);
+    const structuralLaborPattern = detectStructuralLaborPattern(segment, startDate, endDate, provinceMeta);
     const ignoredReason = detectAdministrativeIgnoredReason(`${companyName || ""} ${segment}`);
     const administrative = detectAdministrativeKeywords(`${companyName || ""} ${segment}`);
     const classification = scoreEmploymentCandidate({
@@ -718,6 +748,7 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
     const hasUsableDates = Boolean(startDate || endDate);
     const hasPlausibleEmployer = Boolean(companyName) && classification.employer_plausibility >= 0.3;
     const hasLaborPattern = laborPattern.matched;
+    const hasStructuralLaborPattern = structuralLaborPattern.matched;
     const dominatedByNumericNoise = classification.numeric_noise_penalty >= 0.45;
     const promotedLowConfidence =
       !administrative.matched &&
@@ -726,6 +757,7 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
       !dominatedByNumericNoise &&
       ((classification.score >= EMPLOYMENT_SCORE_THRESHOLD) ||
         hasLaborPattern ||
+        hasStructuralLaborPattern ||
         (selfEmployment.matched && classification.score >= SELF_EMPLOYMENT_SCORE_THRESHOLD)) &&
       classification.score < LOW_CONFIDENCE_PROMOTION_THRESHOLD;
 
@@ -737,6 +769,7 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
       !dominatedByNumericNoise &&
       ((classification.score >= EMPLOYMENT_SCORE_THRESHOLD) ||
         hasLaborPattern ||
+        hasStructuralLaborPattern ||
         (selfEmployment.matched && classification.score >= SELF_EMPLOYMENT_SCORE_THRESHOLD))
     ) {
       entryType = "employment";
@@ -746,8 +779,12 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
       ? [...classification.classification_reasons]
       : [];
     if (!hasPlausibleEmployer && hasLaborPattern) classificationReasons.push("no_employer_but_labor_pattern");
+    if (hasStructuralLaborPattern) classificationReasons.push("structural_labor_pattern");
     for (const reason of laborPattern.reasons) {
       classificationReasons.push(`labor_pattern:${reason}`);
+    }
+    for (const reason of structuralLaborPattern.reasons) {
+      classificationReasons.push(`structural_pattern:${reason}`);
     }
     if (promotedLowConfidence) classificationReasons.push("promoted_low_confidence");
 
@@ -794,6 +831,8 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
         ...classification,
         labor_pattern_matched: hasLaborPattern,
         labor_pattern_reasons: laborPattern.reasons,
+        structural_labor_pattern_matched: hasStructuralLaborPattern,
+        structural_labor_pattern_reasons: structuralLaborPattern.reasons,
         promotion_threshold: selfEmployment.matched ? SELF_EMPLOYMENT_SCORE_THRESHOLD : EMPLOYMENT_SCORE_THRESHOLD,
         promoted_low_confidence: promotedLowConfidence,
       },
@@ -826,9 +865,16 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
       provinceHint: provinceMeta.province_hint,
     });
     const fallbackHasUsableDates = Boolean(normalizeLooseDate(extraction?.start_date) || normalizeLooseDate(extraction?.end_date));
+    const fallbackStructuralLaborPattern = detectStructuralLaborPattern(
+      `${String(extraction?.employer_identifier || "")} ${fallbackText}`,
+      normalizeLooseDate(extraction?.start_date),
+      normalizeLooseDate(extraction?.end_date),
+      provinceMeta,
+    );
     const fallbackHasPlausibleEmployer =
       Boolean(String(extraction?.company_name || "").trim()) && classification.employer_plausibility >= 0.3;
     const fallbackHasLaborPattern = laborPattern.matched;
+    const fallbackHasStructuralLaborPattern = fallbackStructuralLaborPattern.matched;
     const fallbackDominatedByNumericNoise = classification.numeric_noise_penalty >= 0.45;
     const fallbackPromotedLowConfidence =
       !administrative.matched &&
@@ -837,6 +883,7 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
       !fallbackDominatedByNumericNoise &&
       ((classification.score >= EMPLOYMENT_SCORE_THRESHOLD) ||
         fallbackHasLaborPattern ||
+        fallbackHasStructuralLaborPattern ||
         (selfEmployment.matched && classification.score >= SELF_EMPLOYMENT_SCORE_THRESHOLD)) &&
       classification.score < LOW_CONFIDENCE_PROMOTION_THRESHOLD;
     const fallbackType =
@@ -846,6 +893,7 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
             !fallbackDominatedByNumericNoise &&
             ((classification.score >= EMPLOYMENT_SCORE_THRESHOLD) ||
               fallbackHasLaborPattern ||
+              fallbackHasStructuralLaborPattern ||
               (selfEmployment.matched && classification.score >= SELF_EMPLOYMENT_SCORE_THRESHOLD))
           ? "employment"
           : "discarded";
@@ -856,8 +904,12 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
       if (!fallbackHasPlausibleEmployer && fallbackHasLaborPattern) {
         fallbackClassificationReasons.push("no_employer_but_labor_pattern");
       }
+      if (fallbackHasStructuralLaborPattern) fallbackClassificationReasons.push("structural_labor_pattern");
       for (const reason of laborPattern.reasons) {
         fallbackClassificationReasons.push(`labor_pattern:${reason}`);
+      }
+      for (const reason of fallbackStructuralLaborPattern.reasons) {
+        fallbackClassificationReasons.push(`structural_pattern:${reason}`);
       }
       if (fallbackPromotedLowConfidence) fallbackClassificationReasons.push("promoted_low_confidence");
       extractedEntries.push({
@@ -885,6 +937,8 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
         ...classification,
         labor_pattern_matched: fallbackHasLaborPattern,
         labor_pattern_reasons: laborPattern.reasons,
+        structural_labor_pattern_matched: fallbackHasStructuralLaborPattern,
+        structural_labor_pattern_reasons: fallbackStructuralLaborPattern.reasons,
         promotion_threshold: selfEmployment.matched ? SELF_EMPLOYMENT_SCORE_THRESHOLD : EMPLOYMENT_SCORE_THRESHOLD,
         promoted_low_confidence: fallbackPromotedLowConfidence,
       },
