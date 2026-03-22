@@ -49,6 +49,7 @@ export default function EvidenceListClient({
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [reconciliationDrafts, setReconciliationDrafts] = useState<Record<string, Record<string, string>>>({})
   const [savingReconciliationId, setSavingReconciliationId] = useState<string | null>(null)
+  const [reconciliationFeedback, setReconciliationFeedback] = useState<Record<string, any>>({})
 
   const supabase = useMemo(
     () =>
@@ -306,7 +307,17 @@ export default function EvidenceListClient({
       if (!res.ok) {
         throw new Error(String(json?.details || json?.error || "No se pudo guardar la conciliación."))
       }
-      setMessage("Conciliación guardada. Hemos actualizado las experiencias vinculadas por esta fe de vida laboral.")
+      const summary = json?.reconciliation_summary || null
+      setReconciliationFeedback((prev) => ({
+        ...prev,
+        [evidenceId]: summary,
+      }))
+      setMessage(
+        String(
+          summary?.message ||
+            "Conciliación guardada. Hemos actualizado las experiencias vinculadas por esta fe de vida laboral.",
+        ),
+      )
       setReconciliationDrafts((prev) => {
         const next = { ...prev }
         delete next[evidenceId]
@@ -324,6 +335,7 @@ export default function EvidenceListClient({
   function renderVidaLaboralReconciliation(item: any) {
     const entries = Array.isArray(item.extracted_employment_entries) ? item.extracted_employment_entries : []
     if (!item.analysis_completed || item.evidence_type_key !== "vida_laboral" || entries.length === 0) return null
+    const summary = reconciliationFeedback[String(item.evidence_id || "")] || item.reconciliation_summary || null
 
     return (
       <div
@@ -346,6 +358,54 @@ export default function EvidenceListClient({
         <div style={{ fontSize: 12, color: "#475569", marginBottom: 12 }}>
           Revisa las experiencias detectadas y decide si corresponden a una experiencia ya declarada, si debes crear una nueva o si no deben vincularse.
         </div>
+        {summary ? (
+          <div
+            style={{
+              marginBottom: 12,
+              borderRadius: 12,
+              border: "1px solid #bfdbfe",
+              background: "#eff6ff",
+              padding: 12,
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 700, color: "#1d4ed8", marginBottom: 4 }}>
+              Resultado de la conciliación guardada
+            </div>
+            <div style={{ fontSize: 12, color: "#1e3a8a", marginBottom: 8 }}>
+              {String(summary?.message || "").trim() || "Conciliación guardada."}
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: summary?.material_changes ? 10 : 0 }}>
+              <span style={{ borderRadius: 999, background: "#dbeafe", color: "#1d4ed8", padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>
+                {Number(summary?.linked_existing_count || 0)} vinculadas
+              </span>
+              <span style={{ borderRadius: 999, background: "#dcfce7", color: "#166534", padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>
+                {Number(summary?.created_count || 0)} creadas
+              </span>
+              <span style={{ borderRadius: 999, background: "#fef3c7", color: "#92400e", padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>
+                {Number(summary?.ignored_count || 0) + Number(summary?.auto_ignored_count || 0)} ignoradas
+              </span>
+            </div>
+            {summary?.material_changes ? (
+              <div>
+                <a
+                  href="/candidate/experience"
+                  style={{
+                    display: "inline-flex",
+                    borderRadius: 10,
+                    background: "#1d4ed8",
+                    color: "#fff",
+                    padding: "8px 12px",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textDecoration: "none",
+                  }}
+                >
+                  Ver experiencias actualizadas
+                </a>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div style={{ display: "grid", gap: 10 }}>
           {entries.map((entry: any) => {

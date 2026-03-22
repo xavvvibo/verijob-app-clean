@@ -47,6 +47,17 @@ type EvidenceItem = {
     reconciliation_choice: string | null;
     raw_text: string | null;
   }>;
+  reconciliation_summary: {
+    linked_existing_count: number;
+    created_count: number;
+    ignored_count: number;
+    auto_ignored_count: number;
+    pending_count: number;
+    material_changes: boolean;
+    linked_employment_record_ids: string[];
+    created_profile_experience_ids: string[];
+    message: string;
+  } | null;
   person_check_label: string;
   company_check_label: string;
   date_check_label: string;

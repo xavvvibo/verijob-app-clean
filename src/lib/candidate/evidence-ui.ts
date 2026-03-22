@@ -46,6 +46,17 @@ export type CandidateEvidenceUiItem = {
     reconciliation_choice: string | null;
     raw_text: string | null;
   }>;
+  reconciliation_summary: {
+    linked_existing_count: number;
+    created_count: number;
+    ignored_count: number;
+    auto_ignored_count: number;
+    pending_count: number;
+    material_changes: boolean;
+    linked_employment_record_ids: string[];
+    created_profile_experience_ids: string[];
+    message: string;
+  } | null;
   person_check_label: string;
   company_check_label: string;
   date_check_label: string;
@@ -153,6 +164,24 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
         raw_text: String(entry?.raw_text || "").trim() || null,
       }))
     : [];
+  const reconciliationSummary =
+    processing?.reconciliation_summary && typeof processing.reconciliation_summary === "object"
+      ? {
+          linked_existing_count: Number(processing.reconciliation_summary.linked_existing_count || 0),
+          created_count: Number(processing.reconciliation_summary.created_count || 0),
+          ignored_count: Number(processing.reconciliation_summary.ignored_count || 0),
+          auto_ignored_count: Number(processing.reconciliation_summary.auto_ignored_count || 0),
+          pending_count: Number(processing.reconciliation_summary.pending_count || 0),
+          material_changes: Boolean(processing.reconciliation_summary.material_changes),
+          linked_employment_record_ids: Array.isArray(processing.reconciliation_summary.linked_employment_record_ids)
+            ? processing.reconciliation_summary.linked_employment_record_ids.map((value: any) => String(value || "")).filter(Boolean)
+            : [],
+          created_profile_experience_ids: Array.isArray(processing.reconciliation_summary.created_profile_experience_ids)
+            ? processing.reconciliation_summary.created_profile_experience_ids.map((value: any) => String(value || "")).filter(Boolean)
+            : [],
+          message: String(processing.reconciliation_summary.message || "").trim(),
+        }
+      : null;
   const identityGatePassed =
     Boolean(processing?.identity_gate_passed ?? processing?.matching?.identity_gate_passed) &&
     matchLevel !== "conflict";
@@ -216,6 +245,7 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
           : "Identidad parcial o no concluyente."
       : null,
     extracted_employment_entries: extractedEmploymentEntries,
+    reconciliation_summary: reconciliationSummary,
     person_check_label: analysisCompleted
       ? isVidaLaboral
         ? ""

@@ -211,6 +211,17 @@ export async function PATCH(req: Request, ctx: any) {
     const currentEntries = Array.isArray(processing.extracted_employment_entries)
       ? processing.extracted_employment_entries
       : [];
+    const summary = {
+      linked_existing_count: 0,
+      created_count: 0,
+      ignored_count: 0,
+      auto_ignored_count: currentEntries.filter((entry: any) => String(entry?.ignored_reason || "").trim()).length,
+      pending_count: 0,
+      material_changes: false,
+      linked_employment_record_ids: [] as string[],
+      created_profile_experience_ids: [] as string[],
+      message: "",
+    };
 
     const nextEntries = [];
     for (const currentEntry of currentEntries) {
@@ -229,6 +240,7 @@ export async function PATCH(req: Request, ctx: any) {
         nextEntry.reconciliation_choice = "ignore";
         nextEntry.linked_employment_record_id = null;
         nextEntry.created_profile_experience_id = null;
+        summary.ignored_count += 1;
         nextEntries.push(nextEntry);
         continue;
       }
@@ -244,6 +256,10 @@ export async function PATCH(req: Request, ctx: any) {
         nextEntry.reconciliation_choice = "create_new";
         nextEntry.linked_employment_record_id = String((created as any).employmentRecordId || "");
         nextEntry.created_profile_experience_id = String((created as any).profileExperienceId || "");
+        summary.created_count += 1;
+        summary.material_changes = true;
+        if (nextEntry.linked_employment_record_id) summary.linked_employment_record_ids.push(nextEntry.linked_employment_record_id);
+        if (nextEntry.created_profile_experience_id) summary.created_profile_experience_ids.push(nextEntry.created_profile_experience_id);
         nextEntries.push(nextEntry);
         continue;
       }
@@ -258,6 +274,9 @@ export async function PATCH(req: Request, ctx: any) {
         nextEntry.reconciliation_status = "linked";
         nextEntry.reconciliation_choice = "link_existing";
         nextEntry.linked_employment_record_id = String((materialized as any).employmentRecordId || "");
+        summary.linked_existing_count += 1;
+        summary.material_changes = true;
+        if (nextEntry.linked_employment_record_id) summary.linked_employment_record_ids.push(nextEntry.linked_employment_record_id);
         nextEntries.push(nextEntry);
         continue;
       }
@@ -266,6 +285,11 @@ export async function PATCH(req: Request, ctx: any) {
         nextEntry.reconciliation_status = "linked";
         nextEntry.reconciliation_choice = "link_existing";
         nextEntry.linked_employment_record_id = choice;
+        summary.linked_existing_count += 1;
+        summary.material_changes = true;
+        if (nextEntry.linked_employment_record_id) summary.linked_employment_record_ids.push(nextEntry.linked_employment_record_id);
+      } else {
+        summary.pending_count += 1;
       }
       nextEntries.push(nextEntry);
     }
@@ -291,6 +315,12 @@ export async function PATCH(req: Request, ctx: any) {
       nextEntries.filter((entry: any) => String(entry?.reconciliation_status || "") === "linked").length > 0
         ? "Experiencias de vida laboral reconciliadas con el perfil."
         : "Revisa y vincula las experiencias detectadas en la fe de vida laboral.";
+    summary.linked_employment_record_ids = Array.from(new Set(summary.linked_employment_record_ids.filter(Boolean)));
+    summary.created_profile_experience_ids = Array.from(new Set(summary.created_profile_experience_ids.filter(Boolean)));
+    summary.message = summary.material_changes
+      ? `Conciliación guardada. ${summary.linked_existing_count} experiencias vinculadas, ${summary.created_count} creadas y ${summary.ignored_count + summary.auto_ignored_count} movimientos ignorados.`
+      : `Conciliación guardada. No se ha creado ni vinculado ninguna experiencia; los movimientos detectados fueron ignorados por no corresponder a experiencia laboral CV.`;
+    processing.reconciliation_summary = summary;
 
     const nextContext = {
       ...currentContext,
@@ -311,6 +341,7 @@ export async function PATCH(req: Request, ctx: any) {
       id,
       extracted_employment_entries: nextEntries,
       supporting_employment_record_ids: supportingEmploymentRecordIds,
+      reconciliation_summary: summary,
     });
   } catch (error: any) {
     return json(500, {
