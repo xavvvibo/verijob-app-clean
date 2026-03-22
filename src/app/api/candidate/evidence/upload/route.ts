@@ -22,6 +22,7 @@ import {
   isMissingExternalResolvedColumn,
   isVerificationExternallyResolved,
 } from "@/lib/verification/external-resolution";
+import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -531,6 +532,8 @@ export async function POST(req: Request) {
         },
       })
       .eq("id", (context as any).verificationRequestId);
+
+    await recalculateAndPersistCandidateTrustScore(user.id).catch(() => {});
 
     void dispatchBackgroundJob({
       origin: new URL(req.url).origin,

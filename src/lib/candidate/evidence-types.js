@@ -6,7 +6,7 @@ const EVIDENCE_TYPE_CONFIGS = {
       "Puede servir para varias o todas tus experiencias.",
     requiresExperience: false,
     scope: "global",
-    trustWeight: 1.0,
+    trustWeight: 20,
   },
   contrato_trabajo: {
     key: "contrato_trabajo",
@@ -14,7 +14,7 @@ const EVIDENCE_TYPE_CONFIGS = {
     helper: "Debe asociarse a una experiencia concreta.",
     requiresExperience: true,
     scope: "experience",
-    trustWeight: 0.8,
+    trustWeight: 10,
   },
   nomina: {
     key: "nomina",
@@ -22,7 +22,7 @@ const EVIDENCE_TYPE_CONFIGS = {
     helper: "Debe asociarse a una experiencia concreta.",
     requiresExperience: true,
     scope: "experience",
-    trustWeight: 0.65,
+    trustWeight: 6,
   },
   certificado_empresa: {
     key: "certificado_empresa",
@@ -30,7 +30,7 @@ const EVIDENCE_TYPE_CONFIGS = {
     helper: "Debe asociarse a una experiencia concreta.",
     requiresExperience: true,
     scope: "experience",
-    trustWeight: 0.85,
+    trustWeight: 8,
   },
   otro_documento: {
     key: "otro_documento",
@@ -38,7 +38,7 @@ const EVIDENCE_TYPE_CONFIGS = {
     helper: "Debe asociarse a una experiencia concreta.",
     requiresExperience: true,
     scope: "experience",
-    trustWeight: 0.35,
+    trustWeight: 0,
   },
 };
 
@@ -81,6 +81,14 @@ function getEvidenceTypeLabel(type) {
 
 function getEvidenceTypeWeight(type) {
   return Number(getEvidenceTypeConfig(type).trustWeight || 0);
+}
+
+function getEvidenceTrustImpact(type) {
+  const normalized = normalizeEvidenceType(type);
+  if (normalized === "vida_laboral") return "alta";
+  if (normalized === "contrato_trabajo" || normalized === "certificado_empresa") return "media";
+  if (normalized === "nomina") return "baja-media";
+  return "baja";
 }
 
 function requiresExperienceAssociation(type) {
@@ -165,6 +173,7 @@ module.exports = {
   getEvidenceTypeConfig,
   getEvidenceTypeLabel,
   getEvidenceTypeWeight,
+  getEvidenceTrustImpact,
   getEvidenceTrustWeightsMap,
   getEvidenceTypeOptions,
   normalizeValidationStatus,

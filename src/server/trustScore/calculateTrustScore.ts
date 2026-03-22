@@ -16,6 +16,9 @@ type TrustBreakdown = {
   approved: number;
   confirmed: number;
   evidences: number;
+  evidence_points_raw: number;
+  evidence_points_capped: number;
+  evidence_types: string[];
   reuseEvents: number;
   reuseCompanies: number;
   model: string;
@@ -49,6 +52,33 @@ function normalizeText(value: unknown) {
     .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function calculateEvidenceScore(rows: any[]) {
+  const usableEvidences = rows.filter((row: any) => {
+    const status = normalizeValidationStatus(row?.validation_status);
+    return status !== EVIDENCE_VALIDATION_INTERNAL.REJECTED;
+  });
+
+  const uniqueEvidenceTypes: string[] = [];
+  const seenEvidenceTypes = new Set<string>();
+
+  for (const row of usableEvidences) {
+    const type = normalizeEvidenceType(row?.evidence_type || row?.document_type);
+    if (!type || seenEvidenceTypes.has(type)) continue;
+    seenEvidenceTypes.add(type);
+    uniqueEvidenceTypes.push(type);
+  }
+
+  const rawPoints = uniqueEvidenceTypes.reduce((acc, type) => acc + Number(getEvidenceTypeWeight(type) || 0), 0);
+  const cappedPoints = Math.min(30, rawPoints);
+
+  return {
+    usableEvidences,
+    uniqueEvidenceTypes,
+    rawPoints,
+    cappedPoints,
+  };
 }
 
 function consistencyBlockFromEmployment(rows: any[]): number {
@@ -142,30 +172,8 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
     weightedVerifiedEmployment >= 3 ? 40 : weightedVerifiedEmployment >= 2 ? 30 : weightedVerifiedEmployment >= 1 ? 20 : weightedVerifiedEmployment > 0 ? 10 : 0;
   const verificationBlock = Math.max(0, verificationBlockBase - Math.min(10, rejectedVerificationCount * 5));
 
-  const usableEvidences = evidences.filter((row: any) => {
-    const status = normalizeValidationStatus(row?.validation_status);
-    return status !== EVIDENCE_VALIDATION_INTERNAL.REJECTED;
-  });
-  const uniqueEvidenceTypes = new Set(
-    usableEvidences
-      .map((row: any) => normalizeEvidenceType(row?.document_type || row?.evidence_type))
-      .filter(Boolean)
-  );
-  const evidenceWeightSum = Array.from(uniqueEvidenceTypes).reduce(
-    (acc, type) => {
-      const row = usableEvidences.find(
-        (e: any) => normalizeEvidenceType(e?.document_type || e?.evidence_type) === type
-      );
-      const persistedWeight = Number((row as any)?.trust_weight ?? 0);
-      const baseWeight = Number(getEvidenceTypeWeight(type) || 0);
-      const finalWeight = persistedWeight > 0 ? persistedWeight : baseWeight;
-      return acc + finalWeight;
-    },
-    0
-  );
-  const maxWeightSum = 1 + 0.85 + 0.8 + 0.65 + 0.35; // vida laboral + certificado + contrato + nómina + otro
-  const weightedEvidenceRatio = maxWeightSum > 0 ? evidenceWeightSum / maxWeightSum : 0;
-  const evidenceBlock = Math.min(30, Math.round(weightedEvidenceRatio * 30));
+  const evidenceScore = calculateEvidenceScore(evidences);
+  const evidenceBlock = evidenceScore.cappedPoints;
 
   const consistencyBlock = consistencyBlockFromEmployment(employment);
 
@@ -195,10 +203,13 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
       reuse: reuseBlock,
       approved: Number(weightedVerifiedEmployment.toFixed(2)),
       confirmed: verifications.filter((row: any) => normalizeText(row?.status) === "verified").length,
-      evidences: usableEvidences.length,
+      evidences: evidenceScore.usableEvidences.length,
+      evidence_points_raw: evidenceScore.rawPoints,
+      evidence_points_capped: evidenceScore.cappedPoints,
+      evidence_types: evidenceScore.uniqueEvidenceTypes,
       reuseEvents,
       reuseCompanies,
-      model: "trust_mvp_f28_v2_weighted_evidence",
+      model: "trust_mvp_f28_v3_document_evidence_points",
     },
   };
 }
