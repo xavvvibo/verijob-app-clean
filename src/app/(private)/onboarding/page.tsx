@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 import { createServerSupabaseClient } from "@/utils/supabase/server"
+import { resolveCandidateOnboardingCompleted } from "@/lib/auth/onboarding-state"
 import CandidateOnboardingFlow from "./CandidateOnboardingFlow"
 
 export const dynamic = "force-dynamic"
@@ -61,7 +62,7 @@ export default async function CandidateOnboardingPage() {
   const role = String(profile.role || "").toLowerCase()
   if (role === "company") redirect("/onboarding/company")
 
-  if (profile.onboarding_completed) {
+  if (resolveCandidateOnboardingCompleted(profile)) {
     redirect("/candidate/overview")
   }
 

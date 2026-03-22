@@ -11,9 +11,19 @@ function coerceBoolean(value: unknown) {
 export function resolveCandidateOnboardingCompleted(input: {
   onboardingCompleted?: unknown;
   onboarding_completed?: unknown;
+  onboardingStep?: unknown;
+  onboarding_step?: unknown;
 }) {
   if (typeof input.onboardingCompleted !== "undefined") {
     return coerceBoolean(input.onboardingCompleted);
   }
-  return coerceBoolean(input.onboarding_completed);
+  if (typeof input.onboarding_completed !== "undefined" && coerceBoolean(input.onboarding_completed)) {
+    return true;
+  }
+  const step = String(
+    typeof input.onboardingStep !== "undefined" ? input.onboardingStep : input.onboarding_step || ""
+  )
+    .trim()
+    .toLowerCase();
+  return step === "finish" || step === "done" || step === "completed";
 }

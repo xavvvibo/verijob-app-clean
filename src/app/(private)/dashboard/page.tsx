@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/utils/supabase/server";
 import { resolveAuthenticatedRouting } from "@/lib/auth/post-login-redirect";
+import { resolveCandidateOnboardingCompleted } from "@/lib/auth/onboarding-state";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -13,17 +14,19 @@ export default async function DashboardRouter() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, active_company_id, onboarding_completed")
+    .select("role, active_company_id, onboarding_completed, onboarding_step")
     .eq("id", user.id)
     .maybeSingle();
 
   const role = String(profile?.role || "").toLowerCase();
 
-  if (role === "candidate" && profile?.onboarding_completed) {
+  const candidateOnboardingCompleted = resolveCandidateOnboardingCompleted(profile || {});
+
+  if (role === "candidate" && candidateOnboardingCompleted) {
     redirect("/candidate/overview");
   }
 
-  if (role === "candidate" && !profile?.onboarding_completed) {
+  if (role === "candidate" && !candidateOnboardingCompleted) {
     redirect("/onboarding");
   }
 

@@ -13,7 +13,7 @@ export async function requireRole(
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role,active_company_id,onboarding_completed")
+    .select("role,active_company_id,onboarding_completed,onboarding_step")
     .eq("id", data.user.id)
     .single();
 

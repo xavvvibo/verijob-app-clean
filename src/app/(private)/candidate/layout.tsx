@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+import { resolveCandidateOnboardingCompleted } from "@/lib/auth/onboarding-state";
 
 export const metadata: Metadata = {
   title: { default: "VERIJOB — Candidato", template: "VERIJOB Candidato — %s" },
@@ -20,7 +21,7 @@ export default async function CandidateLayout({ children }: { children: React.Re
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role,active_company_id,onboarding_completed")
+    .select("role,active_company_id,onboarding_completed,onboarding_step")
     .eq("id", au.user.id)
     .maybeSingle();
 
@@ -31,8 +32,9 @@ export default async function CandidateLayout({ children }: { children: React.Re
   if (role === "owner") redirect("/owner?forbidden=1&from=candidate");
 
   const onboardingAccessGranted = cookieStore.get("candidate_onboarding_access")?.value === "1";
+  const onboardingCompleted = resolveCandidateOnboardingCompleted(profile || {});
 
-  if (!profile?.onboarding_completed && !onboardingAccessGranted) {
+  if (!onboardingCompleted && !onboardingAccessGranted) {
     redirect("/onboarding?blocked=1&source=candidate");
   }
 
