@@ -112,19 +112,100 @@ export async function publicTableExists(admin: SupabaseLike, tableName: string) 
   return columns.size > 0;
 }
 
-function resolveOwnerColumns(columns: Set<string>) {
+function getErrorMessage(error: any) {
+  return String(error?.message || error?.details || error?.hint || error || "").toLowerCase();
+}
+
+function isMissingColumnError(error: any, columnName: string) {
+  const message = getErrorMessage(error);
+  return message.includes(`column "${columnName.toLowerCase()}"`) && message.includes("does not exist");
+}
+
+function isMissingRelationError(error: any, tableName: string) {
+  const message = getErrorMessage(error);
+  return (
+    message.includes(`relation "${tableName.toLowerCase()}" does not exist`) ||
+    message.includes(`could not find the table '${tableName.toLowerCase()}'`) ||
+    message.includes(`could not find the relation '${tableName.toLowerCase()}'`)
+  );
+}
+
+function omitColumn(rows: Record<string, any>[], columnName: string) {
+  return rows.map((row) => {
+    const next = { ...row };
+    delete next[columnName];
+    return next;
+  });
+}
+
+type RuntimeTableSupport = {
+  exists: boolean;
+  filterColumn: "user_id" | "candidate_id" | null;
+  insertColumns: {
+    user_id: boolean;
+    candidate_id: boolean;
+    candidate_profile_id: boolean;
+  };
+};
+
+async function resolveRuntimeTableSupport(
+  admin: SupabaseLike,
+  tableName: string,
+  userId: string,
+): Promise<RuntimeTableSupport> {
+  const probe = await admin.from(tableName).select("id").limit(1);
+  if (probe.error && isMissingRelationError(probe.error, tableName)) {
+    return {
+      exists: false,
+      filterColumn: null,
+      insertColumns: { user_id: false, candidate_id: false, candidate_profile_id: false },
+    };
+  }
+
+  const userIdProbe = await admin.from(tableName).select("id").eq("user_id", userId).limit(1);
+  if (!userIdProbe.error) {
+    return {
+      exists: true,
+      filterColumn: "user_id",
+      insertColumns: { user_id: true, candidate_id: true, candidate_profile_id: true },
+    };
+  }
+
+  if (!isMissingColumnError(userIdProbe.error, "user_id")) {
+    return {
+      exists: true,
+      filterColumn: "user_id",
+      insertColumns: { user_id: true, candidate_id: true, candidate_profile_id: true },
+    };
+  }
+
+  const candidateIdProbe = await admin.from(tableName).select("id").eq("candidate_id", userId).limit(1);
+  if (!candidateIdProbe.error) {
+    return {
+      exists: true,
+      filterColumn: "candidate_id",
+      insertColumns: { user_id: false, candidate_id: true, candidate_profile_id: true },
+    };
+  }
+
+  if (!isMissingColumnError(candidateIdProbe.error, "candidate_id")) {
+    return {
+      exists: true,
+      filterColumn: "candidate_id",
+      insertColumns: { user_id: false, candidate_id: true, candidate_profile_id: true },
+    };
+  }
+
   return {
-    userId: columns.has("user_id"),
-    candidateId: columns.has("candidate_id"),
-    filterColumn: columns.has("user_id") ? "user_id" : columns.has("candidate_id") ? "candidate_id" : null,
+    exists: true,
+    filterColumn: null,
+    insertColumns: { user_id: false, candidate_id: false, candidate_profile_id: true },
   };
 }
 
 async function ensureCandidateProfileId(admin: SupabaseLike, userId: string) {
-  const candidateProfilesExists = await publicTableExists(admin, "candidate_profiles");
-  if (!candidateProfilesExists) return null;
-
   const current = await admin.from("candidate_profiles").select("id").eq("user_id", userId).maybeSingle();
+  if (current.error && isMissingRelationError(current.error, "candidate_profiles")) return null;
   if (!current.error && current.data?.id) return String(current.data.id);
 
   const inserted = await admin
@@ -133,6 +214,7 @@ async function ensureCandidateProfileId(admin: SupabaseLike, userId: string) {
     .select("id")
     .maybeSingle();
 
+  if (inserted.error && isMissingRelationError(inserted.error, "candidate_profiles")) return null;
   if (!inserted.error && inserted.data?.id) return String(inserted.data.id);
   return null;
 }
@@ -263,51 +345,43 @@ export async function readCandidateProfileCollections(
   userId: string,
   options?: { candidateProfile?: any }
 ) {
-  const [educationColumns, languagesColumns, certificationsColumns, achievementsColumns] = await Promise.all([
-    getPublicTableColumns(admin, "candidate_education"),
-    getPublicTableColumns(admin, "candidate_languages"),
-    getPublicTableColumns(admin, "candidate_certifications"),
-    getPublicTableColumns(admin, "candidate_achievements"),
+  const [educationSupport, languagesSupport, certificationsSupport, achievementsSupport] = await Promise.all([
+    resolveRuntimeTableSupport(admin, "candidate_education", userId),
+    resolveRuntimeTableSupport(admin, "candidate_languages", userId),
+    resolveRuntimeTableSupport(admin, "candidate_certifications", userId),
+    resolveRuntimeTableSupport(admin, "candidate_achievements", userId),
   ]);
-  const educationExists = educationColumns.size > 0;
-  const languagesExists = languagesColumns.size > 0;
-  const certificationsExists = certificationsColumns.size > 0;
-  const achievementsExists = achievementsColumns.size > 0;
-  const educationOwner = resolveOwnerColumns(educationColumns);
-  const languagesOwner = resolveOwnerColumns(languagesColumns);
-  const certificationsOwner = resolveOwnerColumns(certificationsColumns);
-  const achievementsOwner = resolveOwnerColumns(achievementsColumns);
 
   const [educationRes, languagesRes, certificationsRes, achievementsRes] = await Promise.all([
-    educationExists && educationOwner.filterColumn
+    educationSupport.exists && educationSupport.filterColumn
       ? admin
           .from("candidate_education")
           .select("*")
-          .eq(educationOwner.filterColumn, userId)
+          .eq(educationSupport.filterColumn, userId)
           .order("display_order", { ascending: true })
           .order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
-    languagesExists && languagesOwner.filterColumn
+    languagesSupport.exists && languagesSupport.filterColumn
       ? admin
           .from("candidate_languages")
           .select("*")
-          .eq(languagesOwner.filterColumn, userId)
+          .eq(languagesSupport.filterColumn, userId)
           .order("display_order", { ascending: true })
           .order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
-    certificationsExists && certificationsOwner.filterColumn
+    certificationsSupport.exists && certificationsSupport.filterColumn
       ? admin
           .from("candidate_certifications")
           .select("*")
-          .eq(certificationsOwner.filterColumn, userId)
+          .eq(certificationsSupport.filterColumn, userId)
           .order("display_order", { ascending: true })
           .order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
-    achievementsExists && achievementsOwner.filterColumn
+    achievementsSupport.exists && achievementsSupport.filterColumn
       ? admin
           .from("candidate_achievements")
           .select("*")
-          .eq(achievementsOwner.filterColumn, userId)
+          .eq(achievementsSupport.filterColumn, userId)
           .order("display_order", { ascending: true })
           .order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
@@ -357,10 +431,10 @@ export async function readCandidateProfileCollections(
 
   return {
     support: {
-      education: educationExists,
-      languages: languagesExists,
-      certifications: certificationsExists,
-      achievements: achievementsExists,
+      education: educationSupport.exists && Boolean(educationSupport.filterColumn),
+      languages: languagesSupport.exists && Boolean(languagesSupport.filterColumn),
+      certifications: certificationsSupport.exists && Boolean(certificationsSupport.filterColumn),
+      achievements: achievementsSupport.exists && Boolean(achievementsSupport.filterColumn),
     },
     education,
     languages,
@@ -444,27 +518,39 @@ async function replaceCollection(args: {
   userId: string;
   items: Record<string, any>[];
 }) {
-  const tableColumns = await getPublicTableColumns(args.admin, args.table);
-  if (!tableColumns.size) {
+  const runtime = await resolveRuntimeTableSupport(args.admin, args.table, args.userId);
+  if (!runtime.exists) {
     throw new Error(`${args.table}_missing`);
   }
-  const owner = resolveOwnerColumns(tableColumns);
-  if (!owner.filterColumn) throw new Error(`${args.table}_owner_missing`);
+  if (!runtime.filterColumn) throw new Error(`${args.table}_owner_missing`);
 
   const candidateProfileId = await ensureCandidateProfileId(args.admin, args.userId);
-  const deleteRes = await args.admin.from(args.table).delete().eq(owner.filterColumn, args.userId);
+  const deleteRes = await args.admin.from(args.table).delete().eq(runtime.filterColumn, args.userId);
   if (deleteRes.error) throw deleteRes.error;
 
   if (!args.items.length) return;
 
   const rows = args.items.map((item) => {
     const row: Record<string, any> = { ...item };
-    if (owner.userId) row.user_id = args.userId;
-    if (owner.candidateId) row.candidate_id = args.userId;
-    if (tableColumns.has("candidate_profile_id")) row.candidate_profile_id = candidateProfileId;
+    if (runtime.insertColumns.user_id) row.user_id = args.userId;
+    if (runtime.insertColumns.candidate_id) row.candidate_id = args.userId;
+    if (runtime.insertColumns.candidate_profile_id && candidateProfileId) row.candidate_profile_id = candidateProfileId;
     return row;
   });
-  const insertRes = await args.admin.from(args.table).insert(rows);
+
+  let insertRes = await args.admin.from(args.table).insert(rows);
+  if (insertRes.error && isMissingColumnError(insertRes.error, "candidate_profile_id")) {
+    const retryRows = omitColumn(rows, "candidate_profile_id");
+    insertRes = await args.admin.from(args.table).insert(retryRows);
+  }
+  if (insertRes.error && isMissingColumnError(insertRes.error, "candidate_id")) {
+    const retryRows = omitColumn(rows, "candidate_id");
+    insertRes = await args.admin.from(args.table).insert(retryRows);
+  }
+  if (insertRes.error && isMissingColumnError(insertRes.error, "user_id")) {
+    const retryRows = omitColumn(rows, "user_id");
+    insertRes = await args.admin.from(args.table).insert(retryRows);
+  }
   if (insertRes.error) throw insertRes.error;
 }
 
@@ -511,21 +597,18 @@ export async function clearCandidateProfileCollections(admin: SupabaseLike, user
     "candidate_certifications",
     "candidate_achievements",
   ]) {
-    const columns = await getPublicTableColumns(admin, table);
-    if (!columns.size) continue;
-    const owner = resolveOwnerColumns(columns);
-    if (!owner.filterColumn) continue;
-    const { error } = await admin.from(table).delete().eq(owner.filterColumn, userId);
+    const runtime = await resolveRuntimeTableSupport(admin, table, userId);
+    if (!runtime.exists || !runtime.filterColumn) continue;
+    const { error } = await admin.from(table).delete().eq(runtime.filterColumn, userId);
     if (error) throw error;
   }
 }
 
 export async function deleteCandidateCollectionItems(admin: SupabaseLike, table: string, userId: string, ids?: string[]) {
-  const columns = await getPublicTableColumns(admin, table);
-  if (!columns.size) throw new Error(`${table}_missing`);
-  const owner = resolveOwnerColumns(columns);
-  if (!owner.filterColumn) throw new Error(`${table}_owner_missing`);
-  const query = admin.from(table).delete().eq(owner.filterColumn, userId);
+  const runtime = await resolveRuntimeTableSupport(admin, table, userId);
+  if (!runtime.exists) throw new Error(`${table}_missing`);
+  if (!runtime.filterColumn) throw new Error(`${table}_owner_missing`);
+  const query = admin.from(table).delete().eq(runtime.filterColumn, userId);
   const result = ids && ids.length ? await query.in("id", ids) : await query;
   if (result.error) throw result.error;
 }

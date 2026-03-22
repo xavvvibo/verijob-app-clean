@@ -45,6 +45,12 @@ function toPayload(items: EducationItem[]) {
     .filter((x) => x.title || x.institution || x.start_date || x.end_date || x.description);
 }
 
+function toUiError(message: unknown) {
+  const raw = String(message || "").trim();
+  if (!raw) return "No se pudo guardar la formación.";
+  return "No se pudo guardar la formación. Revisa los datos y vuelve a intentarlo.";
+}
+
 export default function CandidateEducationPage() {
   const [items, setItems] = useState<EducationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,7 +108,7 @@ export default function CandidateEducationPage() {
     const j = await r.json().catch(() => ({}));
     setSaving(false);
     if (!r.ok) {
-      setMessage(j?.error || "No se pudo guardar la formación.");
+      setMessage(toUiError(j?.details || j?.error));
       return;
     }
 
