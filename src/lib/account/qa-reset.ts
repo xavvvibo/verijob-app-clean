@@ -1,3 +1,5 @@
+import { clearCandidateProfileCollections, readCandidateProfileCollections } from "@/lib/candidate/profile-collections";
+
 type SupabaseLike = any;
 
 const QA_CANDIDATE_RESET_EMAIL = "xavvvibo@gmail.com";
@@ -284,6 +286,8 @@ export async function resetCandidateAccountForQa(args: {
     if (candidateProfileUpdateErr && !isMissingRelationError(candidateProfileUpdateErr, "candidate_profiles")) throw candidateProfileUpdateErr;
   }
 
+  await clearCandidateProfileCollections(admin, userId);
+
   await deactivatePlanOverridesForQa(admin, userId, nowIso);
   const subscriptionReset = await resetLatestSubscriptionToFree(admin, userId, nowIso);
 
@@ -339,18 +343,19 @@ export async function resetCandidateAccountForQa(args: {
     admin.from("profiles").select("avatar_url,onboarding_completed").eq("id", userId).maybeSingle(),
     admin
       .from("candidate_profiles")
-      .select("education,certifications,trust_score")
+      .select("trust_score")
       .eq("user_id", userId)
       .maybeSingle(),
     admin.from("profile_experiences").select("id", { count: "exact", head: true }).eq("user_id", userId),
     admin.from("evidences").select("id", { count: "exact", head: true }).eq("uploaded_by", userId),
   ]);
 
+  const postCollections = await readCandidateProfileCollections(admin, userId, {
+    candidateProfile: postCandidateProfileRes.data || {},
+  });
   const postCandidateProfile = postCandidateProfileRes.data || {};
-  const educationCount = Array.isArray((postCandidateProfile as any)?.education) ? (postCandidateProfile as any).education.length : 0;
-  const achievementsRaw: any[] = [];
-  const certificationsRaw = Array.isArray((postCandidateProfile as any)?.certifications) ? (postCandidateProfile as any).certifications : [];
-  const achievementsCount = achievementsRaw.length + certificationsRaw.length;
+  const educationCount = postCollections.education.length;
+  const achievementsCount = postCollections.achievements_catalog.all.length;
 
   try {
     await admin.auth.admin.updateUserById(userId, { ban_duration: "none" });

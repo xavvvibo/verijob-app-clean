@@ -5,6 +5,15 @@ import { buildCandidateProfileCompletionModel } from "@/lib/candidate/profile-co
 import { normalizeCandidatePhone } from "@/lib/phone";
 import { buildIdentityRecord } from "@/lib/security/identity";
 import { buildCandidateExperienceTrustTimeline } from "@/lib/candidate/experience-trust";
+import {
+  readCandidateProfileCollections,
+  replaceCandidateAchievementsCollection,
+  replaceCandidateCertificationsCollection,
+  replaceCandidateEducationCollection,
+  replaceCandidateLanguagesCollection,
+} from "@/lib/candidate/profile-collections";
+
+const PROFILE_PERSONAL_FIELDS = ["full_name", "phone", "title", "location"] as const;
 
 async function getTableColumns(admin: any, tableName: string) {
   const { data, error } = await admin
@@ -16,37 +25,13 @@ async function getTableColumns(admin: any, tableName: string) {
     return new Set(data.map((row: any) => String(row?.column_name || "")));
   }
   if (tableName === "candidate_profiles") {
-    return new Set([
-      "user_id",
-      "summary",
-      "education",
-    ]);
+    return new Set(["id", "user_id", "summary", "education", "trust_score", "trust_score_breakdown"]);
   }
   if (tableName === "profiles") {
-    return new Set([
-      "id",
-      "full_name",
-      "phone",
-      "title",
-      "location",
-      "updated_at",
-    ]);
+    return new Set(["id", "full_name", "phone", "title", "location", "updated_at"]);
   }
   return new Set<string>();
 }
-
-const PROFILE_PERSONAL_FIELDS = [
-  "full_name",
-  "phone",
-  "title",
-  "location",
-] as const;
-
-const CANDIDATE_PROFILE_MUTABLE_FIELDS = [
-  "summary",
-  "education",
-  "certifications",
-] as const;
 
 function normalizeText(value: unknown) {
   return String(value || "").trim();
@@ -55,148 +40,6 @@ function normalizeText(value: unknown) {
 function normalizeNullableText(value: unknown, max: number) {
   const normalized = normalizeText(value).slice(0, max);
   return normalized || null;
-}
-
-type AchievementCategory = "certificacion" | "premio" | "idioma" | "otro";
-
-type AchievementItem = {
-  title: string;
-  language: string | null;
-  level: string | null;
-  certificate_title: string | null;
-  issuer: string | null;
-  date: string | null;
-  description: string | null;
-  category: AchievementCategory;
-};
-
-function formatLanguageLabel(item: Partial<AchievementItem>) {
-  const language = normalizeText(item.language || item.title);
-  const level = normalizeText(item.level);
-  if (!language) return null;
-  return level ? `${language} — ${level}` : language;
-}
-
-function normalizeAchievement(raw: any): AchievementItem | null {
-  const title = normalizeText(raw?.title);
-  const language = normalizeText(raw?.language) || null;
-  const level = normalizeText(raw?.level) || null;
-  const certificateTitle = normalizeText(raw?.certificate_title) || null;
-  const issuer = normalizeText(raw?.issuer) || null;
-  const date = normalizeText(raw?.date) || null;
-  const description = normalizeText(raw?.description) || null;
-  const rawCategory = normalizeText(raw?.category).toLowerCase();
-  const category: AchievementCategory =
-    rawCategory === "idioma" || rawCategory === "premio" || rawCategory === "certificacion"
-      ? (rawCategory as AchievementCategory)
-      : "otro";
-  const normalizedTitle = category === "idioma" ? title || language || "" : title;
-  if (!normalizedTitle && !language && !issuer && !date && !description && !certificateTitle) return null;
-  return {
-    title: normalizedTitle,
-    language,
-    level,
-    certificate_title: certificateTitle,
-    issuer,
-    date,
-    description,
-    category,
-  };
-}
-
-function dedupeAchievements(items: AchievementItem[]) {
-  const seen = new Set<string>();
-  return items.filter((item) => {
-    const primary = item.category === "idioma" ? normalizeText(item.language || item.title) : normalizeText(item.title);
-    const key = `${item.category}|${primary.toLowerCase()}|${normalizeText(item.level).toLowerCase()}|${normalizeText(item.issuer).toLowerCase()}|${normalizeText(item.date).toLowerCase()}`;
-    if (!primary && !item.issuer && !item.date && !item.description) return false;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function buildAchievementsCatalog(profile: any, candidateProfile: any) {
-  const certificationsLegacy = Array.isArray(candidateProfile?.certifications)
-    ? candidateProfile.certifications.map(normalizeAchievement).filter(Boolean)
-    : [];
-
-  const merged = dedupeAchievements([
-    ...certificationsLegacy,
-  ] as AchievementItem[]);
-  return {
-    all: merged,
-    languages: merged.filter((item) => item.category === "idioma"),
-    certifications: merged.filter((item) => item.category === "certificacion"),
-    awards: merged.filter((item) => item.category === "premio"),
-    others: merged.filter((item) => item.category === "otro"),
-  };
-}
-
-async function readProfileAndCandidateProfile(supabase: any, userId: string) {
-  const [profileRes, candidateProfileRes, identityRes, experienceCountRes, evidenceCountRes, profileExperiencesRes, employmentRecordsRes, verificationSummariesRes] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
-    supabase.from("candidate_profiles").select("*").eq("user_id", userId).maybeSingle(),
-    supabase
-      .from("candidate_identities")
-      .select("user_id, identity_type, identity_masked")
-      .eq("user_id", userId)
-      .maybeSingle(),
-    supabase.from("profile_experiences").select("id", { count: "exact", head: true }).eq("user_id", userId),
-    supabase.from("evidences").select("id", { count: "exact", head: true }).eq("uploaded_by", userId),
-    supabase
-      .from("profile_experiences")
-      .select("id, role_title, company_name, start_date, end_date, description, matched_verification_id, created_at")
-      .eq("user_id", userId)
-      .order("start_date", { ascending: false }),
-    supabase
-      .from("employment_records")
-      .select("id, position, company_name_freeform, start_date, end_date, verification_status, last_verification_request_id")
-      .eq("candidate_id", userId)
-      .order("start_date", { ascending: false }),
-    supabase
-      .from("verification_summary")
-      .select("verification_id, status, evidence_count")
-      .eq("candidate_id", userId),
-  ]);
-
-  if (profileRes.error) {
-    return { error: NextResponse.json({ error: profileRes.error.message }, { status: 400 }) };
-  }
-  if (candidateProfileRes.error) {
-    return { error: NextResponse.json({ error: candidateProfileRes.error.message }, { status: 400 }) };
-  }
-  if (identityRes.error) {
-    return { error: NextResponse.json({ error: identityRes.error.message }, { status: 400 }) };
-  }
-  if (experienceCountRes.error) {
-    return { error: NextResponse.json({ error: experienceCountRes.error.message }, { status: 400 }) };
-  }
-  if (evidenceCountRes.error) {
-    return { error: NextResponse.json({ error: evidenceCountRes.error.message }, { status: 400 }) };
-  }
-  if (profileExperiencesRes.error) {
-    return { error: NextResponse.json({ error: profileExperiencesRes.error.message }, { status: 400 }) };
-  }
-  if (employmentRecordsRes.error) {
-    return { error: NextResponse.json({ error: employmentRecordsRes.error.message }, { status: 400 }) };
-  }
-  if (verificationSummariesRes.error) {
-    return { error: NextResponse.json({ error: verificationSummariesRes.error.message }, { status: 400 }) };
-  }
-
-  return {
-    profile: profileRes.data || null,
-    candidateProfile: candidateProfileRes.data || null,
-    identity: identityRes.data || null,
-    profileExperiences: profileExperiencesRes.data || [],
-    employmentRecords: employmentRecordsRes.data || [],
-    verificationSummaries: verificationSummariesRes.data || [],
-    counts: {
-      experience_count: Number(experienceCountRes.count || 0),
-      evidence_count: Number(evidenceCountRes.count || 0),
-    },
-  };
 }
 
 function sameJson(a: unknown, b: unknown) {
@@ -242,7 +85,6 @@ async function writeCandidateProfileRow(args: {
     if (!missingColumn || !Object.prototype.hasOwnProperty.call(workingPayload, missingColumn) || missingColumn === "user_id") {
       return res;
     }
-
     delete workingPayload[missingColumn];
   }
 
@@ -268,15 +110,10 @@ async function writeProfileRow(args: {
       .select(workingSelect)
       .maybeSingle();
 
-    if (!res.error) {
-      return res;
-    }
+    if (!res.error) return res;
 
     const missingColumn = extractMissingColumnName(res.error);
-    if (
-      missingColumn &&
-      Object.prototype.hasOwnProperty.call(workingPayload, missingColumn)
-    ) {
+    if (missingColumn && Object.prototype.hasOwnProperty.call(workingPayload, missingColumn)) {
       delete workingPayload[missingColumn];
       continue;
     }
@@ -291,13 +128,71 @@ async function writeProfileRow(args: {
       continue;
     }
 
-    if (!missingColumn) {
-      return res;
-    }
     return res;
   }
 
   return { data: null, error: { message: "profile_write_retry_exhausted" } };
+}
+
+async function readProfileAndCandidateProfile(supabase: any, userId: string) {
+  const [
+    profileRes,
+    candidateProfileRes,
+    identityRes,
+    experienceCountRes,
+    evidenceCountRes,
+    profileExperiencesRes,
+    employmentRecordsRes,
+    verificationSummariesRes,
+  ] = await Promise.all([
+    supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
+    supabase.from("candidate_profiles").select("*").eq("user_id", userId).maybeSingle(),
+    supabase.from("candidate_identities").select("user_id, identity_type, identity_masked").eq("user_id", userId).maybeSingle(),
+    supabase.from("profile_experiences").select("id", { count: "exact", head: true }).eq("user_id", userId),
+    supabase.from("evidences").select("id", { count: "exact", head: true }).eq("uploaded_by", userId),
+    supabase
+      .from("profile_experiences")
+      .select("id, role_title, company_name, start_date, end_date, description, matched_verification_id, created_at")
+      .eq("user_id", userId)
+      .order("start_date", { ascending: false }),
+    supabase
+      .from("employment_records")
+      .select("id, position, company_name_freeform, start_date, end_date, verification_status, last_verification_request_id")
+      .eq("candidate_id", userId)
+      .order("start_date", { ascending: false }),
+    supabase
+      .from("verification_summary")
+      .select("verification_id, status, evidence_count")
+      .eq("candidate_id", userId),
+  ]);
+
+  for (const res of [
+    profileRes,
+    candidateProfileRes,
+    identityRes,
+    experienceCountRes,
+    evidenceCountRes,
+    profileExperiencesRes,
+    employmentRecordsRes,
+    verificationSummariesRes,
+  ]) {
+    if (res.error) {
+      return { error: NextResponse.json({ error: res.error.message }, { status: 400 }) };
+    }
+  }
+
+  return {
+    profile: profileRes.data || null,
+    candidateProfile: candidateProfileRes.data || null,
+    identity: identityRes.data || null,
+    profileExperiences: profileExperiencesRes.data || [],
+    employmentRecords: employmentRecordsRes.data || [],
+    verificationSummaries: verificationSummariesRes.data || [],
+    counts: {
+      experience_count: Number(experienceCountRes.count || 0),
+      evidence_count: Number(evidenceCountRes.count || 0),
+    },
+  };
 }
 
 function buildRequestedPersonalSnapshot(body: any, currentProfile: any) {
@@ -329,25 +224,79 @@ function validatePersistedPersonalSnapshot(params: {
   return null;
 }
 
+function normalizeAchievementCategory(value: unknown) {
+  const raw = normalizeText(value).toLowerCase();
+  if (raw === "idioma") return "idioma";
+  if (raw === "certificacion" || raw === "certificación" || raw === "certification") return "certificacion";
+  if (raw === "premio") return "premio";
+  return "otro";
+}
+
+function normalizeCompatibilityLanguageItems(items: any[]) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => ({
+      language_name: normalizeText(item?.language || item?.title || item?.language_name),
+      proficiency_level: normalizeText(item?.level || item?.proficiency_level),
+      notes: normalizeText(item?.description || item?.notes),
+      is_native: false,
+    }))
+    .filter((item) => item.language_name);
+}
+
+function normalizeCompatibilityCertificationItems(items: any[]) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => ({
+      name: normalizeText(item?.title || item?.name),
+      issuer: normalizeText(item?.issuer),
+      issue_date: normalizeText(item?.date || item?.issue_date),
+      credential_id: normalizeText(item?.certificate_title || item?.credential_id),
+      credential_url: normalizeText(item?.credential_url),
+      notes: normalizeText(item?.description || item?.notes),
+    }))
+    .filter((item) => item.name || item.issuer || item.notes);
+}
+
+function normalizeCompatibilityAchievementItems(items: any[]) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => ({
+      title: normalizeText(item?.title),
+      description: normalizeText(item?.description),
+      achievement_type: normalizeText(item?.category || item?.achievement_type),
+      issuer: normalizeText(item?.issuer),
+      achieved_at: normalizeText(item?.date || item?.achieved_at),
+    }))
+    .filter((item) => item.title || item.description || item.issuer);
+}
+
+function buildProfilePayload(candidateProfile: any, collections: Awaited<ReturnType<typeof readCandidateProfileCollections>>, experienceTimeline: any[]) {
+  return {
+    ...(candidateProfile || {}),
+    education: collections.education,
+    languages: collections.language_labels,
+    certifications: collections.certifications,
+    achievements: collections.achievements,
+    achievements_catalog: collections.achievements_catalog,
+    achievements_support: {
+      languages: collections.support.languages,
+      certifications: collections.support.certifications,
+      achievements: collections.support.achievements,
+    },
+    experience_timeline: experienceTimeline,
+  };
+}
+
 export async function GET() {
   const supabase = await createRouteHandlerClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const admin = createServiceRoleClient();
   const read = await readProfileAndCandidateProfile(admin, user.id);
   if ((read as any).error) return (read as any).error;
   const { profile, candidateProfile, identity, counts, profileExperiences, employmentRecords, verificationSummaries } = read as any;
-  const [candidateProfileColumns, profileColumns] = await Promise.all([
-    getTableColumns(admin, "candidate_profiles"),
-    getTableColumns(admin, "profiles"),
-  ]);
-  const achievementsCatalog = buildAchievementsCatalog(profile, candidateProfile);
+  const collections = await readCandidateProfileCollections(admin, user.id, { candidateProfile });
   const experienceTimeline = buildCandidateExperienceTrustTimeline({
     profileExperiences: profileExperiences || [],
     employmentRecords: employmentRecords || [],
@@ -358,7 +307,8 @@ export async function GET() {
     candidateProfile,
     experienceCount: Number(counts?.experience_count || 0),
     evidenceCount: Number(counts?.evidence_count || 0),
-    achievementsCount: achievementsCatalog.all.length,
+    achievementsCount: collections.achievements_catalog.all.length,
+    educationCount: collections.education.length,
   });
 
   return NextResponse.json({
@@ -377,17 +327,7 @@ export async function GET() {
       identity_masked: identity?.identity_masked || null,
       has_identity: Boolean(identity?.identity_type && identity?.identity_masked),
     },
-    profile: {
-      ...(candidateProfile || {}),
-      languages: achievementsCatalog.languages.map((item) => formatLanguageLabel(item) || item.title).filter(Boolean),
-      achievements: achievementsCatalog.all,
-      achievements_catalog: achievementsCatalog,
-      achievements_support: {
-        languages: profileColumns.has("languages"),
-        certifications: candidateProfileColumns.has("certifications"),
-      },
-      experience_timeline: experienceTimeline,
-    },
+    profile: buildProfilePayload(candidateProfile, collections, experienceTimeline),
     profile_completion: profileCompletion,
     counts,
   });
@@ -398,10 +338,7 @@ export async function PUT(req: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
+  if (!user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
 
   const admin = createServiceRoleClient();
   const body = await req.json().catch(() => ({}));
@@ -413,84 +350,21 @@ export async function PUT(req: Request) {
     getTableColumns(admin, "profiles"),
   ]);
 
-  const hasLanguagesInput = Object.prototype.hasOwnProperty.call(body || {}, "languages");
-  const hasCertificationsInput = Object.prototype.hasOwnProperty.call(body || {}, "certifications");
-  const languagesInput = Array.isArray(body?.languages)
-    ? body.languages
-    : Array.isArray(body?.achievements)
-      ? body.achievements.filter((item: any) => String(item?.category || "").toLowerCase() === "idioma")
-      : [];
-  const certificationsInput = Array.isArray(body?.certifications)
-    ? body.certifications
-    : Array.isArray(body?.achievements)
-      ? body.achievements.filter((item: any) => String(item?.category || "").toLowerCase() === "certificacion")
-      : [];
-  const hasCandidateProfileInput = ["summary", "education", "certifications"].some((key) =>
-    Object.prototype.hasOwnProperty.call(body || {}, key)
-  );
-  const normalizedLanguages = dedupeAchievements(
-    languagesInput.map(normalizeAchievement).filter(Boolean) as AchievementItem[]
-  )
-    .filter((item) => item.category === "idioma")
-    .map((item) => ({
-      ...item,
-      title: normalizeText(item.language || item.title),
-      language: normalizeText(item.language || item.title) || null,
-    }))
-    .filter((item) => item.language)
-    .map((item) => formatLanguageLabel(item) || normalizeText(item.language || item.title));
-  const normalizedCertifications = dedupeAchievements(
-    certificationsInput.map(normalizeAchievement).filter(Boolean) as AchievementItem[]
-  );
-  const certifications = normalizedCertifications.filter((item) => item.category === "certificacion");
-
-  let writeError: any = null;
-  let nextCandidateProfile: any = candidateProfile || null;
-  if (hasCandidateProfileInput) {
-    const payload: Record<string, any> = {
-      user_id: user.id,
-    };
+  if (Object.prototype.hasOwnProperty.call(body || {}, "summary")) {
+    const payload: Record<string, any> = { user_id: user.id };
     if (candidateProfileColumns.has("summary")) {
       payload.summary = typeof body?.summary === "string" ? body.summary : candidateProfile?.summary ?? null;
     }
-    if (candidateProfileColumns.has("education") && CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("education")) {
-      payload.education = Array.isArray(body?.education)
-        ? body.education
-        : Array.isArray(candidateProfile?.education)
-          ? candidateProfile.education
-          : [];
+    const res = await writeCandidateProfileRow({
+      admin,
+      userId: user.id,
+      candidateProfile,
+      payload,
+    });
+    if (res.error) {
+      return NextResponse.json({ error: "candidate_profile_write_failed", details: res.error.message }, { status: 400 });
     }
-    if (
-      hasCertificationsInput &&
-      candidateProfileColumns.has("certifications") &&
-      CANDIDATE_PROFILE_MUTABLE_FIELDS.includes("certifications")
-    ) {
-      payload.certifications = certifications;
     }
-
-    if (Object.keys(payload).length === 1 && payload.user_id) {
-      nextCandidateProfile = candidateProfile || { user_id: user.id };
-    } else {
-      const res = await writeCandidateProfileRow({
-        admin,
-        userId: user.id,
-        candidateProfile,
-        payload,
-      });
-      writeError = res.error;
-      nextCandidateProfile = res.data;
-      if (!writeError && !nextCandidateProfile) {
-        writeError = { message: candidateProfile?.id ? "candidate_profile_update_no_rows" : "candidate_profile_insert_no_rows" };
-      }
-    }
-  }
-
-  if (writeError) {
-    return NextResponse.json(
-      { error: "candidate_profile_write_failed", details: writeError.message },
-      { status: 400 }
-    );
-  }
 
   const nextProfilePatch: Record<string, any> = {};
   for (const field of PROFILE_PERSONAL_FIELDS) {
@@ -498,25 +372,15 @@ export async function PUT(req: Request) {
     if (field === "phone") {
       const normalizedPhone = normalizeCandidatePhone(body?.[field]);
       if (normalizedPhone.ok === false) {
-        return NextResponse.json(
-          { error: "invalid_phone", details: normalizedPhone.error },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "invalid_phone", details: normalizedPhone.error }, { status: 400 });
       }
       nextProfilePatch[field] = normalizedPhone.normalized;
       continue;
     }
     nextProfilePatch[field] = normalizeNullableText(body?.[field], 160);
   }
-  const clearIdentity = body?.clear_identity === true;
-  const hasIdentityValueInput =
-    Object.prototype.hasOwnProperty.call(body || {}, "identity_value") &&
-    typeof body?.identity_value === "string" &&
-    body.identity_value.trim().length > 0;
   if (Object.keys(nextProfilePatch).length) {
-    if (profileColumns.has("updated_at")) {
-      nextProfilePatch.updated_at = new Date().toISOString();
-    }
+    if (profileColumns.has("updated_at")) nextProfilePatch.updated_at = new Date().toISOString();
     const profileUpdate = await writeProfileRow({
       admin,
       userId: user.id,
@@ -524,48 +388,49 @@ export async function PUT(req: Request) {
       select: "id, full_name, phone, title, location",
     });
     if (profileUpdate.error) {
-      return NextResponse.json(
-        { error: "profile_update_failed", details: profileUpdate.error.message },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "profile_update_failed", details: profileUpdate.error.message }, { status: 400 });
     }
-    if (!profileUpdate.data) {
-      return NextResponse.json(
-        { error: "profile_update_no_rows", details: "No se actualizó ninguna fila en profiles." },
-        { status: 400 }
-      );
-    }
-    Object.assign(profile, profileUpdate.data || {});
+    if (profileUpdate.data) Object.assign(profile, profileUpdate.data);
   }
 
-  if (hasLanguagesInput && profileColumns.has("languages")) {
-    const profileLanguagesPatch: Record<string, any> = {
-      languages: normalizedLanguages,
-    };
-    if (profileColumns.has("updated_at")) {
-      profileLanguagesPatch.updated_at = new Date().toISOString();
+  const achievementsInput = Array.isArray(body?.achievements) ? body.achievements : [];
+  const requestedLanguages = Object.prototype.hasOwnProperty.call(body || {}, "languages")
+    ? Array.isArray(body?.languages)
+      ? body.languages
+      : []
+    : achievementsInput.filter((item: any) => normalizeAchievementCategory(item?.category) === "idioma");
+  const requestedCertifications = Object.prototype.hasOwnProperty.call(body || {}, "certifications")
+    ? Array.isArray(body?.certifications)
+      ? body.certifications
+      : []
+    : achievementsInput.filter((item: any) => normalizeAchievementCategory(item?.category) === "certificacion");
+  const requestedAchievements = achievementsInput.filter((item: any) => {
+    const category = normalizeAchievementCategory(item?.category);
+    return category === "premio" || category === "otro";
+  });
+
+  try {
+    if (Object.prototype.hasOwnProperty.call(body || {}, "education")) {
+      await replaceCandidateEducationCollection(admin, user.id, Array.isArray(body?.education) ? body.education : [], "manual");
     }
-    const profileLanguagesUpdate = await writeProfileRow({
-      admin,
-      userId: user.id,
-      payload: profileLanguagesPatch,
-      select: "id, languages",
-    });
-    if (profileLanguagesUpdate.error) {
-      return NextResponse.json(
-        { error: "profile_languages_update_failed", details: profileLanguagesUpdate.error.message },
-        { status: 400 }
-      );
+    if (Object.prototype.hasOwnProperty.call(body || {}, "languages") || achievementsInput.length > 0) {
+      await replaceCandidateLanguagesCollection(admin, user.id, normalizeCompatibilityLanguageItems(requestedLanguages), "manual");
     }
-    if (!profileLanguagesUpdate.data) {
-      return NextResponse.json(
-        { error: "profile_languages_update_no_rows", details: "No se actualizó ninguna fila de idiomas en profiles." },
-        { status: 400 }
-      );
+    if (Object.prototype.hasOwnProperty.call(body || {}, "certifications") || achievementsInput.length > 0) {
+      await replaceCandidateCertificationsCollection(admin, user.id, normalizeCompatibilityCertificationItems(requestedCertifications), "manual");
     }
-    Object.assign(profile, profileLanguagesUpdate.data || {});
+    if (Array.isArray(body?.achievements)) {
+      await replaceCandidateAchievementsCollection(admin, user.id, normalizeCompatibilityAchievementItems(requestedAchievements), "manual");
+    }
+  } catch (error: any) {
+    return NextResponse.json({ error: "candidate_collection_write_failed", details: String(error?.message || error) }, { status: 400 });
   }
 
+  const clearIdentity = body?.clear_identity === true;
+  const hasIdentityValueInput =
+    Object.prototype.hasOwnProperty.call(body || {}, "identity_value") &&
+    typeof body?.identity_value === "string" &&
+    body.identity_value.trim().length > 0;
   let requestedIdentitySnapshot:
     | { identity_type: string; identity_masked: string }
     | null
@@ -574,28 +439,13 @@ export async function PUT(req: Request) {
   if (clearIdentity) {
     const deleteIdentity = await admin.from("candidate_identities").delete().eq("user_id", user.id);
     if (deleteIdentity.error) {
-      return NextResponse.json(
-        {
-          error: "candidate_identity_delete_failed",
-          details: deleteIdentity.error.message,
-        },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "candidate_identity_delete_failed", details: deleteIdentity.error.message }, { status: 400 });
     }
     requestedIdentitySnapshot = null;
   } else if (hasIdentityValueInput) {
-    const identityRecord = buildIdentityRecord({
-      type: body?.identity_type,
-      value: body?.identity_value,
-    });
+    const identityRecord = buildIdentityRecord({ type: body?.identity_type, value: body?.identity_value });
     if (!identityRecord.identityType || !identityRecord.identityMasked || !identityRecord.identityHash) {
-      return NextResponse.json(
-        {
-          error: "invalid_identity",
-          details: "El documento de identidad no es válido.",
-        },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "invalid_identity", details: "El documento de identidad no es válido." }, { status: 400 });
     }
     const upsertIdentity = await admin
       .from("candidate_identities")
@@ -610,23 +460,8 @@ export async function PUT(req: Request) {
       )
       .select("user_id, identity_type, identity_masked")
       .maybeSingle();
-    if (upsertIdentity.error) {
-      return NextResponse.json(
-        {
-          error: "candidate_identity_write_failed",
-          details: upsertIdentity.error.message,
-        },
-        { status: 400 }
-      );
-    }
-    if (!upsertIdentity.data) {
-      return NextResponse.json(
-        {
-          error: "candidate_identity_write_no_rows",
-          details: "No se pudo persistir la identidad del candidato.",
-        },
-        { status: 400 }
-      );
+    if (upsertIdentity.error || !upsertIdentity.data) {
+      return NextResponse.json({ error: "candidate_identity_write_failed", details: upsertIdentity.error?.message || "identity_write_failed" }, { status: 400 });
     }
     requestedIdentitySnapshot = {
       identity_type: identityRecord.identityType,
@@ -640,6 +475,7 @@ export async function PUT(req: Request) {
   const persistedCandidateProfile = (reread as any).candidateProfile || null;
   const persistedIdentity = (reread as any).identity || null;
   const persistedCounts = (reread as any).counts || counts;
+  const persistedCollections = await readCandidateProfileCollections(admin, user.id, { candidateProfile: persistedCandidateProfile });
 
   const requestedPersonalSnapshot = buildRequestedPersonalSnapshot(body, profile);
   const personalMismatchField = validatePersistedPersonalSnapshot({
@@ -647,112 +483,69 @@ export async function PUT(req: Request) {
     persisted: persistedProfile,
   });
   if (personalMismatchField) {
-    return NextResponse.json(
-      {
-        error: "profile_persistence_mismatch",
-        details: `El campo ${personalMismatchField} no quedó persistido tras la relectura.`,
-      },
-      { status: 409 }
-    );
+    return NextResponse.json({ error: "profile_persistence_mismatch", details: `El campo ${personalMismatchField} no quedó persistido tras la relectura.` }, { status: 409 });
   }
 
-  if (hasCandidateProfileInput) {
+  if (Object.prototype.hasOwnProperty.call(body || {}, "summary")) {
     const requestedSummary = typeof body?.summary === "string" ? body.summary : candidateProfile?.summary ?? null;
     const persistedSummary = persistedCandidateProfile?.summary ?? null;
     if ((requestedSummary ?? null) !== (persistedSummary ?? null)) {
-      return NextResponse.json(
-        {
-          error: "candidate_profile_persistence_mismatch",
-          details: "El resumen profesional no quedó persistido tras la relectura.",
-        },
-        { status: 409 }
-      );
-    }
-    if (Object.prototype.hasOwnProperty.call(body || {}, "education")) {
-      const requestedEducation = Array.isArray(body?.education) ? body.education : [];
-      const persistedEducation = Array.isArray(persistedCandidateProfile?.education) ? persistedCandidateProfile.education : [];
-      if (!sameJson(requestedEducation, persistedEducation)) {
-        return NextResponse.json(
-          {
-            error: "candidate_profile_persistence_mismatch",
-            details: "La formación no quedó persistida tras la relectura.",
-          },
-          { status: 409 }
-        );
-      }
-    }
-    if (hasLanguagesInput || hasCertificationsInput) {
-      const requestedAchievements = dedupeAchievements([
-        ...(profileColumns.has("languages")
-          ? normalizedLanguages
-              .map((label) => ({
-                title: normalizeText(label),
-                language: normalizeText(label),
-                level: null,
-                certificate_title: null,
-                issuer: null,
-                date: null,
-                description: null,
-                category: "idioma" as const,
-              }))
-              .filter(Boolean)
-          : []),
-        ...certifications,
-      ] as AchievementItem[]);
-      const persistedAchievements = buildAchievementsCatalog(persistedProfile, persistedCandidateProfile).all;
-      if (!sameJson(requestedAchievements, persistedAchievements)) {
-        return NextResponse.json(
-          {
-            error: "candidate_profile_persistence_mismatch",
-            details: "Los idiomas y logros no quedaron persistidos tras la relectura.",
-          },
-          { status: 409 }
-        );
-      }
+      return NextResponse.json({ error: "candidate_profile_persistence_mismatch", details: "El resumen profesional no quedó persistido tras la relectura." }, { status: 409 });
     }
   }
 
-  if (requestedIdentitySnapshot === null) {
-    if (persistedIdentity) {
-      return NextResponse.json(
-        {
-          error: "candidate_identity_persistence_mismatch",
-          details: "El documento de identidad no se eliminó tras la relectura.",
-        },
-        { status: 409 }
-      );
-    }
-  } else if (requestedIdentitySnapshot) {
-    if (
-      (persistedIdentity?.identity_type ?? null) !== requestedIdentitySnapshot.identity_type ||
-      (persistedIdentity?.identity_masked ?? null) !== requestedIdentitySnapshot.identity_masked
-    ) {
-      return NextResponse.json(
-        {
-          error: "candidate_identity_persistence_mismatch",
-          details: "El documento de identidad no quedó persistido tras la relectura.",
-        },
-        { status: 409 }
-      );
+  if (Object.prototype.hasOwnProperty.call(body || {}, "education")) {
+    const requestedEducation = (Array.isArray(body?.education) ? body.education : []).map((item: any) => ({
+      title: normalizeText(item?.title),
+      institution: normalizeText(item?.institution),
+      field_of_study: normalizeText(item?.field_of_study),
+      start_date: normalizeText(item?.start_date),
+      end_date: item?.in_progress ? "" : normalizeText(item?.end_date),
+      description: normalizeText(item?.description),
+      in_progress: Boolean(item?.in_progress),
+    }));
+    const persistedEducation = persistedCollections.education.map((item) => ({
+      title: normalizeText(item.title),
+      institution: normalizeText(item.institution),
+      field_of_study: normalizeText(item.field_of_study),
+      start_date: normalizeText(item.start_date),
+      end_date: item.in_progress ? "" : normalizeText(item.end_date),
+      description: normalizeText(item.description),
+      in_progress: Boolean(item.in_progress),
+    }));
+    if (!sameJson(requestedEducation, persistedEducation)) {
+      return NextResponse.json({ error: "candidate_collection_persistence_mismatch", details: "La formación no quedó persistida tras la relectura." }, { status: 409 });
     }
   }
 
-  const nextProfile = persistedProfile;
-  const achievementsCatalog = buildAchievementsCatalog(nextProfile, persistedCandidateProfile);
+  if (requestedIdentitySnapshot === null && persistedIdentity) {
+    return NextResponse.json({ error: "candidate_identity_persistence_mismatch", details: "El documento de identidad no se eliminó tras la relectura." }, { status: 409 });
+  }
+  if (requestedIdentitySnapshot && ((persistedIdentity?.identity_type ?? null) !== requestedIdentitySnapshot.identity_type || (persistedIdentity?.identity_masked ?? null) !== requestedIdentitySnapshot.identity_masked)) {
+    return NextResponse.json({ error: "candidate_identity_persistence_mismatch", details: "El documento de identidad no quedó persistido tras la relectura." }, { status: 409 });
+  }
+
+  const experienceTimeline = buildCandidateExperienceTrustTimeline({
+    profileExperiences: (reread as any).profileExperiences || [],
+    employmentRecords: (reread as any).employmentRecords || [],
+    verificationSummaries: (reread as any).verificationSummaries || [],
+  });
   const profileCompletion = buildCandidateProfileCompletionModel({
-    profile: nextProfile,
+    profile: persistedProfile,
     candidateProfile: persistedCandidateProfile,
     experienceCount: Number(persistedCounts?.experience_count || 0),
     evidenceCount: Number(persistedCounts?.evidence_count || 0),
-    achievementsCount: achievementsCatalog.all.length,
+    achievementsCount: persistedCollections.achievements_catalog.all.length,
+    educationCount: persistedCollections.education.length,
   });
+
   return NextResponse.json({
     ok: true,
     personal_profile: {
-      full_name: nextProfile?.full_name || null,
-      phone: nextProfile?.phone || null,
-      title: nextProfile?.title || null,
-      location: nextProfile?.location || null,
+      full_name: persistedProfile?.full_name || null,
+      phone: persistedProfile?.phone || null,
+      title: persistedProfile?.title || null,
+      location: persistedProfile?.location || null,
       address_line1: null,
       address_line2: null,
       city: null,
@@ -763,12 +556,7 @@ export async function PUT(req: Request) {
       identity_masked: persistedIdentity?.identity_masked || null,
       has_identity: Boolean(persistedIdentity?.identity_type && persistedIdentity?.identity_masked),
     },
-    profile: {
-      ...(persistedCandidateProfile || {}),
-      languages: achievementsCatalog.languages.map((item) => formatLanguageLabel(item) || item.title).filter(Boolean),
-      achievements: achievementsCatalog.all,
-      achievements_catalog: achievementsCatalog,
-    },
+    profile: buildProfilePayload(persistedCandidateProfile, persistedCollections, experienceTimeline),
     profile_completion: profileCompletion,
     counts: persistedCounts,
   });

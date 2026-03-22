@@ -174,13 +174,13 @@ export default function CvUploadAndParse() {
   const [lastAppliedJobId, setLastAppliedJobId] = useState<string | null>(null);
 
   const loadProfileSets = useCallback(async () => {
-    const [{ data: profileExps }, { data: profile }] = await Promise.all([
+    const [{ data: profileExps }, educationRes] = await Promise.all([
       supabase.from("profile_experiences").select("role_title,company_name,start_date,end_date").order("created_at", { ascending: false }),
-      supabase.from("candidate_profiles").select("education").maybeSingle(),
+      fetch("/api/candidate/education", { credentials: "include", cache: "no-store" as any }).then((res) => res.json()).catch(() => ({})),
     ]);
 
     const expRows = Array.isArray(profileExps) ? profileExps : [];
-    const eduRows = Array.isArray((profile as any)?.education) ? (profile as any).education : [];
+    const eduRows = Array.isArray((educationRes as any)?.items) ? (educationRes as any).items : [];
 
     setExpExistingExact(new Set(expRows.map((x: any) => expExactSig(x))));
     setExpExistingPossible(new Set(expRows.map((x: any) => expPossibleSig(x))));

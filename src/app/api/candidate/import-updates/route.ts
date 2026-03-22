@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
+import {
+  readCandidateProfileCollections,
+  replaceCandidateLanguagesCollection,
+} from "@/lib/candidate/profile-collections";
 
 export const dynamic = "force-dynamic";
 
@@ -171,17 +175,32 @@ export async function PATCH(request: Request) {
       return json(400, { error: "no_languages_to_apply" });
     }
 
-    const [profileColumnsRes, { data: candidateProfileRow, error: candidateProfileErr }] = await Promise.all([
-      admin.from("information_schema.columns").select("column_name").eq("table_schema", "public").eq("table_name", "profiles"),
-      admin.from("candidate_profiles").select("id,certifications,raw_cv_json").eq("user_id", user.id).maybeSingle(),
+    const [{ data: candidateProfileRow, error: candidateProfileErr }, collections] = await Promise.all([
+      admin.from("candidate_profiles").select("id,raw_cv_json").eq("user_id", user.id).maybeSingle(),
+      readCandidateProfileCollections(admin, user.id),
     ]);
     if (candidateProfileErr) return json(400, { error: "candidate_profile_read_failed", details: candidateProfileErr.message });
-    const profileColumns = new Set(
-      Array.isArray(profileColumnsRes.data)
-        ? profileColumnsRes.data.map((row: any) => String(row?.column_name || ""))
-        : []
-    );
-    const languagesSupported = profileColumns.has("languages");
+    const languagesSupported = collections.support.languages;
+
+    if (languagesSupported) {
+      const existing = new Set(collections.languages.map((item: any) => normalizeText(item.language_name).toLowerCase()));
+      const merged = [...collections.languages];
+      for (const language of mergedLanguages) {
+        const key = normalizeText(language).toLowerCase();
+        if (!key || existing.has(key)) continue;
+        existing.add(key);
+        merged.push({
+          language_name: language,
+          proficiency_level: "",
+          is_native: false,
+          notes: "",
+          source: "company_import",
+          display_order: merged.length,
+          is_visible: true,
+        });
+      }
+      await replaceCandidateLanguagesCollection(admin, user.id, merged, "company_import");
+    }
 
     const nextRawCvJson = updateProfileProposal(rawCvJson, inviteId, {
       languages_applied_at: languagesSupported ? new Date().toISOString() : null,

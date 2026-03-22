@@ -10,6 +10,7 @@ import {
   isVerifiedEmploymentRecordStatus,
   normalizeEmploymentRecordVerificationStatus,
 } from "@/lib/verification/employment-record-verification-status";
+import { readCandidateProfileCollections } from "@/lib/candidate/profile-collections";
 
 type Params = { token: string };
 
@@ -154,7 +155,6 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     "full_name",
     "title",
     "location",
-    profileColumns.has("languages") ? "languages" : null,
     profileColumns.has("lifecycle_status") ? "lifecycle_status" : null,
     profileColumns.has("deleted_at") ? "deleted_at" : null,
   ]
@@ -171,24 +171,14 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     return json(410, { error: "profile_unavailable" });
   }
 
-  const { data: candidateProfileColumnsRes } = await admin
-    .from("information_schema.columns")
-    .select("column_name")
-    .eq("table_schema", "public")
-    .eq("table_name", "candidate_profiles");
-  const candidateProfileColumns = new Set(
-    (candidateProfileColumnsRes || []).map((row: any) => String(row?.column_name || ""))
-  );
   const candidateProfileSelect = [
     "summary",
-    "education",
     "trust_score",
     "trust_score_breakdown",
     "job_search_status",
     "preferred_workday",
     "preferred_roles",
     "work_zones",
-    candidateProfileColumns.has("certifications") ? "certifications" : null,
   ]
     .filter(Boolean)
     .join(",");
@@ -198,6 +188,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     .select(candidateProfileSelect)
     .eq("user_id", candidateId)
     .maybeSingle();
+  const candidateCollections = await readCandidateProfileCollections(admin, candidateId, { candidateProfile: cp });
 
   const { data: latestSub } = await admin
     .from("subscriptions")
@@ -259,10 +250,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   );
 
   const candidateProfile = (cp as any) || null;
-  const educationTotal = Array.isArray(candidateProfile?.education) ? candidateProfile.education.length : 0;
-  const certificationsRaw = Array.isArray(candidateProfile?.certifications)
-    ? candidateProfile.certifications
-    : [];
+  const educationTotal = candidateCollections.education.length;
 
   const trustScore = Number(candidateProfile?.trust_score ?? 0);
   const profileStatus = resolveProfileStatus({
@@ -347,21 +335,33 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     };
   });
 
-  const educationItems = asArray(candidateProfile?.education).map((item: any, idx: number) => ({
-    id: String(item?.id || `edu-${idx}`),
-    title: asText(item?.title || item?.degree || item?.program, 180) || "Formación",
-    institution: asText(item?.institution || item?.school || item?.center, 180) || null,
-    start_date: asText(item?.start_date || item?.start || item?.from, 30) || null,
-    end_date: asText(item?.end_date || item?.end || item?.to, 30) || null,
-    description: asText(item?.description || item?.notes, 500) || null,
+  const educationItems = candidateCollections.education.map((item: any) => ({
+    id: String(item?.id || ""),
+    title: asText(item?.title || item?.degree_name || item?.program, 180) || "Formación",
+    institution: asText(item?.institution || item?.institution_name, 180) || null,
+    start_date: asText(item?.start_date, 30) || null,
+    end_date: asText(item?.end_date, 30) || null,
+    description: asText(item?.description, 500) || null,
   }));
 
-  const achievementItems = certificationsRaw
-    .map((item: any) => formatAchievementEntry(item))
+  const achievementItems = [
+    ...candidateCollections.certifications.map((item: any) => formatAchievementEntry({
+      title: item?.name,
+      issuer: item?.issuer,
+      date: item?.issue_date,
+      description: item?.notes,
+      category: "certificacion",
+    })),
+    ...candidateCollections.achievements.map((item: any) => formatAchievementEntry({
+      title: item?.title,
+      issuer: item?.issuer,
+      date: item?.achieved_at,
+      description: item?.description,
+      category: item?.achievement_type || "otro",
+    })),
+  ]
     .filter(Boolean);
-  const publicLanguages = normalizePublicLanguages([
-    ...normalizePublicLanguages((profile as any)?.languages),
-  ]);
+  const publicLanguages = normalizePublicLanguages(candidateCollections.language_labels);
 
   const derivedRecommendations = rows
     .filter((r: any) => isVerifiedStatus(r?.status))
@@ -409,7 +409,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     evidences_total: evidences,
     evidences_count: evidences,
     education_total: internalPreviewAllowed ? educationTotal : 0,
-    achievements_total: internalPreviewAllowed ? certificationsRaw.length : 0,
+    achievements_total: internalPreviewAllowed ? candidateCollections.achievements_catalog.all.length : 0,
     verified_work_count: verifiedWork,
     verified_education_count: internalPreviewAllowed ? verifiedEducation : 0,
     total_verifications: totalVerifications,

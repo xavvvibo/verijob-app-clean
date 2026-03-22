@@ -3,6 +3,7 @@ import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { buildIdentityRecord } from "@/lib/security/identity";
 import { resetCandidateAccountForQa } from "@/lib/account/qa-reset";
+import { clearCandidateProfileCollections } from "@/lib/candidate/profile-collections";
 
 export const dynamic = "force-dynamic";
 
@@ -200,6 +201,8 @@ export async function POST(request: Request) {
     if (Object.keys(candidatePatch).length > 0) {
       await admin.from("candidate_profiles").update(candidatePatch).eq("user_id", user.id);
     }
+
+    await clearCandidateProfileCollections(admin, user.id);
 
     await deactivateCandidatePublicLinks(admin, user.id);
 

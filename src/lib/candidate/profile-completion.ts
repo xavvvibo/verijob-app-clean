@@ -24,8 +24,12 @@ export function buildCandidateProfileCompletionModel(args: {
   experienceCount: number;
   evidenceCount: number;
   achievementsCount: number;
+  educationCount?: number;
 }) : CandidateProfileCompletionModel {
-  const educationCount = Array.isArray(args.candidateProfile?.education) ? args.candidateProfile.education.length : 0;
+  const educationCount = Number(
+    args.educationCount ??
+      (Array.isArray(args.candidateProfile?.education) ? args.candidateProfile.education.length : 0),
+  );
 
   const checklist: CandidateProfileCompletionItem[] = [
     {

@@ -4,6 +4,13 @@ import {
   normalizeCvLanguages,
   shouldImportEducationRow,
 } from "@/lib/candidate/cv-parse-normalize";
+import {
+  readCandidateProfileCollections,
+  replaceCandidateAchievementsCollection,
+  replaceCandidateCertificationsCollection,
+  replaceCandidateEducationCollection,
+  replaceCandidateLanguagesCollection,
+} from "@/lib/candidate/profile-collections";
 
 function normalizeText(v: any) {
   return typeof v === "string" ? v.trim() : "";
@@ -135,15 +142,39 @@ async function getTableColumns(supabase: any, table: string): Promise<Set<string
 }
 
 async function persistLanguagesFromExtract(params: {
+  supabase: any;
+  userId: string;
   languagesRaw: any[];
 }) {
-  const { languagesRaw } = params;
+  const { supabase, userId, languagesRaw } = params;
   const normalizedLanguages = normalizeCvLanguages(Array.isArray(languagesRaw) ? languagesRaw : [], 50);
 
   if (normalizedLanguages.length === 0) {
     return { imported: 0, duplicatesSkipped: 0 };
   }
-  return { imported: 0, duplicatesSkipped: normalizedLanguages.length };
+  const collections = await readCandidateProfileCollections(supabase, userId);
+  const existing = new Set(collections.languages.map((item) => normalizeText(item.language_name).toLowerCase()));
+  const merged = [...collections.languages];
+  let imported = 0;
+
+  for (const languageName of normalizedLanguages) {
+    const key = normalizeText(languageName).toLowerCase();
+    if (!key || existing.has(key)) continue;
+    existing.add(key);
+    imported += 1;
+    merged.push({
+      language_name: languageName,
+      proficiency_level: "",
+      is_native: false,
+      notes: "",
+      source: "cv_parse",
+      display_order: merged.length,
+      is_visible: true,
+    });
+  }
+
+  await replaceCandidateLanguagesCollection(supabase, userId, merged, "cv_parse");
+  return { imported, duplicatesSkipped: Math.max(normalizedLanguages.length - imported, 0) };
 }
 
 async function persistAchievementsFromExtract(params: {
@@ -163,9 +194,6 @@ async function persistAchievementsFromExtract(params: {
       if (!title && !issuer && !date && !description) return null;
       return {
         title: title || issuer || description || "Logro detectado",
-        language: null,
-        level: null,
-        certificate_title: category === "certificacion" ? title || null : null,
         issuer,
         date,
         description,
@@ -181,64 +209,65 @@ async function persistAchievementsFromExtract(params: {
     return { imported: 0, duplicatesSkipped: 0 };
   }
 
-  const [candidateProfileColumns, cpRes] = await Promise.all([
-    getTableColumns(supabase, "candidate_profiles"),
-    supabase.from("candidate_profiles").select("*").eq("user_id", userId).maybeSingle(),
-  ]);
+  const collections = await readCandidateProfileCollections(supabase, userId);
+  const existingCerts = new Set(
+    collections.certifications.map((item) =>
+      `${normalizeText(item.name).toLowerCase()}|${normalizeText(item.issuer).toLowerCase()}|${normalizeText(item.issue_date).toLowerCase()}`,
+    ),
+  );
+  const existingAchievements = new Set(
+    collections.achievements.map((item) =>
+      `${normalizeText(item.title).toLowerCase()}|${normalizeText(item.issuer).toLowerCase()}|${normalizeText(item.achieved_at).toLowerCase()}`,
+    ),
+  );
 
-  const targetCandidates = candidateProfileColumns.has("certifications")
-    ? ["certifications"]
-    : [];
+  const mergedCertifications = [...collections.certifications];
+  const mergedAchievements = [...collections.achievements];
+  let imported = 0;
 
-  let lastError: any = null;
+  for (const item of normalized) {
+    if (item.category === "idioma") continue;
+    if (item.category === "certificacion") {
+      const key = `${normalizeText(item.title).toLowerCase()}|${normalizeText(item.issuer).toLowerCase()}|${normalizeText(item.date).toLowerCase()}`;
+      if (!key || existingCerts.has(key)) continue;
+      existingCerts.add(key);
+      imported += 1;
+      mergedCertifications.push({
+        name: item.title,
+        issuer: item.issuer || "",
+        issue_date: item.date || "",
+        expiry_date: "",
+        credential_id: "",
+        credential_url: "",
+        notes: item.description || "",
+        source: "cv_parse",
+        display_order: mergedCertifications.length,
+        is_visible: true,
+      });
+      continue;
+    }
 
-  if (!targetCandidates.length) {
-    return { imported: 0, duplicatesSkipped: normalized.length };
-  }
-
-  for (const targetColumn of targetCandidates) {
-    const currentAchievements = Array.isArray((cpRes.data as any)?.[targetColumn]) ? (cpRes.data as any)[targetColumn] : [];
-    const seen = new Set(
-      currentAchievements
-        .map((item: any) => {
-          const category = normalizeAchievementCategory(item?.category);
-          const title = normalizeText(item?.title || item?.certificate_title || item?.description).toLowerCase();
-          const issuer = normalizeText(item?.issuer).toLowerCase();
-          const date = normalizeText(item?.date).toLowerCase();
-          return `${category}|${title}|${issuer}|${date}`;
-        })
-        .filter(Boolean)
-    );
-
-    const toAppend = normalized.filter((item: any) => {
-      const key = `${normalizeAchievementCategory(item?.category)}|${normalizeText(item?.title).toLowerCase()}|${normalizeText(item?.issuer).toLowerCase()}|${normalizeText(item?.date).toLowerCase()}`;
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
+    const key = `${normalizeText(item.title).toLowerCase()}|${normalizeText(item.issuer).toLowerCase()}|${normalizeText(item.date).toLowerCase()}`;
+    if (!key || existingAchievements.has(key)) continue;
+    existingAchievements.add(key);
+    imported += 1;
+    mergedAchievements.push({
+      title: item.title,
+      description: item.description || "",
+      achievement_type: item.category,
+      issuer: item.issuer || "",
+      achieved_at: item.date || "",
+      source: "cv_parse",
+      display_order: mergedAchievements.length,
+      is_visible: true,
     });
-
-    if (toAppend.length === 0) {
-      return { imported: 0, duplicatesSkipped: normalized.length };
-    }
-
-    const payload = {
-      user_id: userId,
-      [targetColumn]: [...currentAchievements, ...toAppend],
-      updated_at: new Date().toISOString(),
-    };
-
-    const { error: persistErr } = cpRes.data
-      ? await supabase.from("candidate_profiles").update(payload).eq("user_id", userId)
-      : await supabase.from("candidate_profiles").insert(payload);
-
-    if (!persistErr) {
-      return { imported: toAppend.length, duplicatesSkipped: normalized.length - toAppend.length };
-    }
-
-    lastError = persistErr;
   }
 
-  throw new Error(`achievements_candidate_profile_persist_failed:${lastError?.message || "unknown_error"}`);
+  await Promise.all([
+    replaceCandidateCertificationsCollection(supabase, userId, mergedCertifications, "cv_parse"),
+    replaceCandidateAchievementsCollection(supabase, userId, mergedAchievements, "cv_parse"),
+  ]);
+  return { imported, duplicatesSkipped: Math.max(normalized.length - imported, 0) };
 }
 
 export async function POST(req: Request) {
@@ -357,6 +386,8 @@ export async function POST(req: Request) {
 
     const [langImport, achievementsImport] = await Promise.all([
       persistLanguagesFromExtract({
+        supabase,
+        userId: user.id,
         languagesRaw: Array.isArray(result?.languages) ? result.languages : [],
       }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
       persistAchievementsFromExtract({
@@ -417,14 +448,8 @@ export async function POST(req: Request) {
       });
     }
 
-    const { data: cp, error: cpErr } = await supabase
-      .from("candidate_profiles")
-      .select("education")
-      .eq("user_id", user.id)
-      .maybeSingle();
-    if (cpErr) return NextResponse.json({ error: "profile_fetch_failed", details: cpErr.message }, { status: 400 });
-
-    const currentEducation = Array.isArray((cp as any)?.education) ? (cp as any).education : [];
+    const collections = await readCandidateProfileCollections(supabase, user.id);
+    const currentEducation = Array.isArray(collections.education) ? collections.education : [];
     const mergedExact = new Set(currentEducation.map((x: any) => eduExactSig(x)));
     const mergedPossible = new Set(currentEducation.map((x: any) => `${normalizeRoleOrTitle(x?.title)}|${normalizeCompanyOrInstitution(x?.institution)}`));
     const toAppend: any[] = [];
@@ -438,29 +463,17 @@ export async function POST(req: Request) {
     }
 
     if (toAppend.length > 0) {
-      const merged = [...currentEducation, ...toAppend];
-      const payload = {
-        user_id: user.id,
-        education: merged,
-        updated_at: new Date().toISOString(),
-      };
-
-      let persistError: any = null;
-      if (cp) {
-        const { error } = await supabase.from("candidate_profiles").update(payload).eq("user_id", user.id);
-        persistError = error;
-      } else {
-        const { error } = await supabase.from("candidate_profiles").insert(payload);
-        persistError = error;
-      }
-
-      if (persistError) {
+      try {
+        await replaceCandidateEducationCollection(supabase, user.id, [...currentEducation, ...toAppend], "cv_parse");
+      } catch (persistError: any) {
         return NextResponse.json({ error: "education_persist_failed", details: persistError.message }, { status: 400 });
       }
     }
 
     const [langImport, achievementsImport] = await Promise.all([
       persistLanguagesFromExtract({
+        supabase,
+        userId: user.id,
         languagesRaw: Array.isArray(result?.languages) ? result.languages : [],
       }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
       persistAchievementsFromExtract({
@@ -499,6 +512,8 @@ export async function POST(req: Request) {
 
     const [langResult, achievementsImport] = await Promise.all([
       persistLanguagesFromExtract({
+        supabase,
+        userId: user.id,
         languagesRaw: selectedRaw,
       }),
       persistAchievementsFromExtract({

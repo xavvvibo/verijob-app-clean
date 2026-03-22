@@ -11,6 +11,7 @@ import {
   resolveCompanyCandidateAccess,
 } from "@/lib/company/profile-access";
 import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
+import { readCandidateProfileCollections } from "@/lib/candidate/profile-collections";
 
 type Params = { token: string };
 
@@ -386,9 +387,10 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
   const { data: candidateProfile } = await service
     .from("candidate_profiles")
-    .select("allow_company_email_contact,allow_company_phone_contact,job_search_status,availability_start,preferred_workday,preferred_roles,work_zones,availability_schedule,trust_score,trust_score_breakdown,education,certifications,raw_cv_json")
+    .select("allow_company_email_contact,allow_company_phone_contact,job_search_status,availability_start,preferred_workday,preferred_roles,work_zones,availability_schedule,trust_score,trust_score_breakdown,raw_cv_json")
     .eq("user_id", link.candidate_id)
     .maybeSingle();
+  const candidateCollections = await readCandidateProfileCollections(service, String(link.candidate_id), { candidateProfile });
 
   const { data: verifications } = await service
     .from("verification_summary")
@@ -505,15 +507,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
           created_at: null,
         }));
   const experienceCount = Math.max(profileExperienceRows.length, employmentRows.length);
-  const profileLanguages = Array.isArray((profile as any)?.languages)
-    ? (profile as any).languages.map((x: any) => String(x || "").trim()).filter(Boolean)
-    : [];
-  const certificationLanguages = Array.isArray((candidateProfile as any)?.certifications)
-    ? (candidateProfile as any).certifications
-        .filter((item: any) => String(item?.category || "").toLowerCase() === "idioma")
-        .map((item: any) => String(item?.title || "").trim())
-        .filter(Boolean)
-    : [];
+  const profileLanguages = candidateCollections.language_labels;
   const importedLanguages = Array.isArray((candidateProfile as any)?.raw_cv_json?.company_cv_import?.extracted_payload?.languages)
     ? (candidateProfile as any).raw_cv_json.company_cv_import.extracted_payload.languages
         .map((item: any) => String(item?.name || item?.language || item?.title || item || "").trim())
@@ -523,7 +517,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     linkedInviteRes.data && typeof (linkedInviteRes.data as any)?.extracted_payload_json === "object"
       ? (linkedInviteRes.data as any).extracted_payload_json
       : {};
-  const languagesDetected = Array.from(new Set([...profileLanguages, ...certificationLanguages, ...importedLanguages]));
+  const languagesDetected = Array.from(new Set([...profileLanguages, ...importedLanguages]));
   const verificationTypes = Array.from(
     new Set(
       verificationRows.flatMap((row: any) => {
@@ -552,7 +546,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     Number(Boolean((profile as any)?.title)),
     Number(Boolean((profile as any)?.location)),
     Number(experienceCount > 0),
-    Number(Array.isArray((candidateProfile as any)?.education) && (candidateProfile as any).education.length > 0),
+    Number(candidateCollections.education.length > 0),
     Number(languagesDetected.length > 0),
   ];
   const onboardingCompletion = clampPercent(
@@ -564,7 +558,7 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     employmentRows.length > 0 ||
     totalVerifications > 0 ||
     trustScore > 0 ||
-    (Array.isArray((candidateProfile as any)?.education) && (candidateProfile as any).education.length > 0) ||
+    candidateCollections.education.length > 0 ||
     languagesDetected.length > 0 ||
     Boolean((profile as any)?.title) ||
     Boolean((profile as any)?.location);

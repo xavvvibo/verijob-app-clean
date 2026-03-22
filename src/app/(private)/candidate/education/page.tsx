@@ -54,9 +54,9 @@ export default function CandidateEducationPage() {
 
   useEffect(() => {
     (async () => {
-      const r = await fetch("/api/candidate/profile", { credentials: "include", cache: "no-store" as any });
+      const r = await fetch("/api/candidate/education", { credentials: "include", cache: "no-store" as any });
       const j = await r.json().catch(() => ({}));
-      const normalized = normalizeEducation(j?.profile?.education);
+      const normalized = normalizeEducation(j?.items);
       setItems(normalized);
       setExpandedIndex(normalized.length === 1 ? 0 : null);
       setLoading(false);
@@ -91,11 +91,11 @@ export default function CandidateEducationPage() {
   async function save() {
     setSaving(true);
     setMessage(null);
-    const r = await fetch("/api/candidate/profile", {
-      method: "PUT",
+    const r = await fetch("/api/candidate/education", {
+      method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        education: toPayload(items),
+        items: toPayload(items),
       }),
     });
 
@@ -106,7 +106,7 @@ export default function CandidateEducationPage() {
       return;
     }
 
-    setItems(normalizeEducation(j?.profile?.education));
+    setItems(normalizeEducation(j?.items));
     setExpandedIndex(null);
     setMessage("Formación guardada correctamente.");
   }
