@@ -15,17 +15,29 @@ const supabase = createClient(
 )
 
 export default function EvidenceListClient({ initialItems }: Props) {
-  const [items, setItems] = useState<any[]>(initialItems || [])
-  const [loading, setLoading] = useState(false)
+  const [items, setItems] = useState<any[]>([])
+  const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
-    load()
+    init()
   }, [])
 
-  async function load() {
+  async function init() {
+    const { data: sessionData } = await supabase.auth.getSession()
+    const session = sessionData?.session
+
+    if (!session) {
+      console.log("NO SESSION")
+      return
+    }
+
+    const uid = session.user.id
+    setUserId(uid)
+
     const { data, error } = await supabase
       .from("evidences")
       .select("*")
+      .eq("uploaded_by", uid)
       .order("created_at", { ascending: false })
 
     if (!error && data) {
@@ -33,17 +45,11 @@ export default function EvidenceListClient({ initialItems }: Props) {
     }
   }
 
-  async function fakeUpload() {
-    alert("Subida real desactivada en debug.\nAhora solo necesitamos validar backend.")
-  }
-
   return (
     <div style={{ padding: 20 }}>
       <h2>Evidencias</h2>
 
-      <button onClick={fakeUpload} style={{ marginBottom: 20 }}>
-        Subir evidencia (debug)
-      </button>
+      <div>User: {userId || "no session"}</div>
 
       {items.length === 0 && <p>No hay evidencias</p>}
 
