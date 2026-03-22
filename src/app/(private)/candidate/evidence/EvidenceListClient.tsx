@@ -297,7 +297,7 @@ export default function EvidenceListClient({
         body: JSON.stringify({
           action: "reconcile_vida_laboral",
           entries: entries
-            .filter((entry: any) => !entry?.ignored_reason)
+            .filter((entry: any) => String(entry?.type || "").trim() === "employment")
             .map((entry: any) => ({
               entry_id: entry.entry_id,
               selection: getEntrySelection(item, entry) || "__ignore__",
@@ -339,6 +339,7 @@ export default function EvidenceListClient({
     const summary = reconciliationFeedback[String(item.evidence_id || "")] || item.reconciliation_summary || null
     const employmentEntries = entries.filter((entry: any) => String(entry?.type || "employment") === "employment")
     const administrativeEntries = entries.filter((entry: any) => String(entry?.type || "employment") === "administrative")
+    console.log("EMPLOYMENT_ENTRIES", employmentEntries)
     const showAdministrative = Boolean(expandedAdministrativeByEvidence[String(item.evidence_id || "")])
 
     return (

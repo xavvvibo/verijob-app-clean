@@ -248,7 +248,7 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
     supporting_employment_record_ids: supportingEmploymentRecordIds,
     supporting_experiences_label:
       analysisCompleted && isVidaLaboral && extractedEmploymentEntries.length > 0
-        ? `Se han detectado ${extractedEmploymentEntries.filter((entry) => !entry.ignored_reason).length} experiencias laborales para revisar y vincular.`
+        ? `Se han detectado ${extractedEmploymentEntries.filter((entry) => String(entry?.type || "").trim() === "employment").length} experiencias laborales para revisar y vincular.`
         : analysisCompleted && supportsMultipleExperiences
           ? `Este documento puede reforzar ${supportingEmploymentRecordIds.length} experiencias compatibles del perfil.`
         : null,
