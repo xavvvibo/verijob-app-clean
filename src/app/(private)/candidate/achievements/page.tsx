@@ -56,6 +56,18 @@ const EMPTY_ACHIEVEMENT: AchievementItem = {
   achieved_at: "",
 };
 
+const LANGUAGE_LEVEL_OPTIONS = [
+  "",
+  "Nativo",
+  "A1",
+  "A2",
+  "B1",
+  "B2",
+  "C1",
+  "C2",
+  "Profesional",
+];
+
 function normalizeText(value: unknown) {
   return String(value || "").trim();
 }
@@ -248,9 +260,14 @@ export default function CandidateAchievementsPage() {
             onAdd={() => setLanguages((prev) => [...prev, { ...EMPTY_LANGUAGE }])}
             items={languages}
             renderItem={(item, index) => (
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-3 md:grid-cols-2 rounded-xl bg-slate-50/70 p-3">
                 <Field label="Idioma" value={item.language_name} onChange={(value) => updateAt(setLanguages, index, { language_name: value })} />
-                <Field label="Nivel" value={item.proficiency_level} onChange={(value) => updateAt(setLanguages, index, { proficiency_level: value })} />
+                <SelectField
+                  label="Nivel"
+                  value={item.proficiency_level}
+                  onChange={(value) => updateAt(setLanguages, index, { proficiency_level: value })}
+                  options={LANGUAGE_LEVEL_OPTIONS}
+                />
                 <label className="flex items-center gap-2 text-sm text-gray-700">
                   <input
                     type="checkbox"
@@ -276,7 +293,7 @@ export default function CandidateAchievementsPage() {
             onAdd={() => setCertifications((prev) => [...prev, { ...EMPTY_CERTIFICATION }])}
             items={certifications}
             renderItem={(item, index) => (
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-3 md:grid-cols-2 rounded-xl bg-slate-50/70 p-3">
                 <Field label="Nombre" value={item.name} onChange={(value) => updateAt(setCertifications, index, { name: value })} />
                 <Field label="Emisor" value={item.issuer} onChange={(value) => updateAt(setCertifications, index, { issuer: value })} />
                 <Field label="Fecha de emisión" value={item.issue_date} onChange={(value) => updateAt(setCertifications, index, { issue_date: value })} placeholder="YYYY-MM" />
@@ -302,7 +319,7 @@ export default function CandidateAchievementsPage() {
             onAdd={() => setAchievements((prev) => [...prev, { ...EMPTY_ACHIEVEMENT }])}
             items={achievements}
             renderItem={(item, index) => (
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-3 md:grid-cols-2 rounded-xl bg-slate-50/70 p-3">
                 <Field label="Título" value={item.title} onChange={(value) => updateAt(setAchievements, index, { title: value })} />
                 <Field label="Tipo" value={item.achievement_type} onChange={(value) => updateAt(setAchievements, index, { achievement_type: value })} placeholder="Premio, reconocimiento, hito…" />
                 <Field label="Emisor" value={item.issuer} onChange={(value) => updateAt(setAchievements, index, { issuer: value })} />
@@ -416,6 +433,38 @@ function Field({
         placeholder={placeholder}
         className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
       />
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+}) {
+  return (
+    <label className="block">
+      <div className="text-sm font-semibold text-gray-900">{label}</div>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+      >
+        <option value="">Selecciona nivel</option>
+        {options
+          .filter((option) => option)
+          .map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+      </select>
     </label>
   );
 }

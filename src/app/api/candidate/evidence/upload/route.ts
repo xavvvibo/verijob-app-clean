@@ -468,7 +468,7 @@ export async function POST(req: Request) {
       file_sha256: fileSha256 || createHash("sha256").update(storagePath).digest("hex"),
     };
 
-    const { data: evidence, error: evidenceErr } = await supabase
+    const { data: evidence, error: evidenceErr } = await admin
       .from("evidences")
       .insert(evidenceRow)
       .select("id, verification_request_id, storage_path, evidence_type, document_type, document_scope, trust_weight, validation_status, inconsistency_reason, document_issue_date, uploaded_by, created_at, file_sha256")
@@ -491,7 +491,7 @@ export async function POST(req: Request) {
       },
     }).catch(() => {});
 
-    await supabase
+    await admin
       .from("evidences")
       .update({ validation_status: EVIDENCE_VALIDATION_INTERNAL.AUTO_PROCESSING })
       .eq("id", evidence.id)
@@ -518,7 +518,7 @@ export async function POST(req: Request) {
         ? (context as any).verificationRequest.request_context
         : {};
 
-    await supabase
+    await admin
       .from("verification_requests")
       .update({
         request_context: {

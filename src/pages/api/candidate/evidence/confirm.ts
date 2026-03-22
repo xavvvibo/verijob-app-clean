@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { createPagesRouteClient } from "@/utils/supabase/pages";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
 import {
   getEvidenceTypeConfig,
@@ -30,6 +31,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
   try {
     const supabase = createPagesRouteClient(req, res);
+    const admin = createServiceRoleClient();
     const { data: auth, error: authErr } = await supabase.auth.getUser();
 
     if (authErr || !auth?.user) {
@@ -95,7 +97,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       file_sha256,
     };
 
-    const { data, error } = await supabase
+    const { data, error } = await admin
       .from("evidences")
       .insert(row)
       .select("id, verification_request_id, storage_path, evidence_type, document_type, document_scope, trust_weight, validation_status, inconsistency_reason, document_issue_date, uploaded_by, created_at, file_sha256")
@@ -123,7 +125,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       },
     }).catch(() => {});
 
-    await supabase
+    await admin
       .from("evidences")
       .update({ validation_status: EVIDENCE_VALIDATION_INTERNAL.AUTO_PROCESSING })
       .eq("id", data.id)
@@ -148,7 +150,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         ? (vr as any).request_context
         : {};
 
-    await supabase
+    await admin
       .from("verification_requests")
       .update({
         request_context: {
