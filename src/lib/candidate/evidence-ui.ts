@@ -8,6 +8,7 @@ import { resolveDocumentaryMatchLevel } from "@/lib/candidate/documentary-proces
 
 export type CandidateEvidenceUiItem = {
   id: string;
+  evidence_id: string;
   verification_request_id: string | null;
   employment_record_id: string | null;
   document_name: string;
@@ -122,6 +123,7 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
 
   return {
     id: String(r?.id || ""),
+    evidence_id: String(r?.id || ""),
     verification_request_id: String(r?.verification_request_id || vr?.id || "") || null,
     employment_record_id: String(vr?.employment_record_id || er?.id || "") || null,
     document_name: getEvidenceTypeLabel(evidenceTypeKey),

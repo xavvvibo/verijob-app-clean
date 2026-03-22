@@ -9,6 +9,7 @@ export const revalidate = 0;
 
 type EvidenceItem = {
   id: string;
+  evidence_id: string;
   verification_request_id: string | null;
   employment_record_id: string | null;
   document_name: string;

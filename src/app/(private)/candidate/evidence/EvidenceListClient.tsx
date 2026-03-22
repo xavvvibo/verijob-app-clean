@@ -219,6 +219,13 @@ export default function EvidenceListClient({
   }
 
   async function deleteEvidence(id: string) {
+    if (!id) {
+      console.error("EVIDENCE_DELETE_MISSING_ID", { id })
+      setIsError(true)
+      setMessage("No se pudo identificar el documento que intentas eliminar.")
+      return
+    }
+
     setDeletingId(id)
     setIsError(false)
     setMessage(null)
@@ -329,8 +336,8 @@ export default function EvidenceListClient({
         <div style={{ marginTop: 12 }}>
           <button
             type="button"
-            onClick={() => void deleteEvidence(item.id)}
-            disabled={deletingId === item.id}
+            onClick={() => void deleteEvidence(String(item.evidence_id || ""))}
+            disabled={deletingId === String(item.evidence_id || "")}
             style={{
               borderRadius: 10,
               border: "1px solid #fecaca",
@@ -339,11 +346,11 @@ export default function EvidenceListClient({
               padding: "8px 12px",
               fontSize: 12,
               fontWeight: 600,
-              cursor: deletingId === item.id ? "not-allowed" : "pointer",
-              opacity: deletingId === item.id ? 0.6 : 1,
+              cursor: deletingId === String(item.evidence_id || "") ? "not-allowed" : "pointer",
+              opacity: deletingId === String(item.evidence_id || "") ? 0.6 : 1,
             }}
           >
-            {deletingId === item.id ? "Eliminando…" : "Eliminar documento"}
+            {deletingId === String(item.evidence_id || "") ? "Eliminando…" : "Eliminar documento"}
           </button>
         </div>
       </div>
