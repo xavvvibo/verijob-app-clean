@@ -48,6 +48,31 @@ type EvidenceItem = {
     reconciliation_choice: string | null;
     raw_text: string | null;
   }>;
+  grouped_employment_entries: Array<{
+    entry_id: string;
+    type: string;
+    subtype: string | null;
+    self_employment: boolean;
+    company_name: string;
+    normalized_company_key: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    is_current: boolean;
+    confidence: number;
+    group_score: number;
+    province_prefix: string | null;
+    province_hint: string | null;
+    suggested_match_employment_record_id: string | null;
+    linked_employment_record_id: string | null;
+    reconciliation_status: string;
+    reconciliation_choice: string | null;
+    source_entry_count: number;
+    source_entry_ids: string[];
+    source_block_indexes: number[];
+    classification_reasons: string[];
+    concise_summary: string | null;
+    raw_text: string | null;
+  }>;
   reconciliation_summary: {
     linked_existing_count: number;
     created_count: number;

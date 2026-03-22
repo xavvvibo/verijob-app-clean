@@ -284,7 +284,9 @@ export default function EvidenceListClient({
   async function saveVidaLaboralReconciliation(item: any) {
     const evidenceId = String(item.evidence_id || "")
     const entries = Array.isArray(item.extracted_employment_entries) ? item.extracted_employment_entries : []
-    if (!evidenceId || entries.length === 0) return
+    const groupedEntries = Array.isArray(item.grouped_employment_entries) ? item.grouped_employment_entries : []
+    const entriesForSave = groupedEntries.length > 0 ? groupedEntries : entries
+    if (!evidenceId || entriesForSave.length === 0) return
 
     setSavingReconciliationId(evidenceId)
     setIsError(false)
@@ -296,12 +298,18 @@ export default function EvidenceListClient({
         credentials: "include",
         body: JSON.stringify({
           action: "reconcile_vida_laboral",
-          entries: entries
+          entries: entriesForSave
             .filter((entry: any) => String(entry?.type || "").trim() === "employment")
-            .map((entry: any) => ({
-              entry_id: entry.entry_id,
-              selection: getEntrySelection(item, entry) || "__ignore__",
-            })),
+            .flatMap((entry: any) => {
+              const selection = getEntrySelection(item, entry) || "__ignore__"
+              const sourceEntryIds = Array.isArray(entry?.source_entry_ids) && entry.source_entry_ids.length > 0
+                ? entry.source_entry_ids
+                : [entry.entry_id]
+              return sourceEntryIds.map((entryId: string) => ({
+                entry_id: entryId,
+                selection,
+              }))
+            }),
         }),
       })
       const json = await readJsonSafe(res)
@@ -335,9 +343,10 @@ export default function EvidenceListClient({
 
   function renderVidaLaboralReconciliation(item: any) {
     const entries = Array.isArray(item.extracted_employment_entries) ? item.extracted_employment_entries : []
+    const groupedEntries = Array.isArray(item.grouped_employment_entries) ? item.grouped_employment_entries : []
     if (!item.analysis_completed || item.evidence_type_key !== "vida_laboral" || entries.length === 0) return null
     const summary = reconciliationFeedback[String(item.evidence_id || "")] || item.reconciliation_summary || null
-    const employmentEntries = entries.filter((entry: any) => String(entry?.type || "employment") === "employment")
+    const employmentEntries = (groupedEntries.length > 0 ? groupedEntries : entries).filter((entry: any) => String(entry?.type || "employment") === "employment")
     const administrativeEntries = entries.filter((entry: any) => String(entry?.type || "employment") === "administrative")
     console.log("EMPLOYMENT_ENTRIES", employmentEntries)
     const showAdministrative = Boolean(expandedAdministrativeByEvidence[String(item.evidence_id || "")])
@@ -429,8 +438,15 @@ export default function EvidenceListClient({
               >
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{entry.company_name}</div>
                 <div style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>{formatPeriod(entry.start_date, entry.end_date)}</div>
-                {entry.raw_text ? (
+                {entry.concise_summary ? (
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>{entry.concise_summary}</div>
+                ) : entry.raw_text ? (
                   <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>{entry.raw_text}</div>
+                ) : null}
+                {Number(entry?.source_entry_count || 0) > 1 ? (
+                  <div style={{ fontSize: 12, color: "#0369a1", marginTop: 6 }}>
+                    Experiencia consolidada a partir de {Number(entry.source_entry_count)} fragmentos detectados.
+                  </div>
                 ) : null}
                 {ignored ? (
                   <div style={{ marginTop: 8, fontSize: 12, color: "#92400e" }}>

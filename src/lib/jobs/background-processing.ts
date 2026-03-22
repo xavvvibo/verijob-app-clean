@@ -793,9 +793,12 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
             extraction: extractionResult.extraction,
             employmentRecords: Array.isArray(employmentRows) ? employmentRows : [],
           })
-        : { entries: [], debug_summary: null, debug_entries: [] };
+        : { entries: [], grouped_employment_entries: [], debug_summary: null, debug_entries: [] };
     const extractedEmploymentEntries = Array.isArray(vidaLaboralExtraction?.entries)
       ? vidaLaboralExtraction.entries
+      : [];
+    const groupedEmploymentEntries = Array.isArray(vidaLaboralExtraction?.grouped_employment_entries)
+      ? vidaLaboralExtraction.grouped_employment_entries
       : [];
     console.info("EVIDENCE_BG_JOB_MATCH_DONE", {
       evidenceId,
@@ -804,6 +807,7 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       autoLink: Boolean(matching.auto_link),
       inconsistencyReason: matching.inconsistency_reason || null,
       vidaLaboralDebugSummary: vidaLaboralExtraction?.debug_summary || null,
+      groupedEmploymentEntries: groupedEmploymentEntries.length,
     });
 
     documentaryProcessing = {
@@ -848,6 +852,7 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
         ]),
       ),
       extracted_employment_entries: extractedEmploymentEntries,
+      grouped_employment_entries: groupedEmploymentEntries,
       debug_summary: vidaLaboralExtraction?.debug_summary || null,
       debug_entries: Array.isArray(vidaLaboralExtraction?.debug_entries) ? vidaLaboralExtraction.debug_entries : [],
       link_state: matching.link_state,

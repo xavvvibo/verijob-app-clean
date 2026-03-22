@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import { groupAndMergeEmploymentEntries } from "@/lib/candidate/documentary-processing";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 
 function json(status: number, body: any) {
@@ -306,6 +307,7 @@ export async function PATCH(req: Request, ctx: any) {
     );
 
     processing.extracted_employment_entries = nextEntries;
+    processing.grouped_employment_entries = groupAndMergeEmploymentEntries(nextEntries);
     processing.supporting_employment_record_ids = supportingEmploymentRecordIds;
     processing.supports_multiple_experiences = supportingEmploymentRecordIds.length > 1;
     processing.link_state = nextEntries.some((entry: any) => String(entry?.reconciliation_status || "") === "linked")

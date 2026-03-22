@@ -47,6 +47,31 @@ export type CandidateEvidenceUiItem = {
     reconciliation_choice: string | null;
     raw_text: string | null;
   }>;
+  grouped_employment_entries: Array<{
+    entry_id: string;
+    type: string;
+    subtype: string | null;
+    self_employment: boolean;
+    company_name: string;
+    normalized_company_key: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    is_current: boolean;
+    confidence: number;
+    group_score: number;
+    province_prefix: string | null;
+    province_hint: string | null;
+    suggested_match_employment_record_id: string | null;
+    linked_employment_record_id: string | null;
+    reconciliation_status: string;
+    reconciliation_choice: string | null;
+    source_entry_count: number;
+    source_entry_ids: string[];
+    source_block_indexes: number[];
+    classification_reasons: string[];
+    concise_summary: string | null;
+    raw_text: string | null;
+  }>;
   reconciliation_summary: {
     linked_existing_count: number;
     created_count: number;
@@ -166,6 +191,40 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
         raw_text: String(entry?.raw_text || "").trim() || null,
       }))
     : [];
+  const groupedEmploymentEntries = Array.isArray(processing?.grouped_employment_entries)
+    ? processing.grouped_employment_entries.map((entry: any) => ({
+        entry_id: String(entry?.entry_id || "").trim(),
+        type: String(entry?.type || "employment").trim() || "employment",
+        subtype: String(entry?.subtype || "").trim() || null,
+        self_employment: Boolean(entry?.self_employment),
+        company_name: String(entry?.company_name || "").trim() || "Empresa detectada",
+        normalized_company_key: String(entry?.normalized_company_key || "").trim() || null,
+        start_date: String(entry?.start_date || "").trim() || null,
+        end_date: String(entry?.end_date || "").trim() || null,
+        is_current: Boolean(entry?.is_current),
+        confidence: Number(entry?.confidence || 0),
+        group_score: Number(entry?.group_score || entry?.confidence || 0),
+        province_prefix: String(entry?.province_prefix || "").trim() || null,
+        province_hint: String(entry?.province_hint || "").trim() || null,
+        suggested_match_employment_record_id:
+          String(entry?.suggested_match_employment_record_id || "").trim() || null,
+        linked_employment_record_id: String(entry?.linked_employment_record_id || "").trim() || null,
+        reconciliation_status: String(entry?.reconciliation_status || "pending").trim(),
+        reconciliation_choice: String(entry?.reconciliation_choice || "").trim() || null,
+        source_entry_count: Number(entry?.source_entry_count || 0),
+        source_entry_ids: Array.isArray(entry?.source_entry_ids)
+          ? entry.source_entry_ids.map((value: any) => String(value || "").trim()).filter(Boolean)
+          : [],
+        source_block_indexes: Array.isArray(entry?.source_block_indexes)
+          ? entry.source_block_indexes.map((value: any) => Number(value)).filter((value: number) => Number.isFinite(value))
+          : [],
+        classification_reasons: Array.isArray(entry?.classification_reasons)
+          ? entry.classification_reasons.map((value: any) => String(value || "").trim()).filter(Boolean)
+          : [],
+        concise_summary: String(entry?.concise_summary || "").trim() || null,
+        raw_text: String(entry?.raw_text || "").trim() || null,
+      }))
+    : [];
   const reconciliationSummary =
     processing?.reconciliation_summary && typeof processing.reconciliation_summary === "object"
       ? {
@@ -247,11 +306,11 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
     supports_multiple_experiences: supportsMultipleExperiences,
     supporting_employment_record_ids: supportingEmploymentRecordIds,
     supporting_experiences_label:
-      analysisCompleted && isVidaLaboral && extractedEmploymentEntries.length > 0
-        ? `Se han detectado ${extractedEmploymentEntries.filter((entry) => String(entry?.type || "").trim() === "employment").length} experiencias laborales para revisar y vincular.`
+      analysisCompleted && isVidaLaboral && (groupedEmploymentEntries.length > 0 || extractedEmploymentEntries.length > 0)
+        ? `Se han detectado ${(groupedEmploymentEntries.length > 0 ? groupedEmploymentEntries : extractedEmploymentEntries).filter((entry) => String(entry?.type || "").trim() === "employment").length} experiencias laborales para revisar y vincular.`
         : analysisCompleted && supportsMultipleExperiences
           ? `Este documento puede reforzar ${supportingEmploymentRecordIds.length} experiencias compatibles del perfil.`
-        : null,
+          : null,
     identity_status_label: analysisCompleted
       ? identityMatch === "high"
         ? identityConfirmedBy === "official_id"
@@ -264,6 +323,7 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
             : "Posible conflicto de identidad. Revisa los datos."
       : null,
     extracted_employment_entries: extractedEmploymentEntries,
+    grouped_employment_entries: groupedEmploymentEntries,
     reconciliation_summary: reconciliationSummary,
     person_check_label: analysisCompleted
       ? isVidaLaboral

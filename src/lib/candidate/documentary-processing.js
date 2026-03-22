@@ -643,6 +643,138 @@ function extractCompanyNameFromVidaLaboralSegment(segment) {
   return resolved;
 }
 
+export function normalizeEmployerKey(value) {
+  const normalized = normalizeEmploymentText(value)
+    .toUpperCase()
+    .replace(/[.,/]+/g, " ")
+    .replace(/\bS\.?\s*L\.?\s*U?\b/g, " ")
+    .replace(/\bS\.?\s*A\.?\b/g, " ")
+    .replace(/\bSOCIEDAD\s+LIMITADA\b/g, " ")
+    .replace(/\bSOCIEDAD\s+ANONIMA\b/g, " ")
+    .replace(/\b\d{4,}\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const tokens = normalized
+    .split(" ")
+    .map((token) => normalizeText(token))
+    .filter((token) => token.length >= 2 && !VIDA_LABORAL_STOPWORDS.has(token) && !COMPANY_STOPWORDS.has(token));
+  return tokens.slice(0, 8).join(" ").trim() || null;
+}
+
+function pickBestCompanyName(entries) {
+  return [...entries]
+    .map((entry) => String(entry?.company_name || "").trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length)[0] || "Empresa detectada";
+}
+
+function mergeEntryDate(entries, field, mode) {
+  const dated = entries
+    .map((entry) => ({ raw: String(entry?.[field] || "").trim(), idx: toMonthIndex(entry?.[field]) }))
+    .filter((entry) => entry.raw && entry.idx != null)
+    .sort((a, b) => (mode === "min" ? a.idx - b.idx : b.idx - a.idx));
+  return dated[0]?.raw || null;
+}
+
+export function groupAndMergeEmploymentEntries(entries = []) {
+  const employmentEntries = (Array.isArray(entries) ? entries : []).filter(
+    (entry) => String(entry?.type || "").trim() === "employment",
+  );
+  const groups = new Map();
+
+  for (const entry of employmentEntries) {
+    const selfEmployment = Boolean(entry?.self_employment) || String(entry?.subtype || "") === "self_employment";
+    const employerKey = normalizeEmployerKey(entry?.company_name);
+    const provincePrefix = String(entry?.province_prefix || "").trim();
+    const provinceHint = String(entry?.province_hint || "").trim();
+    const suggestedMatchId = String(entry?.suggested_match_employment_record_id || "").trim();
+    const groupingKey = selfEmployment
+      ? ["self_employment", employerKey || "autonomo", provincePrefix || provinceHint || "none"].join("|")
+      : [employerKey || "unknown_employer", provincePrefix || provinceHint || "none", suggestedMatchId || "no_match"].join("|");
+
+    const current = groups.get(groupingKey) || [];
+    current.push(entry);
+    groups.set(groupingKey, current);
+  }
+
+  return Array.from(groups.entries())
+    .map(([groupKey, groupEntries], index) => {
+      const companyName = pickBestCompanyName(groupEntries);
+      const normalizedCompanyKey = normalizeEmployerKey(companyName) || groupKey;
+      const startDate = mergeEntryDate(groupEntries, "start_date", "min");
+      const missingEnd = groupEntries.some((entry) => !String(entry?.end_date || "").trim());
+      const endDate = missingEnd ? null : mergeEntryDate(groupEntries, "end_date", "max");
+      const sourceBlockIndexes = Array.from(
+        new Set(
+          groupEntries
+            .map((entry) => Number(entry?.raw_block_index))
+            .filter((value) => Number.isFinite(value)),
+        ),
+      ).sort((a, b) => a - b);
+      const sourceEntryIds = Array.from(
+        new Set(groupEntries.map((entry) => String(entry?.entry_id || "").trim()).filter(Boolean)),
+      );
+      const classificationReasons = Array.from(
+        new Set(groupEntries.flatMap((entry) => (Array.isArray(entry?.classification_reasons) ? entry.classification_reasons : []))),
+      );
+      const confidenceValues = groupEntries.map((entry) => Number(entry?.confidence || 0)).filter((value) => Number.isFinite(value));
+      const groupScore = clamp01(
+        (confidenceValues.reduce((acc, value) => acc + value, 0) / Math.max(confidenceValues.length, 1)) +
+          Math.min(0.15, Math.max(0, groupEntries.length - 1) * 0.05),
+      );
+      const suggestedScores = groupEntries
+        .map((entry) => ({
+          id: String(entry?.suggested_match_employment_record_id || "").trim(),
+          score: Number(entry?.suggested_match_score || 0),
+        }))
+        .filter((entry) => entry.id);
+      suggestedScores.sort((a, b) => b.score - a.score);
+      const linkedEmploymentRecordId =
+        groupEntries.map((entry) => String(entry?.linked_employment_record_id || "").trim()).filter(Boolean)[0] || null;
+      const reconciliationChoice =
+        groupEntries.map((entry) => String(entry?.reconciliation_choice || "").trim()).filter(Boolean)[0] || null;
+      const reconciliationStatus =
+        linkedEmploymentRecordId
+          ? "linked"
+          : groupEntries.every((entry) => String(entry?.reconciliation_status || "").trim() === "ignored")
+            ? "ignored"
+            : "pending";
+
+      return {
+        entry_id: `grouped_vida_laboral_${index + 1}`,
+        type: "employment",
+        subtype: groupEntries.some((entry) => entry?.self_employment) ? "self_employment" : null,
+        self_employment: groupEntries.some((entry) => entry?.self_employment),
+        company_name: companyName,
+        normalized_company_key: normalizedCompanyKey,
+        start_date: startDate,
+        end_date: endDate,
+        is_current: missingEnd,
+        confidence: groupScore,
+        group_score: groupScore,
+        province_prefix:
+          groupEntries.map((entry) => String(entry?.province_prefix || "").trim()).filter(Boolean)[0] || null,
+        province_hint:
+          groupEntries.map((entry) => String(entry?.province_hint || "").trim()).filter(Boolean)[0] || null,
+        suggested_match_employment_record_id: suggestedScores[0]?.id || null,
+        linked_employment_record_id: linkedEmploymentRecordId,
+        reconciliation_status: reconciliationStatus,
+        reconciliation_choice: reconciliationChoice,
+        source_entry_count: sourceEntryIds.length,
+        source_entry_ids: sourceEntryIds,
+        source_block_indexes: sourceBlockIndexes,
+        classification_reasons: classificationReasons,
+        concise_summary: `${companyName} · ${startDate || "—"} — ${missingEnd ? "Actualidad" : endDate || "—"}`,
+        raw_text: null,
+      };
+    })
+    .sort((a, b) => {
+      const aDate = toMonthIndex(a?.end_date || a?.start_date || "") ?? -1;
+      const bDate = toMonthIndex(b?.end_date || b?.start_date || "") ?? -1;
+      return bDate - aDate;
+    });
+}
+
 export function scoreEmploymentCandidate({
   segment,
   companyName,
@@ -1071,6 +1203,7 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
     const bDate = toMonthIndex(b?.end_date || b?.start_date || "") ?? -1;
     return bDate - aDate;
   });
+  const groupedEmploymentEntries = groupAndMergeEmploymentEntries(sortedEntries);
   const debugSummary = {
     total_raw_text_length: rawText.length,
     total_raw_blocks_before_split: rawBlocksBeforeSplit.length,
@@ -1078,9 +1211,11 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
     total_employment: debugEntries.filter((entry) => String(entry?.type || "") === "employment").length,
     total_administrative: debugEntries.filter((entry) => String(entry?.type || "") === "administrative").length,
     total_discarded: debugEntries.filter((entry) => String(entry?.type || "") === "discarded").length,
+    total_grouped_employment: groupedEmploymentEntries.length,
   };
   return {
     entries: sortedEntries,
+    grouped_employment_entries: groupedEmploymentEntries,
     debug_summary: debugSummary,
     debug_entries: debugEntries,
   };
