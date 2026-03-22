@@ -159,6 +159,26 @@ const VIDA_LABORAL_STOPWORDS = new Set([
 const DATE_TOKEN_REGEX = /\b(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2}|\d{4}-\d{2}|\d{4})\b/g;
 const DATE_PAIR_SOURCE =
   "(?:\\d{2}[/-]\\d{2}[/-]\\d{4}|\\d{2}[/-]\\d{4}|\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}|\\d{4})\\s+(?:a\\s+)?(?:\\d{2}[/-]\\d{2}[/-]\\d{4}|\\d{2}[/-]\\d{4}|\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}|\\d{4})";
+const VIDA_LABORAL_MOVEMENT_START_REGEX = new RegExp(
+  [
+    DATE_PAIR_SOURCE,
+    "\\bautonomo\\b",
+    "\\bautónomo\\b",
+    "\\breta\\b",
+    "\\bprestacion\\b",
+    "\\bprestación\\b",
+    "\\bsubsidio\\b",
+    "\\bextincion\\b",
+    "\\bextinción\\b",
+    "\\bsuspension\\b",
+    "\\bsuspensión\\b",
+    "\\bvacaciones retribuidas\\b",
+    "\\bincapacidad\\b",
+    "\\bmaternidad\\b",
+    "\\bpaternidad\\b",
+  ].join("|"),
+  "i",
+);
 
 function compactIdentity(value) {
   return String(value || "")
@@ -414,11 +434,12 @@ function normalizeVidaLaboralText(text) {
     .replace(/\r/g, "\n")
     .replace(/([A-ZÁÉÍÓÚÑ]{3,})\s+(?=\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}-\d{2})/g, "$1\n")
     .replace(new RegExp(`(${DATE_PAIR_SOURCE})`, "g"), "\n$1")
+    .replace(/\b(AUTONOMO|AUTÓNOMO|RETA|PRESTACION|PRESTACIÓN|SUBSIDIO|EXTINCION|EXTINCIÓN|SUSPENSION|SUSPENSIÓN|VACACIONES RETRIBUIDAS|INCAPACIDAD|MATERNIDAD|PATERNIDAD)\b/g, "\n$1")
     .replace(/\n{2,}/g, "\n")
     .trim();
 }
 
-function splitVidaLaboralSegments(text) {
+export function splitIntoRawMovementBlocks(text) {
   const normalized = normalizeVidaLaboralText(text);
   if (!normalized) return [];
 
@@ -429,22 +450,58 @@ function splitVidaLaboralSegments(text) {
 
   const segments = [];
   let current = "";
+  let currentReasons = [];
+  let rawBlockIndex = 0;
   for (const part of rawParts) {
     const hasDate = extractDateTokens(part).length > 0;
-    if (hasDate) {
-      if (current) segments.push(current.trim());
+    const startsMovement = VIDA_LABORAL_MOVEMENT_START_REGEX.test(part);
+    const splitReasons = [];
+    if (hasDate) splitReasons.push("strong_date_pattern");
+    if (!hasDate && startsMovement) splitReasons.push("movement_keyword");
+    if (startsMovement && current) {
+      const currentAdmin = detectAdministrativeKeywords(current).matched;
+      const nextAdmin = detectAdministrativeKeywords(part).matched;
+      const currentSelf = detectSelfEmployment(current).matched;
+      const nextSelf = detectSelfEmployment(part).matched;
+      if ((currentAdmin && !nextAdmin) || (!currentAdmin && nextAdmin) || (currentSelf && !nextSelf) || (!currentSelf && nextSelf)) {
+        splitReasons.push("incompatible_submovement");
+      }
+    }
+
+    if (splitReasons.length > 0) {
+      if (current) {
+        segments.push({
+          raw_block_index: rawBlockIndex,
+          text: current.trim(),
+          split_from_parent: rawBlockIndex > 0,
+          split_reason: currentReasons.length ? currentReasons : ["movement_boundary"],
+        });
+        rawBlockIndex += 1;
+      }
       current = part;
+      currentReasons = splitReasons;
     } else if (current) {
       current = `${current} ${part}`.trim();
     } else {
       current = part;
+      currentReasons = ["initial_block"];
     }
   }
-  if (current) segments.push(current.trim());
+  if (current) {
+    segments.push({
+      raw_block_index: rawBlockIndex,
+      text: current.trim(),
+      split_from_parent: rawBlockIndex > 0,
+      split_reason: currentReasons.length ? currentReasons : ["trailing_block"],
+    });
+  }
 
   return segments
-    .map((segment) => segment.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
+    .map((segment) => ({
+      ...segment,
+      text: String(segment.text || "").replace(/\s+/g, " ").trim(),
+    }))
+    .filter((segment) => Boolean(segment.text));
 }
 
 function looksLikeCompanyFragment(value) {
@@ -549,11 +606,13 @@ export function scoreEmploymentCandidate({
 
 export function extractVidaLaboralEmploymentEntries({ text, extraction, employmentRecords } = {}) {
   const rows = Array.isArray(employmentRecords) ? employmentRecords : [];
-  const segments = splitVidaLaboralSegments(text);
+  const rawBlocks = splitIntoRawMovementBlocks(text);
   const extractedEntries = [];
 
-  for (let index = 0; index < segments.length; index += 1) {
-    const segment = segments[index];
+  for (let index = 0; index < rawBlocks.length; index += 1) {
+    const rawBlock = rawBlocks[index];
+    const segment = String(rawBlock?.text || "").trim();
+    if (!segment) continue;
     if (isVidaLaboralLegalNoise(segment)) continue;
     const dateTokens = extractDateTokens(segment);
     if (dateTokens.length === 0) continue;
@@ -626,6 +685,9 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
       province_hint: provinceMeta.province_hint,
       classification_reasons: classification.classification_reasons,
       score_breakdown: classification,
+      raw_block_index: Number(rawBlock?.raw_block_index || 0),
+      split_from_parent: Boolean(rawBlock?.split_from_parent),
+      split_reason: Array.isArray(rawBlock?.split_reason) ? rawBlock.split_reason : [],
       raw_text: segment,
     });
   }
@@ -676,6 +738,9 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
       province_hint: provinceMeta.province_hint,
       classification_reasons: classification.classification_reasons,
       score_breakdown: classification,
+      raw_block_index: 0,
+      split_from_parent: false,
+      split_reason: ["fallback_extraction"],
       raw_text: String(extraction?.matching_reason || "").trim() || null,
     });
     }
