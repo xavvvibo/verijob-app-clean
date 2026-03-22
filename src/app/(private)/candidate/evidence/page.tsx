@@ -35,6 +35,7 @@ type EvidenceItem = {
   identity_status_label: string | null;
   extracted_employment_entries: Array<{
     entry_id: string;
+    type: string;
     company_name: string;
     position: string | null;
     start_date: string | null;

@@ -34,6 +34,7 @@ export type CandidateEvidenceUiItem = {
   identity_status_label: string | null;
   extracted_employment_entries: Array<{
     entry_id: string;
+    type: string;
     company_name: string;
     position: string | null;
     start_date: string | null;
@@ -148,8 +149,9 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
     Boolean(processing?.supports_multiple_experiences || processing?.matching?.supports_multiple_experiences) ||
     supportingEmploymentRecordIds.length > 1;
   const extractedEmploymentEntries = Array.isArray(processing?.extracted_employment_entries)
-    ? processing.extracted_employment_entries.map((entry: any) => ({
+      ? processing.extracted_employment_entries.map((entry: any) => ({
         entry_id: String(entry?.entry_id || "").trim(),
+        type: String(entry?.type || "employment").trim() || "employment",
         company_name: String(entry?.company_name || "").trim() || "Empresa detectada",
         position: String(entry?.position || "").trim() || null,
         start_date: String(entry?.start_date || "").trim() || null,

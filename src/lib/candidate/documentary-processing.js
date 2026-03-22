@@ -86,6 +86,22 @@ const VIDA_LABORAL_IGNORED_KEYWORDS = [
   "maternidad",
   "paternidad",
 ];
+const VIDA_LABORAL_LEGAL_NOISE_KEYWORDS = [
+  "a los efectos previstos",
+  "ley organica",
+  "ley orgánica",
+  "fichero general de afiliacion",
+  "fichero general de afiliación",
+  "referencias electronicas",
+  "referencias electrónicas",
+  "sede electronica",
+  "sede electrónica",
+  "codigo cea",
+  "código cea",
+  "documento no sera valido",
+  "documento no será válido",
+  "seguridad social informa",
+];
 const VIDA_LABORAL_STOPWORDS = new Set([
   "fecha",
   "alta",
@@ -315,6 +331,12 @@ function detectAdministrativeIgnoredReason(value) {
     : null;
 }
 
+function isVidaLaboralLegalNoise(value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return false;
+  return VIDA_LABORAL_LEGAL_NOISE_KEYWORDS.some((keyword) => normalized.includes(normalizeText(keyword)));
+}
+
 function normalizeVidaLaboralText(text) {
   return String(text || "")
     .replace(/\r/g, "\n")
@@ -394,6 +416,7 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
 
   for (let index = 0; index < segments.length; index += 1) {
     const segment = segments[index];
+    if (isVidaLaboralLegalNoise(segment)) continue;
     const dateTokens = extractDateTokens(segment);
     if (dateTokens.length === 0) continue;
 
@@ -403,10 +426,11 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
     if (!companyName) continue;
 
     const ignoredReason = detectAdministrativeIgnoredReason(`${companyName} ${segment}`);
+    const entryType = ignoredReason ? "administrative" : "employment";
     let suggestedMatchEmploymentRecordId = null;
     let suggestedMatchScore = 0;
 
-    if (!ignoredReason) {
+    if (entryType === "employment") {
       for (const row of rows) {
         const companyMatch = compareCompanyName(companyName, row);
         const dateScore = dateCompatibility(startDate, endDate, row?.start_date, row?.end_date);
@@ -420,6 +444,7 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
 
     extractedEntries.push({
       entry_id: `vida_laboral_${index + 1}`,
+      type: entryType,
       company_name: companyName,
       position: null,
       start_date: startDate,
@@ -438,6 +463,11 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
   if (extractedEntries.length === 0 && (extraction?.company_name || extraction?.start_date || extraction?.end_date)) {
     extractedEntries.push({
       entry_id: "vida_laboral_fallback_1",
+      type: detectAdministrativeIgnoredReason(
+        `${String(extraction?.company_name || "")} ${String(extraction?.job_title || "")}`,
+      )
+        ? "administrative"
+        : "employment",
       company_name: String(extraction?.company_name || "").trim() || "Empresa detectada",
       position: String(extraction?.job_title || "").trim() || null,
       start_date: normalizeLooseDate(extraction?.start_date),
@@ -458,13 +488,19 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
   const deduped = [];
   const seen = new Set();
   for (const entry of extractedEntries) {
-    const key = [normalizeText(entry.company_name), entry.start_date || "", entry.end_date || ""].join("|");
+    const key = [entry.type || "employment", normalizeText(entry.company_name), entry.start_date || "", entry.end_date || ""].join("|");
     if (seen.has(key)) continue;
     seen.add(key);
     deduped.push(entry);
   }
-
-  return deduped;
+  return deduped.sort((a, b) => {
+    const aType = String(a?.type || "employment");
+    const bType = String(b?.type || "employment");
+    if (aType !== bType) return aType === "employment" ? -1 : 1;
+    const aDate = toMonthIndex(a?.end_date || a?.start_date || "") ?? -1;
+    const bDate = toMonthIndex(b?.end_date || b?.start_date || "") ?? -1;
+    return bDate - aDate;
+  });
 }
 
 export function normalizeDocumentaryMatchLevel(level) {

@@ -50,6 +50,7 @@ export default function EvidenceListClient({
   const [reconciliationDrafts, setReconciliationDrafts] = useState<Record<string, Record<string, string>>>({})
   const [savingReconciliationId, setSavingReconciliationId] = useState<string | null>(null)
   const [reconciliationFeedback, setReconciliationFeedback] = useState<Record<string, any>>({})
+  const [expandedAdministrativeByEvidence, setExpandedAdministrativeByEvidence] = useState<Record<string, boolean>>({})
 
   const supabase = useMemo(
     () =>
@@ -336,6 +337,9 @@ export default function EvidenceListClient({
     const entries = Array.isArray(item.extracted_employment_entries) ? item.extracted_employment_entries : []
     if (!item.analysis_completed || item.evidence_type_key !== "vida_laboral" || entries.length === 0) return null
     const summary = reconciliationFeedback[String(item.evidence_id || "")] || item.reconciliation_summary || null
+    const employmentEntries = entries.filter((entry: any) => String(entry?.type || "employment") === "employment")
+    const administrativeEntries = entries.filter((entry: any) => String(entry?.type || "employment") === "administrative")
+    const showAdministrative = Boolean(expandedAdministrativeByEvidence[String(item.evidence_id || "")])
 
     return (
       <div
@@ -408,7 +412,7 @@ export default function EvidenceListClient({
         ) : null}
 
         <div style={{ display: "grid", gap: 10 }}>
-          {entries.map((entry: any) => {
+          {employmentEntries.map((entry: any) => {
             const ignored = Boolean(entry.ignored_reason)
             const linked = String(entry.linked_employment_record_id || "").trim()
             const selection = getEntrySelection(item, entry)
@@ -471,6 +475,53 @@ export default function EvidenceListClient({
             )
           })}
         </div>
+
+        {administrativeEntries.length > 0 ? (
+          <div style={{ marginTop: 12 }}>
+            <button
+              type="button"
+              onClick={() =>
+                setExpandedAdministrativeByEvidence((prev) => ({
+                  ...prev,
+                  [String(item.evidence_id || "")]: !prev[String(item.evidence_id || "")],
+                }))
+              }
+              style={{
+                border: "1px solid #e2e8f0",
+                background: "#fff",
+                color: "#475569",
+                borderRadius: 10,
+                padding: "8px 12px",
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              {showAdministrative ? "Ocultar" : "Mostrar"} otros movimientos detectados ({administrativeEntries.length})
+            </button>
+            {showAdministrative ? (
+              <div style={{ display: "grid", gap: 8, marginTop: 10 }}>
+                {administrativeEntries.map((entry: any) => (
+                  <div
+                    key={entry.entry_id}
+                    style={{
+                      borderRadius: 12,
+                      border: "1px solid #e5e7eb",
+                      background: "#f8fafc",
+                      padding: 12,
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 700, color: "#334155" }}>{entry.company_name}</div>
+                    <div style={{ fontSize: 12, color: "#64748b", marginTop: 2 }}>{formatPeriod(entry.start_date, entry.end_date)}</div>
+                    <div style={{ marginTop: 8, fontSize: 12, color: "#92400e" }}>
+                      Movimiento administrativo detectado. No se propone como experiencia laboral CV.
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
 
         <div style={{ marginTop: 12 }}>
           <button
