@@ -274,13 +274,32 @@ async function processCandidateCvParseJob(jobId: string): Promise<JobSummary> {
 
     let extractedText = "";
     try {
+      console.info("CV_PARSE_TEXT_EXTRACTOR_SELECTED", {
+        jobId,
+        extractor: "pdf-parse-debugging-disabled-lazy",
+        filename: effectiveFilename,
+      });
+      console.info("CV_PARSE_TEXT_EXTRACT_START", {
+        jobId,
+        filename: effectiveFilename,
+      });
       extractedText = (await extractCvTextFromBuffer(fileBuffer, effectiveFilename)).trim();
+      console.info("CV_PARSE_TEXT_EXTRACT_OK", {
+        jobId,
+        filename: effectiveFilename,
+        chars: extractedText.length,
+      });
       console.info("CV_PARSE_PDF_READ_OK", {
         jobId,
         filename: effectiveFilename,
         chars: extractedText.length,
       });
     } catch (error: any) {
+      console.error("CV_PARSE_TEXT_EXTRACT_FAILED", {
+        jobId,
+        filename: effectiveFilename,
+        error: String(error?.message || error),
+      });
       if (error instanceof CvExtractionError) {
         throw new Error(`${error.code}:${error.message}`);
       }
