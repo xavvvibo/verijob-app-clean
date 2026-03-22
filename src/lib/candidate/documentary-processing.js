@@ -70,6 +70,22 @@ const COMPANY_STOPWORDS = new Set([
   "solutions",
   "solution",
 ]);
+const VIDA_LABORAL_IGNORED_KEYWORDS = [
+  "desempleo",
+  "prestacion por desempleo",
+  "prestación por desempleo",
+  "subsidio",
+  "vacaciones",
+  "vacaciones retribuidas",
+  "movimiento administrativo",
+  "situacion asimilada",
+  "situación asimilada",
+  "inactividad",
+  "incapacidad temporal",
+  "it contingencias",
+  "maternidad",
+  "paternidad",
+];
 
 function compactIdentity(value) {
   return String(value || "")
@@ -239,6 +255,129 @@ function clamp01(v) {
   return Math.max(0, Math.min(1, n));
 }
 
+function normalizeLooseDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const slash = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (slash) return `${slash[3]}-${slash[2]}-${slash[1]}`;
+  const dash = raw.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+  if (dash) return `${dash[3]}-${dash[2]}-${dash[1]}`;
+  const ym = raw.match(/^(\d{2})\/(\d{4})$/);
+  if (ym) return `${ym[2]}-${ym[1]}-01`;
+  const ymIso = raw.match(/^(\d{4})-(\d{2})$/);
+  if (ymIso) return `${ymIso[1]}-${ymIso[2]}-01`;
+  const year = raw.match(/^(\d{4})$/);
+  if (year) return `${year[1]}-01-01`;
+  return null;
+}
+
+function extractDateTokens(value) {
+  const matches = String(value || "").match(/\b(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2}|\d{4}-\d{2}|\d{4})\b/g);
+  return Array.isArray(matches) ? matches : [];
+}
+
+function normalizeVidaLaboralCompanyName(value) {
+  return String(value || "")
+    .replace(/\b(fecha|alta|baja|empresa|situacion|situación|ccc|codigo|código|cotizacion|cotización|regimen|régimen|tipo|contrato)\b/gi, " ")
+    .replace(/\b(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2}|\d{4}-\d{2}|\d{4})\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function detectAdministrativeIgnoredReason(value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return null;
+  return VIDA_LABORAL_IGNORED_KEYWORDS.some((keyword) => normalized.includes(normalizeText(keyword)))
+    ? "administrative_non_employment_movement"
+    : null;
+}
+
+export function extractVidaLaboralEmploymentEntries({ text, extraction, employmentRecords } = {}) {
+  const rows = Array.isArray(employmentRecords) ? employmentRecords : [];
+  const rawLines = String(text || "")
+    .split(/\r?\n+/)
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+  const extractedEntries = [];
+
+  for (let index = 0; index < rawLines.length; index += 1) {
+    const line = rawLines[index];
+    const dateTokens = extractDateTokens(line);
+    if (dateTokens.length < 2) continue;
+
+    const combined = [rawLines[index - 1], line, rawLines[index + 1]].filter(Boolean).join(" ").trim();
+    const startDate = normalizeLooseDate(dateTokens[0]);
+    const endDate = normalizeLooseDate(dateTokens[1]);
+    const companyName = normalizeVidaLaboralCompanyName(combined) || normalizeVidaLaboralCompanyName(line);
+    if (!companyName || companyName.length < 3) continue;
+
+    const ignoredReason = detectAdministrativeIgnoredReason(`${companyName} ${combined}`);
+    let suggestedMatchEmploymentRecordId = null;
+    let suggestedMatchScore = 0;
+
+    if (!ignoredReason) {
+      for (const row of rows) {
+        const companyMatch = compareCompanyName(companyName, row);
+        const dateScore = dateCompatibility(startDate, endDate, row?.start_date, row?.end_date);
+        const score = clamp01(companyMatch.score * 0.6 + dateScore * 0.4);
+        if (score > suggestedMatchScore) {
+          suggestedMatchScore = score;
+          suggestedMatchEmploymentRecordId = String(row?.id || "") || null;
+        }
+      }
+    }
+
+    extractedEntries.push({
+      entry_id: `vida_laboral_${index + 1}`,
+      company_name: companyName,
+      position: null,
+      start_date: startDate,
+      end_date: endDate,
+      confidence: clamp01((startDate && endDate ? 0.7 : 0.5) + (suggestedMatchScore >= 0.7 ? 0.2 : 0)),
+      ignored_reason: ignoredReason,
+      suggested_match_employment_record_id: suggestedMatchEmploymentRecordId,
+      suggested_match_score: suggestedMatchScore,
+      reconciliation_status: ignoredReason ? "ignored" : "pending",
+      reconciliation_choice: ignoredReason ? "ignore" : null,
+      linked_employment_record_id: null,
+      raw_text: combined,
+    });
+  }
+
+  if (extractedEntries.length === 0 && (extraction?.company_name || extraction?.start_date || extraction?.end_date)) {
+    extractedEntries.push({
+      entry_id: "vida_laboral_fallback_1",
+      company_name: String(extraction?.company_name || "").trim() || "Empresa detectada",
+      position: String(extraction?.job_title || "").trim() || null,
+      start_date: normalizeLooseDate(extraction?.start_date),
+      end_date: normalizeLooseDate(extraction?.end_date),
+      confidence: extraction?.confidence_score == null ? 0.45 : clamp01(extraction.confidence_score),
+      ignored_reason: detectAdministrativeIgnoredReason(
+        `${String(extraction?.company_name || "")} ${String(extraction?.job_title || "")}`,
+      ),
+      suggested_match_employment_record_id: null,
+      suggested_match_score: 0,
+      reconciliation_status: "pending",
+      reconciliation_choice: null,
+      linked_employment_record_id: null,
+      raw_text: String(extraction?.matching_reason || "").trim() || null,
+    });
+  }
+
+  const deduped = [];
+  const seen = new Set();
+  for (const entry of extractedEntries) {
+    const key = [normalizeText(entry.company_name), entry.start_date || "", entry.end_date || ""].join("|");
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(entry);
+  }
+
+  return deduped;
+}
+
 export function normalizeDocumentaryMatchLevel(level) {
   const raw = String(level || "").trim().toLowerCase();
   if (raw === "high" || raw === "medium" || raw === "low" || raw === "inconclusive" || raw === "conflict") return raw;
@@ -398,7 +537,7 @@ export function computeDocumentaryMatching({
   if (best && best.titleSimilarity < 0.45) mismatchFlags.push("position_mismatch");
   if (best && best.dateScore < 0.35) mismatchFlags.push("date_mismatch");
 
-  const autoLink = Boolean(
+  const autoLinkEligible = Boolean(
     identityGatePassed &&
     best &&
     finalScore >= 0.82 &&
@@ -406,10 +545,21 @@ export function computeDocumentaryMatching({
     best.dateScore >= 0.4 &&
     (isVidaLaboral ? true : best.titleSimilarity >= 0.5)
   );
+  const autoLink = isVidaLaboral ? false : autoLinkEligible;
 
-  const suggestedReview = Boolean(hasNameInconsistency || (!autoLink && best && finalScore >= 0.6));
+  const suggestedReview = Boolean(
+    hasNameInconsistency || (!autoLink && best && finalScore >= (isVidaLaboral ? 0.45 : 0.6))
+  );
 
-  const linkState = autoLink ? "auto_linked" : suggestedReview ? "suggested_review" : "unlinked";
+  const linkState = isVidaLaboral
+    ? hardIdentityConflict
+      ? "identity_conflict"
+      : "reconciliation_required"
+    : autoLink
+      ? "auto_linked"
+      : suggestedReview
+        ? "suggested_review"
+        : "unlinked";
   const overallMatchLevel = hardIdentityConflict
     ? "conflict"
     : !identityGatePassed && String(extraction?.candidate_name || "").trim()
@@ -446,7 +596,13 @@ export function computeDocumentaryMatching({
     auto_link: autoLink,
     needs_manual_review: !autoLink,
     company_match_source: best?.company_match_source || null,
-    matching_reason: autoLink
+    matching_reason: isVidaLaboral
+      ? hardIdentityConflict
+        ? identityByOfficialId === false
+          ? "Conflicto: el identificador oficial del documento no coincide con el candidato."
+          : "Conflicto: el titular del documento no coincide razonablemente con el candidato."
+        : "Documento procesado. Revisa y vincula las experiencias detectadas de tu fe de vida laboral."
+      : autoLink
       ? best?.company_match_source === "legal_name"
         ? "Coincidencia alta con esta experiencia. Empresa alineada por razón social."
         : best?.company_match_source === "commercial_name"

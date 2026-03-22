@@ -32,6 +32,21 @@ type EvidenceItem = {
   supports_multiple_experiences: boolean;
   supporting_employment_record_ids: string[];
   supporting_experiences_label: string | null;
+  identity_status_label: string | null;
+  extracted_employment_entries: Array<{
+    entry_id: string;
+    company_name: string;
+    position: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    confidence: number;
+    ignored_reason: string | null;
+    suggested_match_employment_record_id: string | null;
+    linked_employment_record_id: string | null;
+    reconciliation_status: string;
+    reconciliation_choice: string | null;
+    raw_text: string | null;
+  }>;
   person_check_label: string;
   company_check_label: string;
   date_check_label: string;
@@ -84,19 +99,18 @@ export default async function CandidateEvidencePage(props: any) {
       label: `${position} — ${company} (${period})`,
     };
   });
-
-  if (experienceOptions.length === 0) {
-    experienceOptions.push(
-      ...((profileExperienceRows || []).map((row: any) => {
-        const position = String(row.role_title || "Experiencia").trim();
-        const company = String(row.company_name || "Empresa").trim();
-        const period = [row.start_date || "—", row.end_date || "Actualidad"].join(" · ");
-        return {
-          id: `profile:${String(row.id)}`,
-          label: `${position} — ${company} (${period})`,
-        };
-      }) as ExperienceOption[]),
-    );
+  const existingLabels = new Set(experienceOptions.map((item) => item.label));
+  for (const row of profileExperienceRows || []) {
+    const position = String((row as any).role_title || "Experiencia").trim();
+    const company = String((row as any).company_name || "Empresa").trim();
+    const period = [(row as any).start_date || "—", (row as any).end_date || "Actualidad"].join(" · ");
+    const label = `${position} — ${company} (${period})`;
+    if (existingLabels.has(label)) continue;
+    existingLabels.add(label);
+    experienceOptions.push({
+      id: `profile:${String((row as any).id)}`,
+      label,
+    });
   }
 
   const items: EvidenceItem[] = (evidences || []).map((r: any) => buildEvidenceUiItem(r));

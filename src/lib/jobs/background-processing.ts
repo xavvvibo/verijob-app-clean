@@ -17,6 +17,7 @@ import {
 import {
   computeDocumentaryMatching,
   extractDocumentarySignals,
+  extractVidaLaboralEmploymentEntries,
 } from "@/lib/candidate/documentary-processing";
 import { buildIdentityRecord } from "@/lib/security/identity";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
@@ -785,6 +786,14 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       extractedIdentityHash: extractedIdentityRecord?.identityHash || null,
       evidenceType,
     });
+    const extractedEmploymentEntries =
+      evidenceType === "vida_laboral"
+        ? extractVidaLaboralEmploymentEntries({
+            text: await extractCvTextFromBuffer(fileBuffer, fileName).catch(() => ""),
+            extraction: extractionResult.extraction,
+            employmentRecords: Array.isArray(employmentRows) ? employmentRows : [],
+          })
+        : [];
     console.info("EVIDENCE_BG_JOB_MATCH_DONE", {
       evidenceId,
       overallMatchLevel: matching.overall_match_level,
@@ -819,10 +828,20 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       overall_match_level: matching.overall_match_level || "inconclusive",
       mismatch_flags: Array.isArray(matching.mismatch_flags) ? matching.mismatch_flags : [],
       company_match_source: matching.company_match_source || null,
-      supports_multiple_experiences: Boolean(matching.supports_multiple_experiences),
-      supporting_employment_record_ids: Array.isArray(matching.supporting_employment_record_ids)
-        ? matching.supporting_employment_record_ids
-        : [],
+      supports_multiple_experiences:
+        Boolean(matching.supports_multiple_experiences) ||
+        extractedEmploymentEntries.filter((entry: any) => !entry?.ignored_reason).length > 1,
+      supporting_employment_record_ids: Array.from(
+        new Set([
+          ...(Array.isArray(matching.supporting_employment_record_ids)
+            ? matching.supporting_employment_record_ids
+            : []),
+          ...extractedEmploymentEntries
+            .map((entry: any) => String(entry?.suggested_match_employment_record_id || "").trim())
+            .filter(Boolean),
+        ]),
+      ),
+      extracted_employment_entries: extractedEmploymentEntries,
       link_state: matching.link_state,
       needs_manual_review: matching.needs_manual_review,
       matching_reason: matching.matching_reason,

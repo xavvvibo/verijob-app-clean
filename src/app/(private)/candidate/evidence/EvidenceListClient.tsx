@@ -47,6 +47,8 @@ export default function EvidenceListClient({
   const [message, setMessage] = useState<string | null>(null)
   const [isError, setIsError] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [reconciliationDrafts, setReconciliationDrafts] = useState<Record<string, Record<string, string>>>({})
+  const [savingReconciliationId, setSavingReconciliationId] = useState<string | null>(null)
 
   const supabase = useMemo(
     () =>
@@ -248,8 +250,195 @@ export default function EvidenceListClient({
     }
   }
 
+  function formatPeriod(start?: string | null, end?: string | null) {
+    const startText = String(start || "").slice(0, 10)
+    const endText = String(end || "").slice(0, 10)
+    if (!startText && !endText) return "Fechas no detectadas"
+    return `${startText || "—"} · ${endText || "Actualidad"}`
+  }
+
+  function getEntrySelection(item: any, entry: any) {
+    const evidenceDraft = reconciliationDrafts[String(item.evidence_id || "")]
+    if (evidenceDraft && Object.prototype.hasOwnProperty.call(evidenceDraft, String(entry.entry_id || ""))) {
+      return evidenceDraft[String(entry.entry_id || "")]
+    }
+    if (entry.linked_employment_record_id) return String(entry.linked_employment_record_id)
+    if (entry.reconciliation_choice === "ignore" || entry.reconciliation_status === "ignored") return "__ignore__"
+    if (entry.reconciliation_choice === "create_new") return "__create_new__"
+    if (entry.suggested_match_employment_record_id) return String(entry.suggested_match_employment_record_id)
+    return ""
+  }
+
+  function setEntrySelection(evidenceId: string, entryId: string, value: string) {
+    setReconciliationDrafts((prev) => ({
+      ...prev,
+      [evidenceId]: {
+        ...(prev[evidenceId] || {}),
+        [entryId]: value,
+      },
+    }))
+  }
+
+  async function saveVidaLaboralReconciliation(item: any) {
+    const evidenceId = String(item.evidence_id || "")
+    const entries = Array.isArray(item.extracted_employment_entries) ? item.extracted_employment_entries : []
+    if (!evidenceId || entries.length === 0) return
+
+    setSavingReconciliationId(evidenceId)
+    setIsError(false)
+    setMessage("Guardando conciliación de experiencias…")
+    try {
+      const res = await fetch(`/api/candidate/evidence/${encodeURIComponent(evidenceId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          action: "reconcile_vida_laboral",
+          entries: entries
+            .filter((entry: any) => !entry?.ignored_reason)
+            .map((entry: any) => ({
+              entry_id: entry.entry_id,
+              selection: getEntrySelection(item, entry) || "__ignore__",
+            })),
+        }),
+      })
+      const json = await readJsonSafe(res)
+      if (!res.ok) {
+        throw new Error(String(json?.details || json?.error || "No se pudo guardar la conciliación."))
+      }
+      setMessage("Conciliación guardada. Hemos actualizado las experiencias vinculadas por esta fe de vida laboral.")
+      setReconciliationDrafts((prev) => {
+        const next = { ...prev }
+        delete next[evidenceId]
+        return next
+      })
+      await reloadList()
+    } catch (error: any) {
+      setIsError(true)
+      setMessage(String(error?.message || error || "No se pudo guardar la conciliación."))
+    } finally {
+      setSavingReconciliationId(null)
+    }
+  }
+
+  function renderVidaLaboralReconciliation(item: any) {
+    const entries = Array.isArray(item.extracted_employment_entries) ? item.extracted_employment_entries : []
+    if (!item.analysis_completed || item.evidence_type_key !== "vida_laboral" || entries.length === 0) return null
+
+    return (
+      <div
+        style={{
+          marginTop: 12,
+          borderRadius: 14,
+          border: "1px solid #dbe4f0",
+          background: "#f8fbff",
+          padding: 14,
+        }}
+      >
+        <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a", marginBottom: 4 }}>
+          Fe de vida laboral procesada
+        </div>
+        {item.identity_status_label ? (
+          <div style={{ fontSize: 12, color: item.match_level === "conflict" ? "#b91c1c" : "#0f766e", marginBottom: 10 }}>
+            {item.identity_status_label}
+          </div>
+        ) : null}
+        <div style={{ fontSize: 12, color: "#475569", marginBottom: 12 }}>
+          Revisa las experiencias detectadas y decide si corresponden a una experiencia ya declarada, si debes crear una nueva o si no deben vincularse.
+        </div>
+
+        <div style={{ display: "grid", gap: 10 }}>
+          {entries.map((entry: any) => {
+            const ignored = Boolean(entry.ignored_reason)
+            const linked = String(entry.linked_employment_record_id || "").trim()
+            const selection = getEntrySelection(item, entry)
+            return (
+              <div
+                key={entry.entry_id}
+                style={{
+                  borderRadius: 12,
+                  border: "1px solid #dbe4f0",
+                  background: "#fff",
+                  padding: 12,
+                }}
+              >
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{entry.company_name}</div>
+                <div style={{ fontSize: 12, color: "#475569", marginTop: 2 }}>{formatPeriod(entry.start_date, entry.end_date)}</div>
+                {entry.raw_text ? (
+                  <div style={{ fontSize: 12, color: "#64748b", marginTop: 6 }}>{entry.raw_text}</div>
+                ) : null}
+                {ignored ? (
+                  <div style={{ marginTop: 8, fontSize: 12, color: "#92400e" }}>
+                    Movimiento omitido automáticamente: no corresponde a una experiencia laboral válida del CV.
+                  </div>
+                ) : null}
+                {!ignored ? (
+                  <div style={{ marginTop: 10, display: "grid", gap: 6 }}>
+                    <label style={{ display: "grid", gap: 6 }}>
+                      <span style={{ fontSize: 12, fontWeight: 600, color: "#334155" }}>
+                        ¿A qué experiencia declarada corresponde?
+                      </span>
+                      <select
+                        value={selection}
+                        onChange={(event) =>
+                          setEntrySelection(String(item.evidence_id || ""), String(entry.entry_id || ""), event.target.value)
+                        }
+                        style={{ border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", fontSize: 14 }}
+                      >
+                        <option value="">Selecciona una experiencia</option>
+                        {experienceOptions.map((option: any) => (
+                          <option key={option.id} value={option.id}>
+                            {option.label}
+                          </option>
+                        ))}
+                        <option value="__create_new__">Añadir nueva experiencia con estos datos</option>
+                        <option value="__ignore__">No vincular</option>
+                      </select>
+                    </label>
+                    {entry.suggested_match_employment_record_id ? (
+                      <div style={{ fontSize: 12, color: "#0369a1" }}>
+                        Sugerencia automática detectada para ayudarte a reconciliar esta línea.
+                      </div>
+                    ) : null}
+                    {linked ? (
+                      <div style={{ fontSize: 12, color: "#166534" }}>
+                        Esta línea ya quedó conciliada con una experiencia del perfil.
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            )
+          })}
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <button
+            type="button"
+            onClick={() => void saveVidaLaboralReconciliation(item)}
+            disabled={savingReconciliationId === String(item.evidence_id || "")}
+            style={{
+              borderRadius: 10,
+              background: "#0f766e",
+              color: "#fff",
+              padding: "10px 14px",
+              fontSize: 13,
+              fontWeight: 700,
+              border: "none",
+              cursor: savingReconciliationId === String(item.evidence_id || "") ? "not-allowed" : "pointer",
+              opacity: savingReconciliationId === String(item.evidence_id || "") ? 0.7 : 1,
+            }}
+          >
+            {savingReconciliationId === String(item.evidence_id || "") ? "Guardando…" : "Guardar conciliación"}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
   function renderEvidenceCard(item: any) {
     const showAnalysisOutcome = Boolean(item.analysis_completed)
+    const isVidaLaboral = item.evidence_type_key === "vida_laboral"
     const impactTone =
       item.trust_impact === "alta"
         ? { bg: "#dcfce7", color: "#166534" }
@@ -319,7 +508,7 @@ export default function EvidenceListClient({
         {showAnalysisOutcome && item.supporting_experiences_label ? (
           <div style={{ fontSize: 12, color: "#0369a1", marginBottom: 6 }}>{item.supporting_experiences_label}</div>
         ) : null}
-        {showAnalysisOutcome ? (
+        {showAnalysisOutcome && !isVidaLaboral ? (
           <div style={{ display: "grid", gap: 4, marginBottom: 8 }}>
             <div style={{ fontSize: 12, color: item.match_level === "conflict" ? "#b91c1c" : "#334155" }}>
               {item.person_check_label}
@@ -332,6 +521,7 @@ export default function EvidenceListClient({
         {showAnalysisOutcome && item.trust_label ? (
           <div style={{ fontSize: 13, color: "#0369a1", marginBottom: 4 }}>{item.trust_label}</div>
         ) : null}
+        {renderVidaLaboralReconciliation(item)}
         <div style={{ fontSize: 12, color: "#475569" }}>
           {item.status}{item.reason ? ` · ${item.reason}` : ""}
         </div>

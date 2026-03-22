@@ -31,6 +31,21 @@ export type CandidateEvidenceUiItem = {
   supports_multiple_experiences: boolean;
   supporting_employment_record_ids: string[];
   supporting_experiences_label: string | null;
+  identity_status_label: string | null;
+  extracted_employment_entries: Array<{
+    entry_id: string;
+    company_name: string;
+    position: string | null;
+    start_date: string | null;
+    end_date: string | null;
+    confidence: number;
+    ignored_reason: string | null;
+    suggested_match_employment_record_id: string | null;
+    linked_employment_record_id: string | null;
+    reconciliation_status: string;
+    reconciliation_choice: string | null;
+    raw_text: string | null;
+  }>;
   person_check_label: string;
   company_check_label: string;
   date_check_label: string;
@@ -121,13 +136,33 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
   const supportsMultipleExperiences =
     Boolean(processing?.supports_multiple_experiences || processing?.matching?.supports_multiple_experiences) ||
     supportingEmploymentRecordIds.length > 1;
+  const extractedEmploymentEntries = Array.isArray(processing?.extracted_employment_entries)
+    ? processing.extracted_employment_entries.map((entry: any) => ({
+        entry_id: String(entry?.entry_id || "").trim(),
+        company_name: String(entry?.company_name || "").trim() || "Empresa detectada",
+        position: String(entry?.position || "").trim() || null,
+        start_date: String(entry?.start_date || "").trim() || null,
+        end_date: String(entry?.end_date || "").trim() || null,
+        confidence: Number(entry?.confidence || 0),
+        ignored_reason: String(entry?.ignored_reason || "").trim() || null,
+        suggested_match_employment_record_id:
+          String(entry?.suggested_match_employment_record_id || "").trim() || null,
+        linked_employment_record_id: String(entry?.linked_employment_record_id || "").trim() || null,
+        reconciliation_status: String(entry?.reconciliation_status || "pending").trim(),
+        reconciliation_choice: String(entry?.reconciliation_choice || "").trim() || null,
+        raw_text: String(entry?.raw_text || "").trim() || null,
+      }))
+    : [];
   const identityGatePassed =
     Boolean(processing?.identity_gate_passed ?? processing?.matching?.identity_gate_passed) &&
     matchLevel !== "conflict";
+  const isVidaLaboral = evidenceTypeKey === "vida_laboral";
   const trustLabel = !analysisCompleted
     ? null
     : matchLevel === "conflict"
       ? "Este documento no aporta confianza por conflicto de identidad."
+      : isVidaLaboral
+        ? "Documento oficial procesado. Revisa y vincula las experiencias detectadas."
       : impact === "alta"
         ? "Esta evidencia aporta confianza alta."
         : impact === "media"
@@ -166,11 +201,25 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
     supports_multiple_experiences: supportsMultipleExperiences,
     supporting_employment_record_ids: supportingEmploymentRecordIds,
     supporting_experiences_label:
-      analysisCompleted && supportsMultipleExperiences
-        ? `Este documento puede reforzar ${supportingEmploymentRecordIds.length} experiencias compatibles del perfil.`
+      analysisCompleted && isVidaLaboral && extractedEmploymentEntries.length > 0
+        ? `Se han detectado ${extractedEmploymentEntries.filter((entry) => !entry.ignored_reason).length} experiencias laborales para revisar y vincular.`
+        : analysisCompleted && supportsMultipleExperiences
+          ? `Este documento puede reforzar ${supportingEmploymentRecordIds.length} experiencias compatibles del perfil.`
         : null,
-    person_check_label: analysisCompleted
+    identity_status_label: analysisCompleted
       ? identityGatePassed
+        ? identityConfirmedBy === "official_id"
+          ? "Identidad consistente. Confirmada por identificador oficial."
+          : "Identidad consistente. Coincidencia razonable con tu perfil."
+        : matchLevel === "conflict"
+          ? "Identidad no consistente. El documento no coincide con el titular del perfil."
+          : "Identidad parcial o no concluyente."
+      : null,
+    extracted_employment_entries: extractedEmploymentEntries,
+    person_check_label: analysisCompleted
+      ? isVidaLaboral
+        ? ""
+        : identityGatePassed
         ? identityConfirmedBy === "official_id"
           ? "Identidad confirmada por documento oficial"
           : identityConfirmedBy === "name_subset_match" || identityConfirmedBy === "name_tolerant_match"
@@ -180,19 +229,19 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
           ? "Conflicto: el titular del documento no coincide"
           : "Titular pendiente de confirmar"
       : "",
-    company_check_label: analysisCompleted ? describeScore(
+    company_check_label: analysisCompleted && !isVidaLaboral ? describeScore(
       companyScore,
       companyMatchSource === "legal_name" ? "Empresa coincidente por razón social" : companyMatchSource === "commercial_name" ? "Empresa coincidente por nombre comercial" : "Empresa coincide",
       companyMatchSource === "legal_name" ? "Empresa parcialmente compatible por razón social" : companyMatchSource === "commercial_name" ? "Empresa parcialmente compatible por nombre comercial" : "Empresa parcialmente compatible",
       "Empresa no coincide"
     ) : "",
-    date_check_label: analysisCompleted ? describeScore(
+    date_check_label: analysisCompleted && !isVidaLaboral ? describeScore(
       dateScore,
       "Fechas compatibles",
       "Fechas parcialmente compatibles",
       "Fechas incompatibles"
     ) : "",
-    position_check_label: analysisCompleted ? describeScore(
+    position_check_label: analysisCompleted && !isVidaLaboral ? describeScore(
       positionScore,
       "Puesto coincide",
       "Puesto parcialmente compatible",
