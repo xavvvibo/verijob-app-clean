@@ -17,7 +17,7 @@ import {
 import {
   computeDocumentaryMatching,
   extractDocumentarySignals,
-  extractVidaLaboralEmploymentEntries,
+  extractVidaLaboralEmploymentEntriesWithDebug,
 } from "@/lib/candidate/documentary-processing";
 import { buildIdentityRecord } from "@/lib/security/identity";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
@@ -786,20 +786,24 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       extractedIdentityHash: extractedIdentityRecord?.identityHash || null,
       evidenceType,
     });
-    const extractedEmploymentEntries =
+    const vidaLaboralExtraction =
       evidenceType === "vida_laboral"
-        ? extractVidaLaboralEmploymentEntries({
+        ? extractVidaLaboralEmploymentEntriesWithDebug({
             text: await extractCvTextFromBuffer(fileBuffer, fileName).catch(() => ""),
             extraction: extractionResult.extraction,
             employmentRecords: Array.isArray(employmentRows) ? employmentRows : [],
           })
-        : [];
+        : { entries: [], debug_summary: null, debug_entries: [] };
+    const extractedEmploymentEntries = Array.isArray(vidaLaboralExtraction?.entries)
+      ? vidaLaboralExtraction.entries
+      : [];
     console.info("EVIDENCE_BG_JOB_MATCH_DONE", {
       evidenceId,
       overallMatchLevel: matching.overall_match_level,
       overallMatchScore: matching.overall_match_score ?? matching.final_score ?? 0,
       autoLink: Boolean(matching.auto_link),
       inconsistencyReason: matching.inconsistency_reason || null,
+      vidaLaboralDebugSummary: vidaLaboralExtraction?.debug_summary || null,
     });
 
     documentaryProcessing = {
@@ -844,6 +848,8 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
         ]),
       ),
       extracted_employment_entries: extractedEmploymentEntries,
+      debug_summary: vidaLaboralExtraction?.debug_summary || null,
+      debug_entries: Array.isArray(vidaLaboralExtraction?.debug_entries) ? vidaLaboralExtraction.debug_entries : [],
       link_state: matching.link_state,
       needs_manual_review: matching.needs_manual_review,
       matching_reason: matching.matching_reason,
@@ -858,6 +864,10 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       retryable: false,
       error: null,
     };
+    documentaryProcessing.debug_summary = vidaLaboralExtraction?.debug_summary || null;
+    documentaryProcessing.debug_entries = Array.isArray(vidaLaboralExtraction?.debug_entries)
+      ? vidaLaboralExtraction.debug_entries
+      : [];
     finalValidationStatus = matching.auto_link
       ? EVIDENCE_VALIDATION_INTERNAL.APPROVED
       : EVIDENCE_VALIDATION_INTERNAL.NEEDS_REVIEW;
@@ -928,16 +938,34 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
     finalInconsistencyReason = null;
   }
 
+  const requestContextForUpdate = buildRequestContextRetryableState({
+    currentContext: vr.request_context,
+    processing: {
+      ...documentaryProcessing,
+      debug_summary: documentaryProcessing?.debug_summary || null,
+      debug_entries: Array.isArray(documentaryProcessing?.debug_entries) ? documentaryProcessing.debug_entries : [],
+      processed_at: new Date().toISOString(),
+    },
+  });
+  console.info("EVIDENCE_BG_JOB_PROCESSING_BEFORE_PERSIST", {
+    evidenceId,
+    verificationRequestId: vr.id,
+    documentaryProcessingKeys: Object.keys(documentaryProcessing || {}),
+    debugSummaryType:
+      documentaryProcessing?.debug_summary == null
+        ? "null"
+        : Array.isArray(documentaryProcessing?.debug_summary)
+          ? "array"
+          : typeof documentaryProcessing?.debug_summary,
+    debugEntriesLength: Array.isArray(documentaryProcessing?.debug_entries)
+      ? documentaryProcessing.debug_entries.length
+      : -1,
+  });
+
   await supabase
     .from("verification_requests")
     .update({
-      request_context: buildRequestContextRetryableState({
-        currentContext: vr.request_context,
-        processing: {
-          ...documentaryProcessing,
-          processed_at: new Date().toISOString(),
-        },
-      }),
+      request_context: requestContextForUpdate,
     })
     .eq("id", vr.id);
   console.info("EVIDENCE_BG_JOB_PROCESSING_PERSISTED", {

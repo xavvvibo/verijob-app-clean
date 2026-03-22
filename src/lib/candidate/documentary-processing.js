@@ -711,21 +711,70 @@ export function scoreEmploymentCandidate({
   };
 }
 
-export function extractVidaLaboralEmploymentEntries({ text, extraction, employmentRecords } = {}) {
+export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction, employmentRecords } = {}) {
   const rows = Array.isArray(employmentRecords) ? employmentRecords : [];
   const rawBlocks = splitIntoRawMovementBlocks(text);
   const extractedEntries = [];
+  const debugEntries = [];
   const EMPLOYMENT_SCORE_THRESHOLD = 0.46;
   const SELF_EMPLOYMENT_SCORE_THRESHOLD = 0.4;
   const LOW_CONFIDENCE_PROMOTION_THRESHOLD = 0.55;
+  const rawText = String(text || "");
+  const rawBlocksBeforeSplit = rawText
+    .replace(/\r/g, "\n")
+    .split(/\n+/)
+    .map((part) => String(part || "").trim())
+    .filter(Boolean);
 
   for (let index = 0; index < rawBlocks.length; index += 1) {
     const rawBlock = rawBlocks[index];
     const segment = String(rawBlock?.text || "").trim();
     if (!segment) continue;
-    if (isVidaLaboralLegalNoise(segment)) continue;
+    const debugEntryBase = {
+      raw_block_index: Number(rawBlock?.raw_block_index || index),
+      normalized_excerpt: segment.slice(0, 220),
+      province_prefix: null,
+      province_hint: null,
+      split_from_parent: Boolean(rawBlock?.split_from_parent),
+      split_reason: Array.isArray(rawBlock?.split_reason) ? rawBlock.split_reason : [],
+    };
+    if (isVidaLaboralLegalNoise(segment)) {
+      debugEntries.push({
+        ...debugEntryBase,
+        company_name: null,
+        start_date: null,
+        end_date: null,
+        self_employment_matched: false,
+        administrative_matched: false,
+        numeric_noise_penalty: 0,
+        classification_score: 0,
+        has_labor_pattern: false,
+        has_structural_labor_pattern: false,
+        type: "discarded",
+        classification_reasons: ["legal_noise_discarded"],
+        ignored_reason: "legal_noise",
+      });
+      continue;
+    }
     const dateTokens = extractDateTokens(segment);
-    if (dateTokens.length === 0) continue;
+    if (dateTokens.length === 0) {
+      debugEntries.push({
+        ...debugEntryBase,
+        company_name: null,
+        start_date: null,
+        end_date: null,
+        self_employment_matched: false,
+        administrative_matched: false,
+        numeric_noise_penalty: 0,
+        classification_score: 0,
+        has_labor_pattern: false,
+        has_structural_labor_pattern: false,
+        type: "discarded",
+        classification_reasons: ["missing_dates"],
+        ignored_reason: null,
+      });
+      continue;
+    }
 
     const startDate = normalizeLooseDate(dateTokens[0]);
     const endDate = normalizeLooseDate(dateTokens[1] || null);
@@ -774,7 +823,6 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
     ) {
       entryType = "employment";
     }
-    if (entryType === "discarded") continue;
     const classificationReasons = Array.isArray(classification.classification_reasons)
       ? [...classification.classification_reasons]
       : [];
@@ -787,6 +835,24 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
       classificationReasons.push(`structural_pattern:${reason}`);
     }
     if (promotedLowConfidence) classificationReasons.push("promoted_low_confidence");
+    debugEntries.push({
+      ...debugEntryBase,
+      company_name: companyName || null,
+      start_date: startDate,
+      end_date: endDate,
+      self_employment_matched: Boolean(selfEmployment.matched),
+      administrative_matched: Boolean(administrative.matched),
+      numeric_noise_penalty: Number(classification.numeric_noise_penalty || 0),
+      classification_score: Number(classification.score || 0),
+      has_labor_pattern: Boolean(hasLaborPattern),
+      has_structural_labor_pattern: Boolean(hasStructuralLaborPattern),
+      province_prefix: provinceMeta.province_prefix,
+      province_hint: provinceMeta.province_hint,
+      type: entryType,
+      classification_reasons: classificationReasons,
+      ignored_reason: ignoredReason,
+    });
+    if (entryType === "discarded") continue;
 
     let suggestedMatchEmploymentRecordId = null;
     let suggestedMatchScore = 0;
@@ -897,6 +963,26 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
               (selfEmployment.matched && classification.score >= SELF_EMPLOYMENT_SCORE_THRESHOLD))
           ? "employment"
           : "discarded";
+    debugEntries.push({
+      raw_block_index: 0,
+      normalized_excerpt: fallbackText.slice(0, 220),
+      company_name: String(extraction?.company_name || "").trim() || null,
+      start_date: normalizeLooseDate(extraction?.start_date),
+      end_date: normalizeLooseDate(extraction?.end_date),
+      self_employment_matched: Boolean(selfEmployment.matched),
+      administrative_matched: Boolean(administrative.matched),
+      numeric_noise_penalty: Number(classification.numeric_noise_penalty || 0),
+      classification_score: Number(classification.score || 0),
+      has_labor_pattern: Boolean(fallbackHasLaborPattern),
+      has_structural_labor_pattern: Boolean(fallbackHasStructuralLaborPattern),
+      province_prefix: provinceMeta.province_prefix,
+      province_hint: provinceMeta.province_hint,
+      type: fallbackType,
+      classification_reasons: [],
+      ignored_reason: ignoredReason,
+      split_from_parent: false,
+      split_reason: ["fallback_extraction"],
+    });
     if (fallbackType !== "discarded") {
       const fallbackClassificationReasons = Array.isArray(classification.classification_reasons)
         ? [...classification.classification_reasons]
@@ -912,6 +998,7 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
         fallbackClassificationReasons.push(`structural_pattern:${reason}`);
       }
       if (fallbackPromotedLowConfidence) fallbackClassificationReasons.push("promoted_low_confidence");
+      debugEntries[debugEntries.length - 1].classification_reasons = fallbackClassificationReasons;
       extractedEntries.push({
       entry_id: "vida_laboral_fallback_1",
       type: fallbackType,
@@ -958,7 +1045,7 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
     seen.add(key);
     deduped.push(entry);
   }
-  return deduped.sort((a, b) => {
+  const sortedEntries = deduped.sort((a, b) => {
     const aType = String(a?.type || "employment");
     const bType = String(b?.type || "employment");
     if (aType !== bType) return aType === "employment" ? -1 : 1;
@@ -966,6 +1053,23 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
     const bDate = toMonthIndex(b?.end_date || b?.start_date || "") ?? -1;
     return bDate - aDate;
   });
+  const debugSummary = {
+    total_raw_text_length: rawText.length,
+    total_raw_blocks_before_split: rawBlocksBeforeSplit.length,
+    total_blocks_after_split: rawBlocks.length,
+    total_employment: debugEntries.filter((entry) => String(entry?.type || "") === "employment").length,
+    total_administrative: debugEntries.filter((entry) => String(entry?.type || "") === "administrative").length,
+    total_discarded: debugEntries.filter((entry) => String(entry?.type || "") === "discarded").length,
+  };
+  return {
+    entries: sortedEntries,
+    debug_summary: debugSummary,
+    debug_entries: debugEntries,
+  };
+}
+
+export function extractVidaLaboralEmploymentEntries({ text, extraction, employmentRecords } = {}) {
+  return extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction, employmentRecords }).entries;
 }
 
 export function normalizeDocumentaryMatchLevel(level) {
