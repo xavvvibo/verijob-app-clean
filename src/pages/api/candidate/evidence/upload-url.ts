@@ -481,11 +481,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     return json(res, 200, {
+      storage_bucket: BUCKET,
       storage_path,
       verification_request_id: resolvedVerificationRequestId,
       employment_record_id: resolvedEmploymentRecordId || null,
       signed_url: data.signedUrl,
       token: data.token,
+      original_filename: original_name,
       mime,
       size_bytes,
       evidence_type,

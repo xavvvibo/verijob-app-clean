@@ -392,11 +392,15 @@ export async function POST(req: Request) {
         ok: true,
         signed_url: signed.data.signedUrl,
         token: signed.data.token,
+        storage_bucket: BUCKET,
         storage_path: storagePath,
         verification_request_id: (context as any).verificationRequestId,
         employment_record_id: (context as any).employmentRecordId,
         evidence_type: evidenceType,
         evidence_type_label: evidenceConfig.label,
+        original_filename: filename,
+        mime,
+        size_bytes: sizeBytes,
         file_sha256: fileSha256,
       });
     }
@@ -471,7 +475,7 @@ export async function POST(req: Request) {
     const { data: evidence, error: evidenceErr } = await admin
       .from("evidences")
       .insert(evidenceRow)
-      .select("id, verification_request_id, storage_path, evidence_type, document_type, document_scope, trust_weight, validation_status, inconsistency_reason, document_issue_date, uploaded_by, created_at, file_sha256")
+      .select("id")
       .single();
     if (evidenceErr || !evidence?.id) {
       await admin.storage.from(BUCKET).remove([storagePath]).catch(() => {});

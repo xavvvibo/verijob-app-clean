@@ -23,6 +23,17 @@ function isHexSha256(s?: string) {
   return /^[a-f0-9]{64}$/i.test(s);
 }
 
+function messageIncludes(error: any, value: string) {
+  const text = String(error?.message || error?.details || error || "").toLowerCase();
+  return text.includes(value.toLowerCase());
+}
+
+function omitColumn(row: Record<string, any>, columnName: string) {
+  const next = { ...row };
+  delete next[columnName];
+  return next;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
@@ -49,6 +60,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const evidence_type = normalizeEvidenceType(body?.evidence_type);
     const evidenceConfig = getEvidenceTypeConfig(evidence_type);
     const file_sha256 = body?.file_sha256 ? String(body.file_sha256).toLowerCase() : null;
+    const storage_bucket = String(body?.storage_bucket || "evidence").trim() || "evidence";
+    const original_filename = String(body?.original_filename || "").trim() || null;
+    const mime_type = String(body?.mime || body?.mime_type || "").trim() || null;
+    const size_bytes = Number(body?.size_bytes ?? 0) || null;
 
     if (!verification_request_id) {
       return json(res, 400, { error: "Falta verification_request_id", route: "/pages/api/candidate/evidence/confirm" });
@@ -83,9 +98,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       });
     }
 
-    const row = {
+    const row: Record<string, any> = {
       verification_request_id,
+      storage_bucket,
       storage_path,
+      original_filename,
+      mime_type,
+      size_bytes,
       evidence_type,
       document_type: evidence_type,
       document_scope: evidenceConfig.scope,
@@ -97,11 +116,47 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       file_sha256,
     };
 
-    const { data, error } = await admin
+    let insertPayload: Record<string, any> = { ...row };
+    let insertResult = await admin
       .from("evidences")
-      .insert(row)
-      .select("id, verification_request_id, storage_path, evidence_type, document_type, document_scope, trust_weight, validation_status, inconsistency_reason, document_issue_date, uploaded_by, created_at, file_sha256")
+      .insert(insertPayload)
+      .select("id")
       .single();
+
+    if (insertResult.error && messageIncludes(insertResult.error, `column "storage_bucket"`)) {
+      insertPayload = omitColumn(insertPayload, "storage_bucket");
+      insertResult = await admin
+        .from("evidences")
+        .insert(insertPayload)
+        .select("id")
+        .single();
+    }
+    if (insertResult.error && messageIncludes(insertResult.error, `column "original_filename"`)) {
+      insertPayload = omitColumn(insertPayload, "original_filename");
+      insertResult = await admin
+        .from("evidences")
+        .insert(insertPayload)
+        .select("id")
+        .single();
+    }
+    if (insertResult.error && messageIncludes(insertResult.error, `column "mime_type"`)) {
+      insertPayload = omitColumn(insertPayload, "mime_type");
+      insertResult = await admin
+        .from("evidences")
+        .insert(insertPayload)
+        .select("id")
+        .single();
+    }
+    if (insertResult.error && messageIncludes(insertResult.error, `column "size_bytes"`)) {
+      insertPayload = omitColumn(insertPayload, "size_bytes");
+      insertResult = await admin
+        .from("evidences")
+        .insert(insertPayload)
+        .select("id")
+        .single();
+    }
+
+    const { data, error } = insertResult;
 
     if (error) {
       return json(res, 400, {

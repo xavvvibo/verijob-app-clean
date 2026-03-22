@@ -176,13 +176,19 @@ export default function EvidenceListClient({
         body: JSON.stringify({
           verification_request_id: prepareJson.verification_request_id,
           storage_path: prepareJson.storage_path,
+          storage_bucket: prepareJson.storage_bucket || "evidence",
+          original_filename: file.name,
+          mime: file.type || "application/octet-stream",
+          size_bytes: file.size,
           evidence_type: normalizeEvidenceType(selectedEvidenceType),
           file_sha256: fileHash,
         }),
       });
       const confirmJson = await confirmRes.json().catch(() => ({}));
       if (!confirmRes.ok) {
-        throw new Error(confirmJson?.error || "No se pudo registrar la evidencia.");
+        throw new Error(
+          String(confirmJson?.details || confirmJson?.error || "No se pudo registrar la evidencia.").trim(),
+        );
       }
       if (confirmJson?.processing?.deferred) {
         const evidenceLabel = getEvidenceTypeLabel(selectedEvidenceType);
