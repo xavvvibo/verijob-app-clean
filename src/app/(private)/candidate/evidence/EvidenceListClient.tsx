@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { createClient } from "@supabase/supabase-js"
+import { createBrowserClient } from "@supabase/ssr"
 
 type Props = {
   initialItems: any[]
@@ -9,30 +9,26 @@ type Props = {
   preselectedExperienceId?: string
 }
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-)
-
 export default function EvidenceListClient({ initialItems }: Props) {
   const [items, setItems] = useState<any[]>([])
   const [userId, setUserId] = useState<string | null>(null)
+
+  const supabase = createBrowserClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  )
 
   useEffect(() => {
     init()
   }, [])
 
   async function init() {
-    const { data: sessionData } = await supabase.auth.getSession()
-    const session = sessionData?.session
+    const { data: userData } = await supabase.auth.getUser()
 
-    if (!session) {
-      console.log("NO SESSION")
-      return
-    }
-
-    const uid = session.user.id
+    const uid = userData?.user?.id || null
     setUserId(uid)
+
+    if (!uid) return
 
     const { data, error } = await supabase
       .from("evidences")
@@ -54,9 +50,8 @@ export default function EvidenceListClient({ initialItems }: Props) {
       {items.length === 0 && <p>No hay evidencias</p>}
 
       {items.map((e) => (
-        <div key={e.id} style={{ marginBottom: 10 }}>
+        <div key={e.id}>
           <strong>{e.evidence_type}</strong>
-          <div>{e.uploaded_by}</div>
         </div>
       ))}
     </div>
