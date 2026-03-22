@@ -102,6 +102,34 @@ const VIDA_LABORAL_LEGAL_NOISE_KEYWORDS = [
   "documento no será válido",
   "seguridad social informa",
 ];
+const VIDA_LABORAL_ADMIN_KEYWORDS = [
+  "desempleo",
+  "prestacion desempleo",
+  "prestacion por desempleo",
+  "prestación desempleo",
+  "prestación por desempleo",
+  "subsidio",
+  "suspension",
+  "suspensión",
+  "vacaciones",
+  "vacaciones retribuidas y no disfrutadas",
+  "movimiento administrativo",
+  "incapacidad",
+  "incapacidad temporal",
+  "maternidad",
+  "paternidad",
+  "situacion asimilada",
+  "situación asimilada",
+];
+const VIDA_LABORAL_SELF_EMPLOYMENT_KEYWORDS = [
+  "autonomo",
+  "autónomo",
+  "reta",
+  "regimen especial trabajadores autonomos",
+  "régimen especial trabajadores autónomos",
+  "trabajador autonomo",
+  "trabajador autónomo",
+];
 const VIDA_LABORAL_STOPWORDS = new Set([
   "fecha",
   "alta",
@@ -331,6 +359,50 @@ function detectAdministrativeIgnoredReason(value) {
     : null;
 }
 
+export function normalizeEmploymentText(value) {
+  return String(value || "")
+    .replace(/\r/g, "\n")
+    .replace(/\u00a0/g, " ")
+    .replace(/[|]+/g, " ")
+    .replace(/[_-]{3,}/g, " ")
+    .replace(/([A-Za-zÁÉÍÓÚÑ])(\d)/g, "$1 $2")
+    .replace(/(\d)([A-Za-zÁÉÍÓÚÑ])/g, "$1 $2")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function detectAdministrativeKeywords(value) {
+  const normalized = normalizeText(value);
+  const keywords = VIDA_LABORAL_ADMIN_KEYWORDS.filter((keyword) => normalized.includes(normalizeText(keyword)));
+  return {
+    matched: keywords.length > 0,
+    keywords,
+  };
+}
+
+export function detectSelfEmployment(value) {
+  const normalized = normalizeText(value);
+  const keywords = VIDA_LABORAL_SELF_EMPLOYMENT_KEYWORDS.filter((keyword) =>
+    normalized.includes(normalizeText(keyword)),
+  );
+  return {
+    matched: keywords.length > 0,
+    keywords,
+  };
+}
+
+export function extractProvincePrefixFromContributionCode(value) {
+  const raw = String(value || "");
+  const match = raw.match(
+    /\b(?:ccc|c\.?c\.?c\.?|codigo cuenta cotizacion|código cuenta cotización)?\s*:?\s*(\d{2})\d{6,}\b/i,
+  );
+  const prefix = match?.[1] || null;
+  if (!prefix) return { province_prefix: null, province_hint: null };
+  if (prefix === "18") return { province_prefix: "18", province_hint: "Granada" };
+  if (prefix === "08") return { province_prefix: "08", province_hint: "Barcelona" };
+  return { province_prefix: prefix, province_hint: null };
+}
+
 function isVidaLaboralLegalNoise(value) {
   const normalized = normalizeText(value);
   if (!normalized) return false;
@@ -338,11 +410,8 @@ function isVidaLaboralLegalNoise(value) {
 }
 
 function normalizeVidaLaboralText(text) {
-  return String(text || "")
+  return normalizeEmploymentText(text)
     .replace(/\r/g, "\n")
-    .replace(/[ \t]+/g, " ")
-    .replace(/\u00a0/g, " ")
-    .replace(/[|]/g, " ")
     .replace(/([A-ZÁÉÍÓÚÑ]{3,})\s+(?=\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}-\d{2})/g, "$1\n")
     .replace(new RegExp(`(${DATE_PAIR_SOURCE})`, "g"), "\n$1")
     .replace(/\n{2,}/g, "\n")
@@ -384,10 +453,11 @@ function looksLikeCompanyFragment(value) {
 }
 
 function cleanupVidaLaboralCompanyText(value) {
-  const cleaned = String(value || "")
+  const cleaned = normalizeEmploymentText(value)
     .replace(DATE_TOKEN_REGEX, " ")
     .replace(/\b(?:empresa|empresario|razon social|razón social|nif|cif|naf|ccc|situacion|situación|tipo|contrato|coeficiente|grupo|epigrafe|epígrafe|dias|días|regimen|régimen|provincia|clave)\b/gi, " ")
     .replace(/\b\d{6,}\b/g, " ")
+    .replace(/\bgeneral\b/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -409,6 +479,74 @@ function extractCompanyNameFromVidaLaboralSegment(segment) {
   return cleaned;
 }
 
+export function scoreEmploymentCandidate({
+  segment,
+  companyName,
+  startDate,
+  endDate,
+  employmentRecords,
+  selfEmployment,
+  provinceHint,
+} = {}) {
+  const normalizedSegment = normalizeEmploymentText(segment);
+  const alphaChars = (normalizedSegment.match(/[a-záéíóúñ]/gi) || []).length;
+  const numericChars = (normalizedSegment.match(/\d/g) || []).length;
+  const numericDensity = alphaChars === 0 ? 1 : numericChars / Math.max(alphaChars, 1);
+  const adminSignals = detectAdministrativeKeywords(normalizedSegment);
+  const employerPlausibility = looksLikeCompanyFragment(companyName)
+    ? Math.min(1, companyTokens(companyName).length / 3 + 0.35)
+    : 0;
+  const datePlausibility = startDate && endDate ? 1 : startDate || endDate ? 0.65 : 0;
+  const numericNoisePenalty = numericDensity >= 1.15 ? 0.45 : numericDensity >= 0.75 ? 0.2 : 0;
+  const administrativePenalty = adminSignals.matched ? 0.8 : 0;
+  const selfEmploymentBonus = selfEmployment?.matched && datePlausibility >= 0.65 ? 0.22 : 0;
+  const generalNoisePenalty = /^general[\d-]*/i.test(String(segment || "").trim()) ? 0.35 : 0;
+  let existingMatchBonus = 0;
+
+  for (const row of Array.isArray(employmentRecords) ? employmentRecords : []) {
+    const companyMatch = compareCompanyName(companyName, row).score;
+    const dateScore = dateCompatibility(startDate, endDate, row?.start_date, row?.end_date);
+    let candidateScore = companyMatch * 0.7 + dateScore * 0.3;
+    if (provinceHint && normalizeText(row?.company_name_freeform || row?.company_name || "").includes(normalizeText(provinceHint))) {
+      candidateScore += 0.05;
+    }
+    existingMatchBonus = Math.max(existingMatchBonus, clamp01(candidateScore) * 0.25);
+  }
+
+  const provincePrefixConfidence = provinceHint ? 0.08 : 0;
+  const score = clamp01(
+    employerPlausibility * 0.42 +
+      datePlausibility * 0.28 +
+      Math.min(alphaChars / 24, 1) * 0.15 +
+      existingMatchBonus +
+      selfEmploymentBonus +
+      provincePrefixConfidence -
+      administrativePenalty -
+      numericNoisePenalty -
+      generalNoisePenalty,
+  );
+  const classificationReasons = [];
+  if (employerPlausibility >= 0.55) classificationReasons.push("plausible_employer");
+  if (datePlausibility >= 0.65) classificationReasons.push("reasonable_dates");
+  if (existingMatchBonus >= 0.12) classificationReasons.push("partial_existing_experience_match");
+  if (selfEmployment?.matched) classificationReasons.push("self_employment_pattern");
+  if (provinceHint) classificationReasons.push(`province_hint:${provinceHint}`);
+  if (adminSignals.matched) classificationReasons.push("administrative_keywords");
+  if (numericNoisePenalty > 0) classificationReasons.push("numeric_noise");
+  if (generalNoisePenalty > 0) classificationReasons.push("ocr_general_noise");
+
+  return {
+    score,
+    employer_plausibility: employerPlausibility,
+    date_plausibility: datePlausibility,
+    administrative_keyword_penalty: administrativePenalty,
+    numeric_noise_penalty: numericNoisePenalty,
+    self_employment_bonus: selfEmploymentBonus,
+    province_prefix_confidence: provincePrefixConfidence,
+    classification_reasons: classificationReasons,
+  };
+}
+
 export function extractVidaLaboralEmploymentEntries({ text, extraction, employmentRecords } = {}) {
   const rows = Array.isArray(employmentRecords) ? employmentRecords : [];
   const segments = splitVidaLaboralSegments(text);
@@ -423,10 +561,31 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
     const startDate = normalizeLooseDate(dateTokens[0]);
     const endDate = normalizeLooseDate(dateTokens[1] || null);
     const companyName = extractCompanyNameFromVidaLaboralSegment(segment);
-    if (!companyName) continue;
+    const selfEmployment = detectSelfEmployment(segment);
+    const provinceMeta = extractProvincePrefixFromContributionCode(segment);
+    const ignoredReason = detectAdministrativeIgnoredReason(`${companyName || ""} ${segment}`);
+    const administrative = detectAdministrativeKeywords(`${companyName || ""} ${segment}`);
+    const classification = scoreEmploymentCandidate({
+      segment,
+      companyName,
+      startDate,
+      endDate,
+      employmentRecords: rows,
+      selfEmployment,
+      provinceHint: provinceMeta.province_hint,
+    });
 
-    const ignoredReason = detectAdministrativeIgnoredReason(`${companyName} ${segment}`);
-    const entryType = ignoredReason ? "administrative" : "employment";
+    let entryType = "discarded";
+    if (ignoredReason || administrative.matched) {
+      entryType = "administrative";
+    } else if (
+      (companyName && (startDate || endDate) && classification.score >= 0.55) ||
+      (selfEmployment.matched && (startDate || endDate) && classification.score >= 0.48)
+    ) {
+      entryType = "employment";
+    }
+    if (entryType === "discarded") continue;
+
     let suggestedMatchEmploymentRecordId = null;
     let suggestedMatchScore = 0;
 
@@ -445,44 +604,81 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
     extractedEntries.push({
       entry_id: `vida_laboral_${index + 1}`,
       type: entryType,
-      company_name: companyName,
+      company_name:
+        companyName || (selfEmployment.matched ? "Trabajo por cuenta propia / Autónomo" : "Empresa detectada"),
       position: null,
       start_date: startDate,
       end_date: endDate,
-      confidence: clamp01((startDate ? 0.55 : 0.35) + (endDate ? 0.1 : 0) + (suggestedMatchScore >= 0.7 ? 0.2 : suggestedMatchScore >= 0.5 ? 0.1 : 0)),
+      confidence: clamp01(
+        classification.score * 0.75 +
+          (suggestedMatchScore >= 0.7 ? 0.15 : suggestedMatchScore >= 0.5 ? 0.08 : 0) +
+          (selfEmployment.matched ? 0.05 : 0),
+      ),
       ignored_reason: ignoredReason,
       suggested_match_employment_record_id: suggestedMatchEmploymentRecordId,
       suggested_match_score: suggestedMatchScore,
-      reconciliation_status: ignoredReason ? "ignored" : "pending",
-      reconciliation_choice: ignoredReason ? "ignore" : null,
+      reconciliation_status: entryType === "employment" ? "pending" : "ignored",
+      reconciliation_choice: entryType === "employment" ? null : "ignore",
       linked_employment_record_id: null,
+      subtype: selfEmployment.matched ? "self_employment" : null,
+      self_employment: Boolean(selfEmployment.matched),
+      province_prefix: provinceMeta.province_prefix,
+      province_hint: provinceMeta.province_hint,
+      classification_reasons: classification.classification_reasons,
+      score_breakdown: classification,
       raw_text: segment,
     });
   }
 
   if (extractedEntries.length === 0 && (extraction?.company_name || extraction?.start_date || extraction?.end_date)) {
-    extractedEntries.push({
-      entry_id: "vida_laboral_fallback_1",
-      type: detectAdministrativeIgnoredReason(
-        `${String(extraction?.company_name || "")} ${String(extraction?.job_title || "")}`,
-      )
+    const fallbackText = `${String(extraction?.company_name || "")} ${String(extraction?.job_title || "")}`.trim();
+    const selfEmployment = detectSelfEmployment(fallbackText);
+    const provinceMeta = extractProvincePrefixFromContributionCode(
+      `${String(extraction?.employer_identifier || "")} ${fallbackText}`,
+    );
+    const ignoredReason = detectAdministrativeIgnoredReason(fallbackText);
+    const administrative = detectAdministrativeKeywords(fallbackText);
+    const classification = scoreEmploymentCandidate({
+      segment: fallbackText,
+      companyName: String(extraction?.company_name || "").trim(),
+      startDate: normalizeLooseDate(extraction?.start_date),
+      endDate: normalizeLooseDate(extraction?.end_date),
+      employmentRecords: rows,
+      selfEmployment,
+      provinceHint: provinceMeta.province_hint,
+    });
+    const fallbackType =
+      ignoredReason || administrative.matched
         ? "administrative"
-        : "employment",
-      company_name: String(extraction?.company_name || "").trim() || "Empresa detectada",
+        : classification.score >= 0.55 || (selfEmployment.matched && classification.score >= 0.48)
+          ? "employment"
+          : "discarded";
+    if (fallbackType !== "discarded") {
+      extractedEntries.push({
+      entry_id: "vida_laboral_fallback_1",
+      type: fallbackType,
+      company_name:
+        String(extraction?.company_name || "").trim() ||
+        (selfEmployment.matched ? "Trabajo por cuenta propia / Autónomo" : "Empresa detectada"),
       position: String(extraction?.job_title || "").trim() || null,
       start_date: normalizeLooseDate(extraction?.start_date),
       end_date: normalizeLooseDate(extraction?.end_date),
-      confidence: extraction?.confidence_score == null ? 0.45 : clamp01(extraction.confidence_score),
-      ignored_reason: detectAdministrativeIgnoredReason(
-        `${String(extraction?.company_name || "")} ${String(extraction?.job_title || "")}`,
-      ),
+      confidence: extraction?.confidence_score == null ? classification.score : clamp01(extraction.confidence_score),
+      ignored_reason: ignoredReason,
       suggested_match_employment_record_id: null,
       suggested_match_score: 0,
-      reconciliation_status: "pending",
-      reconciliation_choice: null,
+      reconciliation_status: fallbackType === "employment" ? "pending" : "ignored",
+      reconciliation_choice: fallbackType === "employment" ? null : "ignore",
       linked_employment_record_id: null,
+      subtype: selfEmployment.matched ? "self_employment" : null,
+      self_employment: Boolean(selfEmployment.matched),
+      province_prefix: provinceMeta.province_prefix,
+      province_hint: provinceMeta.province_hint,
+      classification_reasons: classification.classification_reasons,
+      score_breakdown: classification,
       raw_text: String(extraction?.matching_reason || "").trim() || null,
     });
+    }
   }
 
   const deduped = [];
