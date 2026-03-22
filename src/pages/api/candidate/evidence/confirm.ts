@@ -19,24 +19,23 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       storage_path,
     } = req.body
 
-    // 🔥 FIX: obtener usuario desde verification_request
-    const { data: vr, error: vrError } = await supabase
-      .from("verification_requests")
-      .select("requested_by")
-      .eq("id", verification_request_id)
-      .maybeSingle()
+    // 🔐 sacar usuario del token
+    const authHeader = req.headers.authorization
 
-    if (vrError || !vr?.requested_by) {
-      return res.status(400).json({
-        ok: false,
-        stage: "vr_lookup_failed",
-        vrError,
-      })
+    if (!authHeader) {
+      return res.status(401).json({ ok: false, stage: "no_auth_header" })
     }
 
-    const uploaded_by = vr.requested_by
+    const token = authHeader.replace("Bearer ", "")
+    const { data: userData } = await supabase.auth.getUser(token)
 
-    // 🧱 INSERT
+    const userId = userData?.user?.id
+
+    if (!userId) {
+      return res.status(401).json({ ok: false, stage: "invalid_user" })
+    }
+
+    // 🧱 INSERT CORRECTO
     const { data: inserted, error } = await supabase
       .from("evidences")
       .insert({
@@ -44,7 +43,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         evidence_type,
         file_sha256,
         storage_path,
-        uploaded_by, // 🔥 ya siempre válido
+        uploaded_by: userId, // 🔥 FIX REAL
       })
       .select("id")
       .maybeSingle()
