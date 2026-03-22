@@ -20,6 +20,8 @@ type EvidenceItem = {
   reason: string | null;
   created_at: string | null;
   scope_label: string;
+  processing_status: string;
+  analysis_completed: boolean;
   processing_label: string;
   trust_label: string | null;
   trust_impact: string;

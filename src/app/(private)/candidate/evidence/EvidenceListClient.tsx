@@ -242,6 +242,7 @@ export default function EvidenceListClient({
   }
 
   function renderEvidenceCard(item: any) {
+    const showAnalysisOutcome = Boolean(item.analysis_completed)
     const impactTone =
       item.trust_impact === "alta"
         ? { bg: "#dcfce7", color: "#166534" }
@@ -285,12 +286,16 @@ export default function EvidenceListClient({
       >
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
           <span style={{ fontWeight: 700, color: "#0f172a" }}>{item.document_name}</span>
-          <span style={{ borderRadius: 999, background: impactTone.bg, color: impactTone.color, padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>
-            {impactLabel}
-          </span>
-          <span style={{ borderRadius: 999, background: matchTone.bg, color: matchTone.color, padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>
-            {item.match_label}
-          </span>
+          {showAnalysisOutcome ? (
+            <span style={{ borderRadius: 999, background: impactTone.bg, color: impactTone.color, padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>
+              {impactLabel}
+            </span>
+          ) : null}
+          {showAnalysisOutcome && item.match_label ? (
+            <span style={{ borderRadius: 999, background: matchTone.bg, color: matchTone.color, padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>
+              {item.match_label}
+            </span>
+          ) : null}
           <span style={{ borderRadius: 999, background: "#eff6ff", color: "#1d4ed8", padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>
             {item.scope_label}
           </span>
@@ -301,18 +306,20 @@ export default function EvidenceListClient({
           <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>{item.dates}</div>
         ) : null}
         <div style={{ fontSize: 13, color: "#0f172a", marginBottom: 4 }}>{item.processing_label}</div>
-        {item.match_summary ? (
+        {showAnalysisOutcome && item.match_summary ? (
           <div style={{ fontSize: 13, color: "#334155", marginBottom: 4 }}>{item.match_summary}</div>
         ) : null}
-        <div style={{ display: "grid", gap: 4, marginBottom: 8 }}>
-          <div style={{ fontSize: 12, color: item.match_level === "conflict" ? "#b91c1c" : "#334155" }}>
-            {item.person_check_label}
+        {showAnalysisOutcome ? (
+          <div style={{ display: "grid", gap: 4, marginBottom: 8 }}>
+            <div style={{ fontSize: 12, color: item.match_level === "conflict" ? "#b91c1c" : "#334155" }}>
+              {item.person_check_label}
+            </div>
+            <div style={{ fontSize: 12, color: "#475569" }}>{item.company_check_label}</div>
+            <div style={{ fontSize: 12, color: "#475569" }}>{item.date_check_label}</div>
+            <div style={{ fontSize: 12, color: "#475569" }}>{item.position_check_label}</div>
           </div>
-          <div style={{ fontSize: 12, color: "#475569" }}>{item.company_check_label}</div>
-          <div style={{ fontSize: 12, color: "#475569" }}>{item.date_check_label}</div>
-          <div style={{ fontSize: 12, color: "#475569" }}>{item.position_check_label}</div>
-        </div>
-        {item.trust_label ? (
+        ) : null}
+        {showAnalysisOutcome && item.trust_label ? (
           <div style={{ fontSize: 13, color: "#0369a1", marginBottom: 4 }}>{item.trust_label}</div>
         ) : null}
         <div style={{ fontSize: 12, color: "#475569" }}>

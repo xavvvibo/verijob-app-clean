@@ -19,6 +19,8 @@ export type CandidateEvidenceUiItem = {
   reason: string | null;
   created_at: string | null;
   scope_label: string;
+  processing_status: string;
+  analysis_completed: boolean;
   processing_label: string;
   trust_label: string | null;
   trust_impact: string;
@@ -64,6 +66,7 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
   });
   const scope = String(r?.document_scope || vr?.request_context?.documentary_scope || "").toLowerCase();
   const processingStatus = String(processing?.processing_status || processing?.status || "").toLowerCase();
+  const analysisCompleted = processingStatus === "processed" || processingStatus === "completed";
   const linkState = String(processing?.link_state || "").toLowerCase();
   const matchLevel = resolveDocumentaryMatchLevel({
     matching: processing?.matching || {
@@ -88,8 +91,9 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
               ? "No pudimos completar el análisis automático. Queda pendiente de revisión."
               : "Documento registrado.";
   const scopeLabel = scope === "global" ? "Evidencia global" : "Evidencia asociada a una experiencia";
-  const matchLabel =
-    matchLevel === "high"
+  const matchLabel = !analysisCompleted
+    ? null
+    : matchLevel === "high"
       ? "Coincidencia alta con esta experiencia"
       : matchLevel === "medium"
         ? "Coincidencia parcial positiva con esta experiencia"
@@ -97,17 +101,16 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
           ? "Coincidencia baja: revisa fechas o puesto"
           : matchLevel === "conflict"
             ? "Coincidencia conflictiva: revisa empresa, puesto o titular"
-            : processingStatus === "queued" || processingStatus === "processing"
-              ? "Documento recibido, análisis pendiente"
-              : "Coincidencia no concluyente";
+            : "Coincidencia no concluyente";
   const companyScore = Number(processing?.company_match_score ?? processing?.matching?.company_match_score ?? 0);
   const dateScore = Number(processing?.date_match_score ?? processing?.matching?.date_match_score ?? 0);
   const positionScore = Number(processing?.position_match_score ?? processing?.matching?.position_match_score ?? 0);
   const identityGatePassed =
     Boolean(processing?.identity_gate_passed ?? processing?.matching?.identity_gate_passed) &&
     matchLevel !== "conflict";
-  const trustLabel =
-    matchLevel === "conflict"
+  const trustLabel = !analysisCompleted
+    ? null
+    : matchLevel === "conflict"
       ? "Este documento no aporta confianza por conflicto de identidad."
       : impact === "alta"
         ? "Esta evidencia aporta confianza alta."
@@ -133,34 +136,40 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
     reason: ui.reason || null,
     created_at: r?.created_at || null,
     scope_label: scopeLabel,
+    processing_status: processingStatus || "queued",
+    analysis_completed: analysisCompleted,
     processing_label: processingLabel,
     trust_label: trustLabel,
     trust_impact: impact,
     match_level: matchLevel,
     match_label: matchLabel,
-    match_summary: String(processing?.processing_summary || processing?.matching_reason || "").trim() || null,
-    person_check_label: identityGatePassed
-      ? "Titular del documento coincide con tu perfil"
-      : matchLevel === "conflict"
-        ? "Conflicto: el titular del documento no coincide"
-        : "Titular pendiente de confirmar",
-    company_check_label: describeScore(
+    match_summary: analysisCompleted
+      ? String(processing?.processing_summary || processing?.matching_reason || "").trim() || null
+      : null,
+    person_check_label: analysisCompleted
+      ? identityGatePassed
+        ? "Titular del documento coincide con tu perfil"
+        : matchLevel === "conflict"
+          ? "Conflicto: el titular del documento no coincide"
+          : "Titular pendiente de confirmar"
+      : "",
+    company_check_label: analysisCompleted ? describeScore(
       companyScore,
       "Empresa coincide",
       "Empresa parcialmente compatible",
       "Empresa no coincide"
-    ),
-    date_check_label: describeScore(
+    ) : "",
+    date_check_label: analysisCompleted ? describeScore(
       dateScore,
       "Fechas compatibles",
       "Fechas parcialmente compatibles",
       "Fechas incompatibles"
-    ),
-    position_check_label: describeScore(
+    ) : "",
+    position_check_label: analysisCompleted ? describeScore(
       positionScore,
       "Puesto coincide",
       "Puesto parcialmente compatible",
       "Puesto no coincide"
-    ),
+    ) : "",
   };
 }
