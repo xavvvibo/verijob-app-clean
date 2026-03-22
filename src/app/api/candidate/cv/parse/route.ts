@@ -120,8 +120,8 @@ export async function POST(req: Request) {
     console.info("CV_PARSE_ROUTE_AUTH_OK", { userId: user.id });
     console.info("CV_PARSE_ROUTE_STAGE_AUTH", { userId: user.id });
 
-    const json = await req.json().catch(() => null);
-    const body = BodySchema.parse(json);
+    const requestJson = await req.json().catch(() => null);
+    const body = BodySchema.parse(requestJson);
     debugStage = "body";
     console.info("CV_PARSE_ROUTE_BODY_OK", {
       storagePath: body.storage_path,
