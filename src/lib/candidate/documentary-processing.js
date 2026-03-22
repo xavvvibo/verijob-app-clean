@@ -155,6 +155,13 @@ const VIDA_LABORAL_STOPWORDS = new Set([
   "días",
   "provincia",
   "clave",
+  "barcelona",
+  "granada",
+  "madrid",
+  "valencia",
+  "sevilla",
+  "malaga",
+  "málaga",
 ]);
 const DATE_TOKEN_REGEX = /\b(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2}|\d{4}-\d{2}|\d{4})\b/g;
 const DATE_PAIR_SOURCE =
@@ -525,6 +532,35 @@ function cleanupVidaLaboralCompanyText(value) {
   return pieces.join(" ").trim();
 }
 
+function extractMercantileNameCandidates(value) {
+  const raw = normalizeEmploymentText(value)
+    .replace(DATE_TOKEN_REGEX, " ")
+    .replace(/\b\d{5,}\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!raw) return [];
+
+  const suffixMatches = Array.from(
+    raw.matchAll(/\b([A-ZÁÉÍÓÚÑA-Za-záéíóúñ][A-ZÁÉÍÓÚÑA-Za-záéíóúñ\s]{1,80}?\s(?:S\.?\s?L\.?U?|S\.?\s?L\.?|S\.?\s?A\.?))\b/g),
+  ).map((match) => String(match[1] || "").trim());
+
+  const plainPhraseMatches = Array.from(
+    raw.matchAll(/\b([A-ZÁÉÍÓÚÑA-Za-záéíóúñ]{2,}(?:\s+[A-ZÁÉÍÓÚÑA-Za-záéíóúñ]{2,}){0,4})\b/g),
+  )
+    .map((match) => String(match[1] || "").trim())
+    .filter((candidate) => {
+      const tokens = candidate
+        .split(/\s+/)
+        .map((token) => normalizeText(token))
+        .filter(Boolean);
+      if (tokens.length === 0) return false;
+      if (tokens.every((token) => VIDA_LABORAL_STOPWORDS.has(token))) return false;
+      return tokens.some((token) => token.length >= 3 && !VIDA_LABORAL_STOPWORDS.has(token));
+    });
+
+  return Array.from(new Set([...suffixMatches, ...plainPhraseMatches])).sort((a, b) => b.length - a.length);
+}
+
 function extractCompanyNameFromVidaLaboralSegment(segment) {
   const raw = String(segment || "").trim();
   if (!raw) return null;
@@ -532,8 +568,11 @@ function extractCompanyNameFromVidaLaboralSegment(segment) {
   const afterEmpresa = raw.match(/\bempresa\b[:\s-]*(.+)$/i);
   const candidate = afterEmpresa ? afterEmpresa[1] : raw;
   const cleaned = cleanupVidaLaboralCompanyText(candidate);
-  if (!looksLikeCompanyFragment(cleaned)) return null;
-  return cleaned;
+  const mercantileCandidates = extractMercantileNameCandidates(candidate);
+  const bestCandidate = mercantileCandidates.find((item) => looksLikeCompanyFragment(cleanupVidaLaboralCompanyText(item)));
+  const resolved = bestCandidate ? cleanupVidaLaboralCompanyText(bestCandidate) : cleaned;
+  if (!looksLikeCompanyFragment(resolved)) return null;
+  return resolved;
 }
 
 export function scoreEmploymentCandidate({

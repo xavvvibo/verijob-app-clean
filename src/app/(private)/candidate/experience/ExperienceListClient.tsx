@@ -114,7 +114,6 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
       start_date: startDate,
       end_date: isCurrent ? null : normalizeDateForSave(row.end_date || null),
       description: String(row.description || "").trim() || null,
-      updated_at: new Date().toISOString(),
     };
 
     const { error } = await supabase.from("profile_experiences").update(payload).eq("id", id);
