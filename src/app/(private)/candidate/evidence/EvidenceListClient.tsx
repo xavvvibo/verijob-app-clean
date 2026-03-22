@@ -15,16 +15,22 @@ const supabase = createClient(
 )
 
 export default function EvidenceListClient({ initialItems }: Props) {
-  const [items, setItems] = useState<any[]>(initialItems || [])
+  const [items, setItems] = useState<any[]>([])
 
   useEffect(() => {
     load()
   }, [])
 
   async function load() {
+    const { data: userData } = await supabase.auth.getUser()
+    const userId = userData?.user?.id
+
+    if (!userId) return
+
     const { data, error } = await supabase
       .from("evidences")
       .select("*")
+      .eq("uploaded_by", userId)
       .order("created_at", { ascending: false })
 
     if (!error && data) {
