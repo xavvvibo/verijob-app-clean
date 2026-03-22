@@ -14,8 +14,8 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-export default function EvidenceListClient() {
-  const [items, setItems] = useState<any[]>([])
+export default function EvidenceListClient({ initialItems }: Props) {
+  const [items, setItems] = useState<any[]>(initialItems || [])
   const [debug, setDebug] = useState<any>(null)
 
   useEffect(() => {
