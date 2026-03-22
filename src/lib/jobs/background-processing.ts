@@ -820,6 +820,8 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       position_match_score: matching.position_match_score ?? 0,
       date_match_score: matching.date_match_score ?? 0,
       person_match_score: matching.person_match_score ?? 0,
+      identity_match: matching.identity_match || "none",
+      identity_match_score: matching.identity_match_score ?? matching.person_match_score ?? 0,
       identity_gate_passed: Boolean(matching.identity_gate_passed),
       identity_confirmed_by: matching.identity_confirmed_by || null,
       identity_by_official_id:
@@ -858,9 +860,7 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
     };
     finalValidationStatus = matching.auto_link
       ? EVIDENCE_VALIDATION_INTERNAL.APPROVED
-      : matching.inconsistency_reason
-        ? EVIDENCE_VALIDATION_INTERNAL.REJECTED
-        : EVIDENCE_VALIDATION_INTERNAL.NEEDS_REVIEW;
+      : EVIDENCE_VALIDATION_INTERNAL.NEEDS_REVIEW;
     finalInconsistencyReason = matching.inconsistency_reason || null;
     finalDocumentIssueDate = normalizeDateOnly(extractionResult?.extraction?.issue_date);
 

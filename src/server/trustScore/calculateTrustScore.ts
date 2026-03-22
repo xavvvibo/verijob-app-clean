@@ -72,6 +72,14 @@ function evidenceMatchMultiplier(level: string) {
   return 0.15;
 }
 
+function identityMatchMultiplier(level: string) {
+  if (level === "high") return 1;
+  if (level === "medium") return 0.7;
+  if (level === "low") return 0.15;
+  if (level === "none") return 0;
+  return 1;
+}
+
 function calculateWeightedEvidenceScore(rows: any[], verificationById: Map<string, any>) {
   const { usableEvidences } = calculateEvidenceScore(rows);
   const bestByType = new Map<string, { adjusted: number; level: string; base: number }>();
@@ -82,6 +90,9 @@ function calculateWeightedEvidenceScore(rows: any[], verificationById: Map<strin
     const basePoints = Number(getEvidenceTypeWeight(type) || row?.trust_weight || 0);
     const verification = verificationById.get(String(row?.verification_request_id || ""));
     const processing = verification?.request_context?.documentary_processing || {};
+    const identityMatch = String(processing?.identity_match || processing?.matching?.identity_match || "")
+      .trim()
+      .toLowerCase();
     const level = resolveDocumentaryMatchLevel({
       matching: processing?.matching || {
         overall_match_level: processing?.overall_match_level,
@@ -92,7 +103,7 @@ function calculateWeightedEvidenceScore(rows: any[], verificationById: Map<strin
       validationStatus: row?.validation_status,
       inconsistencyReason: row?.inconsistency_reason || processing?.inconsistency_reason,
     });
-    const adjusted = Number((basePoints * evidenceMatchMultiplier(level)).toFixed(2));
+    const adjusted = Number((basePoints * evidenceMatchMultiplier(level) * identityMatchMultiplier(identityMatch)).toFixed(2));
     const previous = bestByType.get(type);
     if (!previous || adjusted > previous.adjusted) {
       bestByType.set(type, { adjusted, level, base: basePoints });

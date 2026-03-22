@@ -288,6 +288,25 @@ function comparePersonName(docName, candidateName) {
   return { score: 0, level: "conflict", mode: "name_mismatch", subsetMatch, surnameMatch, givenMatch };
 }
 
+export function compareIdentityFuzzy(a, b) {
+  const compared = comparePersonName(a, b);
+  if (compared.level === "high") {
+    return { identity_match: "high", score: compared.score, mode: compared.mode, details: compared };
+  }
+  if (compared.level === "medium") {
+    return { identity_match: "medium", score: compared.score, mode: compared.mode, details: compared };
+  }
+  if (compared.level === "low" || compared.level === "inconclusive") {
+    return {
+      identity_match: compared.score >= 0.32 ? "low" : "none",
+      score: compared.score,
+      mode: compared.mode,
+      details: compared,
+    };
+  }
+  return { identity_match: "none", score: compared.score, mode: compared.mode, details: compared };
+}
+
 function compareCompanyName(extractedCompanyName, row) {
   const candidates = [
     { value: row?.company_name, source: "legal_name" },
@@ -909,13 +928,14 @@ export function computeDocumentaryMatching({
     candidateIdentityHash && extractedIdentityHash && extractedIdentityValue
       ? candidateIdentityHash === extractedIdentityHash
       : null;
-  const candidateNameMatch = comparePersonName(extraction?.candidate_name, candidateName);
-  const candidateNameScore = candidateNameMatch.score;
-  const hardIdentityConflict =
-    identityByOfficialId === false || (String(extraction?.candidate_name || "").trim() && candidateNameMatch.level === "conflict");
-  const identityGatePassed =
-    identityByOfficialId === true || candidateNameMatch.level === "high" || candidateNameMatch.level === "medium";
-  const identityConfirmedBy = identityByOfficialId === true ? "official_id" : identityGatePassed ? candidateNameMatch.mode : null;
+  const candidateIdentityMatch = compareIdentityFuzzy(extraction?.candidate_name, candidateName);
+  const candidateNameScore = candidateIdentityMatch.score;
+  const identityMatch =
+    identityByOfficialId === true ? "high" : identityByOfficialId === false ? "none" : candidateIdentityMatch.identity_match;
+  const identityMatchMultiplier =
+    identityMatch === "high" ? 1 : identityMatch === "medium" ? 0.7 : identityMatch === "low" ? 0.2 : 0;
+  const identityGatePassed = identityMatch !== "none";
+  const identityConfirmedBy = identityByOfficialId === true ? "official_id" : identityGatePassed ? candidateIdentityMatch.mode : null;
 
   const scored = rows.map((row) => {
     const companyMatch = compareCompanyName(extraction?.company_name, row);
@@ -932,11 +952,9 @@ export function computeDocumentaryMatching({
         ? { company: 0.5, date: 0.5, title: 0 }
         : { company: 0.4, date: 0.35, title: 0.25 };
 
-    const score = identityGatePassed
-      ? clamp01(companyScore * scoreWeights.company + dateScore * scoreWeights.date + effectiveTitleScore * scoreWeights.title)
-      : hardIdentityConflict
-        ? 0
-        : clamp01(companyScore * 0.2 + dateScore * 0.5 + effectiveTitleScore * 0.15);
+    const score = clamp01(
+      companyScore * scoreWeights.company + dateScore * scoreWeights.date + effectiveTitleScore * scoreWeights.title,
+    );
     return {
       employment_record_id: String(row?.id || ""),
       companySimilarity: companyScore,
@@ -953,8 +971,9 @@ export function computeDocumentaryMatching({
   const best = scored[0] || null;
 
   const extractionConfidence = extraction?.confidence_score == null ? 0.5 : clamp01(extraction.confidence_score);
-  const finalScore = hardIdentityConflict ? 0 : best ? clamp01(best.score * 0.85 + extractionConfidence * 0.15) : 0;
-  const hasNameInconsistency = Boolean(hardIdentityConflict);
+  const baseFinalScore = best ? clamp01(best.score * 0.85 + extractionConfidence * 0.15) : 0;
+  const finalScore = clamp01(baseFinalScore * identityMatchMultiplier);
+  const hasNameInconsistency = identityMatch === "none";
   const mismatchFlags = [];
   if (identityByOfficialId === false) mismatchFlags.push("official_identity_mismatch");
   if (hasNameInconsistency && identityByOfficialId !== false) mismatchFlags.push("person_name_mismatch");
@@ -963,7 +982,7 @@ export function computeDocumentaryMatching({
   if (best && best.dateScore < 0.35) mismatchFlags.push("date_mismatch");
 
   const autoLinkEligible = Boolean(
-    identityGatePassed &&
+    (identityMatch === "high" || identityMatch === "medium") &&
     best &&
     finalScore >= 0.82 &&
     best.companySimilarity >= (isVidaLaboral ? 0.55 : 0.6) &&
@@ -973,26 +992,20 @@ export function computeDocumentaryMatching({
   const autoLink = isVidaLaboral ? false : autoLinkEligible;
 
   const suggestedReview = Boolean(
-    hasNameInconsistency || (!autoLink && best && finalScore >= (isVidaLaboral ? 0.45 : 0.6))
+    identityMatch === "low" || identityMatch === "none" || (!autoLink && best && finalScore >= (isVidaLaboral ? 0.45 : 0.6))
   );
 
   const linkState = isVidaLaboral
-    ? hardIdentityConflict
-      ? "identity_conflict"
-      : "reconciliation_required"
+    ? "reconciliation_required"
     : autoLink
       ? "auto_linked"
       : suggestedReview
         ? "suggested_review"
         : "unlinked";
-  const overallMatchLevel = hardIdentityConflict
-    ? "conflict"
-    : !identityGatePassed && String(extraction?.candidate_name || "").trim()
-      ? "inconclusive"
-    : resolveDocumentaryMatchLevel({
-        matching: { final_score: finalScore },
-        inconsistencyReason: null,
-      });
+  const overallMatchLevel = resolveDocumentaryMatchLevel({
+    matching: { final_score: finalScore },
+    inconsistencyReason: null,
+  });
 
   const supportingMatches =
     isVidaLaboral
@@ -1009,6 +1022,8 @@ export function computeDocumentaryMatching({
     position_match_score: best?.titleSimilarity ?? 0,
     date_match_score: best?.dateScore ?? 0,
     person_match_score: best?.candidateScore ?? candidateNameScore,
+    identity_match: identityMatch,
+    identity_match_score: candidateNameScore,
     overall_match_score: finalScore,
     overall_match_level: overallMatchLevel,
     identity_gate_passed: identityGatePassed,
@@ -1022,11 +1037,13 @@ export function computeDocumentaryMatching({
     needs_manual_review: !autoLink,
     company_match_source: best?.company_match_source || null,
     matching_reason: isVidaLaboral
-      ? hardIdentityConflict
-        ? identityByOfficialId === false
-          ? "Conflicto: el identificador oficial del documento no coincide con el candidato."
-          : "Conflicto: el titular del documento no coincide razonablemente con el candidato."
-        : "Documento procesado. Revisa y vincula las experiencias detectadas de tu fe de vida laboral."
+      ? identityMatch === "high"
+        ? "Documento procesado. Identidad consistente y experiencias listas para revisión."
+        : identityMatch === "medium"
+          ? "Documento procesado. Coincidencia razonable de identidad. Revisa y vincula las experiencias detectadas."
+          : identityMatch === "low"
+            ? "Documento procesado. No se ha podido verificar completamente la identidad. Revisa los datos."
+            : "Documento procesado. Posible conflicto de identidad. Revisa los datos antes de vincular."
       : autoLink
       ? best?.company_match_source === "legal_name"
         ? "Coincidencia alta con esta experiencia. Empresa alineada por razón social."
@@ -1034,17 +1051,13 @@ export function computeDocumentaryMatching({
           ? "Coincidencia alta con esta experiencia. Empresa alineada por nombre comercial."
           : "Coincidencia alta entre empresa, periodo y puesto."
       : suggestedReview
-        ? hardIdentityConflict
-          ? identityByOfficialId === false
-            ? "Conflicto: el identificador oficial del documento no coincide con el candidato."
-            : "Conflicto: el titular del documento no coincide razonablemente con el candidato."
-          : "Coincidencia parcial; requiere revisión manual."
+        ? identityMatch === "low"
+          ? "Coincidencia parcial; la identidad requiere revisión manual."
+          : identityMatch === "none"
+            ? "Posible conflicto de identidad. Revisa los datos antes de validar."
+            : "Coincidencia parcial; requiere revisión manual."
         : "Coincidencia insuficiente para autovincular.",
-    inconsistency_reason: hardIdentityConflict
-      ? identityByOfficialId === false
-        ? "Conflicto: el identificador oficial del documento no coincide con el candidato."
-        : "Conflicto: el titular del documento no coincide razonablemente con el candidato."
-      : null,
+    inconsistency_reason: null,
   };
 }
 

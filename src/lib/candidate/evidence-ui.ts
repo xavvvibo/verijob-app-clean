@@ -187,11 +187,26 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
   const identityGatePassed =
     Boolean(processing?.identity_gate_passed ?? processing?.matching?.identity_gate_passed) &&
     matchLevel !== "conflict";
+  const identityMatch = String(
+    processing?.identity_match || processing?.matching?.identity_match || (identityGatePassed ? "medium" : "none"),
+  )
+    .trim()
+    .toLowerCase();
   const isVidaLaboral = evidenceTypeKey === "vida_laboral";
   const trustLabel = !analysisCompleted
     ? null
-    : matchLevel === "conflict"
-      ? "Este documento no aporta confianza por conflicto de identidad."
+    : identityMatch === "high"
+      ? isVidaLaboral
+        ? "Documento oficial procesado. Aporta confianza alta y ya puedes revisar las experiencias detectadas."
+        : "Esta evidencia aporta confianza alta."
+      : identityMatch === "medium"
+        ? isVidaLaboral
+          ? "Documento oficial procesado. Coincidencia razonable y listo para revisión."
+          : "Esta evidencia aporta confianza media."
+      : identityMatch === "low"
+        ? "No se ha podido verificar completamente la identidad. Revisa los datos."
+      : identityMatch === "none"
+        ? "Posible conflicto de identidad. Revisa los datos antes de validar el documento."
       : isVidaLaboral
         ? "Documento oficial procesado. Revisa y vincula las experiencias detectadas."
       : impact === "alta"
@@ -238,28 +253,32 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
           ? `Este documento puede reforzar ${supportingEmploymentRecordIds.length} experiencias compatibles del perfil.`
         : null,
     identity_status_label: analysisCompleted
-      ? identityGatePassed
+      ? identityMatch === "high"
         ? identityConfirmedBy === "official_id"
           ? "Identidad consistente. Confirmada por identificador oficial."
-          : "Identidad consistente. Coincidencia razonable con tu perfil."
-        : matchLevel === "conflict"
-          ? "Identidad no consistente. El documento no coincide con el titular del perfil."
-          : "Identidad parcial o no concluyente."
+          : "Identidad consistente. Coincidencia alta con tu perfil."
+        : identityMatch === "medium"
+          ? "Coincidencia razonable de identidad con tu perfil."
+          : identityMatch === "low"
+            ? "No se ha podido verificar completamente la identidad. Revisa los datos."
+            : "Posible conflicto de identidad. Revisa los datos."
       : null,
     extracted_employment_entries: extractedEmploymentEntries,
     reconciliation_summary: reconciliationSummary,
     person_check_label: analysisCompleted
       ? isVidaLaboral
         ? ""
-        : identityGatePassed
+        : identityMatch === "high"
         ? identityConfirmedBy === "official_id"
           ? "Identidad confirmada por documento oficial"
           : identityConfirmedBy === "name_subset_match" || identityConfirmedBy === "name_tolerant_match"
             ? "Coincidencia alta pese a variación en el nombre mostrado"
             : "Titular del documento coincide con tu perfil"
-        : matchLevel === "conflict"
-          ? "Conflicto: el titular del documento no coincide"
-          : "Titular pendiente de confirmar"
+        : identityMatch === "medium"
+          ? "Coincidencia razonable del titular con tu perfil"
+          : identityMatch === "low"
+            ? "Revisar identidad del titular"
+            : "Posible conflicto de identidad"
       : "",
     company_check_label: analysisCompleted && !isVidaLaboral ? describeScore(
       companyScore,
