@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { createClient as createSupabaseAdmin } from "@supabase/supabase-js";
-import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { z } from "zod";
+
+console.info("CV_PARSE_ROUTE_MODULE_LOADED");
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -106,6 +106,8 @@ export async function POST(req: Request) {
     | "response" = "enter";
   try {
     console.info("CV_PARSE_ROUTE_ENTER");
+    console.info("CV_PARSE_ROUTE_BEFORE_AUTH");
+    const { createRouteHandlerClient } = await import("@/utils/supabase/server");
     const authClient = await createRouteHandlerClient();
 
     const {
@@ -119,7 +121,9 @@ export async function POST(req: Request) {
     debugStage = "auth";
     console.info("CV_PARSE_ROUTE_AUTH_OK", { userId: user.id });
     console.info("CV_PARSE_ROUTE_STAGE_AUTH", { userId: user.id });
+    console.info("CV_PARSE_ROUTE_AFTER_AUTH", { userId: user.id });
 
+    console.info("CV_PARSE_ROUTE_BEFORE_BODY");
     const requestJson = await req.json().catch(() => null);
     const body = BodySchema.parse(requestJson);
     debugStage = "body";
@@ -130,6 +134,7 @@ export async function POST(req: Request) {
       sizeBytes: body.size_bytes ?? null,
     });
     console.info("CV_PARSE_ROUTE_STAGE_BODY", { storagePath: body.storage_path });
+    console.info("CV_PARSE_ROUTE_AFTER_BODY", { storagePath: body.storage_path });
 
     const supabaseUrl = getSupabaseUrl();
     const serviceKey = getServiceKey();
@@ -145,10 +150,15 @@ export async function POST(req: Request) {
       });
     }
 
+    const { createClient: createSupabaseAdmin } = await import("@supabase/supabase-js");
     admin = createSupabaseAdmin(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
+    console.info("CV_PARSE_ROUTE_BEFORE_UPLOAD_INSERT", {
+      storagePath: body.storage_path,
+      userId: user.id,
+    });
     const { data: upload, error: upErr } = await admin
       .from("cv_uploads")
       .insert({
@@ -188,7 +198,15 @@ export async function POST(req: Request) {
       uploadId: upload.id,
       storagePath: body.storage_path,
     });
+    console.info("CV_PARSE_ROUTE_AFTER_UPLOAD_INSERT", {
+      uploadId: upload.id,
+      storagePath: body.storage_path,
+    });
 
+    console.info("CV_PARSE_ROUTE_BEFORE_JOB_INSERT", {
+      uploadId: upload.id,
+      userId: user.id,
+    });
     const { data: job, error: jobErr } = await admin
       .from("cv_parse_jobs")
       .insert({
@@ -232,6 +250,10 @@ export async function POST(req: Request) {
       jobId: job.id,
       uploadId: upload.id,
     });
+    console.info("CV_PARSE_ROUTE_AFTER_JOB_INSERT", {
+      jobId: job.id,
+      uploadId: upload.id,
+    });
 
     const origin = new URL(req.url).origin;
     const internalSecret = getInternalSecret();
@@ -243,6 +265,10 @@ export async function POST(req: Request) {
     try {
       debugStage = "trigger";
       console.info("CV_PARSE_ROUTE_STAGE_TRIGGER", {
+        jobId: job.id,
+        uploadId: upload.id,
+      });
+      console.info("CV_PARSE_ROUTE_BEFORE_TRIGGER", {
         jobId: job.id,
         uploadId: upload.id,
       });
@@ -303,6 +329,12 @@ export async function POST(req: Request) {
       runnerStatus,
       runnerError,
     });
+    console.info("CV_PARSE_ROUTE_AFTER_TRIGGER", {
+      jobId: job.id,
+      runnerTriggered,
+      runnerStatus,
+      runnerError,
+    });
     debugStage = "response";
     console.info("CV_PARSE_ROUTE_STAGE_RESPONSE", {
       jobId: job.id,
@@ -336,6 +368,12 @@ export async function POST(req: Request) {
         processingError: responseBody.processing_error,
       });
     }
+    console.info("CV_PARSE_ROUTE_BEFORE_RETURN", {
+      jobId: job.id,
+      status: responseBody.status,
+      fatal: responseBody.fatal,
+      debugStage: responseBody.debug_stage,
+    });
     return json(200, responseBody);
   } catch (e: any) {
     const fatalMessage = String(e?.message || e);
