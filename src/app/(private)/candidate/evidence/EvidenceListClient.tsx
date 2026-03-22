@@ -34,10 +34,11 @@ export default function EvidenceListClient({ initialItems }: Props) {
         verification_requests (
           employment_records (
             id,
-            company_name,
-            job_title,
+            company_name_freeform,
+            position,
             start_date,
-            end_date
+            end_date,
+            is_current
           )
         )
       `)
@@ -49,10 +50,10 @@ export default function EvidenceListClient({ initialItems }: Props) {
     }
   }
 
-  function formatDates(start?: string, end?: string) {
+  function formatDates(start?: string, end?: string, isCurrent?: boolean) {
     if (!start) return ""
     const s = new Date(start).getFullYear()
-    const e = end ? new Date(end).getFullYear() : "Actualidad"
+    const e = isCurrent ? "Actualidad" : end ? new Date(end).getFullYear() : "Actualidad"
     return `${s} — ${e}`
   }
 
@@ -71,10 +72,10 @@ export default function EvidenceListClient({ initialItems }: Props) {
 
             {exp ? (
               <div style={{ color: "#666" }}>
-                {exp.job_title || "Puesto no definido"} —{" "}
-                {exp.company_name || "Empresa no definida"}
+                {exp.position || "Puesto no definido"} —{" "}
+                {exp.company_name_freeform || "Empresa no definida"}
                 <div style={{ fontSize: 12 }}>
-                  {formatDates(exp.start_date, exp.end_date)}
+                  {formatDates(exp.start_date, exp.end_date, exp.is_current)}
                 </div>
               </div>
             ) : (
