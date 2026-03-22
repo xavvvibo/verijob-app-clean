@@ -14,6 +14,31 @@ const BodySchema = z.object({
   sha256: z.string().nullable().optional(),
 });
 
+function json(status: number, body: Record<string, any>) {
+  try {
+    const response = NextResponse.json(body, { status });
+    response.headers.set("Cache-Control", "no-store");
+    return response;
+  } catch (error: any) {
+    return new Response(
+      JSON.stringify({
+        ok: false,
+        fatal: true,
+        error: "response_serialization_failed",
+        details: String(error?.message || error),
+        debug_stage: body?.debug_stage || "response",
+      }),
+      {
+        status,
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "cache-control": "no-store",
+        },
+      }
+    );
+  }
+}
+
 function getSupabaseUrl(): string {
   return process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
 }
@@ -89,13 +114,11 @@ export async function POST(req: Request) {
     } = await authClient.auth.getUser();
 
     if (authErr || !user) {
-      return NextResponse.json(
-        { error: "unauthorized", details: authErr?.message || null },
-        { status: 401 }
-      );
+      return json(401, { ok: false, fatal: true, error: "unauthorized", details: authErr?.message || null, debug_stage: "auth" });
     }
     debugStage = "auth";
     console.info("CV_PARSE_ROUTE_AUTH_OK", { userId: user.id });
+    console.info("CV_PARSE_ROUTE_STAGE_AUTH", { userId: user.id });
 
     const json = await req.json().catch(() => null);
     const body = BodySchema.parse(json);
@@ -106,15 +129,20 @@ export async function POST(req: Request) {
       mimeType: body.mime_type || null,
       sizeBytes: body.size_bytes ?? null,
     });
+    console.info("CV_PARSE_ROUTE_STAGE_BODY", { storagePath: body.storage_path });
 
     const supabaseUrl = getSupabaseUrl();
     const serviceKey = getServiceKey();
 
     if (!supabaseUrl || !serviceKey) {
-      return NextResponse.json(
-        { error: "missing_server_env", has_url: !!supabaseUrl, has_service_key: !!serviceKey },
-        { status: 500 }
-      );
+      return json(500, {
+        ok: false,
+        fatal: true,
+        error: "missing_server_env",
+        has_url: !!supabaseUrl,
+        has_service_key: !!serviceKey,
+        debug_stage: debugStage,
+      });
     }
 
     admin = createSupabaseAdmin(supabaseUrl, serviceKey, {
@@ -136,21 +164,28 @@ export async function POST(req: Request) {
       .single();
 
     if (upErr || !upload) {
-      return NextResponse.json(
+      return json(
+        400,
         {
+          ok: false,
+          fatal: true,
           error: "cv_uploads_insert_failed",
           details: upErr?.message || "insert_failed",
           step: "cv_uploads",
           user_id: user.id,
           storage_path: body.storage_path,
+          debug_stage: "upload_create",
         },
-        { status: 400 }
       );
     }
     debugStage = "upload_create";
     console.info("CV_PARSE_ROUTE_UPLOAD_CREATED", {
       uploadId: upload.id,
       userId: user.id,
+      storagePath: body.storage_path,
+    });
+    console.info("CV_PARSE_ROUTE_STAGE_UPLOAD_CREATE", {
+      uploadId: upload.id,
       storagePath: body.storage_path,
     });
 
@@ -165,15 +200,18 @@ export async function POST(req: Request) {
       .single();
 
     if (jobErr || !job) {
-      return NextResponse.json(
+      return json(
+        400,
         {
+          ok: false,
+          fatal: true,
           error: "cv_parse_jobs_insert_failed",
           details: jobErr?.message || "insert_failed",
           step: "cv_parse_jobs",
           user_id: user.id,
           cv_upload_id: upload.id,
+          debug_stage: "job_create",
         },
-        { status: 400 }
       );
     }
     createdJobId = String(job.id);
@@ -190,6 +228,10 @@ export async function POST(req: Request) {
       uploadId: upload.id,
       userId: user.id,
     });
+    console.info("CV_PARSE_ROUTE_STAGE_JOB_CREATE", {
+      jobId: job.id,
+      uploadId: upload.id,
+    });
 
     const origin = new URL(req.url).origin;
     const internalSecret = getInternalSecret();
@@ -200,6 +242,10 @@ export async function POST(req: Request) {
 
     try {
       debugStage = "trigger";
+      console.info("CV_PARSE_ROUTE_STAGE_TRIGGER", {
+        jobId: job.id,
+        uploadId: upload.id,
+      });
       console.info("CV_PARSE_ROUTE_TRIGGER_CALL_START", {
         jobId: job.id,
         uploadId: upload.id,
@@ -258,6 +304,10 @@ export async function POST(req: Request) {
       runnerError,
     });
     debugStage = "response";
+    console.info("CV_PARSE_ROUTE_STAGE_RESPONSE", {
+      jobId: job.id,
+      uploadId: upload.id,
+    });
     const responseBody = {
       ok: true,
       job_id: job.id,
@@ -286,10 +336,10 @@ export async function POST(req: Request) {
         processingError: responseBody.processing_error,
       });
     }
-    return NextResponse.json(responseBody);
+    return json(200, responseBody);
   } catch (e: any) {
     const fatalMessage = String(e?.message || e);
-    console.error("CV_PARSE_ROUTE_FATAL", {
+    console.error("CV_PARSE_ROUTE_CATCH_FATAL", {
       error: fatalMessage,
       createdJobId,
       createdUploadId,
@@ -312,7 +362,7 @@ export async function POST(req: Request) {
         status: "failed",
         processingError: fatalMessage,
       });
-      return NextResponse.json({
+      return json(200, {
         ok: true,
         job_id: createdJobId,
         upload_id: createdUploadId,
@@ -331,14 +381,15 @@ export async function POST(req: Request) {
       error: fatalMessage,
       debugStage,
     });
-    return NextResponse.json(
+    return json(
+      400,
       {
+        ok: false,
         error: "bad_request",
         details: fatalMessage,
         fatal: true,
         debug_stage: debugStage,
       },
-      { status: 400 }
     );
   }
 }
