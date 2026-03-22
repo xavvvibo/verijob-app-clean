@@ -29,6 +29,9 @@ type EvidenceItem = {
   match_level: string;
   match_label: string;
   match_summary: string | null;
+  supports_multiple_experiences: boolean;
+  supporting_employment_record_ids: string[];
+  supporting_experiences_label: string | null;
   person_check_label: string;
   company_check_label: string;
   date_check_label: string;

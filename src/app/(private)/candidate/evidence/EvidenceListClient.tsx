@@ -316,6 +316,9 @@ export default function EvidenceListClient({
         {showAnalysisOutcome && item.match_summary ? (
           <div style={{ fontSize: 13, color: "#334155", marginBottom: 4 }}>{item.match_summary}</div>
         ) : null}
+        {showAnalysisOutcome && item.supporting_experiences_label ? (
+          <div style={{ fontSize: 12, color: "#0369a1", marginBottom: 6 }}>{item.supporting_experiences_label}</div>
+        ) : null}
         {showAnalysisOutcome ? (
           <div style={{ display: "grid", gap: 4, marginBottom: 8 }}>
             <div style={{ fontSize: 12, color: item.match_level === "conflict" ? "#b91c1c" : "#334155" }}>

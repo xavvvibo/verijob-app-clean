@@ -11,6 +11,7 @@ import {
   normalizeEmploymentRecordVerificationStatus,
 } from "@/lib/verification/employment-record-verification-status";
 import { readCandidateProfileCollections } from "@/lib/candidate/profile-collections";
+import { mapCandidateAvailability } from "@/lib/candidate/availability";
 
 type Params = { token: string };
 
@@ -391,7 +392,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const profileTitle = asText((profile as any)?.title, 140) || null;
   const profileLocation = asText((profile as any)?.location, 140) || null;
   const profileSummary = asText(candidateProfile?.summary, 1200) || null;
-  const availability = asText(candidateProfile?.job_search_status, 80) || null;
+  const availability = mapCandidateAvailability(candidateProfile?.job_search_status) || null;
   const workMode = asText(candidateProfile?.preferred_workday, 80) || null;
   const sector = asText(asArray(candidateProfile?.preferred_roles)?.[0], 120) || null;
   const candidateCapabilities = getCandidatePlanCapabilities(latestSub?.plan || "free");

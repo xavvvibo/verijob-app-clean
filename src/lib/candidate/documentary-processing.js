@@ -338,6 +338,8 @@ export function computeDocumentaryMatching({
   evidenceType,
 }) {
   const rows = Array.isArray(employmentRecords) ? employmentRecords : [];
+  const normalizedEvidenceType = String(evidenceType || "").trim().toLowerCase();
+  const isVidaLaboral = normalizedEvidenceType === "vida_laboral";
   const extractedIdentityValue = compactIdentity(extraction?.tax_id);
   const identityByOfficialId =
     candidateIdentityHash && extractedIdentityHash && extractedIdentityValue
@@ -354,23 +356,29 @@ export function computeDocumentaryMatching({
   const scored = rows.map((row) => {
     const companyMatch = compareCompanyName(extraction?.company_name, row);
     const companyScore =
-      !String(extraction?.company_name || "").trim() && String(evidenceType || "").trim().toLowerCase() === "vida_laboral"
+      !String(extraction?.company_name || "").trim() && isVidaLaboral
         ? 0.6
         : companyMatch.score;
     const titleSimilarity = tokenSimilarity(extraction?.job_title, row?.position);
     const dateScore = dateCompatibility(extraction?.start_date, extraction?.end_date, row?.start_date, row?.end_date);
+    const effectiveTitleScore =
+      isVidaLaboral && !String(extraction?.job_title || "").trim() ? 0.5 : titleSimilarity;
+    const scoreWeights =
+      isVidaLaboral && !String(extraction?.job_title || "").trim()
+        ? { company: 0.5, date: 0.5, title: 0 }
+        : { company: 0.4, date: 0.35, title: 0.25 };
 
     const score = identityGatePassed
-      ? clamp01(companyScore * 0.4 + dateScore * 0.35 + titleSimilarity * 0.25)
+      ? clamp01(companyScore * scoreWeights.company + dateScore * scoreWeights.date + effectiveTitleScore * scoreWeights.title)
       : hardIdentityConflict
         ? 0
-        : clamp01(companyScore * 0.2 + dateScore * 0.5 + titleSimilarity * 0.15);
+        : clamp01(companyScore * 0.2 + dateScore * 0.5 + effectiveTitleScore * 0.15);
     return {
       employment_record_id: String(row?.id || ""),
       companySimilarity: companyScore,
       company_match_source: companyMatch.source,
       company_matched_value: companyMatch.matched_value,
-      titleSimilarity,
+      titleSimilarity: effectiveTitleScore,
       dateScore,
       candidateScore: candidateNameScore,
       score,
@@ -394,9 +402,9 @@ export function computeDocumentaryMatching({
     identityGatePassed &&
     best &&
     finalScore >= 0.82 &&
-    best.companySimilarity >= 0.6 &&
+    best.companySimilarity >= (isVidaLaboral ? 0.55 : 0.6) &&
     best.dateScore >= 0.4 &&
-    best.titleSimilarity >= 0.5
+    (isVidaLaboral ? true : best.titleSimilarity >= 0.5)
   );
 
   const suggestedReview = Boolean(hasNameInconsistency || (!autoLink && best && finalScore >= 0.6));
@@ -412,8 +420,10 @@ export function computeDocumentaryMatching({
       });
 
   const supportingMatches =
-    String(evidenceType || "").trim().toLowerCase() === "vida_laboral"
-      ? scored.filter((item) => item.score >= 0.55).map((item) => item.employment_record_id)
+    isVidaLaboral
+      ? scored
+          .filter((item) => item.score >= 0.55 && item.companySimilarity >= 0.45 && item.dateScore >= 0.45)
+          .map((item) => item.employment_record_id)
       : [];
 
   return {

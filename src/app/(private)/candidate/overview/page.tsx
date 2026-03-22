@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/browser";
 import { VerificationBadge } from "@/components/brand/VerificationBadge";
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
+import { mapCandidateAvailability } from "@/lib/candidate/availability";
 
 type ProfileLite = {
   full_name?: string | null;
@@ -519,13 +520,10 @@ export default function CandidateOverview() {
     [metrics.evidences, metrics.inProcess, metrics.verified, profileCompletionScore]
   );
 
-  const availabilityText = useMemo(() => {
-    const raw = String(candidateProfile?.job_search_status || "").toLowerCase();
-    if (raw.includes("active")) return "Buscando activamente";
-    if (raw.includes("open")) return "Abierto a oportunidades";
-    if (raw.includes("not")) return "No disponible temporalmente";
-    return "Disponibilidad no definida";
-  }, [candidateProfile?.job_search_status]);
+  const availabilityText = useMemo(
+    () => mapCandidateAvailability(candidateProfile?.job_search_status) || "Disponibilidad no definida",
+    [candidateProfile?.job_search_status]
+  );
 
   return (
     <div className="space-y-6">

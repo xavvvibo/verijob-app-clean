@@ -28,6 +28,9 @@ export type CandidateEvidenceUiItem = {
   match_level: string;
   match_label: string;
   match_summary: string | null;
+  supports_multiple_experiences: boolean;
+  supporting_employment_record_ids: string[];
+  supporting_experiences_label: string | null;
   person_check_label: string;
   company_check_label: string;
   date_check_label: string;
@@ -108,6 +111,16 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
   const positionScore = Number(processing?.position_match_score ?? processing?.matching?.position_match_score ?? 0);
   const identityConfirmedBy = String(processing?.identity_confirmed_by || processing?.matching?.identity_confirmed_by || "").trim().toLowerCase();
   const companyMatchSource = String(processing?.company_match_source || processing?.matching?.company_match_source || "").trim().toLowerCase();
+  const supportingEmploymentRecordIds = Array.isArray(
+    processing?.supporting_employment_record_ids || processing?.matching?.supporting_employment_record_ids
+  )
+    ? (processing?.supporting_employment_record_ids || processing?.matching?.supporting_employment_record_ids)
+        .map((value: any) => String(value || "").trim())
+        .filter(Boolean)
+    : [];
+  const supportsMultipleExperiences =
+    Boolean(processing?.supports_multiple_experiences || processing?.matching?.supports_multiple_experiences) ||
+    supportingEmploymentRecordIds.length > 1;
   const identityGatePassed =
     Boolean(processing?.identity_gate_passed ?? processing?.matching?.identity_gate_passed) &&
     matchLevel !== "conflict";
@@ -150,6 +163,12 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
     match_summary: analysisCompleted
       ? String(processing?.processing_summary || processing?.matching_reason || "").trim() || null
       : null,
+    supports_multiple_experiences: supportsMultipleExperiences,
+    supporting_employment_record_ids: supportingEmploymentRecordIds,
+    supporting_experiences_label:
+      analysisCompleted && supportsMultipleExperiences
+        ? `Este documento puede reforzar ${supportingEmploymentRecordIds.length} experiencias compatibles del perfil.`
+        : null,
     person_check_label: analysisCompleted
       ? identityGatePassed
         ? identityConfirmedBy === "official_id"
