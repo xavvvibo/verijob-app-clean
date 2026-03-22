@@ -71,7 +71,16 @@ export async function POST(req: Request) {
   let admin: any = null;
   let createdJobId: string | null = null;
   let createdUploadId: string | null = null;
+  let debugStage:
+    | "enter"
+    | "auth"
+    | "body"
+    | "upload_create"
+    | "job_create"
+    | "trigger"
+    | "response" = "enter";
   try {
+    console.info("CV_PARSE_ROUTE_ENTER");
     const authClient = await createRouteHandlerClient();
 
     const {
@@ -85,9 +94,18 @@ export async function POST(req: Request) {
         { status: 401 }
       );
     }
+    debugStage = "auth";
+    console.info("CV_PARSE_ROUTE_AUTH_OK", { userId: user.id });
 
     const json = await req.json().catch(() => null);
     const body = BodySchema.parse(json);
+    debugStage = "body";
+    console.info("CV_PARSE_ROUTE_BODY_OK", {
+      storagePath: body.storage_path,
+      originalFilename: body.original_filename || null,
+      mimeType: body.mime_type || null,
+      sizeBytes: body.size_bytes ?? null,
+    });
 
     const supabaseUrl = getSupabaseUrl();
     const serviceKey = getServiceKey();
@@ -129,6 +147,12 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+    debugStage = "upload_create";
+    console.info("CV_PARSE_ROUTE_UPLOAD_CREATED", {
+      uploadId: upload.id,
+      userId: user.id,
+      storagePath: body.storage_path,
+    });
 
     const { data: job, error: jobErr } = await admin
       .from("cv_parse_jobs")
@@ -154,6 +178,7 @@ export async function POST(req: Request) {
     }
     createdJobId = String(job.id);
     createdUploadId = String(upload.id);
+    debugStage = "job_create";
     console.info("CV_PARSE_JOB_CREATED", {
       jobId: job.id,
       userId: user.id,
@@ -174,6 +199,11 @@ export async function POST(req: Request) {
     let runnerError: string | null = null;
 
     try {
+      debugStage = "trigger";
+      console.info("CV_PARSE_ROUTE_TRIGGER_CALL_START", {
+        jobId: job.id,
+        uploadId: upload.id,
+      });
       const cookie = req.headers.get("cookie");
       const headers: Record<string, string> = {
         "content-type": "application/json",
@@ -221,6 +251,13 @@ export async function POST(req: Request) {
       runnerStatus,
       runnerError,
     });
+    console.info("CV_PARSE_ROUTE_TRIGGER_CALL_DONE", {
+      jobId: job.id,
+      runnerTriggered,
+      runnerStatus,
+      runnerError,
+    });
+    debugStage = "response";
     const responseBody = {
       ok: true,
       job_id: job.id,
@@ -232,6 +269,8 @@ export async function POST(req: Request) {
       runner_error: runnerError,
       processing_dispatched: runnerTriggered,
       processing_error: runnerTriggered ? null : runnerError || "No pudimos iniciar el análisis automático.",
+      fatal: false,
+      debug_stage: debugStage,
     };
     if (runnerTriggered) {
       console.info("CV_PARSE_ROUTE_RESPONSE_OK", {
@@ -254,6 +293,7 @@ export async function POST(req: Request) {
       error: fatalMessage,
       createdJobId,
       createdUploadId,
+      debugStage,
     });
     if (admin && createdJobId) {
       await markCvParseJobFailed({
@@ -283,15 +323,20 @@ export async function POST(req: Request) {
         runner_error: fatalMessage,
         processing_dispatched: false,
         processing_error: fatalMessage,
+        fatal: false,
+        debug_stage: debugStage,
       });
     }
     console.error("CV_PARSE_ROUTE_RESPONSE_FATAL", {
       error: fatalMessage,
+      debugStage,
     });
     return NextResponse.json(
       {
         error: "bad_request",
         details: fatalMessage,
+        fatal: true,
+        debug_stage: debugStage,
       },
       { status: 400 }
     );
