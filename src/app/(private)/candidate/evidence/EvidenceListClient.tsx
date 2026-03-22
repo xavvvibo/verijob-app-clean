@@ -3,13 +3,19 @@
 import { useEffect, useState } from "react"
 import { createClient } from "@supabase/supabase-js"
 
+type Props = {
+  initialItems: any[]
+  experienceOptions: any[]
+  preselectedExperienceId?: string
+}
+
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 )
 
-export default function EvidenceListClient() {
-  const [items, setItems] = useState<any[]>([])
+export default function EvidenceListClient({ initialItems }: Props) {
+  const [items, setItems] = useState<any[]>(initialItems || [])
 
   useEffect(() => {
     load()
@@ -21,8 +27,8 @@ export default function EvidenceListClient() {
       .select("*")
       .order("created_at", { ascending: false })
 
-    if (!error) {
-      setItems(data || [])
+    if (!error && data) {
+      setItems(data)
     }
   }
 
