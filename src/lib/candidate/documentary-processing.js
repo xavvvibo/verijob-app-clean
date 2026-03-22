@@ -666,6 +666,9 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
   const rows = Array.isArray(employmentRecords) ? employmentRecords : [];
   const rawBlocks = splitIntoRawMovementBlocks(text);
   const extractedEntries = [];
+  const EMPLOYMENT_SCORE_THRESHOLD = 0.46;
+  const SELF_EMPLOYMENT_SCORE_THRESHOLD = 0.4;
+  const LOW_CONFIDENCE_PROMOTION_THRESHOLD = 0.55;
 
   for (let index = 0; index < rawBlocks.length; index += 1) {
     const rawBlock = rawBlocks[index];
@@ -691,17 +694,34 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
       selfEmployment,
       provinceHint: provinceMeta.province_hint,
     });
+    const hasUsableDates = Boolean(startDate || endDate);
+    const hasPlausibleEmployer = Boolean(companyName) && classification.employer_plausibility >= 0.3;
+    const dominatedByNumericNoise = classification.numeric_noise_penalty >= 0.45;
+    const promotedLowConfidence =
+      !administrative.matched &&
+      !ignoredReason &&
+      hasUsableDates &&
+      !dominatedByNumericNoise &&
+      ((hasPlausibleEmployer && classification.score >= EMPLOYMENT_SCORE_THRESHOLD) ||
+        (selfEmployment.matched && classification.score >= SELF_EMPLOYMENT_SCORE_THRESHOLD)) &&
+      classification.score < LOW_CONFIDENCE_PROMOTION_THRESHOLD;
 
     let entryType = "discarded";
     if (ignoredReason || administrative.matched) {
       entryType = "administrative";
     } else if (
-      (companyName && (startDate || endDate) && classification.score >= 0.55) ||
-      (selfEmployment.matched && (startDate || endDate) && classification.score >= 0.48)
+      hasUsableDates &&
+      !dominatedByNumericNoise &&
+      ((hasPlausibleEmployer && classification.score >= EMPLOYMENT_SCORE_THRESHOLD) ||
+        (selfEmployment.matched && classification.score >= SELF_EMPLOYMENT_SCORE_THRESHOLD))
     ) {
       entryType = "employment";
     }
     if (entryType === "discarded") continue;
+    const classificationReasons = Array.isArray(classification.classification_reasons)
+      ? [...classification.classification_reasons]
+      : [];
+    if (promotedLowConfidence) classificationReasons.push("promoted_low_confidence");
 
     let suggestedMatchEmploymentRecordId = null;
     let suggestedMatchScore = 0;
@@ -741,8 +761,12 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
       self_employment: Boolean(selfEmployment.matched),
       province_prefix: provinceMeta.province_prefix,
       province_hint: provinceMeta.province_hint,
-      classification_reasons: classification.classification_reasons,
-      score_breakdown: classification,
+      classification_reasons: classificationReasons,
+      score_breakdown: {
+        ...classification,
+        promotion_threshold: selfEmployment.matched ? SELF_EMPLOYMENT_SCORE_THRESHOLD : EMPLOYMENT_SCORE_THRESHOLD,
+        promoted_low_confidence: promotedLowConfidence,
+      },
       raw_block_index: Number(rawBlock?.raw_block_index || 0),
       split_from_parent: Boolean(rawBlock?.split_from_parent),
       split_reason: Array.isArray(rawBlock?.split_reason) ? rawBlock.split_reason : [],
@@ -767,13 +791,32 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
       selfEmployment,
       provinceHint: provinceMeta.province_hint,
     });
+    const fallbackHasUsableDates = Boolean(normalizeLooseDate(extraction?.start_date) || normalizeLooseDate(extraction?.end_date));
+    const fallbackHasPlausibleEmployer =
+      Boolean(String(extraction?.company_name || "").trim()) && classification.employer_plausibility >= 0.3;
+    const fallbackDominatedByNumericNoise = classification.numeric_noise_penalty >= 0.45;
+    const fallbackPromotedLowConfidence =
+      !administrative.matched &&
+      !ignoredReason &&
+      fallbackHasUsableDates &&
+      !fallbackDominatedByNumericNoise &&
+      ((fallbackHasPlausibleEmployer && classification.score >= EMPLOYMENT_SCORE_THRESHOLD) ||
+        (selfEmployment.matched && classification.score >= SELF_EMPLOYMENT_SCORE_THRESHOLD)) &&
+      classification.score < LOW_CONFIDENCE_PROMOTION_THRESHOLD;
     const fallbackType =
       ignoredReason || administrative.matched
         ? "administrative"
-        : classification.score >= 0.55 || (selfEmployment.matched && classification.score >= 0.48)
+        : fallbackHasUsableDates &&
+            !fallbackDominatedByNumericNoise &&
+            ((fallbackHasPlausibleEmployer && classification.score >= EMPLOYMENT_SCORE_THRESHOLD) ||
+              (selfEmployment.matched && classification.score >= SELF_EMPLOYMENT_SCORE_THRESHOLD))
           ? "employment"
           : "discarded";
     if (fallbackType !== "discarded") {
+      const fallbackClassificationReasons = Array.isArray(classification.classification_reasons)
+        ? [...classification.classification_reasons]
+        : [];
+      if (fallbackPromotedLowConfidence) fallbackClassificationReasons.push("promoted_low_confidence");
       extractedEntries.push({
       entry_id: "vida_laboral_fallback_1",
       type: fallbackType,
@@ -794,8 +837,12 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
       self_employment: Boolean(selfEmployment.matched),
       province_prefix: provinceMeta.province_prefix,
       province_hint: provinceMeta.province_hint,
-      classification_reasons: classification.classification_reasons,
-      score_breakdown: classification,
+      classification_reasons: fallbackClassificationReasons,
+      score_breakdown: {
+        ...classification,
+        promotion_threshold: selfEmployment.matched ? SELF_EMPLOYMENT_SCORE_THRESHOLD : EMPLOYMENT_SCORE_THRESHOLD,
+        promoted_low_confidence: fallbackPromotedLowConfidence,
+      },
       raw_block_index: 0,
       split_from_parent: false,
       split_reason: ["fallback_extraction"],
