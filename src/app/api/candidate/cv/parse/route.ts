@@ -31,6 +31,30 @@ function getInternalSecret(): string {
   return process.env.INTERNAL_ADMIN_SECRET || "";
 }
 
+async function markCvParseJobFailed(params: {
+  admin: any;
+  jobId: string;
+  errorMessage: string;
+}) {
+  const failedAt = new Date().toISOString();
+  await params.admin
+    .from("cv_parse_jobs")
+    .update({
+      status: "failed",
+      finished_at: failedAt,
+      error: String(params.errorMessage || "cv_parse_dispatch_failed").slice(0, 1000),
+      result_json: {
+        meta: {
+          retryable: true,
+          processing_mode: "background_job",
+          failed_at: failedAt,
+          dispatch_failed: true,
+        },
+      },
+    })
+    .eq("id", params.jobId);
+}
+
 export async function POST(req: Request) {
   try {
     const authClient = await createRouteHandlerClient();
@@ -145,19 +169,41 @@ export async function POST(req: Request) {
 
       runnerStatus = runnerRes.status;
       runnerTriggered = runnerRes.ok;
+      console.info("CV_PARSE_TRIGGER_REQUEST_RECEIVED", {
+        jobId: job.id,
+        uploadId: upload.id,
+        origin,
+      });
 
       if (!runnerRes.ok) {
         const txt = await runnerRes.text().catch(() => "");
         runnerError = txt.slice(0, 500) || `runner_failed_${runnerRes.status}`;
+        await markCvParseJobFailed({
+          admin,
+          jobId: String(job.id),
+          errorMessage: runnerError,
+        });
       }
     } catch (e: any) {
       runnerError = String(e?.message || e);
+      await markCvParseJobFailed({
+        admin,
+        jobId: String(job.id),
+        errorMessage: runnerError,
+      });
     }
+
+    console.info("CV_PARSE_TRIGGER_DISPATCH_RESULT", {
+      jobId: job.id,
+      runnerTriggered,
+      runnerStatus,
+      runnerError,
+    });
 
     return NextResponse.json({
       ok: true,
       job_id: job.id,
-      status: job.status,
+      status: runnerTriggered ? job.status : "failed",
       created_at: job.created_at,
       upload_id: upload.id,
       runner_triggered: runnerTriggered,
@@ -165,6 +211,9 @@ export async function POST(req: Request) {
       runner_error: runnerError,
     });
   } catch (e: any) {
+    console.error("CV_PARSE_ROUTE_FATAL", {
+      error: String(e?.message || e),
+    });
     return NextResponse.json(
       {
         error: "bad_request",

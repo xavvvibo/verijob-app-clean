@@ -346,35 +346,29 @@ export default function CvUploadAndParse() {
       });
       if (upErr) throw new Error(`upload_failed: ${upErr.message}`);
 
-      const { data: upload, error: cvUploadErr } = await supabase
-        .from("cv_uploads")
-        .insert({
-          user_id: user.id,
-          storage_bucket: bucket,
+      const parseRes = await fetch("/api/candidate/cv/parse", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
           storage_path: path,
           original_filename: file.name,
           mime_type: file.type || null,
           size_bytes: file.size,
-        })
-        .select("id")
-        .single();
-      if (cvUploadErr || !upload) throw new Error(`cv_uploads_insert_failed: ${cvUploadErr?.message || "insert_failed"}`);
+          sha256: null,
+        }),
+      });
+      const parseBody = await parseRes.json().catch(() => ({}));
+      if (!parseRes.ok || !parseBody?.job_id) {
+        throw new Error(
+          parseBody?.details ||
+            parseBody?.error ||
+            parseBody?.runner_error ||
+            "cv_parse_jobs_insert_failed: insert_failed"
+        );
+      }
 
-      const { data: parseJob, error: jobErr } = await supabase
-        .from("cv_parse_jobs")
-        .insert({ user_id: user.id, cv_upload_id: upload.id, status: "queued" })
-        .select("id,status")
-        .single();
-      if (jobErr || !parseJob) throw new Error(`cv_parse_jobs_insert_failed: ${jobErr?.message || "insert_failed"}`);
-
-      setJobId(parseJob.id);
-      setMsg("Job en cola…");
-
-      void fetch("/api/candidate/cv/parse/trigger", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ job_id: parseJob.id }),
-      }).catch(() => {});
+      setJobId(String(parseBody.job_id));
+      setMsg(parseBody?.processing_error ? toFriendlyCvError(parseBody.processing_error) : "Job en cola…");
     } catch (e: any) {
       setMsg(toFriendlyCvError(e?.message || "Error subiendo/procesando CV."));
     } finally {

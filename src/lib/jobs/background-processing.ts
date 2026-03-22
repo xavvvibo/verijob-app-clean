@@ -906,13 +906,20 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
 
 async function pickPendingCandidateCvJobs(limit: number) {
   const supabase = createServiceRoleClient() as any;
+  console.info("CV_PARSE_WORKER_PICK_QUERY", { limit });
   const { data } = await supabase
     .from("cv_parse_jobs")
     .select("id")
     .in("status", ["queued", "failed"])
     .order("created_at", { ascending: true })
     .limit(limit);
-  return (Array.isArray(data) ? data : []).map((row: any) => String(row.id)).filter(Boolean);
+  const ids = (Array.isArray(data) ? data : []).map((row: any) => String(row.id)).filter(Boolean);
+  if (ids.length > 0) {
+    console.info("CV_PARSE_WORKER_PICK_FOUND", { limit, ids });
+  } else {
+    console.info("CV_PARSE_WORKER_PICK_EMPTY", { limit });
+  }
+  return ids;
 }
 
 async function pickPendingCompanyImportJobs(limit: number) {

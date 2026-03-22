@@ -60,6 +60,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "missing_job_id" }, { status: 400 });
     }
     console.info("CV_PARSE_DISPATCH_START", { jobId, isInternalCall, requesterUserId });
+    console.info("CV_PARSE_TRIGGER_REQUEST_RECEIVED", { jobId, isInternalCall, requesterUserId });
 
     const supabase = createServiceRoleClient() as any;
     const { data: job, error: jobErr } = await supabase
@@ -76,6 +77,11 @@ export async function POST(req: Request) {
       console.error("CV_PARSE_DISPATCH_JOB_NOT_FOUND", { jobId });
       return NextResponse.json({ error: "job_not_found" }, { status: 404 });
     }
+    console.info("CV_PARSE_TRIGGER_JOB_LOOKUP_OK", {
+      jobId,
+      userId: job.user_id,
+      currentStatus: job.status,
+    });
     if (!isInternalCall && requesterUserId && requesterUserId !== String(job.user_id || "")) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
@@ -124,6 +130,10 @@ export async function POST(req: Request) {
           jobId,
           errorMessage: dispatchResult.error || dispatchResult.details || "cv_parse_dispatch_failed",
         });
+        console.error("CV_PARSE_TRIGGER_JOB_MARKED_FAILED", {
+          jobId,
+          error: dispatchResult.error || dispatchResult.details || "cv_parse_dispatch_failed",
+        });
       }
     } catch (error: any) {
       const dispatchMessage = String(error?.message || error || "cv_parse_dispatch_failed");
@@ -138,6 +148,10 @@ export async function POST(req: Request) {
         jobId,
         errorMessage: dispatchMessage,
       });
+      console.error("CV_PARSE_TRIGGER_JOB_MARKED_FAILED", {
+        jobId,
+        error: dispatchMessage,
+      });
       dispatchResult = {
         ok: false,
         mode: "inline",
@@ -147,18 +161,28 @@ export async function POST(req: Request) {
       };
     }
 
-    return NextResponse.json(
-      {
-        ok: true,
-        accepted: true,
-        job_id: jobId,
-        status: dispatchResult.ok ? nextStatus : "failed",
-        processing_dispatched: dispatchResult.ok,
-        processing_error: dispatchResult.ok ? null : dispatchResult.error || dispatchResult.details || "cv_parse_dispatch_failed",
-        dispatch: dispatchResult,
-      },
-      { status: 202 }
-    );
+    const responseBody = {
+      ok: true,
+      accepted: true,
+      job_id: jobId,
+      status: dispatchResult.ok ? nextStatus : "failed",
+      processing_dispatched: dispatchResult.ok,
+      processing_error: dispatchResult.ok ? null : dispatchResult.error || dispatchResult.details || "cv_parse_dispatch_failed",
+      dispatch: dispatchResult,
+    };
+    console.info("CV_PARSE_TRIGGER_DISPATCH_RESULT", {
+      jobId,
+      processingDispatched: responseBody.processing_dispatched,
+      processingError: responseBody.processing_error,
+      dispatchMode: dispatchResult.mode,
+      dispatchStatus: dispatchResult.status,
+    });
+    console.info("CV_PARSE_TRIGGER_RESPONSE_OK", {
+      jobId,
+      status: responseBody.status,
+      processingDispatched: responseBody.processing_dispatched,
+    });
+    return NextResponse.json(responseBody, { status: 202 });
   } catch (error: any) {
     console.error("CV_PARSE_TRIGGER_FATAL", {
       error: String(error?.message || error),
