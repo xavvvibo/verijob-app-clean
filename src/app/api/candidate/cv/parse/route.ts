@@ -37,25 +37,40 @@ async function markCvParseJobFailed(params: {
   errorMessage: string;
 }) {
   const failedAt = new Date().toISOString();
-  await params.admin
-    .from("cv_parse_jobs")
-    .update({
-      status: "failed",
-      finished_at: failedAt,
-      error: String(params.errorMessage || "cv_parse_dispatch_failed").slice(0, 1000),
-      result_json: {
-        meta: {
-          retryable: true,
-          processing_mode: "background_job",
-          failed_at: failedAt,
-          dispatch_failed: true,
+  try {
+    await params.admin
+      .from("cv_parse_jobs")
+      .update({
+        status: "failed",
+        finished_at: failedAt,
+        error: String(params.errorMessage || "cv_parse_dispatch_failed").slice(0, 1000),
+        result_json: {
+          meta: {
+            retryable: true,
+            processing_mode: "background_job",
+            failed_at: failedAt,
+            dispatch_failed: true,
+          },
         },
-      },
-    })
-    .eq("id", params.jobId);
+      })
+      .eq("id", params.jobId);
+    console.error("CV_PARSE_ROUTE_JOB_FAILED_PERSISTED", {
+      jobId: params.jobId,
+      error: String(params.errorMessage || "cv_parse_dispatch_failed"),
+    });
+  } catch (persistError: any) {
+    console.error("CV_PARSE_ROUTE_JOB_FAILED_PERSIST_FAILED", {
+      jobId: params.jobId,
+      error: String(params.errorMessage || "cv_parse_dispatch_failed"),
+      persistError: String(persistError?.message || persistError),
+    });
+  }
 }
 
 export async function POST(req: Request) {
+  let admin: any = null;
+  let createdJobId: string | null = null;
+  let createdUploadId: string | null = null;
   try {
     const authClient = await createRouteHandlerClient();
 
@@ -84,7 +99,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const admin = createSupabaseAdmin(supabaseUrl, serviceKey, {
+    admin = createSupabaseAdmin(supabaseUrl, serviceKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
@@ -137,11 +152,18 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+    createdJobId = String(job.id);
+    createdUploadId = String(upload.id);
     console.info("CV_PARSE_JOB_CREATED", {
       jobId: job.id,
       userId: user.id,
       uploadId: upload.id,
       storagePath: body.storage_path,
+    });
+    console.info("CV_PARSE_ROUTE_JOB_CREATED", {
+      jobId: job.id,
+      uploadId: upload.id,
+      userId: user.id,
     });
 
     const origin = new URL(req.url).origin;
@@ -199,8 +221,7 @@ export async function POST(req: Request) {
       runnerStatus,
       runnerError,
     });
-
-    return NextResponse.json({
+    const responseBody = {
       ok: true,
       job_id: job.id,
       status: runnerTriggered ? job.status : "failed",
@@ -209,15 +230,68 @@ export async function POST(req: Request) {
       runner_triggered: runnerTriggered,
       runner_status: runnerStatus,
       runner_error: runnerError,
-    });
+      processing_dispatched: runnerTriggered,
+      processing_error: runnerTriggered ? null : runnerError || "No pudimos iniciar el análisis automático.",
+    };
+    if (runnerTriggered) {
+      console.info("CV_PARSE_ROUTE_RESPONSE_OK", {
+        jobId: job.id,
+        uploadId: upload.id,
+        status: responseBody.status,
+      });
+    } else {
+      console.error("CV_PARSE_ROUTE_RESPONSE_PARTIAL", {
+        jobId: job.id,
+        uploadId: upload.id,
+        status: responseBody.status,
+        processingError: responseBody.processing_error,
+      });
+    }
+    return NextResponse.json(responseBody);
   } catch (e: any) {
+    const fatalMessage = String(e?.message || e);
     console.error("CV_PARSE_ROUTE_FATAL", {
-      error: String(e?.message || e),
+      error: fatalMessage,
+      createdJobId,
+      createdUploadId,
+    });
+    if (admin && createdJobId) {
+      await markCvParseJobFailed({
+        admin,
+        jobId: createdJobId,
+        errorMessage: fatalMessage,
+      });
+      console.error("CV_PARSE_ROUTE_TRIGGER_FAILED", {
+        jobId: createdJobId,
+        uploadId: createdUploadId,
+        error: fatalMessage,
+      });
+      console.error("CV_PARSE_ROUTE_RESPONSE_PARTIAL", {
+        jobId: createdJobId,
+        uploadId: createdUploadId,
+        status: "failed",
+        processingError: fatalMessage,
+      });
+      return NextResponse.json({
+        ok: true,
+        job_id: createdJobId,
+        upload_id: createdUploadId,
+        status: "failed",
+        created_at: null,
+        runner_triggered: false,
+        runner_status: null,
+        runner_error: fatalMessage,
+        processing_dispatched: false,
+        processing_error: fatalMessage,
+      });
+    }
+    console.error("CV_PARSE_ROUTE_RESPONSE_FATAL", {
+      error: fatalMessage,
     });
     return NextResponse.json(
       {
         error: "bad_request",
-        details: String(e?.message || e),
+        details: fatalMessage,
       },
       { status: 400 }
     );
