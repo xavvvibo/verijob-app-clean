@@ -86,6 +86,35 @@ const VIDA_LABORAL_IGNORED_KEYWORDS = [
   "maternidad",
   "paternidad",
 ];
+const VIDA_LABORAL_STOPWORDS = new Set([
+  "fecha",
+  "alta",
+  "baja",
+  "empresa",
+  "situacion",
+  "situación",
+  "ccc",
+  "codigo",
+  "código",
+  "cotizacion",
+  "cotización",
+  "regimen",
+  "régimen",
+  "tipo",
+  "contrato",
+  "grupo",
+  "epigrafe",
+  "epígrafe",
+  "coeficiente",
+  "jornada",
+  "dias",
+  "días",
+  "provincia",
+  "clave",
+]);
+const DATE_TOKEN_REGEX = /\b(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2}|\d{4}-\d{2}|\d{4})\b/g;
+const DATE_PAIR_SOURCE =
+  "(?:\\d{2}[/-]\\d{2}[/-]\\d{4}|\\d{2}[/-]\\d{4}|\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}|\\d{4})\\s+(?:a\\s+)?(?:\\d{2}[/-]\\d{2}[/-]\\d{4}|\\d{2}[/-]\\d{4}|\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}|\\d{4})";
 
 function compactIdentity(value) {
   return String(value || "")
@@ -274,16 +303,8 @@ function normalizeLooseDate(value) {
 }
 
 function extractDateTokens(value) {
-  const matches = String(value || "").match(/\b(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2}|\d{4}-\d{2}|\d{4})\b/g);
+  const matches = String(value || "").match(DATE_TOKEN_REGEX);
   return Array.isArray(matches) ? matches : [];
-}
-
-function normalizeVidaLaboralCompanyName(value) {
-  return String(value || "")
-    .replace(/\b(fecha|alta|baja|empresa|situacion|situación|ccc|codigo|código|cotizacion|cotización|regimen|régimen|tipo|contrato)\b/gi, " ")
-    .replace(/\b(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2}|\d{4}-\d{2}|\d{4})\b/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 function detectAdministrativeIgnoredReason(value) {
@@ -294,26 +315,94 @@ function detectAdministrativeIgnoredReason(value) {
     : null;
 }
 
+function normalizeVidaLaboralText(text) {
+  return String(text || "")
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\u00a0/g, " ")
+    .replace(/[|]/g, " ")
+    .replace(/([A-ZÁÉÍÓÚÑ]{3,})\s+(?=\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}-\d{2})/g, "$1\n")
+    .replace(new RegExp(`(${DATE_PAIR_SOURCE})`, "g"), "\n$1")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
+
+function splitVidaLaboralSegments(text) {
+  const normalized = normalizeVidaLaboralText(text);
+  if (!normalized) return [];
+
+  const rawParts = normalized
+    .split(/\n+/)
+    .map((part) => String(part || "").trim())
+    .filter(Boolean);
+
+  const segments = [];
+  let current = "";
+  for (const part of rawParts) {
+    const hasDate = extractDateTokens(part).length > 0;
+    if (hasDate) {
+      if (current) segments.push(current.trim());
+      current = part;
+    } else if (current) {
+      current = `${current} ${part}`.trim();
+    } else {
+      current = part;
+    }
+  }
+  if (current) segments.push(current.trim());
+
+  return segments
+    .map((segment) => segment.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function looksLikeCompanyFragment(value) {
+  const tokens = companyTokens(value);
+  return tokens.length >= 1 && String(value || "").replace(/\s+/g, " ").trim().length >= 3;
+}
+
+function cleanupVidaLaboralCompanyText(value) {
+  const cleaned = String(value || "")
+    .replace(DATE_TOKEN_REGEX, " ")
+    .replace(/\b(?:empresa|empresario|razon social|razón social|nif|cif|naf|ccc|situacion|situación|tipo|contrato|coeficiente|grupo|epigrafe|epígrafe|dias|días|regimen|régimen|provincia|clave)\b/gi, " ")
+    .replace(/\b\d{6,}\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const pieces = cleaned
+    .split(/\s+/)
+    .filter((token) => token && !VIDA_LABORAL_STOPWORDS.has(normalizeText(token)));
+
+  return pieces.join(" ").trim();
+}
+
+function extractCompanyNameFromVidaLaboralSegment(segment) {
+  const raw = String(segment || "").trim();
+  if (!raw) return null;
+
+  const afterEmpresa = raw.match(/\bempresa\b[:\s-]*(.+)$/i);
+  const candidate = afterEmpresa ? afterEmpresa[1] : raw;
+  const cleaned = cleanupVidaLaboralCompanyText(candidate);
+  if (!looksLikeCompanyFragment(cleaned)) return null;
+  return cleaned;
+}
+
 export function extractVidaLaboralEmploymentEntries({ text, extraction, employmentRecords } = {}) {
   const rows = Array.isArray(employmentRecords) ? employmentRecords : [];
-  const rawLines = String(text || "")
-    .split(/\r?\n+/)
-    .map((line) => String(line || "").trim())
-    .filter(Boolean);
+  const segments = splitVidaLaboralSegments(text);
   const extractedEntries = [];
 
-  for (let index = 0; index < rawLines.length; index += 1) {
-    const line = rawLines[index];
-    const dateTokens = extractDateTokens(line);
-    if (dateTokens.length < 2) continue;
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    const dateTokens = extractDateTokens(segment);
+    if (dateTokens.length === 0) continue;
 
-    const combined = [rawLines[index - 1], line, rawLines[index + 1]].filter(Boolean).join(" ").trim();
     const startDate = normalizeLooseDate(dateTokens[0]);
-    const endDate = normalizeLooseDate(dateTokens[1]);
-    const companyName = normalizeVidaLaboralCompanyName(combined) || normalizeVidaLaboralCompanyName(line);
-    if (!companyName || companyName.length < 3) continue;
+    const endDate = normalizeLooseDate(dateTokens[1] || null);
+    const companyName = extractCompanyNameFromVidaLaboralSegment(segment);
+    if (!companyName) continue;
 
-    const ignoredReason = detectAdministrativeIgnoredReason(`${companyName} ${combined}`);
+    const ignoredReason = detectAdministrativeIgnoredReason(`${companyName} ${segment}`);
     let suggestedMatchEmploymentRecordId = null;
     let suggestedMatchScore = 0;
 
@@ -335,14 +424,14 @@ export function extractVidaLaboralEmploymentEntries({ text, extraction, employme
       position: null,
       start_date: startDate,
       end_date: endDate,
-      confidence: clamp01((startDate && endDate ? 0.7 : 0.5) + (suggestedMatchScore >= 0.7 ? 0.2 : 0)),
+      confidence: clamp01((startDate ? 0.55 : 0.35) + (endDate ? 0.1 : 0) + (suggestedMatchScore >= 0.7 ? 0.2 : suggestedMatchScore >= 0.5 ? 0.1 : 0)),
       ignored_reason: ignoredReason,
       suggested_match_employment_record_id: suggestedMatchEmploymentRecordId,
       suggested_match_score: suggestedMatchScore,
       reconciliation_status: ignoredReason ? "ignored" : "pending",
       reconciliation_choice: ignoredReason ? "ignore" : null,
       linked_employment_record_id: null,
-      raw_text: combined,
+      raw_text: segment,
     });
   }
 
