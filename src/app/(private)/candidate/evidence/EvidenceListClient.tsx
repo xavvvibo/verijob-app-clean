@@ -184,10 +184,16 @@ export default function EvidenceListClient({
           file_sha256: fileHash,
         }),
       });
-      const confirmJson = await confirmRes.json().catch(() => ({}));
+      const confirmText = await confirmRes.text();
+      let confirmJson: any = {};
+      try {
+        confirmJson = confirmText ? JSON.parse(confirmText) : {};
+      } catch {
+        confirmJson = {};
+      }
       if (!confirmRes.ok) {
         throw new Error(
-          String(confirmJson?.details || confirmJson?.error || "No se pudo registrar la evidencia.").trim(),
+          String(confirmJson?.details || confirmJson?.error || confirmText || "No se pudo registrar la evidencia.").trim(),
         );
       }
       if (confirmJson?.processing?.deferred) {
