@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 
 function json(status: number, body: any) {
@@ -21,7 +22,7 @@ export async function DELETE(_req: Request, ctx: any) {
 
   const { data: row, error: rowErr } = await supabase
     .from("evidences")
-    .select("id")
+    .select("id,verification_request_id")
     .eq("id", id)
     .eq("uploaded_by", user.id)
     .maybeSingle();
@@ -31,6 +32,33 @@ export async function DELETE(_req: Request, ctx: any) {
 
   const { error: delErr } = await supabase.from("evidences").delete().eq("id", id).eq("uploaded_by", user.id);
   if (delErr) return json(400, { error: "delete_failed", details: delErr.message });
+
+  const verificationRequestId = String((row as any)?.verification_request_id || "").trim();
+  if (verificationRequestId) {
+    const admin = createServiceRoleClient() as any;
+    const { count } = await admin
+      .from("evidences")
+      .select("id", { count: "exact", head: true })
+      .eq("verification_request_id", verificationRequestId);
+
+    if (Number(count || 0) === 0) {
+      const { data: vr } = await admin
+        .from("verification_requests")
+        .select("request_context")
+        .eq("id", verificationRequestId)
+        .maybeSingle();
+
+      const currentContext =
+        vr?.request_context && typeof vr.request_context === "object" ? (vr.request_context as any) : {};
+      const nextContext = { ...currentContext };
+      delete nextContext.documentary_processing;
+
+      await admin
+        .from("verification_requests")
+        .update({ request_context: nextContext })
+        .eq("id", verificationRequestId);
+    }
+  }
 
   await recalculateAndPersistCandidateTrustScore(user.id).catch(() => {});
 

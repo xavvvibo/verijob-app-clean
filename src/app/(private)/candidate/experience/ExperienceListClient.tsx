@@ -14,6 +14,7 @@ type ExperienceStatus =
 
 type Row = {
   id: string;
+  employment_record_id?: string | null;
   role_title: string | null;
   company_name: string | null;
   start_date: string | null;
@@ -378,7 +379,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                           </button>
                         ) : null}
                         <Link
-                          href={`/candidate/evidence?experience_id=${encodeURIComponent(row.id)}&company=${encodeURIComponent(row.company_name || "")}&position=${encodeURIComponent(row.role_title || "")}`}
+                          href={`/candidate/evidence?experience_id=${encodeURIComponent(row.employment_record_id || `profile:${row.id}`)}&company=${encodeURIComponent(row.company_name || "")}&position=${encodeURIComponent(row.role_title || "")}`}
                           className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50"
                         >
                           Vincular documentación

@@ -2,25 +2,34 @@ import { redirect } from "next/navigation";
 import DashboardShell from "@/app/_components/DashboardShell";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import EvidenceListClient from "./EvidenceListClient";
-import {
-  getEvidenceTypeLabel,
-  toEvidenceUiStatusWithReason,
-} from "@/lib/candidate/evidence-types";
+import { buildEvidenceUiItem } from "@/lib/candidate/evidence-ui";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 type EvidenceItem = {
   id: string;
+  verification_request_id: string | null;
+  employment_record_id: string | null;
   document_name: string;
   document_type: string;
+  evidence_type_key: string;
   experience: string;
+  dates: string | null;
   status: string;
   reason: string | null;
   created_at: string | null;
   scope_label: string;
   processing_label: string;
   trust_label: string | null;
+  trust_impact: string;
+  match_level: string;
+  match_label: string;
+  match_summary: string | null;
+  person_check_label: string;
+  company_check_label: string;
+  date_check_label: string;
+  position_check_label: string;
 };
 
 type ExperienceOption = {
@@ -44,7 +53,7 @@ export default async function CandidateEvidencePage(props: any) {
 
   const { data: evidences } = await supabase
     .from("evidences")
-    .select("id, verification_request_id, created_at, evidence_type, document_type, document_scope, validation_status, inconsistency_reason, trust_weight, verification_requests(status, request_context, employment_record_id, employment_records(position, company_name_freeform))")
+    .select("id, verification_request_id, created_at, evidence_type, document_type, document_scope, validation_status, inconsistency_reason, trust_weight, verification_requests(id, status, request_context, employment_record_id, employment_records(id, position, company_name_freeform, start_date, end_date, is_current))")
     .eq("uploaded_by", au.user.id)
     .order("created_at", { ascending: false });
 
@@ -84,60 +93,7 @@ export default async function CandidateEvidencePage(props: any) {
     );
   }
 
-  const items: EvidenceItem[] = (evidences || []).map((r: any) => {
-    const vr = Array.isArray(r.verification_requests) ? r.verification_requests[0] : r.verification_requests;
-    const er = Array.isArray(vr?.employment_records) ? vr.employment_records[0] : vr?.employment_records;
-    const processing = vr?.request_context?.documentary_processing || {};
-    const ui = toEvidenceUiStatusWithReason({
-      validationStatus: r?.validation_status || vr?.status,
-      inconsistencyReason: r?.inconsistency_reason || processing?.inconsistency_reason,
-      matchingReason: processing?.matching_reason,
-      error: processing?.error,
-      fallbackReason:
-        String(processing?.status || "").toLowerCase() === "queued"
-          ? "Evidencia recibida. La estamos analizando."
-          : String(processing?.status || "").toLowerCase() === "processing"
-            ? "Estamos analizando el documento."
-            : null,
-    });
-    const scope = String(r?.document_scope || vr?.request_context?.documentary_scope || "").toLowerCase();
-    const processingStatus = String(processing?.status || "").toLowerCase();
-    const linkState = String(processing?.link_state || "").toLowerCase();
-    const scopeLabel = scope === "global" ? "Evidencia global" : "Evidencia asociada a una experiencia";
-    const processingLabel =
-      processingStatus === "queued"
-        ? "Archivo recibido. Pendiente de análisis."
-        : processingStatus === "processing"
-          ? "Documento en análisis."
-          : processingStatus === "processed" && linkState === "auto_linked"
-            ? "Documento procesado y vinculado automáticamente."
-            : processingStatus === "processed"
-              ? "Documento procesado. Está pendiente de revisión."
-              : processingStatus === "failed"
-                ? "No pudimos completar el análisis automático. Queda pendiente de revisión."
-                : "Documento registrado.";
-    const trustLabel =
-      String(r?.validation_status || "").toLowerCase() === "approved"
-        ? "Ya está reforzando tu Trust Score."
-        : Number(r?.trust_weight ?? 0) > 0
-          ? "Puede reforzar tu Trust Score cuando termine la validación."
-          : null;
-    return {
-      id: r.id,
-      document_name: getEvidenceTypeLabel(r?.document_type || r?.evidence_type),
-      document_type: getEvidenceTypeLabel(r?.document_type || r?.evidence_type),
-      experience:
-        scope === "global"
-          ? "Varias experiencias"
-          : [er?.position, er?.company_name_freeform].filter(Boolean).join(" — ") || "Experiencia no vinculada",
-      status: ui.status,
-      reason: ui.reason || null,
-      created_at: r.created_at || null,
-      scope_label: scopeLabel,
-      processing_label: processingLabel,
-      trust_label: trustLabel,
-    };
-  });
+  const items: EvidenceItem[] = (evidences || []).map((r: any) => buildEvidenceUiItem(r));
 
   return (
     <DashboardShell title="Evidencias">

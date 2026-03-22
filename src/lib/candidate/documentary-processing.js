@@ -111,6 +111,43 @@ function clamp01(v) {
   return Math.max(0, Math.min(1, n));
 }
 
+export function normalizeDocumentaryMatchLevel(level) {
+  const raw = String(level || "").trim().toLowerCase();
+  if (raw === "high" || raw === "medium" || raw === "low" || raw === "inconclusive" || raw === "conflict") return raw;
+  return "inconclusive";
+}
+
+export function resolveDocumentaryMatchLevel({
+  matching,
+  processingStatus,
+  validationStatus,
+  inconsistencyReason,
+} = {}) {
+  const normalizedProcessingStatus = String(processingStatus || "").trim().toLowerCase();
+  const normalizedValidationStatus = String(validationStatus || "").trim().toLowerCase();
+  const explicit = normalizeDocumentaryMatchLevel(
+    matching?.overall_match_level || matching?.match_level || matching?.level || null
+  );
+
+  if (matching?.overall_match_level || matching?.match_level || matching?.level) {
+    return explicit;
+  }
+
+  if (String(inconsistencyReason || "").trim() || normalizedValidationStatus === "rejected") {
+    return "conflict";
+  }
+
+  if (!matching || normalizedProcessingStatus === "queued" || normalizedProcessingStatus === "processing") {
+    return "inconclusive";
+  }
+
+  const score = clamp01(matching?.overall_match_score ?? matching?.final_score ?? matching?.best_match?.score ?? 0);
+  if (score >= 0.82) return "high";
+  if (score >= 0.6) return "medium";
+  if (score >= 0.35) return "low";
+  return "inconclusive";
+}
+
 function readOutputText(resp) {
   if (typeof resp?.output_text === "string" && resp.output_text.trim()) return resp.output_text.trim();
   if (Array.isArray(resp?.output)) {
@@ -166,21 +203,25 @@ export function normalizeDocumentaryExtract(raw) {
 
 export function computeDocumentaryMatching({ extraction, employmentRecords, candidateName }) {
   const rows = Array.isArray(employmentRecords) ? employmentRecords : [];
+  const candidateNameScore = extraction?.candidate_name
+    ? tokenSimilarity(extraction?.candidate_name, candidateName)
+    : 0.5;
+  const personMatches = !extraction?.candidate_name || candidateNameScore >= 0.55;
+
   const scored = rows.map((row) => {
     const companySimilarity = tokenSimilarity(extraction?.company_name, row?.company_name_freeform);
     const titleSimilarity = tokenSimilarity(extraction?.job_title, row?.position);
     const dateScore = dateCompatibility(extraction?.start_date, extraction?.end_date, row?.start_date, row?.end_date);
-    const candidateScore = extraction?.candidate_name
-      ? tokenSimilarity(extraction?.candidate_name, candidateName)
-      : 0.5;
 
-    const score = clamp01(companySimilarity * 0.4 + titleSimilarity * 0.2 + dateScore * 0.25 + candidateScore * 0.15);
+    const score = personMatches
+      ? clamp01(companySimilarity * 0.4 + dateScore * 0.35 + titleSimilarity * 0.25)
+      : 0;
     return {
       employment_record_id: String(row?.id || ""),
       companySimilarity,
       titleSimilarity,
       dateScore,
-      candidateScore,
+      candidateScore: candidateNameScore,
       score,
     };
   });
@@ -189,28 +230,45 @@ export function computeDocumentaryMatching({ extraction, employmentRecords, cand
   const best = scored[0] || null;
 
   const extractionConfidence = extraction?.confidence_score == null ? 0.5 : clamp01(extraction.confidence_score);
-  const finalScore = best ? clamp01(best.score * 0.75 + extractionConfidence * 0.25) : 0;
-  const candidateNameScore = extraction?.candidate_name
-    ? tokenSimilarity(extraction?.candidate_name, candidateName)
-    : 0.5;
-  const hasNameInconsistency = Boolean(extraction?.candidate_name && candidateNameScore < 0.55);
+  const finalScore = personMatches && best ? clamp01(best.score * 0.85 + extractionConfidence * 0.15) : 0;
+  const hasNameInconsistency = Boolean(extraction?.candidate_name && !personMatches);
+  const mismatchFlags = [];
+  if (hasNameInconsistency) mismatchFlags.push("person_name_mismatch");
+  if (best && best.companySimilarity < 0.55) mismatchFlags.push("company_mismatch");
+  if (best && best.titleSimilarity < 0.45) mismatchFlags.push("position_mismatch");
+  if (best && best.dateScore < 0.35) mismatchFlags.push("date_mismatch");
 
   const autoLink = Boolean(
+    personMatches &&
     best &&
     finalScore >= 0.82 &&
     best.companySimilarity >= 0.6 &&
-    (best.dateScore >= 0.4 || best.titleSimilarity >= 0.5) &&
-    !hasNameInconsistency
+    best.dateScore >= 0.4 &&
+    best.titleSimilarity >= 0.5
   );
 
   const suggestedReview = Boolean(hasNameInconsistency || (!autoLink && best && finalScore >= 0.6));
 
   const linkState = autoLink ? "auto_linked" : suggestedReview ? "suggested_review" : "unlinked";
+  const overallMatchLevel = hasNameInconsistency
+    ? "conflict"
+    : resolveDocumentaryMatchLevel({
+        matching: { final_score: finalScore },
+        inconsistencyReason: null,
+      });
 
   return {
     best_match: best,
     candidates: scored,
     final_score: finalScore,
+    company_match_score: best?.companySimilarity ?? 0,
+    position_match_score: best?.titleSimilarity ?? 0,
+    date_match_score: best?.dateScore ?? 0,
+    person_match_score: best?.candidateScore ?? candidateNameScore,
+    overall_match_score: finalScore,
+    overall_match_level: overallMatchLevel,
+    identity_gate_passed: personMatches,
+    mismatch_flags: mismatchFlags,
     link_state: linkState,
     auto_link: autoLink,
     needs_manual_review: !autoLink,
@@ -218,11 +276,11 @@ export function computeDocumentaryMatching({ extraction, employmentRecords, cand
       ? "Coincidencia alta entre empresa, periodo y puesto"
       : suggestedReview
         ? hasNameInconsistency
-          ? "Inconsistencia detectada en titular del documento"
+          ? "Conflicto: el titular del documento no coincide con el candidato"
           : "Coincidencia parcial; requiere revisión manual"
         : "Coincidencia insuficiente para autovincular",
     inconsistency_reason: hasNameInconsistency
-      ? "Inconsistencia detectada en titular del documento"
+      ? "Conflicto: el titular del documento no coincide con el candidato"
       : null,
   };
 }

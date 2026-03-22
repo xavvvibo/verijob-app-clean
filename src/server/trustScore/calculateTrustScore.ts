@@ -5,6 +5,7 @@ import {
   normalizeValidationStatus,
   EVIDENCE_VALIDATION_INTERNAL,
 } from "@/lib/candidate/evidence-types";
+import { resolveDocumentaryMatchLevel } from "@/lib/candidate/documentary-processing";
 import { isVerifiedEmploymentRecordStatus } from "@/lib/verification/employment-record-verification-status";
 import { verificationTrustWeightForSignal } from "@/lib/verification/verifier-email-signal";
 
@@ -19,6 +20,7 @@ type TrustBreakdown = {
   evidence_points_raw: number;
   evidence_points_capped: number;
   evidence_types: string[];
+  evidence_match_levels?: Record<string, string>;
   reuseEvents: number;
   reuseCompanies: number;
   model: string;
@@ -59,18 +61,46 @@ function calculateEvidenceScore(rows: any[]) {
     const status = normalizeValidationStatus(row?.validation_status);
     return status !== EVIDENCE_VALIDATION_INTERNAL.REJECTED;
   });
+  return { usableEvidences };
+}
 
-  const uniqueEvidenceTypes: string[] = [];
-  const seenEvidenceTypes = new Set<string>();
+function evidenceMatchMultiplier(level: string) {
+  if (level === "high") return 1;
+  if (level === "medium") return 0.7;
+  if (level === "low") return 0.35;
+  if (level === "conflict") return 0;
+  return 0.15;
+}
+
+function calculateWeightedEvidenceScore(rows: any[], verificationById: Map<string, any>) {
+  const { usableEvidences } = calculateEvidenceScore(rows);
+  const bestByType = new Map<string, { adjusted: number; level: string; base: number }>();
 
   for (const row of usableEvidences) {
     const type = normalizeEvidenceType(row?.evidence_type || row?.document_type);
-    if (!type || seenEvidenceTypes.has(type)) continue;
-    seenEvidenceTypes.add(type);
-    uniqueEvidenceTypes.push(type);
+    if (!type) continue;
+    const basePoints = Number(getEvidenceTypeWeight(type) || row?.trust_weight || 0);
+    const verification = verificationById.get(String(row?.verification_request_id || ""));
+    const processing = verification?.request_context?.documentary_processing || {};
+    const level = resolveDocumentaryMatchLevel({
+      matching: processing?.matching || {
+        overall_match_level: processing?.overall_match_level,
+        overall_match_score: processing?.overall_match_score,
+        final_score: processing?.overall_match_score,
+      },
+      processingStatus: processing?.processing_status || processing?.status,
+      validationStatus: row?.validation_status,
+      inconsistencyReason: row?.inconsistency_reason || processing?.inconsistency_reason,
+    });
+    const adjusted = Number((basePoints * evidenceMatchMultiplier(level)).toFixed(2));
+    const previous = bestByType.get(type);
+    if (!previous || adjusted > previous.adjusted) {
+      bestByType.set(type, { adjusted, level, base: basePoints });
+    }
   }
 
-  const rawPoints = uniqueEvidenceTypes.reduce((acc, type) => acc + Number(getEvidenceTypeWeight(type) || 0), 0);
+  const uniqueEvidenceTypes = Array.from(bestByType.keys());
+  const rawPoints = Array.from(bestByType.values()).reduce((acc, item) => acc + item.adjusted, 0);
   const cappedPoints = Math.min(30, rawPoints);
 
   return {
@@ -78,6 +108,7 @@ function calculateEvidenceScore(rows: any[]) {
     uniqueEvidenceTypes,
     rawPoints,
     cappedPoints,
+    matchLevels: Object.fromEntries(Array.from(bestByType.entries()).map(([type, item]) => [type, item.level])),
   };
 }
 
@@ -139,7 +170,10 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
   const evidences = Array.isArray(evidenceRows) ? evidenceRows : [];
 
   const verificationByEmployment = new Map<string, any[]>();
+  const verificationById = new Map<string, any>();
   for (const row of verifications) {
+    const verificationId = String((row as any)?.id || "").trim();
+    if (verificationId) verificationById.set(verificationId, row);
     const employmentRecordId = String((row as any)?.employment_record_id || "").trim();
     if (!employmentRecordId) continue;
     verificationByEmployment.set(employmentRecordId, [...(verificationByEmployment.get(employmentRecordId) || []), row]);
@@ -172,7 +206,7 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
     weightedVerifiedEmployment >= 3 ? 40 : weightedVerifiedEmployment >= 2 ? 30 : weightedVerifiedEmployment >= 1 ? 20 : weightedVerifiedEmployment > 0 ? 10 : 0;
   const verificationBlock = Math.max(0, verificationBlockBase - Math.min(10, rejectedVerificationCount * 5));
 
-  const evidenceScore = calculateEvidenceScore(evidences);
+  const evidenceScore = calculateWeightedEvidenceScore(evidences, verificationById);
   const evidenceBlock = evidenceScore.cappedPoints;
 
   const consistencyBlock = consistencyBlockFromEmployment(employment);
@@ -207,6 +241,7 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
       evidence_points_raw: evidenceScore.rawPoints,
       evidence_points_capped: evidenceScore.cappedPoints,
       evidence_types: evidenceScore.uniqueEvidenceTypes,
+      evidence_match_levels: evidenceScore.matchLevels as any,
       reuseEvents,
       reuseCompanies,
       model: "trust_mvp_f28_v3_document_evidence_points",
