@@ -1,4 +1,4 @@
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { dispatchBackgroundJob } from "@/lib/jobs/background-processing";
@@ -8,6 +8,30 @@ export const dynamic = "force-dynamic";
 
 function getInternalSecret(): string {
   return process.env.INTERNAL_ADMIN_SECRET || "";
+}
+
+async function markCvParseJobFailed(params: {
+  supabase: any;
+  jobId: string;
+  errorMessage: string;
+}) {
+  const failedAt = new Date().toISOString();
+  await params.supabase
+    .from("cv_parse_jobs")
+    .update({
+      status: "failed",
+      finished_at: failedAt,
+      error: String(params.errorMessage || "cv_parse_dispatch_failed").slice(0, 1000),
+      result_json: {
+        meta: {
+          retryable: true,
+          processing_mode: "background_job",
+          failed_at: failedAt,
+          dispatch_failed: true,
+        },
+      },
+    })
+    .eq("id", params.jobId);
 }
 
 export async function POST(req: Request) {
@@ -35,6 +59,7 @@ export async function POST(req: Request) {
     if (!jobId) {
       return NextResponse.json({ error: "missing_job_id" }, { status: 400 });
     }
+    console.info("CV_PARSE_DISPATCH_START", { jobId, isInternalCall, requesterUserId });
 
     const supabase = createServiceRoleClient() as any;
     const { data: job, error: jobErr } = await supabase
@@ -44,9 +69,11 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (jobErr) {
+      console.error("CV_PARSE_DISPATCH_JOB_QUERY_FAILED", { jobId, error: jobErr.message });
       return NextResponse.json({ error: "job_query_failed", details: jobErr.message }, { status: 400 });
     }
     if (!job?.id) {
+      console.error("CV_PARSE_DISPATCH_JOB_NOT_FOUND", { jobId });
       return NextResponse.json({ error: "job_not_found" }, { status: 404 });
     }
     if (!isInternalCall && requesterUserId && requesterUserId !== String(job.user_id || "")) {
@@ -70,28 +97,72 @@ export async function POST(req: Request) {
     }
 
     const origin = new URL(req.url).origin;
-    after(async () => {
-      try {
-        await dispatchBackgroundJob({
-          origin,
-          jobType: "candidate_cv",
+    let dispatchResult: Awaited<ReturnType<typeof dispatchBackgroundJob>>;
+    try {
+      dispatchResult = await dispatchBackgroundJob({
+        origin,
+        jobType: "candidate_cv",
+        jobId,
+      });
+      if (dispatchResult.ok) {
+        console.info("CV_PARSE_DISPATCH_OK", {
           jobId,
+          mode: dispatchResult.mode,
+          status: dispatchResult.status,
+          details: dispatchResult.details || null,
         });
-      } catch {
-        // The queued job remains available for retry or manual runner execution.
+      } else {
+        console.error("CV_PARSE_DISPATCH_FAILED", {
+          jobId,
+          mode: dispatchResult.mode,
+          status: dispatchResult.status,
+          details: dispatchResult.details || null,
+          error: dispatchResult.error || null,
+        });
+        await markCvParseJobFailed({
+          supabase,
+          jobId,
+          errorMessage: dispatchResult.error || dispatchResult.details || "cv_parse_dispatch_failed",
+        });
       }
-    });
+    } catch (error: any) {
+      const dispatchMessage = String(error?.message || error || "cv_parse_dispatch_failed");
+      console.error("CV_PARSE_DISPATCH_FAILED", {
+        jobId,
+        mode: "exception",
+        status: 500,
+        error: dispatchMessage,
+      });
+      await markCvParseJobFailed({
+        supabase,
+        jobId,
+        errorMessage: dispatchMessage,
+      });
+      dispatchResult = {
+        ok: false,
+        mode: "inline",
+        status: 500,
+        details: "dispatch_exception",
+        error: dispatchMessage,
+      };
+    }
 
     return NextResponse.json(
       {
         ok: true,
         accepted: true,
         job_id: jobId,
-        status: nextStatus,
+        status: dispatchResult.ok ? nextStatus : "failed",
+        processing_dispatched: dispatchResult.ok,
+        processing_error: dispatchResult.ok ? null : dispatchResult.error || dispatchResult.details || "cv_parse_dispatch_failed",
+        dispatch: dispatchResult,
       },
       { status: 202 }
     );
   } catch (error: any) {
+    console.error("CV_PARSE_TRIGGER_FATAL", {
+      error: String(error?.message || error),
+    });
     return NextResponse.json(
       {
         error: "trigger_failed",

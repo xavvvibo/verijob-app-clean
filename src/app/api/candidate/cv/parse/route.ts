@@ -113,6 +113,12 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+    console.info("CV_PARSE_JOB_CREATED", {
+      jobId: job.id,
+      userId: user.id,
+      uploadId: upload.id,
+      storagePath: body.storage_path,
+    });
 
     const origin = new URL(req.url).origin;
     const internalSecret = getInternalSecret();

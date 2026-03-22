@@ -206,6 +206,7 @@ function buildRequestContextRetryableState(params: {
 }
 
 async function processCandidateCvParseJob(jobId: string): Promise<JobSummary> {
+  console.info("CV_PARSE_JOB_START", { jobId });
   const supabase = createServiceRoleClient() as any;
   const { data: job, error: jobErr } = await supabase
     .from("cv_parse_jobs")
@@ -214,12 +215,15 @@ async function processCandidateCvParseJob(jobId: string): Promise<JobSummary> {
     .maybeSingle();
 
   if (jobErr) {
+    console.error("CV_PARSE_JOB_QUERY_FAILED", { jobId, error: jobErr.message });
     return { kind: "candidate_cv", id: jobId, state: "failed", details: jobErr.message };
   }
   if (!job?.id) {
+    console.error("CV_PARSE_JOB_NOT_FOUND", { jobId });
     return { kind: "candidate_cv", id: jobId, state: "not_found" };
   }
   if (String(job.status || "").toLowerCase() === "succeeded") {
+    console.info("CV_PARSE_JOB_SKIPPED", { jobId, reason: "already_succeeded" });
     return { kind: "candidate_cv", id: jobId, state: "skipped", details: "already_succeeded" };
   }
 
@@ -233,6 +237,7 @@ async function processCandidateCvParseJob(jobId: string): Promise<JobSummary> {
         error: null,
       })
       .eq("id", job.id);
+    console.info("CV_PARSE_JOB_MARKED_PROCESSING", { jobId });
 
     const { data: upload, error: uploadErr } = await supabase
       .from("cv_uploads")
@@ -243,6 +248,12 @@ async function processCandidateCvParseJob(jobId: string): Promise<JobSummary> {
     if (uploadErr || !upload) {
       throw new Error(`upload_not_found:${uploadErr?.message || "missing_upload"}`);
     }
+    console.info("CV_PARSE_JOB_UPLOAD_LOADED", {
+      jobId,
+      uploadId: job.cv_upload_id,
+      storageBucket: upload.storage_bucket,
+      storagePath: upload.storage_path,
+    });
 
     const normalizedStoragePath = bucketPath(String(upload.storage_path || ""), String(upload.storage_bucket || ""));
     const { data: file, error: downloadErr } = await supabase.storage
@@ -252,6 +263,11 @@ async function processCandidateCvParseJob(jobId: string): Promise<JobSummary> {
     if (downloadErr || !file) {
       throw new Error(`file_download_failed:${downloadErr?.message || "missing_file"}`);
     }
+    console.info("CV_PARSE_STORAGE_DOWNLOAD_OK", {
+      jobId,
+      storageBucket: upload.storage_bucket,
+      storagePath: normalizedStoragePath,
+    });
 
     const fileBuffer = Buffer.from(await file.arrayBuffer());
     const effectiveFilename = upload.original_filename || upload.storage_path?.split("/").pop() || "cv_upload.pdf";
@@ -259,6 +275,11 @@ async function processCandidateCvParseJob(jobId: string): Promise<JobSummary> {
     let extractedText = "";
     try {
       extractedText = (await extractCvTextFromBuffer(fileBuffer, effectiveFilename)).trim();
+      console.info("CV_PARSE_PDF_READ_OK", {
+        jobId,
+        filename: effectiveFilename,
+        chars: extractedText.length,
+      });
     } catch (error: any) {
       if (error instanceof CvExtractionError) {
         throw new Error(`${error.code}:${error.message}`);
@@ -302,6 +323,13 @@ async function processCandidateCvParseJob(jobId: string): Promise<JobSummary> {
     }
 
     const normalized = normalizeCvExtract(parsed, extractedText);
+    console.info("CV_PARSE_EXTRACTION_DONE", {
+      jobId,
+      experiences: normalized.experiences.length,
+      education: normalized.education.length,
+      languages: Array.isArray(normalized.languages) ? normalized.languages.length : 0,
+      achievements: Array.isArray(normalized.achievements) ? normalized.achievements.length : 0,
+    });
     const warningData = buildCvWarnings({
       cvText: extractedText,
       experiences: normalized.experiences,
@@ -329,9 +357,18 @@ async function processCandidateCvParseJob(jobId: string): Promise<JobSummary> {
         },
       })
       .eq("id", job.id);
+    console.info("CV_PARSE_RESULT_PERSISTED", {
+      jobId,
+      warnings: warningData.warnings,
+    });
+    console.info("CV_PARSE_JOB_COMPLETED", { jobId });
 
     return { kind: "candidate_cv", id: jobId, state: "succeeded" };
   } catch (error: any) {
+    console.error("CV_PARSE_JOB_FAILED", {
+      jobId,
+      error: String(error?.message || error),
+    });
     await supabase
       .from("cv_parse_jobs")
       .update({
