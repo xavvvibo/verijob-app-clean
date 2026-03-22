@@ -92,6 +92,37 @@ async function insertEvidenceResilient(admin: any, payload: Record<string, any>)
   return { data: null, error: lastError };
 }
 
+async function persistDispatchFailure(params: {
+  admin: any;
+  verificationRequestId: string;
+  previousContext: Record<string, any>;
+  processingState: Record<string, any>;
+  errorMessage: string;
+}) {
+  const failedProcessing = {
+    ...params.processingState,
+    status: "failed",
+    processing_status: "failed",
+    processed_at: new Date().toISOString(),
+    retryable: true,
+    processing_summary: "No pudimos iniciar el análisis automático.",
+    error: params.errorMessage,
+    overall_match_level: "inconclusive",
+  };
+
+  await params.admin
+    .from("verification_requests")
+    .update({
+      request_context: {
+        ...params.previousContext,
+        documentary_processing: failedProcessing,
+      },
+    })
+    .eq("id", params.verificationRequestId);
+
+  return failedProcessing;
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     if (req.method !== "POST") {
@@ -238,41 +269,106 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const origin = resolveOriginFromNodeRequest(req);
     let dispatchResult: Awaited<ReturnType<typeof dispatchBackgroundJob>> | null = null;
+    let responseProcessingState: Record<string, any> = processingState;
     if (origin) {
-      dispatchResult = await dispatchBackgroundJob({
-        origin,
-        jobType: "evidence_processing",
-        jobId: String(evidence.id),
-      });
-      console.info("EVIDENCE_CONFIRM_DISPATCH_RESULT", {
-        evidenceId: evidence.id,
-        mode: dispatchResult.mode,
-        ok: dispatchResult.ok,
-        status: dispatchResult.status,
-        details: dispatchResult.details || null,
-      });
+      try {
+        dispatchResult = await dispatchBackgroundJob({
+          origin,
+          jobType: "evidence_processing",
+          jobId: String(evidence.id),
+        });
+        console.info("EVIDENCE_CONFIRM_DISPATCH_RESULT", {
+          evidenceId: evidence.id,
+          mode: dispatchResult.mode,
+          ok: dispatchResult.ok,
+          status: dispatchResult.status,
+          details: dispatchResult.details || null,
+          error: dispatchResult.error || null,
+        });
+        if (!dispatchResult.ok) {
+          responseProcessingState = await persistDispatchFailure({
+            admin,
+            verificationRequestId,
+            previousContext,
+            processingState,
+            errorMessage: dispatchResult.error || dispatchResult.details || "background_dispatch_failed",
+          });
+        }
+      } catch (dispatchError: any) {
+        const dispatchMessage = String(dispatchError?.message || dispatchError || "background_dispatch_failed");
+        console.error("EVIDENCE_CONFIRM_DISPATCH_EXCEPTION", {
+          evidenceId: evidence.id,
+          error: dispatchMessage,
+        });
+        dispatchResult = {
+          ok: false,
+          mode: "inline",
+          status: 500,
+          details: "dispatch_exception",
+          error: dispatchMessage,
+        };
+        responseProcessingState = await persistDispatchFailure({
+          admin,
+          verificationRequestId,
+          previousContext,
+          processingState,
+          errorMessage: dispatchMessage,
+        });
+      }
     } else {
       console.error("EVIDENCE_CONFIRM_DISPATCH_SKIPPED", {
         evidenceId: evidence.id,
         reason: "missing_origin",
       });
+      dispatchResult = {
+        ok: false,
+        mode: "inline",
+        status: 500,
+        details: "missing_origin",
+        error: "missing_origin",
+      };
+      responseProcessingState = await persistDispatchFailure({
+        admin,
+        verificationRequestId,
+        previousContext,
+        processingState,
+        errorMessage: "missing_origin",
+      });
     }
 
-    return json(res, 200, {
+    const responseBody = {
       ok: true,
       evidence: { id: evidence.id },
       verification_request_id: verificationRequestId,
       employment_record_id: verificationRequest.employment_record_id ?? null,
-      documentary_processing: processingState,
+      documentary_processing: responseProcessingState,
       processing: {
-        deferred: dispatchResult?.mode === "remote",
+        deferred: dispatchResult?.mode === "remote" && dispatchResult?.ok === true,
         evidence_id: evidence.id,
-        status: "queued",
+        status: responseProcessingState.processing_status || responseProcessingState.status || "queued",
       },
+      processing_dispatched: Boolean(dispatchResult?.ok),
+      processing_error: dispatchResult?.ok ? null : dispatchResult?.error || dispatchResult?.details || "background_dispatch_failed",
       dispatch: dispatchResult,
-    });
+    };
+    if (dispatchResult?.ok) {
+      console.info("EVIDENCE_CONFIRM_RESPONSE_OK", {
+        evidenceId: evidence.id,
+        processingStatus: responseBody.processing.status,
+      });
+    } else {
+      console.error("EVIDENCE_CONFIRM_RESPONSE_PARTIAL", {
+        evidenceId: evidence.id,
+        processingStatus: responseBody.processing.status,
+        processingError: responseBody.processing_error,
+      });
+    }
+    return json(res, 200, responseBody);
   } catch (error: any) {
     console.error("EVIDENCE_CONFIRM_FAILED", error);
+    console.error("EVIDENCE_CONFIRM_RESPONSE_FATAL", {
+      error: String(error?.message || error || "unknown_error"),
+    });
     return json(res, 500, {
       error: "internal_error",
       details: String(error?.message || error || "unknown_error"),

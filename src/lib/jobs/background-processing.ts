@@ -943,6 +943,7 @@ type DispatchBackgroundJobResult = {
   mode: "remote" | "inline";
   status: number;
   details?: string | null;
+  error?: string | null;
   results?: JobSummary[];
 };
 
@@ -959,18 +960,37 @@ export async function dispatchBackgroundJob(params: {
       jobId: params.jobId,
       details: details || null,
     });
-    const results = await runPendingBackgroundJobs({
-      jobType: params.jobType,
-      jobId: params.jobId,
-      limit: 1,
-    });
-    return {
-      ok: true,
-      mode: "inline",
-      status: 200,
-      details: details || reason,
-      results,
-    };
+    try {
+      const results = await runPendingBackgroundJobs({
+        jobType: params.jobType,
+        jobId: params.jobId,
+        limit: 1,
+      });
+      return {
+        ok: true,
+        mode: "inline",
+        status: 200,
+        details: details || reason,
+        error: null,
+        results,
+      };
+    } catch (error: any) {
+      const message = String(error?.message || error || "inline_dispatch_failed");
+      console.error("BG_JOB_DISPATCH_INLINE_FAILED", {
+        reason,
+        jobType: params.jobType,
+        jobId: params.jobId,
+        error: message,
+      });
+      return {
+        ok: false,
+        mode: "inline",
+        status: 500,
+        details: details || reason,
+        error: message,
+        results: [],
+      };
+    }
   };
 
   console.info("BG_JOB_DISPATCH_START", {
@@ -1024,6 +1044,7 @@ export async function dispatchBackgroundJob(params: {
       mode: "remote",
       status: response.status,
       details: responseText.slice(0, 300),
+      error: null,
     };
   } catch (error: any) {
     console.error("BG_JOB_DISPATCH_REMOTE_ERROR", {
