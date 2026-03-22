@@ -541,6 +541,7 @@ async function processCompanyCandidateImportJob(inviteId: string): Promise<JobSu
 }
 
 async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummary> {
+  console.info("EVIDENCE_BG_JOB_START", { evidenceId });
   const supabase = createServiceRoleClient() as any;
   const { data: evidence, error: evidenceErr } = await supabase
     .from("evidences")
@@ -549,11 +550,22 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
     .maybeSingle();
 
   if (evidenceErr) {
+    console.error("EVIDENCE_BG_JOB_EVIDENCE_LOOKUP_FAILED", {
+      evidenceId,
+      error: evidenceErr.message,
+    });
     return { kind: "evidence_processing", id: evidenceId, state: "failed", details: evidenceErr.message };
   }
   if (!evidence?.id) {
+    console.error("EVIDENCE_BG_JOB_EVIDENCE_NOT_FOUND", { evidenceId });
     return { kind: "evidence_processing", id: evidenceId, state: "not_found" };
   }
+  console.info("EVIDENCE_BG_JOB_EVIDENCE_LOADED", {
+    evidenceId,
+    verificationRequestId: evidence.verification_request_id,
+    storagePath: evidence.storage_path,
+    validationStatus: evidence.validation_status,
+  });
 
   const { data: vr, error: vrErr } = await supabase
     .from("verification_requests")
@@ -562,6 +574,11 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
     .maybeSingle();
 
   if (vrErr || !vr?.id) {
+    console.error("EVIDENCE_BG_JOB_REQUEST_LOOKUP_FAILED", {
+      evidenceId,
+      verificationRequestId: evidence.verification_request_id,
+      error: vrErr?.message || "verification_request_not_found",
+    });
     return {
       kind: "evidence_processing",
       id: evidenceId,
@@ -575,6 +592,11 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       ? (vr.request_context as any).documentary_processing || {}
       : {};
   if (String(priorProcessing?.processed_at || "").trim() && !["uploaded", "auto_processing"].includes(String(evidence.validation_status || "").toLowerCase())) {
+    console.info("EVIDENCE_BG_JOB_SKIPPED", {
+      evidenceId,
+      reason: "already_processed",
+      validationStatus: evidence.validation_status,
+    });
     return { kind: "evidence_processing", id: evidenceId, state: "skipped", details: "already_processed" };
   }
 
@@ -611,6 +633,11 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       }),
     })
     .eq("id", vr.id);
+  console.info("EVIDENCE_BG_JOB_MARKED_PROCESSING", {
+    evidenceId,
+    verificationRequestId: vr.id,
+    processingStartedAt,
+  });
 
   let documentaryProcessing: any = {
     ...(priorProcessing && typeof priorProcessing === "object" ? priorProcessing : {}),
@@ -638,6 +665,10 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
     if (downloadErr || !fileBlob) {
       throw new Error(`evidence_download_failed:${downloadErr?.message || "missing_blob"}`);
     }
+    console.info("EVIDENCE_BG_JOB_STORAGE_DOWNLOAD_OK", {
+      evidenceId,
+      storagePath: evidence.storage_path,
+    });
 
     const fileBuffer = Buffer.from(await fileBlob.arrayBuffer());
     const fileName = String(String(evidence.storage_path || "").split("/").pop() || "evidence_document");
@@ -669,11 +700,24 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       openaiApiKey: openaiKey,
       textFallbackExtractor: extractCvTextFromBuffer,
     });
+    console.info("EVIDENCE_BG_JOB_EXTRACTION_DONE", {
+      evidenceId,
+      provider: extractionResult.provider,
+      fallbackTextUsed: Boolean(extractionResult.fallbackTextUsed),
+      warning: extractionResult.warning || null,
+    });
 
     const matching = computeDocumentaryMatching({
       extraction: extractionResult.extraction,
       employmentRecords: Array.isArray(employmentRows) ? employmentRows : [],
       candidateName: profileRow?.full_name || null,
+    });
+    console.info("EVIDENCE_BG_JOB_MATCH_DONE", {
+      evidenceId,
+      overallMatchLevel: matching.overall_match_level,
+      overallMatchScore: matching.overall_match_score ?? matching.final_score ?? 0,
+      autoLink: Boolean(matching.auto_link),
+      inconsistencyReason: matching.inconsistency_reason || null,
     });
 
     documentaryProcessing = {
@@ -753,6 +797,10 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
         .eq("candidate_id", evidence.uploaded_by);
     }
   } catch (error: any) {
+    console.error("EVIDENCE_BG_JOB_FAILED", {
+      evidenceId,
+      error: String(error?.message || error),
+    });
     documentaryProcessing = {
       ...documentaryProcessing,
       status: "failed",
@@ -781,6 +829,12 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       }),
     })
     .eq("id", vr.id);
+  console.info("EVIDENCE_BG_JOB_PROCESSING_PERSISTED", {
+    evidenceId,
+    verificationRequestId: vr.id,
+    processingStatus: documentaryProcessing.processing_status || documentaryProcessing.status,
+    overallMatchLevel: documentaryProcessing.overall_match_level || null,
+  });
 
   await supabase
     .from("evidences")
@@ -793,8 +847,17 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       document_issue_date: finalDocumentIssueDate,
     })
     .eq("id", evidence.id);
+  console.info("EVIDENCE_BG_JOB_EVIDENCE_UPDATED", {
+    evidenceId,
+    validationStatus: finalValidationStatus,
+    inconsistencyReason: finalInconsistencyReason,
+  });
 
   await recalculateAndPersistCandidateTrustScore(String(evidence.uploaded_by)).catch(() => {});
+  console.info("EVIDENCE_BG_JOB_TRUST_RECALCULATED", {
+    evidenceId,
+    candidateId: String(evidence.uploaded_by),
+  });
 
   return {
     kind: "evidence_processing",
@@ -875,27 +938,101 @@ export function resolveInternalJobDispatchUrl(origin: string) {
   return `${origin.replace(/\/$/, "")}/api/internal/jobs/process`;
 }
 
+type DispatchBackgroundJobResult = {
+  ok: boolean;
+  mode: "remote" | "inline";
+  status: number;
+  details?: string | null;
+  results?: JobSummary[];
+};
+
 export async function dispatchBackgroundJob(params: {
   origin: string;
   jobType: "candidate_cv" | "company_candidate_import" | "evidence_processing";
   jobId: string;
-}) {
+}): Promise<DispatchBackgroundJobResult> {
   const internalSecret = process.env.INTERNAL_ADMIN_SECRET || "";
+  const fallbackInline = async (reason: string, details?: string | null): Promise<DispatchBackgroundJobResult> => {
+    console.error("BG_JOB_DISPATCH_FALLBACK_INLINE", {
+      reason,
+      jobType: params.jobType,
+      jobId: params.jobId,
+      details: details || null,
+    });
+    const results = await runPendingBackgroundJobs({
+      jobType: params.jobType,
+      jobId: params.jobId,
+      limit: 1,
+    });
+    return {
+      ok: true,
+      mode: "inline",
+      status: 200,
+      details: details || reason,
+      results,
+    };
+  };
+
+  console.info("BG_JOB_DISPATCH_START", {
+    jobType: params.jobType,
+    jobId: params.jobId,
+    origin: params.origin || null,
+    hasInternalSecret: Boolean(internalSecret),
+  });
+
+  if (!params.origin) {
+    return fallbackInline("missing_origin");
+  }
+  if (!internalSecret) {
+    return fallbackInline("missing_internal_admin_secret");
+  }
+
   const headers: Record<string, string> = {
     "content-type": "application/json",
   };
-  if (internalSecret) headers["x-internal-secret"] = internalSecret;
+  headers["x-internal-secret"] = internalSecret;
 
-  return fetch(resolveInternalJobDispatchUrl(params.origin), {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      job_type: params.jobType,
-      job_id: params.jobId,
-      limit: 1,
-    }),
-    cache: "no-store",
-  });
+  try {
+    const response = await fetch(resolveInternalJobDispatchUrl(params.origin), {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        job_type: params.jobType,
+        job_id: params.jobId,
+        limit: 1,
+      }),
+      cache: "no-store",
+    });
+    const responseText = await response.text();
+    if (!response.ok) {
+      console.error("BG_JOB_DISPATCH_REMOTE_FAILED", {
+        jobType: params.jobType,
+        jobId: params.jobId,
+        status: response.status,
+        body: responseText.slice(0, 500),
+      });
+      return fallbackInline(`remote_status_${response.status}`, responseText.slice(0, 500));
+    }
+    console.info("BG_JOB_DISPATCH_REMOTE_OK", {
+      jobType: params.jobType,
+      jobId: params.jobId,
+      status: response.status,
+      body: responseText.slice(0, 300),
+    });
+    return {
+      ok: true,
+      mode: "remote",
+      status: response.status,
+      details: responseText.slice(0, 300),
+    };
+  } catch (error: any) {
+    console.error("BG_JOB_DISPATCH_REMOTE_ERROR", {
+      jobType: params.jobType,
+      jobId: params.jobId,
+      error: String(error?.message || error),
+    });
+    return fallbackInline("remote_exception", String(error?.message || error));
+  }
 }
 
 export function resolveOriginFromNodeRequest(req: { headers: Record<string, string | string[] | undefined> }) {

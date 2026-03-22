@@ -534,12 +534,27 @@ export async function POST(req: Request) {
       .eq("id", (context as any).verificationRequestId);
 
     await recalculateAndPersistCandidateTrustScore(user.id).catch(() => {});
+    console.info("EVIDENCE_UPLOAD_CREATED", {
+      evidenceId: evidence.id,
+      verificationRequestId: (context as any).verificationRequestId,
+      employmentRecordId: (context as any).employmentRecordId || null,
+      uploadedBy: user.id,
+      evidenceType: evidenceConfig.key,
+      storagePath,
+    });
 
-    void dispatchBackgroundJob({
+    const dispatchResult = await dispatchBackgroundJob({
       origin: new URL(req.url).origin,
       jobType: "evidence_processing",
       jobId: String(evidence.id),
-    }).catch(() => {});
+    });
+    console.info("EVIDENCE_UPLOAD_DISPATCH_RESULT", {
+      evidenceId: evidence.id,
+      mode: dispatchResult.mode,
+      ok: dispatchResult.ok,
+      status: dispatchResult.status,
+      details: dispatchResult.details || null,
+    });
 
     return json(200, {
       ok: true,
@@ -548,10 +563,11 @@ export async function POST(req: Request) {
       employment_record_id: (context as any).employmentRecordId,
       documentary_processing: processingState,
       processing: {
-        deferred: true,
+        deferred: dispatchResult.mode === "remote",
         evidence_id: evidence.id,
         status: "queued",
       },
+      dispatch: dispatchResult,
       evidence_type_label: evidenceConfig.label,
     });
   } catch (e: any) {

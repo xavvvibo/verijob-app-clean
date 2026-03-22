@@ -8,6 +8,7 @@ import {
   getEvidenceTypeConfig,
   normalizeEvidenceType,
 } from "@/lib/candidate/evidence-types";
+import { dispatchBackgroundJob } from "@/lib/jobs/background-processing";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 
 const ROUTE = "/pages/api/candidate/evidence/confirm";
@@ -174,6 +175,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         details: evidenceError?.message || "No se pudo registrar la evidencia.",
       });
     }
+    console.info("EVIDENCE_CONFIRM_CREATED", {
+      evidenceId: evidence.id,
+      verificationRequestId,
+      uploadedBy: user.id,
+      evidenceType: evidenceInsert.evidence_type,
+      storagePath,
+    });
 
     const processingState = {
       mode: "evidence",
@@ -229,16 +237,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }).catch(() => {});
 
     const origin = resolveOriginFromNodeRequest(req);
+    let dispatchResult: Awaited<ReturnType<typeof dispatchBackgroundJob>> | null = null;
     if (origin) {
-      void import("@/lib/jobs/background-processing")
-        .then(({ dispatchBackgroundJob }) =>
-          dispatchBackgroundJob({
-            origin,
-            jobType: "evidence_processing",
-            jobId: String(evidence.id),
-          })
-        )
-        .catch(() => {});
+      dispatchResult = await dispatchBackgroundJob({
+        origin,
+        jobType: "evidence_processing",
+        jobId: String(evidence.id),
+      });
+      console.info("EVIDENCE_CONFIRM_DISPATCH_RESULT", {
+        evidenceId: evidence.id,
+        mode: dispatchResult.mode,
+        ok: dispatchResult.ok,
+        status: dispatchResult.status,
+        details: dispatchResult.details || null,
+      });
+    } else {
+      console.error("EVIDENCE_CONFIRM_DISPATCH_SKIPPED", {
+        evidenceId: evidence.id,
+        reason: "missing_origin",
+      });
     }
 
     return json(res, 200, {
@@ -248,10 +265,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       employment_record_id: verificationRequest.employment_record_id ?? null,
       documentary_processing: processingState,
       processing: {
-        deferred: true,
+        deferred: dispatchResult?.mode === "remote",
         evidence_id: evidence.id,
         status: "queued",
       },
+      dispatch: dispatchResult,
     });
   } catch (error: any) {
     console.error("EVIDENCE_CONFIRM_FAILED", error);
