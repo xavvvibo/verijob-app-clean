@@ -798,7 +798,14 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
     const hasPlausibleEmployer = Boolean(companyName) && classification.employer_plausibility >= 0.3;
     const hasLaborPattern = laborPattern.matched;
     const hasStructuralLaborPattern = structuralLaborPattern.matched;
-    const dominatedByNumericNoise = classification.numeric_noise_penalty >= 0.45;
+    const hasStrongLaborSignal =
+      Boolean(selfEmployment.matched) ||
+      hasLaborPattern ||
+      hasStructuralLaborPattern ||
+      (hasPlausibleEmployer && classification.date_plausibility >= 0.65);
+    const dominatedByNumericNoise = hasStrongLaborSignal
+      ? classification.numeric_noise_penalty > 0.45
+      : classification.numeric_noise_penalty >= 0.45;
     const promotedLowConfidence =
       !administrative.matched &&
       !ignoredReason &&
@@ -831,8 +838,10 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
     for (const reason of laborPattern.reasons) {
       classificationReasons.push(`labor_pattern:${reason}`);
     }
-    for (const reason of structuralLaborPattern.reasons) {
-      classificationReasons.push(`structural_pattern:${reason}`);
+    if (hasStructuralLaborPattern) {
+      for (const reason of structuralLaborPattern.reasons) {
+        classificationReasons.push(`structural_pattern:${reason}`);
+      }
     }
     if (promotedLowConfidence) classificationReasons.push("promoted_low_confidence");
     debugEntries.push({
@@ -941,7 +950,14 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
       Boolean(String(extraction?.company_name || "").trim()) && classification.employer_plausibility >= 0.3;
     const fallbackHasLaborPattern = laborPattern.matched;
     const fallbackHasStructuralLaborPattern = fallbackStructuralLaborPattern.matched;
-    const fallbackDominatedByNumericNoise = classification.numeric_noise_penalty >= 0.45;
+    const fallbackHasStrongLaborSignal =
+      Boolean(selfEmployment.matched) ||
+      fallbackHasLaborPattern ||
+      fallbackHasStructuralLaborPattern ||
+      (fallbackHasPlausibleEmployer && classification.date_plausibility >= 0.65);
+    const fallbackDominatedByNumericNoise = fallbackHasStrongLaborSignal
+      ? classification.numeric_noise_penalty > 0.45
+      : classification.numeric_noise_penalty >= 0.45;
     const fallbackPromotedLowConfidence =
       !administrative.matched &&
       !ignoredReason &&
@@ -994,8 +1010,10 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
       for (const reason of laborPattern.reasons) {
         fallbackClassificationReasons.push(`labor_pattern:${reason}`);
       }
-      for (const reason of fallbackStructuralLaborPattern.reasons) {
-        fallbackClassificationReasons.push(`structural_pattern:${reason}`);
+      if (fallbackHasStructuralLaborPattern) {
+        for (const reason of fallbackStructuralLaborPattern.reasons) {
+          fallbackClassificationReasons.push(`structural_pattern:${reason}`);
+        }
       }
       if (fallbackPromotedLowConfidence) fallbackClassificationReasons.push("promoted_low_confidence");
       debugEntries[debugEntries.length - 1].classification_reasons = fallbackClassificationReasons;
