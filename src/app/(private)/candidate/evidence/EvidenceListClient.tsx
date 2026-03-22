@@ -16,45 +16,39 @@ const supabase = createClient(
 
 export default function EvidenceListClient({ initialItems }: Props) {
   const [items, setItems] = useState<any[]>(initialItems || [])
-  const [debug, setDebug] = useState<any>(null)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     load()
   }, [])
 
   async function load() {
-    const { data: userData } = await supabase.auth.getUser()
-    const userId = userData?.user?.id
-
     const { data, error } = await supabase
       .from("evidences")
       .select("*")
       .order("created_at", { ascending: false })
-
-    setDebug({
-      userId,
-      count: data?.length,
-      error,
-      sample: data?.[0] || null,
-    })
 
     if (!error && data) {
       setItems(data)
     }
   }
 
+  async function fakeUpload() {
+    alert("Subida real desactivada en debug.\nAhora solo necesitamos validar backend.")
+  }
+
   return (
     <div style={{ padding: 20 }}>
-      <h2>DEBUG EVIDENCIAS</h2>
+      <h2>Evidencias</h2>
 
-      <pre>{JSON.stringify(debug, null, 2)}</pre>
-
-      <hr />
+      <button onClick={fakeUpload} style={{ marginBottom: 20 }}>
+        Subir evidencia (debug)
+      </button>
 
       {items.length === 0 && <p>No hay evidencias</p>}
 
       {items.map((e) => (
-        <div key={e.id}>
+        <div key={e.id} style={{ marginBottom: 10 }}>
           <strong>{e.evidence_type}</strong>
           <div>{e.uploaded_by}</div>
         </div>
