@@ -106,6 +106,8 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
   const companyScore = Number(processing?.company_match_score ?? processing?.matching?.company_match_score ?? 0);
   const dateScore = Number(processing?.date_match_score ?? processing?.matching?.date_match_score ?? 0);
   const positionScore = Number(processing?.position_match_score ?? processing?.matching?.position_match_score ?? 0);
+  const identityConfirmedBy = String(processing?.identity_confirmed_by || processing?.matching?.identity_confirmed_by || "").trim().toLowerCase();
+  const companyMatchSource = String(processing?.company_match_source || processing?.matching?.company_match_source || "").trim().toLowerCase();
   const identityGatePassed =
     Boolean(processing?.identity_gate_passed ?? processing?.matching?.identity_gate_passed) &&
     matchLevel !== "conflict";
@@ -150,15 +152,19 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
       : null,
     person_check_label: analysisCompleted
       ? identityGatePassed
-        ? "Titular del documento coincide con tu perfil"
+        ? identityConfirmedBy === "official_id"
+          ? "Identidad confirmada por documento oficial"
+          : identityConfirmedBy === "name_subset_match" || identityConfirmedBy === "name_tolerant_match"
+            ? "Coincidencia alta pese a variación en el nombre mostrado"
+            : "Titular del documento coincide con tu perfil"
         : matchLevel === "conflict"
           ? "Conflicto: el titular del documento no coincide"
           : "Titular pendiente de confirmar"
       : "",
     company_check_label: analysisCompleted ? describeScore(
       companyScore,
-      "Empresa coincide",
-      "Empresa parcialmente compatible",
+      companyMatchSource === "legal_name" ? "Empresa coincidente por razón social" : companyMatchSource === "commercial_name" ? "Empresa coincidente por nombre comercial" : "Empresa coincide",
+      companyMatchSource === "legal_name" ? "Empresa parcialmente compatible por razón social" : companyMatchSource === "commercial_name" ? "Empresa parcialmente compatible por nombre comercial" : "Empresa parcialmente compatible",
       "Empresa no coincide"
     ) : "",
     date_check_label: analysisCompleted ? describeScore(

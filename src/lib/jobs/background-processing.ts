@@ -18,6 +18,7 @@ import {
   computeDocumentaryMatching,
   extractDocumentarySignals,
 } from "@/lib/candidate/documentary-processing";
+import { buildIdentityRecord } from "@/lib/security/identity";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 import {
   EVIDENCE_VALIDATION_INTERNAL,
@@ -741,12 +742,17 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
     const openaiKey = getOpenAIKey();
     if (!openaiKey) throw new Error("missing_openai_api_key");
 
-    const [{ data: employmentRows }, { data: profileRow }] = await Promise.all([
+    const [{ data: employmentRows }, { data: profileRow }, { data: identityRow }] = await Promise.all([
       supabase
         .from("employment_records")
-        .select("id,position,company_name_freeform,start_date,end_date")
+        .select("id,position,company_name,company_name_freeform,start_date,end_date")
         .eq("candidate_id", evidence.uploaded_by),
       supabase.from("profiles").select("full_name").eq("id", evidence.uploaded_by).maybeSingle(),
+      supabase
+        .from("candidate_identities")
+        .select("user_id,identity_type,identity_hash,identity_masked")
+        .eq("user_id", evidence.uploaded_by)
+        .maybeSingle(),
     ]);
 
     const extractionResult = await extractDocumentarySignals({
@@ -763,10 +769,21 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       warning: extractionResult.warning || null,
     });
 
+    const extractedIdentityRecord =
+      extractionResult?.extraction?.tax_id && identityRow?.identity_type
+        ? buildIdentityRecord({
+            type: identityRow.identity_type,
+            value: extractionResult.extraction.tax_id,
+          })
+        : { identityHash: null };
+
     const matching = computeDocumentaryMatching({
       extraction: extractionResult.extraction,
       employmentRecords: Array.isArray(employmentRows) ? employmentRows : [],
       candidateName: profileRow?.full_name || null,
+      candidateIdentityHash: identityRow?.identity_hash || null,
+      extractedIdentityHash: extractedIdentityRecord?.identityHash || null,
+      evidenceType,
     });
     console.info("EVIDENCE_BG_JOB_MATCH_DONE", {
       evidenceId,
@@ -794,9 +811,18 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       position_match_score: matching.position_match_score ?? 0,
       date_match_score: matching.date_match_score ?? 0,
       person_match_score: matching.person_match_score ?? 0,
+      identity_gate_passed: Boolean(matching.identity_gate_passed),
+      identity_confirmed_by: matching.identity_confirmed_by || null,
+      identity_by_official_id:
+        typeof matching.identity_by_official_id === "boolean" ? matching.identity_by_official_id : null,
       overall_match_score: matching.overall_match_score ?? matching.final_score ?? 0,
       overall_match_level: matching.overall_match_level || "inconclusive",
       mismatch_flags: Array.isArray(matching.mismatch_flags) ? matching.mismatch_flags : [],
+      company_match_source: matching.company_match_source || null,
+      supports_multiple_experiences: Boolean(matching.supports_multiple_experiences),
+      supporting_employment_record_ids: Array.isArray(matching.supporting_employment_record_ids)
+        ? matching.supporting_employment_record_ids
+        : [],
       link_state: matching.link_state,
       needs_manual_review: matching.needs_manual_review,
       matching_reason: matching.matching_reason,
@@ -823,6 +849,9 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
     const currentEmploymentRecordId = normalizeText(vr.employment_record_id) || null;
     const linkedEmploymentRecordId =
       matching.auto_link && bestMatchId ? bestMatchId : currentEmploymentRecordId;
+    const bestEmploymentRow = Array.isArray(employmentRows)
+      ? employmentRows.find((row: any) => String(row?.id || "") === linkedEmploymentRecordId)
+      : null;
 
     if (matching.auto_link && linkedEmploymentRecordId) {
       if (linkedEmploymentRecordId !== currentEmploymentRecordId) {
@@ -832,10 +861,17 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
           .eq("id", vr.id);
       }
 
-      const employmentUpdate = buildEmploymentRecordDocumentaryResolvedUpdate({
+      const employmentUpdate: any = buildEmploymentRecordDocumentaryResolvedUpdate({
         verificationRequestId: vr.id,
         nowIso: new Date().toISOString(),
       });
+      if (
+        extractionResult?.extraction?.company_name &&
+        String(matching?.company_match_source || "").trim().toLowerCase() === "commercial_name" &&
+        !String((bestEmploymentRow as any)?.company_name || "").trim()
+      ) {
+        employmentUpdate.company_name = String(extractionResult.extraction.company_name).trim();
+      }
       await supabase
         .from("employment_records")
         .update(employmentUpdate)

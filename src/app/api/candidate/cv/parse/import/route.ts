@@ -270,6 +270,311 @@ async function persistAchievementsFromExtract(params: {
   return { imported, duplicatesSkipped: Math.max(normalized.length - imported, 0) };
 }
 
+async function importExperiencesSection(params: {
+  supabase: any;
+  userId: string;
+  jobId: string;
+  result: any;
+  selectedItems: any[] | null;
+  includeSupplemental: boolean;
+}) {
+  const { supabase, userId, jobId, result, selectedItems, includeSupplemental } = params;
+  const extractedAll = Array.isArray(result?.experiences) ? result.experiences : [];
+  const selectedRaw = selectedItems ?? extractedAll;
+  const totalDetected = extractedAll.length;
+  const selectedCount = selectedRaw.length;
+
+  const candidateRows = selectedRaw
+    .filter((x: any) => !isLikelyAcademic(x))
+    .map((x: any) => {
+      const role_title = toNullable(x?.role_title || x?.title);
+      const company_name = toNullable(x?.company_name || x?.company);
+      const description = toNullable(x?.description);
+      const startDate = normalizeDateForDb(x?.start_date);
+      if (!role_title || !company_name || !startDate) return null;
+      const endDate = normalizeDateForDb(x?.end_date);
+      return {
+        user_id: userId,
+        role_title,
+        company_name,
+        start_date: startDate,
+        end_date: endDate,
+        description,
+        matched_verification_id: null,
+        confidence: null,
+      };
+    })
+    .filter(Boolean);
+
+  if (candidateRows.length === 0) {
+    return {
+      section: "experiences" as const,
+      imported: 0,
+      duplicates_skipped: 0,
+      not_selected: Math.max(totalDetected - selectedCount, 0),
+      languages_imported: 0,
+      languages_error: null,
+      achievements_imported: 0,
+      achievements_error: null,
+    };
+  }
+
+  const [{ data: existingRows, error: existingErr }, profileExpColumns] = await Promise.all([
+    supabase
+      .from("profile_experiences")
+      .select("role_title,company_name,start_date,end_date")
+      .eq("user_id", userId),
+    getTableColumns(supabase, "profile_experiences"),
+  ]);
+
+  if (existingErr) {
+    throw new Error(`profile_experiences_existing_fetch_failed:${existingErr.message}`);
+  }
+
+  const existingExact = new Set((existingRows || []).map((x: any) => expExactSig(x)));
+  const existingPossible = new Set((existingRows || []).map((x: any) => expPossibleSig(x)));
+  const importedAtIso = new Date().toISOString();
+
+  const toInsert: any[] = [];
+  for (const row of candidateRows as any[]) {
+    const exact = expExactSig(row);
+    const possible = expPossibleSig(row);
+    if (existingExact.has(exact) || existingPossible.has(possible)) continue;
+    existingExact.add(exact);
+    existingPossible.add(possible);
+
+    const next: any = { ...row };
+    if (profileExpColumns.has("import_source")) next.import_source = "cv_parse";
+    if (profileExpColumns.has("import_job_id")) next.import_job_id = jobId;
+    if (profileExpColumns.has("imported_at")) next.imported_at = importedAtIso;
+    if (profileExpColumns.has("metadata")) {
+      next.metadata = {
+        import_source: "cv_parse",
+        import_job_id: jobId,
+        imported_at: importedAtIso,
+      };
+    }
+    toInsert.push(next);
+  }
+
+  if (toInsert.length > 0) {
+    const { error: insErr } = await supabase.from("profile_experiences").insert(toInsert);
+    if (insErr) {
+      throw new Error(`profile_experiences_insert_failed:${insErr.message}`);
+    }
+  }
+
+  let langImport: any = { imported: 0, error: null };
+  let achievementsImport: any = { imported: 0, error: null };
+
+  if (includeSupplemental) {
+    [langImport, achievementsImport] = await Promise.all([
+      persistLanguagesFromExtract({
+        supabase,
+        userId,
+        languagesRaw: Array.isArray(result?.languages) ? result.languages : [],
+      }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
+      persistAchievementsFromExtract({
+        supabase,
+        userId,
+        jobId,
+        achievementsRaw: Array.isArray(result?.achievements) ? result.achievements : [],
+      }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
+    ]);
+  }
+
+  return {
+    section: "experiences" as const,
+    imported: toInsert.length,
+    duplicates_skipped: Math.max(selectedCount - toInsert.length, 0),
+    not_selected: Math.max(totalDetected - selectedCount, 0),
+    languages_imported: Number(langImport?.imported || 0),
+    languages_error: langImport?.error || null,
+    achievements_imported: Number(achievementsImport?.imported || 0),
+    achievements_error: achievementsImport?.error || null,
+  };
+}
+
+async function importEducationSection(params: {
+  supabase: any;
+  userId: string;
+  jobId: string;
+  result: any;
+  selectedItems: any[] | null;
+  includeSupplemental: boolean;
+}) {
+  const { supabase, userId, jobId, result, selectedItems, includeSupplemental } = params;
+  const extractedAll = Array.isArray(result?.education) ? result.education : [];
+  const selectedRaw = selectedItems ?? extractedAll;
+  const totalDetected = extractedAll.length;
+  const selectedCount = selectedRaw.length;
+  const importedAt = new Date().toISOString();
+
+  const normalized = selectedRaw
+    .map((x: any) => {
+      const title = toNullable(x?.title || x?.degree);
+      const institution = toNullable(x?.institution);
+      const description = toNullable(x?.description || x?.notes);
+      if (!shouldImportEducationRow({ title, institution, description })) return null;
+      return {
+        title: title || "",
+        institution: institution || "",
+        start_date: normalizeDateText(x?.start_date || x?.start),
+        end_date: normalizeDateText(x?.end_date || x?.end),
+        description,
+        import_source: "cv_parse",
+        import_job_id: jobId,
+        imported_at: importedAt,
+      };
+    })
+    .filter(Boolean);
+
+  if (normalized.length === 0) {
+    return {
+      section: "education" as const,
+      imported: 0,
+      duplicates_skipped: 0,
+      not_selected: Math.max(totalDetected - selectedCount, 0),
+      languages_imported: 0,
+      languages_error: null,
+      achievements_imported: 0,
+      achievements_error: null,
+    };
+  }
+
+  const collections = await readCandidateProfileCollections(supabase, userId);
+  const currentEducation = Array.isArray(collections.education) ? collections.education : [];
+  const mergedExact = new Set(currentEducation.map((x: any) => eduExactSig(x)));
+  const mergedPossible = new Set(currentEducation.map((x: any) => `${normalizeRoleOrTitle(x?.title)}|${normalizeCompanyOrInstitution(x?.institution)}`));
+  const toAppend: any[] = [];
+  for (const row of normalized as any[]) {
+    const exact = eduExactSig(row);
+    const possible = `${normalizeRoleOrTitle(row?.title)}|${normalizeCompanyOrInstitution(row?.institution)}`;
+    if (mergedExact.has(exact) || mergedPossible.has(possible)) continue;
+    mergedExact.add(exact);
+    mergedPossible.add(possible);
+    toAppend.push(row);
+  }
+
+  if (toAppend.length > 0) {
+    await replaceCandidateEducationCollection(supabase, userId, [...currentEducation, ...toAppend], "cv_parse");
+  }
+
+  let langImport: any = { imported: 0, error: null };
+  let achievementsImport: any = { imported: 0, error: null };
+
+  if (includeSupplemental) {
+    [langImport, achievementsImport] = await Promise.all([
+      persistLanguagesFromExtract({
+        supabase,
+        userId,
+        languagesRaw: Array.isArray(result?.languages) ? result.languages : [],
+      }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
+      persistAchievementsFromExtract({
+        supabase,
+        userId,
+        jobId,
+        achievementsRaw: Array.isArray(result?.achievements) ? result.achievements : [],
+      }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
+    ]);
+  }
+
+  return {
+    section: "education" as const,
+    imported: toAppend.length,
+    duplicates_skipped: Math.max(selectedCount - toAppend.length, 0),
+    not_selected: Math.max(totalDetected - selectedCount, 0),
+    languages_imported: Number(langImport?.imported || 0),
+    languages_error: langImport?.error || null,
+    achievements_imported: Number(achievementsImport?.imported || 0),
+    achievements_error: achievementsImport?.error || null,
+  };
+}
+
+async function importLanguagesSection(params: {
+  supabase: any;
+  userId: string;
+  jobId: string;
+  result: any;
+  selectedItems: any[] | null;
+  includeSupplemental: boolean;
+}) {
+  const { supabase, userId, jobId, result, selectedItems, includeSupplemental } = params;
+  const extractedAll = Array.isArray(result?.languages) ? result.languages : [];
+  const selectedRaw = selectedItems ?? extractedAll;
+  const selectedCount = Array.isArray(selectedRaw) ? selectedRaw.length : 0;
+  if (selectedCount === 0) {
+    return {
+      section: "languages" as const,
+      imported: 0,
+      duplicates_skipped: 0,
+      not_selected: Math.max(extractedAll.length - selectedCount, 0),
+      achievements_imported: 0,
+      achievements_error: null,
+    };
+  }
+
+  const langResult = await persistLanguagesFromExtract({
+    supabase,
+    userId,
+    languagesRaw: selectedRaw,
+  });
+
+  let achievementsImport: any = { imported: 0, error: null };
+  if (includeSupplemental) {
+    achievementsImport = await persistAchievementsFromExtract({
+      supabase,
+      userId,
+      jobId,
+      achievementsRaw: Array.isArray(result?.achievements) ? result.achievements : [],
+    }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) }));
+  }
+
+  return {
+    section: "languages" as const,
+    imported: langResult.imported,
+    duplicates_skipped: langResult.duplicatesSkipped,
+    not_selected: Math.max(extractedAll.length - selectedCount, 0),
+    achievements_imported: Number(achievementsImport?.imported || 0),
+    achievements_error: achievementsImport?.error || null,
+  };
+}
+
+async function importAchievementsSection(params: {
+  supabase: any;
+  userId: string;
+  jobId: string;
+  result: any;
+  selectedItems: any[] | null;
+}) {
+  const { supabase, userId, jobId, result, selectedItems } = params;
+  const extractedAll = Array.isArray(result?.achievements) ? result.achievements : [];
+  const selectedRaw = selectedItems ?? extractedAll;
+  const selectedCount = Array.isArray(selectedRaw) ? selectedRaw.length : 0;
+  if (selectedCount === 0) {
+    return {
+      section: "achievements" as const,
+      imported: 0,
+      duplicates_skipped: 0,
+      not_selected: Math.max(extractedAll.length - selectedCount, 0),
+    };
+  }
+
+  const achievementResult = await persistAchievementsFromExtract({
+    supabase,
+    userId,
+    jobId,
+    achievementsRaw: selectedRaw,
+  });
+
+  return {
+    section: "achievements" as const,
+    imported: achievementResult.imported,
+    duplicates_skipped: achievementResult.duplicatesSkipped,
+    not_selected: Math.max(extractedAll.length - selectedCount, 0),
+  };
+}
+
 export async function POST(req: Request) {
   const supabase = await createClient();
   const {
@@ -301,238 +606,132 @@ export async function POST(req: Request) {
 
   const result = (job as any)?.result_json || {};
 
-  if (section === "experiences") {
-    const extractedAll = Array.isArray(result?.experiences) ? result.experiences : [];
-    const selectedRaw = selectedItems ?? extractedAll;
-    const totalDetected = extractedAll.length;
-    const selectedCount = selectedRaw.length;
-
-    const candidateRows = selectedRaw
-      .filter((x: any) => !isLikelyAcademic(x))
-      .map((x: any) => {
-        const role_title = toNullable(x?.role_title || x?.title);
-        const company_name = toNullable(x?.company_name || x?.company);
-        const description = toNullable(x?.description);
-        const startDate = normalizeDateForDb(x?.start_date);
-        if (!role_title || !company_name || !startDate) return null;
-        const endDate = normalizeDateForDb(x?.end_date);
+  if (section === "all") {
+    const selections = typeof body?.selected_items === "object" && body?.selected_items !== null ? body.selected_items : {};
+    const blockRunner = async (run: () => Promise<any>) => {
+      try {
+        const result = await run();
+        return { ...result, error: null };
+      } catch (error: any) {
         return {
-          user_id: user.id,
-          role_title,
-          company_name,
-          start_date: startDate,
-          end_date: endDate,
-          description,
-          matched_verification_id: null,
-          confidence: null,
-        };
-      })
-      .filter(Boolean);
-
-    if (candidateRows.length === 0) {
-      return NextResponse.json({
-        ok: true,
-        section: "experiences",
-        imported: 0,
-        duplicates_skipped: 0,
-        not_selected: Math.max(totalDetected - selectedCount, 0),
-      });
-    }
-
-    const [{ data: existingRows, error: existingErr }, profileExpColumns] = await Promise.all([
-      supabase
-        .from("profile_experiences")
-        .select("role_title,company_name,start_date,end_date")
-        .eq("user_id", user.id),
-      getTableColumns(supabase, "profile_experiences"),
-    ]);
-
-    if (existingErr) {
-      return NextResponse.json({ error: "profile_experiences_existing_fetch_failed", details: existingErr.message }, { status: 400 });
-    }
-
-    const existingExact = new Set((existingRows || []).map((x: any) => expExactSig(x)));
-    const existingPossible = new Set((existingRows || []).map((x: any) => expPossibleSig(x)));
-    const importedAtIso = new Date().toISOString();
-
-    const toInsert: any[] = [];
-    for (const row of candidateRows as any[]) {
-      const exact = expExactSig(row);
-      const possible = expPossibleSig(row);
-      if (existingExact.has(exact) || existingPossible.has(possible)) continue;
-      existingExact.add(exact);
-      existingPossible.add(possible);
-
-      const next: any = { ...row };
-      if (profileExpColumns.has("import_source")) next.import_source = "cv_parse";
-      if (profileExpColumns.has("import_job_id")) next.import_job_id = jobId;
-      if (profileExpColumns.has("imported_at")) next.imported_at = importedAtIso;
-      if (profileExpColumns.has("metadata")) {
-        next.metadata = {
-          import_source: "cv_parse",
-          import_job_id: jobId,
-          imported_at: importedAtIso,
+          imported: 0,
+          duplicates_skipped: 0,
+          not_selected: 0,
+          error: String(error?.message || error || "unknown_error"),
         };
       }
-      toInsert.push(next);
-    }
+    };
 
-    if (toInsert.length > 0) {
-      const { error: insErr } = await supabase.from("profile_experiences").insert(toInsert);
-      if (insErr) {
-        return NextResponse.json({ error: "profile_experiences_insert_failed", details: insErr.message }, { status: 400 });
-      }
-    }
-
-    const [langImport, achievementsImport] = await Promise.all([
-      persistLanguagesFromExtract({
-        supabase,
-        userId: user.id,
-        languagesRaw: Array.isArray(result?.languages) ? result.languages : [],
-      }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
-      persistAchievementsFromExtract({
+    const experiences = await blockRunner(() =>
+      importExperiencesSection({
         supabase,
         userId: user.id,
         jobId,
-        achievementsRaw: Array.isArray(result?.achievements) ? result.achievements : [],
-      }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
-    ]);
+        result,
+        selectedItems: Array.isArray(selections?.experiences) ? selections.experiences : [],
+        includeSupplemental: false,
+      }),
+    );
+    const education = await blockRunner(() =>
+      importEducationSection({
+        supabase,
+        userId: user.id,
+        jobId,
+        result,
+        selectedItems: Array.isArray(selections?.education) ? selections.education : [],
+        includeSupplemental: false,
+      }),
+    );
+    const languages = await blockRunner(() =>
+      importLanguagesSection({
+        supabase,
+        userId: user.id,
+        jobId,
+        result,
+        selectedItems: Array.isArray(selections?.languages) ? selections.languages : [],
+        includeSupplemental: false,
+      }),
+    );
+    const achievements = await blockRunner(() =>
+      importAchievementsSection({
+        supabase,
+        userId: user.id,
+        jobId,
+        result,
+        selectedItems: Array.isArray(selections?.achievements) ? selections.achievements : [],
+      }),
+    );
 
     return NextResponse.json({
       ok: true,
-      section: "experiences",
-      imported: toInsert.length,
-      duplicates_skipped: Math.max(selectedCount - toInsert.length, 0),
-      not_selected: Math.max(totalDetected - selectedCount, 0),
-      languages_imported: Number((langImport as any)?.imported || 0),
-      languages_error: (langImport as any)?.error || null,
-      achievements_imported: Number((achievementsImport as any)?.imported || 0),
-      achievements_error: (achievementsImport as any)?.error || null,
+      section: "all",
+      imported_total:
+        Number(experiences.imported || 0) +
+        Number(education.imported || 0) +
+        Number(languages.imported || 0) +
+        Number(achievements.imported || 0),
+      blocks: {
+        experiences,
+        education,
+        languages,
+        achievements,
+      },
     });
+  }
+
+  if (section === "experiences") {
+    try {
+      return NextResponse.json(
+        await importExperiencesSection({
+          supabase,
+          userId: user.id,
+          jobId,
+          result,
+          selectedItems,
+          includeSupplemental: true,
+        }),
+      );
+    } catch (error: any) {
+      const message = String(error?.message || error || "unknown_error");
+      const [code, ...rest] = message.split(":");
+      return NextResponse.json({ error: code || "profile_experiences_import_failed", details: rest.join(":") || message }, { status: 400 });
+    }
   }
 
   if (section === "education") {
-    const extractedAll = Array.isArray(result?.education) ? result.education : [];
-    const selectedRaw = selectedItems ?? extractedAll;
-    const totalDetected = extractedAll.length;
-    const selectedCount = selectedRaw.length;
-
-    const importedAt = new Date().toISOString();
-
-    const normalized = selectedRaw
-      .map((x: any) => {
-        const title = toNullable(x?.title || x?.degree);
-        const institution = toNullable(x?.institution);
-        const description = toNullable(x?.description || x?.notes);
-        if (!shouldImportEducationRow({ title, institution, description })) return null;
-        return {
-          title: title || "",
-          institution: institution || "",
-          start_date: normalizeDateText(x?.start_date || x?.start),
-          end_date: normalizeDateText(x?.end_date || x?.end),
-          description,
-          import_source: "cv_parse",
-          import_job_id: jobId,
-          imported_at: importedAt,
-        };
-      })
-      .filter(Boolean);
-
-    if (normalized.length === 0) {
-      return NextResponse.json({
-        ok: true,
-        section: "education",
-        imported: 0,
-        duplicates_skipped: 0,
-        not_selected: Math.max(totalDetected - selectedCount, 0),
-      });
+    try {
+      return NextResponse.json(
+        await importEducationSection({
+          supabase,
+          userId: user.id,
+          jobId,
+          result,
+          selectedItems,
+          includeSupplemental: true,
+        }),
+      );
+    } catch (error: any) {
+      const message = String(error?.message || error || "unknown_error");
+      const [code, ...rest] = message.split(":");
+      return NextResponse.json({ error: code || "education_persist_failed", details: rest.join(":") || message }, { status: 400 });
     }
-
-    const collections = await readCandidateProfileCollections(supabase, user.id);
-    const currentEducation = Array.isArray(collections.education) ? collections.education : [];
-    const mergedExact = new Set(currentEducation.map((x: any) => eduExactSig(x)));
-    const mergedPossible = new Set(currentEducation.map((x: any) => `${normalizeRoleOrTitle(x?.title)}|${normalizeCompanyOrInstitution(x?.institution)}`));
-    const toAppend: any[] = [];
-    for (const row of normalized as any[]) {
-      const exact = eduExactSig(row);
-      const possible = `${normalizeRoleOrTitle(row?.title)}|${normalizeCompanyOrInstitution(row?.institution)}`;
-      if (mergedExact.has(exact) || mergedPossible.has(possible)) continue;
-      mergedExact.add(exact);
-      mergedPossible.add(possible);
-      toAppend.push(row);
-    }
-
-    if (toAppend.length > 0) {
-      try {
-        await replaceCandidateEducationCollection(supabase, user.id, [...currentEducation, ...toAppend], "cv_parse");
-      } catch (persistError: any) {
-        return NextResponse.json({ error: "education_persist_failed", details: persistError.message }, { status: 400 });
-      }
-    }
-
-    const [langImport, achievementsImport] = await Promise.all([
-      persistLanguagesFromExtract({
-        supabase,
-        userId: user.id,
-        languagesRaw: Array.isArray(result?.languages) ? result.languages : [],
-      }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
-      persistAchievementsFromExtract({
-        supabase,
-        userId: user.id,
-        jobId,
-        achievementsRaw: Array.isArray(result?.achievements) ? result.achievements : [],
-      }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
-    ]);
-
-    return NextResponse.json({
-      ok: true,
-      section: "education",
-      imported: toAppend.length,
-      duplicates_skipped: Math.max(selectedCount - toAppend.length, 0),
-      not_selected: Math.max(totalDetected - selectedCount, 0),
-      languages_imported: Number((langImport as any)?.imported || 0),
-      languages_error: (langImport as any)?.error || null,
-      achievements_imported: Number((achievementsImport as any)?.imported || 0),
-      achievements_error: (achievementsImport as any)?.error || null,
-    });
   }
 
   if (section === "languages") {
-    const extractedAll = Array.isArray(result?.languages) ? result.languages : [];
-    const selectedRaw = selectedItems ?? extractedAll;
-    if ((Array.isArray(selectedRaw) ? selectedRaw : []).length === 0) {
-      return NextResponse.json({
-        ok: true,
-        section: "languages",
-        imported: 0,
-        duplicates_skipped: 0,
-        not_selected: Math.max(extractedAll.length - selectedRaw.length, 0),
-      });
+    try {
+      return NextResponse.json(
+        await importLanguagesSection({
+          supabase,
+          userId: user.id,
+          jobId,
+          result,
+          selectedItems,
+          includeSupplemental: true,
+        }),
+      );
+    } catch (error: any) {
+      return NextResponse.json({ error: "languages_import_failed", details: String(error?.message || error || "unknown_error") }, { status: 400 });
     }
-
-    const [langResult, achievementsImport] = await Promise.all([
-      persistLanguagesFromExtract({
-        supabase,
-        userId: user.id,
-        languagesRaw: selectedRaw,
-      }),
-      persistAchievementsFromExtract({
-        supabase,
-        userId: user.id,
-        jobId,
-        achievementsRaw: Array.isArray(result?.achievements) ? result.achievements : [],
-      }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
-    ]);
-
-    return NextResponse.json({
-      ok: true,
-      section: "languages",
-      imported: langResult.imported,
-      duplicates_skipped: langResult.duplicatesSkipped,
-      not_selected: Math.max(extractedAll.length - selectedRaw.length, 0),
-      achievements_imported: Number((achievementsImport as any)?.imported || 0),
-      achievements_error: (achievementsImport as any)?.error || null,
-    });
   }
 
   return NextResponse.json({ error: "unsupported_section" }, { status: 400 });

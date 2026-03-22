@@ -49,10 +49,58 @@ function normalizeText(v) {
     .trim();
 }
 
+const PERSON_PARTICLES = new Set(["de", "del", "la", "las", "los", "el", "y", "da", "do", "dos", "das", "della", "di"]);
+const COMPANY_STOPWORDS = new Set([
+  "sl",
+  "s",
+  "l",
+  "sa",
+  "slu",
+  "slu",
+  "sociedad",
+  "limitada",
+  "anonima",
+  "grupo",
+  "holding",
+  "empresa",
+  "compania",
+  "compañia",
+  "services",
+  "service",
+  "solutions",
+  "solution",
+]);
+
+function compactIdentity(value) {
+  return String(value || "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toUpperCase()
+    .trim();
+}
+
+function normalizeCompanyTokenText(v) {
+  return normalizeText(v)
+    .replace(/\b(s l|s a|s l u)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function textTokens(v) {
   return normalizeText(v)
     .split(" ")
     .filter((x) => x.length > 2);
+}
+
+function companyTokens(v) {
+  return normalizeCompanyTokenText(v)
+    .split(" ")
+    .filter((x) => x.length > 1 && !COMPANY_STOPWORDS.has(x));
+}
+
+function personTokens(v) {
+  return normalizeText(v)
+    .split(" ")
+    .filter((x) => x.length > 1 && !PERSON_PARTICLES.has(x));
 }
 
 function tokenSimilarity(a, b) {
@@ -64,6 +112,86 @@ function tokenSimilarity(a, b) {
     if (bSet.has(token)) intersection += 1;
   }
   return intersection / Math.max(aSet.size, bSet.size);
+}
+
+function companySimilarity(a, b) {
+  const aSet = new Set(companyTokens(a));
+  const bSet = new Set(companyTokens(b));
+  if (aSet.size === 0 || bSet.size === 0) return 0;
+  let intersection = 0;
+  for (const token of aSet) {
+    if (bSet.has(token)) intersection += 1;
+  }
+  const base = intersection / Math.max(aSet.size, bSet.size);
+  const subset =
+    Array.from(aSet).every((token) => bSet.has(token)) || Array.from(bSet).every((token) => aSet.has(token));
+  if (subset && intersection >= 1) return Math.max(base, 0.92);
+  return base;
+}
+
+function comparePersonName(docName, candidateName) {
+  const docTokens = personTokens(docName);
+  const candidateTokens = personTokens(candidateName);
+  if (docTokens.length === 0 || candidateTokens.length === 0) {
+    return {
+      score: 0.5,
+      level: "inconclusive",
+      mode: "missing_name",
+      subsetMatch: false,
+      surnameMatch: false,
+      givenMatch: false,
+    };
+  }
+
+  const docSet = new Set(docTokens);
+  const candidateSet = new Set(candidateTokens);
+  const intersection = candidateTokens.filter((token) => docSet.has(token));
+  const overlapRatio = intersection.length / Math.max(candidateTokens.length, docTokens.length);
+  const subsetMatch =
+    candidateTokens.every((token) => docSet.has(token)) || docTokens.every((token) => candidateSet.has(token));
+
+  const docSurnames = docTokens.slice(-2);
+  const candidateSurnames = candidateTokens.slice(-2);
+  const surnameMatch = candidateSurnames.some((token) => docSet.has(token)) && docSurnames.some((token) => candidateSet.has(token));
+  const docGiven = docTokens.slice(0, Math.max(1, docTokens.length - Math.min(2, docTokens.length)));
+  const candidateGiven = candidateTokens.slice(0, Math.max(1, candidateTokens.length - Math.min(2, candidateTokens.length)));
+  const givenMatch = candidateGiven.some((token) => docSet.has(token)) || docGiven.some((token) => candidateSet.has(token));
+
+  if (subsetMatch && surnameMatch && givenMatch) {
+    return { score: 0.95, level: "high", mode: "name_subset_match", subsetMatch, surnameMatch, givenMatch };
+  }
+  if (surnameMatch && givenMatch && overlapRatio >= 0.45) {
+    return { score: 0.82, level: "high", mode: "name_tolerant_match", subsetMatch, surnameMatch, givenMatch };
+  }
+  if (surnameMatch && (givenMatch || overlapRatio >= 0.34)) {
+    return { score: 0.62, level: "medium", mode: "name_partial_match", subsetMatch, surnameMatch, givenMatch };
+  }
+  if (overlapRatio >= 0.25) {
+    return { score: 0.4, level: "low", mode: "name_weak_match", subsetMatch, surnameMatch, givenMatch };
+  }
+  return { score: 0, level: "conflict", mode: "name_mismatch", subsetMatch, surnameMatch, givenMatch };
+}
+
+function compareCompanyName(extractedCompanyName, row) {
+  const candidates = [
+    { value: row?.company_name, source: "legal_name" },
+    { value: row?.company_name_legal, source: "legal_name" },
+    { value: row?.company_name_freeform, source: "commercial_name" },
+    { value: row?.company_name_display, source: "commercial_name" },
+  ].filter((entry) => String(entry.value || "").trim());
+
+  if (!String(extractedCompanyName || "").trim()) {
+    return { score: 0.5, source: null, matched_value: null };
+  }
+
+  let best = { score: 0, source: null, matched_value: null };
+  for (const entry of candidates) {
+    const score = companySimilarity(extractedCompanyName, entry.value);
+    if (score > best.score) {
+      best = { score, source: entry.source, matched_value: String(entry.value || "").trim() || null };
+    }
+  }
+  return best;
 }
 
 function toMonthIndex(value) {
@@ -201,24 +329,47 @@ export function normalizeDocumentaryExtract(raw) {
   return out;
 }
 
-export function computeDocumentaryMatching({ extraction, employmentRecords, candidateName }) {
+export function computeDocumentaryMatching({
+  extraction,
+  employmentRecords,
+  candidateName,
+  candidateIdentityHash,
+  extractedIdentityHash,
+  evidenceType,
+}) {
   const rows = Array.isArray(employmentRecords) ? employmentRecords : [];
-  const candidateNameScore = extraction?.candidate_name
-    ? tokenSimilarity(extraction?.candidate_name, candidateName)
-    : 0.5;
-  const personMatches = !extraction?.candidate_name || candidateNameScore >= 0.55;
+  const extractedIdentityValue = compactIdentity(extraction?.tax_id);
+  const identityByOfficialId =
+    candidateIdentityHash && extractedIdentityHash && extractedIdentityValue
+      ? candidateIdentityHash === extractedIdentityHash
+      : null;
+  const candidateNameMatch = comparePersonName(extraction?.candidate_name, candidateName);
+  const candidateNameScore = candidateNameMatch.score;
+  const hardIdentityConflict =
+    identityByOfficialId === false || (String(extraction?.candidate_name || "").trim() && candidateNameMatch.level === "conflict");
+  const identityGatePassed =
+    identityByOfficialId === true || candidateNameMatch.level === "high" || candidateNameMatch.level === "medium";
+  const identityConfirmedBy = identityByOfficialId === true ? "official_id" : identityGatePassed ? candidateNameMatch.mode : null;
 
   const scored = rows.map((row) => {
-    const companySimilarity = tokenSimilarity(extraction?.company_name, row?.company_name_freeform);
+    const companyMatch = compareCompanyName(extraction?.company_name, row);
+    const companyScore =
+      !String(extraction?.company_name || "").trim() && String(evidenceType || "").trim().toLowerCase() === "vida_laboral"
+        ? 0.6
+        : companyMatch.score;
     const titleSimilarity = tokenSimilarity(extraction?.job_title, row?.position);
     const dateScore = dateCompatibility(extraction?.start_date, extraction?.end_date, row?.start_date, row?.end_date);
 
-    const score = personMatches
-      ? clamp01(companySimilarity * 0.4 + dateScore * 0.35 + titleSimilarity * 0.25)
-      : 0;
+    const score = identityGatePassed
+      ? clamp01(companyScore * 0.4 + dateScore * 0.35 + titleSimilarity * 0.25)
+      : hardIdentityConflict
+        ? 0
+        : clamp01(companyScore * 0.2 + dateScore * 0.5 + titleSimilarity * 0.15);
     return {
       employment_record_id: String(row?.id || ""),
-      companySimilarity,
+      companySimilarity: companyScore,
+      company_match_source: companyMatch.source,
+      company_matched_value: companyMatch.matched_value,
       titleSimilarity,
       dateScore,
       candidateScore: candidateNameScore,
@@ -230,16 +381,17 @@ export function computeDocumentaryMatching({ extraction, employmentRecords, cand
   const best = scored[0] || null;
 
   const extractionConfidence = extraction?.confidence_score == null ? 0.5 : clamp01(extraction.confidence_score);
-  const finalScore = personMatches && best ? clamp01(best.score * 0.85 + extractionConfidence * 0.15) : 0;
-  const hasNameInconsistency = Boolean(extraction?.candidate_name && !personMatches);
+  const finalScore = hardIdentityConflict ? 0 : best ? clamp01(best.score * 0.85 + extractionConfidence * 0.15) : 0;
+  const hasNameInconsistency = Boolean(hardIdentityConflict);
   const mismatchFlags = [];
-  if (hasNameInconsistency) mismatchFlags.push("person_name_mismatch");
+  if (identityByOfficialId === false) mismatchFlags.push("official_identity_mismatch");
+  if (hasNameInconsistency && identityByOfficialId !== false) mismatchFlags.push("person_name_mismatch");
   if (best && best.companySimilarity < 0.55) mismatchFlags.push("company_mismatch");
   if (best && best.titleSimilarity < 0.45) mismatchFlags.push("position_mismatch");
   if (best && best.dateScore < 0.35) mismatchFlags.push("date_mismatch");
 
   const autoLink = Boolean(
-    personMatches &&
+    identityGatePassed &&
     best &&
     finalScore >= 0.82 &&
     best.companySimilarity >= 0.6 &&
@@ -250,12 +402,19 @@ export function computeDocumentaryMatching({ extraction, employmentRecords, cand
   const suggestedReview = Boolean(hasNameInconsistency || (!autoLink && best && finalScore >= 0.6));
 
   const linkState = autoLink ? "auto_linked" : suggestedReview ? "suggested_review" : "unlinked";
-  const overallMatchLevel = hasNameInconsistency
+  const overallMatchLevel = hardIdentityConflict
     ? "conflict"
+    : !identityGatePassed && String(extraction?.candidate_name || "").trim()
+      ? "inconclusive"
     : resolveDocumentaryMatchLevel({
         matching: { final_score: finalScore },
         inconsistencyReason: null,
       });
+
+  const supportingMatches =
+    String(evidenceType || "").trim().toLowerCase() === "vida_laboral"
+      ? scored.filter((item) => item.score >= 0.55).map((item) => item.employment_record_id)
+      : [];
 
   return {
     best_match: best,
@@ -267,20 +426,33 @@ export function computeDocumentaryMatching({ extraction, employmentRecords, cand
     person_match_score: best?.candidateScore ?? candidateNameScore,
     overall_match_score: finalScore,
     overall_match_level: overallMatchLevel,
-    identity_gate_passed: personMatches,
+    identity_gate_passed: identityGatePassed,
+    identity_confirmed_by: identityConfirmedBy,
+    identity_by_official_id: identityByOfficialId,
+    supports_multiple_experiences: supportingMatches.length > 1,
+    supporting_employment_record_ids: supportingMatches,
     mismatch_flags: mismatchFlags,
     link_state: linkState,
     auto_link: autoLink,
     needs_manual_review: !autoLink,
+    company_match_source: best?.company_match_source || null,
     matching_reason: autoLink
-      ? "Coincidencia alta entre empresa, periodo y puesto"
+      ? best?.company_match_source === "legal_name"
+        ? "Coincidencia alta con esta experiencia. Empresa alineada por razón social."
+        : best?.company_match_source === "commercial_name"
+          ? "Coincidencia alta con esta experiencia. Empresa alineada por nombre comercial."
+          : "Coincidencia alta entre empresa, periodo y puesto."
       : suggestedReview
-        ? hasNameInconsistency
-          ? "Conflicto: el titular del documento no coincide con el candidato"
-          : "Coincidencia parcial; requiere revisión manual"
-        : "Coincidencia insuficiente para autovincular",
-    inconsistency_reason: hasNameInconsistency
-      ? "Conflicto: el titular del documento no coincide con el candidato"
+        ? hardIdentityConflict
+          ? identityByOfficialId === false
+            ? "Conflicto: el identificador oficial del documento no coincide con el candidato."
+            : "Conflicto: el titular del documento no coincide razonablemente con el candidato."
+          : "Coincidencia parcial; requiere revisión manual."
+        : "Coincidencia insuficiente para autovincular.",
+    inconsistency_reason: hardIdentityConflict
+      ? identityByOfficialId === false
+        ? "Conflicto: el identificador oficial del documento no coincide con el candidato."
+        : "Conflicto: el titular del documento no coincide razonablemente con el candidato."
       : null,
   };
 }

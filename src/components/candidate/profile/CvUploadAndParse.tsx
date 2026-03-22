@@ -14,13 +14,28 @@ type Job = {
 
 type MatchStatus = "new" | "possible_duplicate" | "already_exists";
 
-type ImportResult = {
-  section: "experiences" | "education" | "languages";
+type AchievementDraft = {
+  title: string;
+  issuer: string;
+  date: string;
+  description: string;
+  category: string;
+};
+
+type ImportBlockResult = {
   imported: number;
-  duplicatesSkipped: number;
-  notSelected: number;
-  languagesImported?: number;
-  achievementsImported?: number;
+  duplicates_skipped: number;
+  not_selected: number;
+};
+
+type ImportResult = {
+  imported_total: number;
+  blocks: {
+    experiences: ImportBlockResult;
+    education: ImportBlockResult;
+    languages: ImportBlockResult;
+    achievements: ImportBlockResult;
+  };
 };
 
 const MAX_CV_SIZE_BYTES = 8 * 1024 * 1024;
@@ -150,10 +165,11 @@ export default function CvUploadAndParse() {
 
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uploadStage, setUploadStage] = useState<null | "uploading" | "creating_job" | "queued">(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [job, setJob] = useState<Job | null>(null);
-  const [importing, setImporting] = useState<null | "experiences" | "education" | "languages">(null);
+  const [importing, setImporting] = useState<null | "all">(null);
   const [dedupLoading] = useState(false);
 
   const [expDrafts, setExpDrafts] = useState<any[]>([]);
@@ -171,6 +187,8 @@ export default function CvUploadAndParse() {
   const [lastImport, setLastImport] = useState<ImportResult | null>(null);
   const [languagesDraft, setLanguagesDraft] = useState<string[]>([]);
   const [languagesChecked, setLanguagesChecked] = useState<boolean[]>([]);
+  const [achievementDrafts, setAchievementDrafts] = useState<AchievementDraft[]>([]);
+  const [achievementChecked, setAchievementChecked] = useState<boolean[]>([]);
   const [lastAppliedJobId, setLastAppliedJobId] = useState<string | null>(null);
 
   const loadProfileSets = useCallback(async () => {
@@ -222,6 +240,7 @@ export default function CvUploadAndParse() {
     const parsedExps = Array.isArray(nextJob?.result_json?.experiences) ? nextJob.result_json.experiences : [];
     const parsedEdu = Array.isArray(nextJob?.result_json?.education) ? nextJob.result_json.education : [];
     const parsedLanguages = Array.isArray(nextJob?.result_json?.languages) ? nextJob.result_json.languages : [];
+    const parsedAchievements = Array.isArray(nextJob?.result_json?.achievements) ? nextJob.result_json.achievements : [];
     setExpDrafts(parsedExps.map((x: any) => ({
       company_name: x.company_name || x.company || "",
       role_title: x.role_title || x.title || "",
@@ -239,30 +258,41 @@ export default function CvUploadAndParse() {
     const normalizedLanguages = normalizeCvLanguages(parsedLanguages, 30);
     setLanguagesDraft(normalizedLanguages);
     setLanguagesChecked(normalizedLanguages.map(() => true));
+    const normalizedAchievements = parsedAchievements
+      .map((x: any) => ({
+        title: x?.title || "",
+        issuer: x?.issuer || "",
+        date: x?.date || "",
+        description: x?.description || "",
+        category: x?.category || "otro",
+      }))
+      .filter((x: AchievementDraft) => Boolean(x.title || x.issuer || x.description || x.date));
+    setAchievementDrafts(normalizedAchievements);
+    setAchievementChecked(normalizedAchievements.map(() => true));
     setLastAppliedJobId(nextJob.id);
   }
 
-  async function importSection(section: "experiences" | "education" | "languages") {
+  async function importSelected() {
     if (!jobId || !job || job.status !== "succeeded") return;
-    setImporting(section);
+    setImporting("all");
     setMsg(null);
 
-    const selectedItems =
-      section === "experiences"
-        ? expDrafts.filter((_: any, idx: number) => expChecked[idx])
-        : section === "education"
-          ? eduDrafts.filter((_: any, idx: number) => eduChecked[idx])
-          : languagesDraft.filter((_: any, idx: number) => languagesChecked[idx]);
+    const selectedItems = {
+      experiences: expDrafts.filter((_: any, idx: number) => expChecked[idx]),
+      education: eduDrafts.filter((_: any, idx: number) => eduChecked[idx]),
+      languages: languagesDraft.filter((_: any, idx: number) => languagesChecked[idx]),
+      achievements: achievementDrafts.filter((_: any, idx: number) => achievementChecked[idx]),
+    };
 
-    if (selectedItems.length === 0) {
+    const totalSelected =
+      selectedItems.experiences.length +
+      selectedItems.education.length +
+      selectedItems.languages.length +
+      selectedItems.achievements.length;
+
+    if (totalSelected === 0) {
       setImporting(null);
-      setMsg(
-        section === "experiences"
-          ? "No hay experiencias seleccionadas para importar."
-          : section === "education"
-            ? "No hay formaciones seleccionadas para importar."
-            : "No hay idiomas seleccionados para importar."
-      );
+      setMsg("Selecciona al menos un elemento antes de importar.");
       return;
     }
 
@@ -270,24 +300,46 @@ export default function CvUploadAndParse() {
       const res = await fetch("/api/candidate/cv/parse/import", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ job_id: jobId, section, selected_items: selectedItems }),
+        body: JSON.stringify({ job_id: jobId, section: "all", selected_items: selectedItems }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error || "import_failed");
 
-      const imported = Number(data?.imported ?? 0);
-      const duplicatesSkipped = Number(data?.duplicates_skipped ?? 0);
-      const notSelected = Number(data?.not_selected ?? 0);
-      const languagesImported = Number(data?.languages_imported ?? 0);
-      const achievementsImported = Number(data?.achievements_imported ?? 0);
+      const nextImport: ImportResult = {
+        imported_total: Number(data?.imported_total ?? 0),
+        blocks: {
+          experiences: {
+            imported: Number(data?.blocks?.experiences?.imported ?? 0),
+            duplicates_skipped: Number(data?.blocks?.experiences?.duplicates_skipped ?? 0),
+            not_selected: Number(data?.blocks?.experiences?.not_selected ?? 0),
+          },
+          education: {
+            imported: Number(data?.blocks?.education?.imported ?? 0),
+            duplicates_skipped: Number(data?.blocks?.education?.duplicates_skipped ?? 0),
+            not_selected: Number(data?.blocks?.education?.not_selected ?? 0),
+          },
+          languages: {
+            imported: Number(data?.blocks?.languages?.imported ?? 0),
+            duplicates_skipped: Number(data?.blocks?.languages?.duplicates_skipped ?? 0),
+            not_selected: Number(data?.blocks?.languages?.not_selected ?? 0),
+          },
+          achievements: {
+            imported: Number(data?.blocks?.achievements?.imported ?? 0),
+            duplicates_skipped: Number(data?.blocks?.achievements?.duplicates_skipped ?? 0),
+            not_selected: Number(data?.blocks?.achievements?.not_selected ?? 0),
+          },
+        },
+      };
+      const blockErrors = [
+        data?.blocks?.experiences?.error ? "experiencias" : null,
+        data?.blocks?.education?.error ? "formación" : null,
+        data?.blocks?.languages?.error ? "idiomas" : null,
+        data?.blocks?.achievements?.error ? "logros/certificaciones" : null,
+      ].filter(Boolean);
 
-      setLastImport({ section, imported, duplicatesSkipped, notSelected, languagesImported, achievementsImported });
+      setLastImport(nextImport);
       setMsg(
-        section === "experiences"
-          ? `${imported} experiencias importadas · ${duplicatesSkipped} omitidas por duplicadas · ${notSelected} no seleccionadas.${languagesImported > 0 || achievementsImported > 0 ? ` Además, hemos añadido ${languagesImported} idiomas y ${achievementsImported} logros detectados.` : ""}`
-          : section === "education"
-            ? `${imported} formaciones importadas · ${duplicatesSkipped} omitidas por duplicadas · ${notSelected} no seleccionadas.${languagesImported > 0 || achievementsImported > 0 ? ` Además, hemos añadido ${languagesImported} idiomas y ${achievementsImported} logros detectados.` : ""}`
-            : `${imported} idiomas importados · ${duplicatesSkipped} omitidos por duplicados · ${notSelected} no seleccionados.${achievementsImported > 0 ? ` También hemos añadido ${achievementsImported} logros detectados.` : ""}`
+        `Importación completada: ${nextImport.blocks.experiences.imported} experiencias, ${nextImport.blocks.education.imported} formaciones, ${nextImport.blocks.languages.imported} idiomas y ${nextImport.blocks.achievements.imported} logros/certificaciones añadidos.${blockErrors.length ? ` Hubo incidencias en: ${blockErrors.join(", ")}.` : ""}`
       );
 
       await loadProfileSets();
@@ -304,6 +356,7 @@ export default function CvUploadAndParse() {
     setLastImport(null);
     setJob(null);
     setJobId(null);
+    setUploadStage(null);
     setExpDrafts([]);
     setEduDrafts([]);
     setExpStatuses([]);
@@ -312,6 +365,8 @@ export default function CvUploadAndParse() {
     setEduChecked([]);
     setLanguagesDraft([]);
     setLanguagesChecked([]);
+    setAchievementDrafts([]);
+    setAchievementChecked([]);
     setLastAppliedJobId(null);
 
     if (!file) {
@@ -329,6 +384,7 @@ export default function CvUploadAndParse() {
     }
 
     setBusy(true);
+    setUploadStage("uploading");
 
     try {
       const { data: auth, error: authErr } = await supabase.auth.getUser();
@@ -346,6 +402,7 @@ export default function CvUploadAndParse() {
       });
       if (upErr) throw new Error(`upload_failed: ${upErr.message}`);
 
+      setUploadStage("creating_job");
       const parseRes = await fetch("/api/candidate/cv/parse", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -368,8 +425,10 @@ export default function CvUploadAndParse() {
       }
 
       setJobId(String(parseBody.job_id));
+      setUploadStage("queued");
       setMsg(parseBody?.processing_error ? toFriendlyCvError(parseBody.processing_error) : "Job en cola…");
     } catch (e: any) {
+      setUploadStage(null);
       setMsg(toFriendlyCvError(e?.message || "Error subiendo/procesando CV."));
     } finally {
       setBusy(false);
@@ -395,10 +454,13 @@ export default function CvUploadAndParse() {
         const nextWarnings = Array.isArray(casted?.result_json?.meta?.warnings) ? casted.result_json.meta.warnings : [];
 
         if (casted.status === "queued") {
+          setUploadStage("queued");
           setMsg("Job en cola…");
         } else if (casted.status === "processing") {
+          setUploadStage(null);
           setMsg("Procesando CV…");
         } else if (casted.status === "succeeded") {
+          setUploadStage(null);
           if (shouldApplyParsedResultOnce({ nextJobId: casted.id, lastAppliedJobId })) {
             await loadProfileSets();
             applyParsedResults(casted);
@@ -419,10 +481,12 @@ export default function CvUploadAndParse() {
             setMsg("Listo. CV procesado con extracción laboral y académica.");
           }
         } else if (casted.status === "failed") {
+          setUploadStage(null);
           setMsg(toFriendlyCvError(casted.error || "Falló el parsing."));
         }
       } catch (e: any) {
         if (!alive) return;
+        setUploadStage(null);
         setMsg(toFriendlyCvError(e?.message || "Error consultando job."));
       }
     };
@@ -437,6 +501,32 @@ export default function CvUploadAndParse() {
 
   const statusLabel =
     job?.status === "queued" ? "En cola" : job?.status === "processing" ? "Procesando" : job?.status === "succeeded" ? "Completado" : job?.status === "failed" ? "Fallido" : "—";
+  const selectedSummary = {
+    experiences: expChecked.filter(Boolean).length,
+    education: eduChecked.filter(Boolean).length,
+    languages: languagesChecked.filter(Boolean).length,
+    achievements: achievementChecked.filter(Boolean).length,
+  };
+  const totalSelected =
+    selectedSummary.experiences + selectedSummary.education + selectedSummary.languages + selectedSummary.achievements;
+  const progressTone =
+    uploadStage === "uploading"
+      ? "border-blue-200 bg-blue-50 text-blue-900"
+      : uploadStage === "creating_job"
+        ? "border-sky-200 bg-sky-50 text-sky-900"
+        : "border-amber-200 bg-amber-50 text-amber-900";
+  const progressTitle =
+    uploadStage === "uploading"
+      ? "Subiendo CV…"
+      : uploadStage === "creating_job"
+        ? "Preparando análisis…"
+        : "Procesando la extracción inicial…";
+  const progressText =
+    uploadStage === "uploading"
+      ? "Estamos cargando el archivo de forma segura para poder analizarlo."
+      : uploadStage === "creating_job"
+        ? "Estamos registrando el CV y arrancando el análisis automático."
+        : "El proceso ya está en marcha. En unos segundos verás el estado del job y la revisión unificada.";
 
   return (
     <div className="space-y-3">
@@ -446,14 +536,27 @@ export default function CvUploadAndParse() {
           <input
             type="file"
             accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            disabled={busy}
             onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="mt-1 w-full rounded-lg border px-3 py-2 text-sm bg-white"
+            className="mt-1 w-full rounded-lg border px-3 py-2 text-sm bg-white disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
           />
         </div>
         <button onClick={start} disabled={busy} className="rounded-lg px-3 py-2 text-sm font-medium border bg-slate-900 text-white disabled:opacity-50">
           {busy ? "Subiendo…" : "Extraer perfil desde CV"}
         </button>
       </div>
+
+      {uploadStage ? (
+        <div className={`rounded-lg border p-3 ${progressTone}`}>
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            <div className="text-sm">
+              <div className="font-medium">{progressTitle}</div>
+              <div className="mt-1 opacity-90">{progressText}</div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {msg ? (
         <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
@@ -476,18 +579,10 @@ export default function CvUploadAndParse() {
 
       {lastImport ? (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-          <div>
-            {lastImport.section === "experiences"
-              ? "Experiencias"
-              : lastImport.section === "education"
-                ? "Formación"
-                : "Idiomas"}: {lastImport.imported} importadas · {lastImport.duplicatesSkipped} omitidas por duplicadas · {lastImport.notSelected} no seleccionadas.
+          <div>Importación completada: {lastImport.imported_total} elementos añadidos al perfil.</div>
+          <div className="mt-1">
+            Experiencias {lastImport.blocks.experiences.imported} · Formación {lastImport.blocks.education.imported} · Idiomas {lastImport.blocks.languages.imported} · Logros/certificaciones {lastImport.blocks.achievements.imported}
           </div>
-          {Number(lastImport.languagesImported || 0) > 0 || Number(lastImport.achievementsImported || 0) > 0 ? (
-            <div className="mt-1">
-              También hemos añadido {Number(lastImport.languagesImported || 0)} idiomas y {Number(lastImport.achievementsImported || 0)} logros detectados al perfil.
-            </div>
-          ) : null}
           <div className="mt-2 flex flex-wrap gap-2">
             <a href="/candidate/experience" className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
               Abrir experiencias
@@ -527,9 +622,6 @@ export default function CvUploadAndParse() {
                   <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => setExpChecked(expStatuses.map(() => true))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Seleccionar todas</button>
                     <button type="button" onClick={() => setExpChecked(expStatuses.map(() => false))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Deseleccionar todas</button>
-                    <button type="button" onClick={() => void importSection("experiences")} disabled={importing !== null || dedupLoading} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium disabled:opacity-60">
-                      {importing === "experiences" ? "Importando…" : "Importar seleccionadas"}
-                    </button>
                   </div>
                 </div>
                 <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
@@ -575,9 +667,6 @@ export default function CvUploadAndParse() {
                   <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => setEduChecked(eduStatuses.map(() => true))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Seleccionar todas</button>
                     <button type="button" onClick={() => setEduChecked(eduStatuses.map(() => false))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Deseleccionar todas</button>
-                    <button type="button" onClick={() => void importSection("education")} disabled={importing !== null || dedupLoading} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium disabled:opacity-60">
-                      {importing === "education" ? "Importando…" : "Importar formación seleccionada"}
-                    </button>
                   </div>
                 </div>
                 <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
@@ -623,9 +712,6 @@ export default function CvUploadAndParse() {
                   <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => setLanguagesChecked(languagesDraft.map(() => true))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Seleccionar todos</button>
                     <button type="button" onClick={() => setLanguagesChecked(languagesDraft.map(() => false))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Deseleccionar todos</button>
-                    <button type="button" onClick={() => void importSection("languages")} disabled={importing !== null || dedupLoading} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium disabled:opacity-60">
-                      Importar idiomas seleccionados
-                    </button>
                   </div>
                 </div>
                 <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
@@ -658,6 +744,69 @@ export default function CvUploadAndParse() {
                     ))}
                   </div>
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="text-sm font-medium">Idiomas y logros detectados</div>
+                  <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => setAchievementChecked(achievementDrafts.map(() => true))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Seleccionar todos</button>
+                    <button type="button" onClick={() => setAchievementChecked(achievementDrafts.map(() => false))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Deseleccionar todos</button>
+                  </div>
+                </div>
+                <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
+                  Mantén en una sola revisión los idiomas, certificaciones y otros logros detectados antes de importarlos al perfil.
+                </div>
+
+                {achievementDrafts.length === 0 ? (
+                  <div className="text-sm text-slate-600">No se detectaron logros ni certificaciones adicionales.</div>
+                ) : (
+                  <div className="space-y-2">
+                    {achievementDrafts.map((item, idx) => (
+                      <div key={`${item.title}-${idx}`} className="rounded-md border bg-white p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(achievementChecked[idx])}
+                              onChange={(e) => setAchievementChecked((prev) => prev.map((v, i) => (i === idx ? e.target.checked : v)))}
+                            />
+                            Seleccionar
+                          </label>
+                          <span className="inline-flex rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                            {item.category || "otro"}
+                          </span>
+                        </div>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          <input value={item.title} onChange={(e) => setAchievementDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, title: e.target.value } : r)))} placeholder="Título" className="rounded-lg border px-3 py-2 text-sm" />
+                          <input value={item.issuer} onChange={(e) => setAchievementDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, issuer: e.target.value } : r)))} placeholder="Emisor" className="rounded-lg border px-3 py-2 text-sm" />
+                          <input value={item.date} onChange={(e) => setAchievementDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, date: e.target.value } : r)))} placeholder="Fecha" className="rounded-lg border px-3 py-2 text-sm" />
+                          <input value={item.category} onChange={(e) => setAchievementDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, category: e.target.value } : r)))} placeholder="Categoría" className="rounded-lg border px-3 py-2 text-sm" />
+                        </div>
+                        <textarea value={item.description} onChange={(e) => setAchievementDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, description: e.target.value } : r)))} rows={2} placeholder="Descripción" className="mt-2 w-full rounded-lg border px-3 py-2 text-sm" />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-lg border border-slate-200 bg-white p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div className="text-sm text-slate-700">
+                    <div className="font-medium text-slate-900">Revisión unificada del CV</div>
+                    <div className="mt-1">
+                      Seleccionadas: {selectedSummary.experiences} experiencias, {selectedSummary.education} formaciones, {selectedSummary.languages} idiomas y {selectedSummary.achievements} logros/certificaciones.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void importSelected()}
+                    disabled={importing !== null || dedupLoading || totalSelected === 0}
+                    className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {importing === "all" ? "Importando…" : "Importar seleccionadas"}
+                  </button>
+                </div>
               </div>
             </div>
           ) : null}
