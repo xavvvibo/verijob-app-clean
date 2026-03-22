@@ -171,34 +171,22 @@ export async function PATCH(request: Request) {
       return json(400, { error: "no_languages_to_apply" });
     }
 
-    const [{ data: profileRow, error: profileErr }, { data: candidateProfileRow, error: candidateProfileErr }] = await Promise.all([
-      admin.from("profiles").select("languages").eq("id", user.id).maybeSingle(),
+    const [profileColumnsRes, { data: candidateProfileRow, error: candidateProfileErr }] = await Promise.all([
+      admin.from("information_schema.columns").select("column_name").eq("table_schema", "public").eq("table_name", "profiles"),
       admin.from("candidate_profiles").select("id,certifications,raw_cv_json").eq("user_id", user.id).maybeSingle(),
     ]);
-    if (profileErr) return json(400, { error: "profile_read_failed", details: profileErr.message });
     if (candidateProfileErr) return json(400, { error: "candidate_profile_read_failed", details: candidateProfileErr.message });
-
-    const currentLanguages = Array.isArray((profileRow as any)?.languages)
-      ? (profileRow as any).languages.map((item: any) => normalizeText(item)).filter(Boolean)
-      : [];
-    const deduped = Array.from(
-      new Map(
-        [...currentLanguages, ...mergedLanguages].map((language) => [language.toLowerCase(), language])
-      ).values()
+    const profileColumns = new Set(
+      Array.isArray(profileColumnsRes.data)
+        ? profileColumnsRes.data.map((row: any) => String(row?.column_name || ""))
+        : []
     );
-
-    const { error: profileUpdateErr } = await admin
-      .from("profiles")
-      .update({
-        languages: deduped,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", user.id);
-    if (profileUpdateErr) return json(400, { error: "profile_languages_update_failed", details: profileUpdateErr.message });
+    const languagesSupported = profileColumns.has("languages");
 
     const nextRawCvJson = updateProfileProposal(rawCvJson, inviteId, {
-      languages_applied_at: new Date().toISOString(),
-      languages_applied_count: newLanguages.length,
+      languages_applied_at: languagesSupported ? new Date().toISOString() : null,
+      languages_apply_not_supported_at: languagesSupported ? null : new Date().toISOString(),
+      languages_applied_count: languagesSupported ? newLanguages.length : 0,
     });
     const candidateProfilePatch: Record<string, any> = {
       raw_cv_json: nextRawCvJson,
@@ -218,7 +206,7 @@ export async function PATCH(request: Request) {
       return json(400, { error: "candidate_profile_update_failed", details: profileProposalErr.message });
     }
 
-    return json(200, { ok: true, proposal_action: proposalAction, applied_languages: newLanguages.length });
+    return json(200, { ok: true, proposal_action: proposalAction, applied_languages: languagesSupported ? newLanguages.length : 0, languages_supported: languagesSupported });
   }
 
   if (!suggestionId) return json(400, { error: "missing_identifiers" });

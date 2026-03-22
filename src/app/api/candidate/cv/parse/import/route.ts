@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import {
   normalizeCvLanguages,
-  selectLanguagesPersistenceTarget,
   shouldImportEducationRow,
 } from "@/lib/candidate/cv-parse-normalize";
 
@@ -136,56 +135,14 @@ async function getTableColumns(supabase: any, table: string): Promise<Set<string
 }
 
 async function persistLanguagesFromExtract(params: {
-  supabase: any;
-  userId: string;
-  jobId: string;
   languagesRaw: any[];
 }) {
-  const { supabase, userId, jobId, languagesRaw } = params;
+  const { languagesRaw } = params;
   const normalizedLanguages = normalizeCvLanguages(Array.isArray(languagesRaw) ? languagesRaw : [], 50);
 
   if (normalizedLanguages.length === 0) {
     return { imported: 0, duplicatesSkipped: 0 };
   }
-
-  const [profileColumns] = await Promise.all([
-    getTableColumns(supabase, "profiles"),
-  ]);
-
-  const persistenceTarget = selectLanguagesPersistenceTarget(profileColumns);
-  if (persistenceTarget === "profiles.languages") {
-    const { data: profileRow } = await supabase.from("profiles").select("languages").eq("id", userId).maybeSingle();
-    const current = Array.isArray((profileRow as any)?.languages)
-      ? (profileRow as any).languages.map((x: any) => normalizeText(x)).filter(Boolean)
-      : [];
-    const currentSet = new Set(current.map((x: string) => x.toLowerCase()));
-    const toAppend = normalizedLanguages.filter((lang: string) => !currentSet.has(lang.toLowerCase()));
-
-    if (toAppend.length > 0) {
-      const merged = [...current, ...toAppend];
-      const { error: upErr } = await supabase
-        .from("profiles")
-        .update({ languages: merged, updated_at: new Date().toISOString() })
-        .eq("id", userId);
-      if (upErr) throw new Error(`languages_profile_update_failed:${upErr.message}`);
-    }
-    return { imported: toAppend.length, duplicatesSkipped: normalizedLanguages.length - toAppend.length };
-  }
-
-  if (persistenceTarget === "skip") {
-    const fallbackRes = await persistAchievementsFromExtract({
-      supabase,
-      userId,
-      jobId,
-      achievementsRaw: normalizedLanguages.map((lang: string) => ({ title: lang, category: "idioma", language: lang })),
-    }).catch((e: any) => ({ imported: 0, duplicatesSkipped: normalizedLanguages.length, error: String(e?.message || e) }));
-    return {
-      imported: Number((fallbackRes as any)?.imported || 0),
-      duplicatesSkipped: Number((fallbackRes as any)?.duplicatesSkipped || 0),
-      error: (fallbackRes as any)?.error || null,
-    };
-  }
-
   return { imported: 0, duplicatesSkipped: normalizedLanguages.length };
 }
 
@@ -400,9 +357,6 @@ export async function POST(req: Request) {
 
     const [langImport, achievementsImport] = await Promise.all([
       persistLanguagesFromExtract({
-        supabase,
-        userId: user.id,
-        jobId,
         languagesRaw: Array.isArray(result?.languages) ? result.languages : [],
       }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
       persistAchievementsFromExtract({
@@ -507,9 +461,6 @@ export async function POST(req: Request) {
 
     const [langImport, achievementsImport] = await Promise.all([
       persistLanguagesFromExtract({
-        supabase,
-        userId: user.id,
-        jobId,
         languagesRaw: Array.isArray(result?.languages) ? result.languages : [],
       }).catch((e: any) => ({ imported: 0, duplicatesSkipped: 0, error: String(e?.message || e) })),
       persistAchievementsFromExtract({
@@ -548,9 +499,6 @@ export async function POST(req: Request) {
 
     const [langResult, achievementsImport] = await Promise.all([
       persistLanguagesFromExtract({
-        supabase,
-        userId: user.id,
-        jobId,
         languagesRaw: selectedRaw,
       }),
       persistAchievementsFromExtract({

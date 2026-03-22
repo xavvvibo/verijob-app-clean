@@ -29,7 +29,6 @@ async function getTableColumns(admin: any, tableName: string) {
       "phone",
       "title",
       "location",
-      "languages",
       "updated_at",
     ]);
   }
@@ -70,27 +69,6 @@ type AchievementItem = {
   description: string | null;
   category: AchievementCategory;
 };
-
-function normalizeProfileLanguage(raw: any): AchievementItem | null {
-  const language =
-    normalizeText(
-      typeof raw === "string"
-        ? raw
-        : raw?.language || raw?.name || raw?.title
-    ) || null;
-  const level = normalizeText(typeof raw === "object" ? raw?.level : null) || null;
-  if (!language) return null;
-  return {
-    title: language,
-    language,
-    level,
-    certificate_title: null,
-    issuer: null,
-    date: null,
-    description: null,
-    category: "idioma",
-  };
-}
 
 function formatLanguageLabel(item: Partial<AchievementItem>) {
   const language = normalizeText(item.language || item.title);
@@ -142,12 +120,8 @@ function buildAchievementsCatalog(profile: any, candidateProfile: any) {
   const certificationsLegacy = Array.isArray(candidateProfile?.certifications)
     ? candidateProfile.certifications.map(normalizeAchievement).filter(Boolean)
     : [];
-  const profileLanguages = Array.isArray(profile?.languages)
-    ? profile.languages.map(normalizeProfileLanguage).filter(Boolean)
-    : [];
 
   const merged = dedupeAchievements([
-    ...profileLanguages,
     ...certificationsLegacy,
   ] as AchievementItem[]);
   return {
@@ -369,7 +343,10 @@ export async function GET() {
   const read = await readProfileAndCandidateProfile(admin, user.id);
   if ((read as any).error) return (read as any).error;
   const { profile, candidateProfile, identity, counts, profileExperiences, employmentRecords, verificationSummaries } = read as any;
-  const candidateProfileColumns = await getTableColumns(admin, "candidate_profiles");
+  const [candidateProfileColumns, profileColumns] = await Promise.all([
+    getTableColumns(admin, "candidate_profiles"),
+    getTableColumns(admin, "profiles"),
+  ]);
   const achievementsCatalog = buildAchievementsCatalog(profile, candidateProfile);
   const experienceTimeline = buildCandidateExperienceTrustTimeline({
     profileExperiences: profileExperiences || [],
@@ -406,7 +383,7 @@ export async function GET() {
       achievements: achievementsCatalog.all,
       achievements_catalog: achievementsCatalog,
       achievements_support: {
-        languages: true,
+        languages: profileColumns.has("languages"),
         certifications: candidateProfileColumns.has("certifications"),
       },
       experience_timeline: experienceTimeline,
@@ -436,7 +413,6 @@ export async function PUT(req: Request) {
     getTableColumns(admin, "profiles"),
   ]);
 
-  const hasAchievementsInput = Object.prototype.hasOwnProperty.call(body || {}, "achievements");
   const hasLanguagesInput = Object.prototype.hasOwnProperty.call(body || {}, "languages");
   const hasCertificationsInput = Object.prototype.hasOwnProperty.call(body || {}, "certifications");
   const languagesInput = Array.isArray(body?.languages)
@@ -562,7 +538,7 @@ export async function PUT(req: Request) {
     Object.assign(profile, profileUpdate.data || {});
   }
 
-  if ((hasLanguagesInput || hasAchievementsInput || hasCertificationsInput) && profileColumns.has("languages")) {
+  if (hasLanguagesInput && profileColumns.has("languages")) {
     const profileLanguagesPatch: Record<string, any> = {
       languages: normalizedLanguages,
     };
@@ -705,11 +681,22 @@ export async function PUT(req: Request) {
         );
       }
     }
-    if (hasLanguagesInput || hasAchievementsInput || hasCertificationsInput) {
+    if (hasLanguagesInput || hasCertificationsInput) {
       const requestedAchievements = dedupeAchievements([
-        ...normalizedLanguages
-          .map((label) => normalizeProfileLanguage(label))
-          .filter(Boolean),
+        ...(profileColumns.has("languages")
+          ? normalizedLanguages
+              .map((label) => ({
+                title: normalizeText(label),
+                language: normalizeText(label),
+                level: null,
+                certificate_title: null,
+                issuer: null,
+                date: null,
+                description: null,
+                category: "idioma" as const,
+              }))
+              .filter(Boolean)
+          : []),
         ...certifications,
       ] as AchievementItem[]);
       const persistedAchievements = buildAchievementsCatalog(persistedProfile, persistedCandidateProfile).all;

@@ -409,7 +409,7 @@ export async function persistImportedCandidateProfile(input: {
       .maybeSingle(),
     supabase
       .from("profiles")
-      .select("id,full_name,email,title,location,languages")
+      .select("id,full_name,email,title,location")
       .eq("id", input.userId)
       .maybeSingle(),
     supabase
@@ -423,18 +423,14 @@ export async function persistImportedCandidateProfile(input: {
     candidateProfileRes.data?.raw_cv_json && typeof candidateProfileRes.data.raw_cv_json === "object"
       ? candidateProfileRes.data.raw_cv_json
       : {};
-  const profileLanguages = Array.isArray((currentProfile as any)?.languages)
-    ? (currentProfile as any).languages.map((item: any) => safeTrim(item)).filter(Boolean)
-    : [];
   const importedLanguages = normalizeCvLanguages(
     Array.isArray(parsed?.languages) ? parsed.languages : [],
     50,
     safeTrim(parsed?.summary || parsed?.raw_text || parsed?.cv_text || parsed?.text)
   );
-  const mergedLanguages = Array.from(new Set([...profileLanguages, ...importedLanguages]));
+  const mergedLanguages = Array.from(new Set([...importedLanguages]));
   const newLanguages = mergedLanguages.filter((language) => {
-    const key = language.toLowerCase();
-    return !profileLanguages.some((item: string) => item.toLowerCase() === key);
+    return Boolean(language);
   });
   const existingValidName = isReliableCandidateName((currentProfile as any)?.full_name)
     ? sanitizeCandidateText((currentProfile as any)?.full_name)

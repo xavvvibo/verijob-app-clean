@@ -145,9 +145,3 @@ export function shouldApplyParsedResultOnce({ nextJobId, lastAppliedJobId }) {
   const lastId = String(lastAppliedJobId || "").trim();
   return Boolean(nextId) && nextId !== lastId;
 }
-
-export function selectLanguagesPersistenceTarget(profileColumns) {
-  const profileSet = profileColumns instanceof Set ? profileColumns : new Set(profileColumns || []);
-  if (profileSet.has("languages")) return "profiles.languages";
-  return "skip";
-}

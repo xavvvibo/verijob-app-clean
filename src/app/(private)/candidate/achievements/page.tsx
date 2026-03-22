@@ -295,6 +295,7 @@ export default function CandidateAchievementsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [supportsLanguages, setSupportsLanguages] = useState(false);
   const [supportsCertifications, setSupportsCertifications] = useState(false);
 
   useEffect(() => {
@@ -302,6 +303,7 @@ export default function CandidateAchievementsPage() {
       const r = await fetch("/api/candidate/profile", { credentials: "include", cache: "no-store" as any });
       const j = await r.json().catch(() => ({}));
       setItems(normalizeAchievements(j?.profile?.achievements_catalog?.all || j?.profile?.achievements || j?.profile?.certifications));
+      setSupportsLanguages(Boolean(j?.profile?.achievements_support?.languages));
       setSupportsCertifications(Boolean(j?.profile?.achievements_support?.certifications));
       setLoading(false);
     })();
@@ -313,11 +315,11 @@ export default function CandidateAchievementsPage() {
     if (!open) return;
     if (open === "language" && items.some((item) => item.category === "idioma" && !item.language && !item.level && !item.description)) return;
     if (open === "certification" && items.some((item) => item.category === "certificacion" && !item.title && !item.issuer && !item.description)) return;
-    if (open === "language") add("language");
+    if (open === "language" && supportsLanguages) add("language");
     if (open === "certification" && supportsCertifications) add("certification");
     window.history.replaceState({}, "", pathname);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, pathname, router, searchParams, supportsCertifications]);
+  }, [loading, pathname, router, searchParams, supportsCertifications, supportsLanguages]);
 
   const languages = useMemo(() => items.filter((item) => item.category === "idioma"), [items]);
   const certifications = useMemo(() => items.filter((item) => item.category === "certificacion"), [items]);
@@ -350,7 +352,7 @@ export default function CandidateAchievementsPage() {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        languages: toPayload(items.filter((item) => item.category === "idioma")),
+        languages: supportsLanguages ? toPayload(items.filter((item) => item.category === "idioma")) : [],
         certifications: supportsCertifications
           ? toPayload(items.filter((item) => item.category === "certificacion"))
           : [],
@@ -365,9 +367,18 @@ export default function CandidateAchievementsPage() {
     }
 
     setItems(normalizeAchievements(j?.profile?.achievements_catalog?.all || j?.profile?.achievements || j?.profile?.certifications));
+    setSupportsLanguages(Boolean(j?.profile?.achievements_support?.languages));
     setSupportsCertifications(Boolean(j?.profile?.achievements_support?.certifications));
     router.replace(`${pathname}?saved=1`, { scroll: false });
-    setMessage(supportsCertifications ? "Idiomas y certificaciones guardados correctamente." : "Idiomas guardados correctamente.");
+    if (supportsLanguages && supportsCertifications) {
+      setMessage("Idiomas y certificaciones guardados correctamente.");
+    } else if (supportsLanguages) {
+      setMessage("Idiomas guardados correctamente.");
+    } else if (supportsCertifications) {
+      setMessage("Certificaciones guardadas correctamente.");
+    } else {
+      setMessage("Este perfil no tiene soporte activo para guardar idiomas o certificaciones.");
+    }
   }
 
   return (
@@ -383,7 +394,8 @@ export default function CandidateAchievementsPage() {
       </header>
 
       <section className="rounded-2xl border border-gray-200 bg-white p-5">
-        <div className={`grid gap-3 ${supportsCertifications ? "md:grid-cols-2" : "md:grid-cols-1"}`}>
+        <div className={`grid gap-3 ${(supportsLanguages ? 1 : 0) + (supportsCertifications ? 1 : 0) > 1 ? "md:grid-cols-2" : "md:grid-cols-1"}`}>
+          {supportsLanguages ? (
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Idiomas</div>
             <div className="mt-2 text-2xl font-semibold text-gray-900">{languages.length}</div>
@@ -396,6 +408,7 @@ export default function CandidateAchievementsPage() {
               Añadir idioma
             </button>
           </div>
+          ) : null}
           {supportsCertifications ? (
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
             <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Certificaciones</div>
@@ -415,10 +428,15 @@ export default function CandidateAchievementsPage() {
         {loading ? <p className="mt-4 text-sm text-gray-600">Cargando…</p> : null}
 
         {!loading && items.length === 0 ? (
-          <p className="mt-4 text-sm text-gray-600">Todavía no has añadido idiomas{supportsCertifications ? " o certificaciones" : ""}.</p>
+          <p className="mt-4 text-sm text-gray-600">
+            {supportsLanguages || supportsCertifications
+              ? `Todavía no has añadido ${supportsLanguages && supportsCertifications ? "idiomas o certificaciones" : supportsLanguages ? "idiomas" : "certificaciones"}.`
+              : "Tu perfil actual no tiene soporte activo para idiomas ni certificaciones."}
+          </p>
         ) : null}
 
         <div className="mt-6 space-y-6">
+          {supportsLanguages ? (
           <section>
             <div className="mb-3">
               <h2 className="text-base font-semibold text-gray-900">Idiomas</h2>
@@ -442,6 +460,7 @@ export default function CandidateAchievementsPage() {
               {!languages.length ? <p className="text-sm text-gray-500">Aún no has añadido idiomas.</p> : null}
             </div>
           </section>
+          ) : null}
 
           {supportsCertifications ? (
           <section>
@@ -469,9 +488,9 @@ export default function CandidateAchievementsPage() {
           </section>
           ) : (
             <section className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-              <h2 className="text-base font-semibold text-amber-900">Logros adicionales no disponibles</h2>
+              <h2 className="text-base font-semibold text-amber-900">Soporte limitado del perfil</h2>
               <p className="mt-1 text-sm text-amber-800">
-                Tu perfil actual permite guardar idiomas{supportsCertifications ? " y certificaciones" : ""}. Los otros logros no se guardan todavía en la base de datos activa.
+                Tu base de datos activa no expone soporte para {supportsLanguages ? "certificaciones" : "idiomas ni certificaciones"} en este módulo.
               </p>
             </section>
           )}
@@ -481,7 +500,7 @@ export default function CandidateAchievementsPage() {
           <button
             type="button"
             onClick={save}
-            disabled={saving}
+            disabled={saving || (!supportsLanguages && !supportsCertifications)}
             className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
           >
             {saving ? "Guardando…" : "Guardar cambios"}
