@@ -8,7 +8,7 @@ const supabase = createClient(
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
-    return res.status(405).json({ ok: false, error: "Method not allowed" })
+    return res.status(405).json({ ok: false })
   }
 
   try {
@@ -19,38 +19,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       storage_path,
     } = req.body
 
-    // 🔐 obtener usuario real desde auth header (si existe)
-    const authHeader = req.headers.authorization
-    let uploaded_by = null
-
-    if (authHeader) {
-      const token = authHeader.replace("Bearer ", "")
-      const { data } = await supabase.auth.getUser(token)
-      uploaded_by = data?.user?.id || null
-    }
-
-    if (!uploaded_by) {
-      return res.status(401).json({
-        ok: false,
-        stage: "missing_user",
-      })
-    }
-
-    // 🔎 CHECK VR EXISTE
-    const { data: vrCheck } = await supabase
+    // 🔥 FIX: obtener usuario desde verification_request
+    const { data: vr, error: vrError } = await supabase
       .from("verification_requests")
-      .select("id")
+      .select("requested_by")
       .eq("id", verification_request_id)
       .maybeSingle()
 
-    if (!vrCheck) {
+    if (vrError || !vr?.requested_by) {
       return res.status(400).json({
         ok: false,
-        stage: "verification_request_not_found",
+        stage: "vr_lookup_failed",
+        vrError,
       })
     }
 
-    // 🧱 INSERT CON uploaded_by (FIX)
+    const uploaded_by = vr.requested_by
+
+    // 🧱 INSERT
     const { data: inserted, error } = await supabase
       .from("evidences")
       .insert({
@@ -58,7 +44,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         evidence_type,
         file_sha256,
         storage_path,
-        uploaded_by, // 🔥 FIX CLAVE
+        uploaded_by, // 🔥 ya siempre válido
       })
       .select("id")
       .maybeSingle()
@@ -79,7 +65,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({
       ok: false,
       stage: "unexpected_exception",
-      message: e?.message || "unknown_error",
+      message: e?.message || "unknown",
     })
   }
 }
