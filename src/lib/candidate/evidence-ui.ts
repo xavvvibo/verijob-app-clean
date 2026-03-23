@@ -249,6 +249,7 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
           message: String(processing.reconciliation_summary.message || "").trim(),
         }
       : null;
+  const reconciliationResolved = Boolean(reconciliationSummary?.material_changes);
   const identityGatePassed =
     Boolean(processing?.identity_gate_passed ?? processing?.matching?.identity_gate_passed) &&
     matchLevel !== "conflict";
@@ -318,7 +319,11 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
           ? `Este documento puede reforzar ${supportingEmploymentRecordIds.length} experiencias compatibles del perfil.`
           : null,
     identity_status_label: analysisCompleted
-      ? identityMatch === "high"
+      ? isVidaLaboral && reconciliationResolved
+        ? reconciliationSummary?.auto_verified_count
+          ? "Conciliación completada. Las experiencias vinculadas han quedado verificadas por documento."
+          : "Conciliación guardada. Las experiencias vinculadas ya están resueltas en tu perfil."
+        : identityMatch === "high"
         ? identityConfirmedBy === "official_id"
           ? "Identidad consistente. Confirmada por identificador oficial."
           : "Identidad consistente. Coincidencia alta con tu perfil."

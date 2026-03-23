@@ -37,6 +37,10 @@ type VerificationRow = {
   evidence_count: number | null;
 };
 
+type EmploymentRecordLite = {
+  verification_status: string | null;
+};
+
 type TrustState = {
   title: string;
   summary: string;
@@ -369,6 +373,7 @@ export default function CandidateOverview() {
   const [candidateProfile, setCandidateProfile] = useState<CandidateProfilePayload>(null);
   const [profileCompletion, setProfileCompletion] = useState<ProfileCompletionPayload>(null);
   const [verifications, setVerifications] = useState<VerificationRow[]>([]);
+  const [employmentRecords, setEmploymentRecords] = useState<EmploymentRecordLite[]>([]);
   const [trustScore, setTrustScore] = useState<number | null>(null);
   const [experienceCount, setExperienceCount] = useState<number>(0);
 
@@ -387,7 +392,7 @@ export default function CandidateOverview() {
 
         const userId = au.user.id;
 
-        const [profileRes, verificationsRes, profileApiRes, trustRes] = await Promise.all([
+        const [profileRes, verificationsRes, employmentRes, profileApiRes, trustRes] = await Promise.all([
           supabase
             .from("profiles")
             .select("full_name, title, location, avatar_url")
@@ -396,6 +401,10 @@ export default function CandidateOverview() {
           supabase
             .from("verification_summary")
             .select("status, company_confirmed, evidence_count")
+            .eq("candidate_id", userId),
+          supabase
+            .from("employment_records")
+            .select("verification_status")
             .eq("candidate_id", userId),
           fetch("/api/candidate/profile", { credentials: "include" }).then((r) => r.json().catch(() => ({}))),
           fetch("/api/candidate/trust-score", { credentials: "include" }).then((r) => r.json().catch(() => ({}))),
@@ -408,6 +417,7 @@ export default function CandidateOverview() {
 
         setProfile((profileRes.data || null) as ProfileLite | null);
         setVerifications((verificationsRes.data || []) as VerificationRow[]);
+        setEmploymentRecords((employmentRes.data || []) as EmploymentRecordLite[]);
         setCandidateProfile(profileApiRes?.profile ?? null);
         setProfileCompletion((profileApiRes?.profile_completion || null) as ProfileCompletionPayload);
         setTrustScore(typeof trustRes?.trust_score === "number" ? trustRes.trust_score : null);
@@ -427,10 +437,10 @@ export default function CandidateOverview() {
   }, []);
 
   const metrics = useMemo(() => {
-    const total = verifications.length;
-    const verified = verifications.filter((v) => {
-      const s = String(v.status || "").toLowerCase();
-      return s === "verified" || s === "approved";
+    const total = Math.max(verifications.length, employmentRecords.length, experienceCount);
+    const verified = employmentRecords.filter((row) => {
+      const s = String(row?.verification_status || "").toLowerCase().trim();
+      return s === "verified" || s === "approved" || s === "verified_document";
     }).length;
     const inProcess = verifications.filter((v) => {
       const s = String(v.status || "").toLowerCase();
@@ -442,7 +452,7 @@ export default function CandidateOverview() {
     const score = trustScore == null ? baseScore : clamp(trustScore);
 
     return { total, verified, inProcess, confirmed, evidences, score };
-  }, [verifications, trustScore]);
+  }, [employmentRecords, experienceCount, verifications, trustScore]);
 
   const educationCount = useMemo(() => listCount(candidateProfile?.education), [candidateProfile]);
   const achievementsCount = useMemo(

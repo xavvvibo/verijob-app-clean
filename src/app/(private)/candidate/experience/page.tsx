@@ -59,7 +59,7 @@ export default async function CandidateExperiencePage({
       .maybeSingle(),
     supabase
       .from("employment_records")
-      .select("id, position, company_name_freeform, start_date, end_date, verification_status, last_verification_request_id")
+      .select("id, source_experience_id, position, company_name_freeform, start_date, end_date, verification_status, last_verification_request_id")
       .eq("candidate_id", au.user.id),
   ]);
 
@@ -124,15 +124,23 @@ export default async function CandidateExperiencePage({
   );
 
   const employmentBySignature = new Map<string, any>();
+  const employmentBySourceExperienceId = new Map<string, any>();
   for (const row of employmentRows || []) {
     const key = experienceMatchKey(row);
     if (key && !employmentBySignature.has(key)) {
       employmentBySignature.set(key, row);
     }
+    const sourceExperienceId = String((row as any)?.source_experience_id || "").trim();
+    if (sourceExperienceId && !employmentBySourceExperienceId.has(sourceExperienceId)) {
+      employmentBySourceExperienceId.set(sourceExperienceId, row);
+    }
   }
 
   function resolveLinkedVerification(row: any) {
-    const employmentRecord = employmentBySignature.get(experienceMatchKey(row)) || null;
+    const employmentRecord =
+      employmentBySourceExperienceId.get(String(row?.id || "").trim()) ||
+      employmentBySignature.get(experienceMatchKey(row)) ||
+      null;
     const linkedId = String(row?.matched_verification_id || employmentRecord?.last_verification_request_id || "").trim();
     const verification = linkedId ? verificationMap.get(linkedId) || null : null;
     return { employmentRecord, linkedId, verification };

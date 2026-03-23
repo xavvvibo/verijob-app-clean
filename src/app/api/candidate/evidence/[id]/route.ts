@@ -204,7 +204,6 @@ function shouldAutoVerifyVidaLaboralEntry(params: {
   if (processingStatus !== "processed" && processingStatus !== "completed") return false;
 
   const identityMatch = resolveIdentityMatch(params.processing);
-  if (identityMatch !== "high" && identityMatch !== "medium") return false;
 
   const entry = params.entry || {};
   const linkedEmploymentRecordId = String(entry?.linked_employment_record_id || "").trim();
@@ -223,11 +222,20 @@ function shouldAutoVerifyVidaLaboralEntry(params: {
     Boolean(entry?.self_employment) ||
     Boolean(params.processing?.cea_present) ||
     reasons.includes("structural_labor_pattern") ||
+    reasons.includes("tabular_row_canonical") ||
     reasons.includes("promoted_low_confidence") ||
     reasons.some((value: string) => value.startsWith("labor_pattern:")) ||
+    reasons.some((value: string) => value.startsWith("structural_pattern:")) ||
     Boolean(entry?.source_entry_count);
 
-  return confidence >= 0.55 || suggestedMatchId === linkedEmploymentRecordId || hasStrongLaborSignal;
+  const manualReconciliation =
+    String(entry?.reconciliation_status || "").trim() === "linked" &&
+    (String(entry?.reconciliation_choice || "").trim() === "link_existing" ||
+      String(entry?.reconciliation_choice || "").trim() === "create_new");
+
+  if (!manualReconciliation && identityMatch !== "high" && identityMatch !== "medium") return false;
+
+  return confidence >= 0.55 || suggestedMatchId === linkedEmploymentRecordId || hasStrongLaborSignal || manualReconciliation;
 }
 
 async function markProfileExperienceVerificationSource(params: {
@@ -516,6 +524,17 @@ export async function PATCH(req: Request, ctx: any) {
         .in("id", autoVerifiedEmploymentRecordIds)
         .eq("candidate_id", user.id);
 
+      const { data: autoVerifiedRows } = await admin
+        .from("employment_records")
+        .select("id,source_experience_id")
+        .in("id", autoVerifiedEmploymentRecordIds)
+        .eq("candidate_id", user.id);
+
+      for (const row of autoVerifiedRows || []) {
+        const profileExperienceId = String((row as any)?.source_experience_id || "").trim();
+        if (profileExperienceId) profileExperienceIdsToMark.add(profileExperienceId);
+      }
+
       for (const profileExperienceId of profileExperienceIdsToMark) {
         await markProfileExperienceVerificationSource({
           admin,
@@ -543,6 +562,9 @@ export async function PATCH(req: Request, ctx: any) {
         : nextEntries.filter((entry: any) => String(entry?.reconciliation_status || "") === "linked").length > 0
           ? "Experiencias de vida laboral reconciliadas con el perfil."
         : "Revisa y vincula las experiencias detectadas en la fe de vida laboral.";
+    if (summary.material_changes) {
+      processing.link_state = summary.auto_verified_count > 0 ? "documentary_verified" : "reconciled";
+    }
     summary.linked_employment_record_ids = Array.from(new Set(summary.linked_employment_record_ids.filter(Boolean)));
     summary.created_profile_experience_ids = Array.from(new Set(summary.created_profile_experience_ids.filter(Boolean)));
     summary.message = summary.material_changes

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
 import { useRouter } from "next/navigation"
 import {
@@ -90,6 +90,7 @@ export default function EvidenceListClient({
   const [expandedAdministrativeByEvidence, setExpandedAdministrativeByEvidence] = useState<Record<string, boolean>>({})
   const [activityState, setActivityState] = useState<null | "uploading" | "processing" | "reconciling" | "deleting">(null)
   const [activityText, setActivityText] = useState<string | null>(null)
+  const evidenceCardRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   const supabase = useMemo(
     () =>
@@ -485,6 +486,9 @@ export default function EvidenceListClient({
       })
       await reloadList()
       router.refresh()
+      window.setTimeout(() => {
+        evidenceCardRefs.current[evidenceId]?.scrollIntoView({ behavior: "smooth", block: "start" })
+      }, 150)
     } catch (error: any) {
       setIsError(true)
       setMessage(String(error?.message || error || "No se pudo guardar la conciliación."))
@@ -753,6 +757,9 @@ export default function EvidenceListClient({
     return (
       <div
         key={item.id}
+        ref={(node) => {
+          evidenceCardRefs.current[String(item.evidence_id || item.id || "")] = node
+        }}
         style={{
           marginBottom: 16,
           border: "1px solid #e2e8f0",
