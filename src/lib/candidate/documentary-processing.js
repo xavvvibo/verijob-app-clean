@@ -163,9 +163,11 @@ const VIDA_LABORAL_STOPWORDS = new Set([
   "malaga",
   "málaga",
 ]);
-const DATE_TOKEN_REGEX = /\b(?:\d{2}[/-]\d{2}[/-]\d{4}|\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2}|\d{4}-\d{2}|\d{4})\b/g;
+const DATE_TOKEN_REGEX = /\b(?:\d{2}[./-]\d{2}[./-]\d{4}|\d{2}[./-]\d{4}|\d{4}-\d{2}-\d{2}|\d{4}-\d{2}|\d{4})\b/g;
 const DATE_PAIR_SOURCE =
-  "(?:\\d{2}[/-]\\d{2}[/-]\\d{4}|\\d{2}[/-]\\d{4}|\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}|\\d{4})\\s+(?:a\\s+)?(?:\\d{2}[/-]\\d{2}[/-]\\d{4}|\\d{2}[/-]\\d{4}|\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}|\\d{4})";
+  "(?:\\d{2}[./-]\\d{2}[./-]\\d{4}|\\d{2}[./-]\\d{4}|\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}|\\d{4})\\s+(?:a\\s+)?(?:\\d{2}[./-]\\d{2}[./-]\\d{4}|\\d{2}[./-]\\d{4}|\\d{4}-\\d{2}-\\d{2}|\\d{4}-\\d{2}|\\d{4})";
+const VIDA_LABORAL_REGIMEN_REGEX =
+  /\b(?:general|reta|autonomo|autónomo|regimen especial trabajadores autonomos|régimen especial trabajadores autónomos)\b/i;
 const VIDA_LABORAL_MOVEMENT_START_REGEX = new RegExp(
   [
     DATE_PAIR_SOURCE,
@@ -379,10 +381,14 @@ function normalizeLooseDate(value) {
   if (!raw) return null;
   const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const dotted = raw.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (dotted) return `${dotted[3]}-${dotted[2]}-${dotted[1]}`;
   const slash = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
   if (slash) return `${slash[3]}-${slash[2]}-${slash[1]}`;
   const dash = raw.match(/^(\d{2})-(\d{2})-(\d{4})$/);
   if (dash) return `${dash[3]}-${dash[2]}-${dash[1]}`;
+  const monthYearDotted = raw.match(/^(\d{2})\.(\d{4})$/);
+  if (monthYearDotted) return `${monthYearDotted[2]}-${monthYearDotted[1]}-01`;
   const ym = raw.match(/^(\d{2})\/(\d{4})$/);
   if (ym) return `${ym[2]}-${ym[1]}-01`;
   const ymIso = raw.match(/^(\d{4})-(\d{2})$/);
@@ -586,6 +592,114 @@ function normalizeVidaLaboralText(text) {
     .replace(/\b(AUTONOMO|AUTÓNOMO|RETA|PRESTACION|PRESTACIÓN|SUBSIDIO|EXTINCION|EXTINCIÓN|SUSPENSION|SUSPENSIÓN|VACACIONES RETRIBUIDAS|INCAPACIDAD|MATERNIDAD|PATERNIDAD)\b/g, "\n$1")
     .replace(/\n{2,}/g, "\n")
     .trim();
+}
+
+function normalizeVidaLaboralTableLayout(text) {
+  return String(text || "")
+    .replace(/\r/g, "\n")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s*\|\s*/g, " ")
+    .replace(/\b(GENERAL|RETA|AUTONOMO|AUTÓNOMO|REGIMEN ESPECIAL TRABAJADORES AUTONOMOS|RÉGIMEN ESPECIAL TRABAJADORES AUTÓNOMOS)\b/g, "\n$1")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
+
+function findDateTokenIndexes(segment) {
+  return Array.from(String(segment || "").matchAll(DATE_TOKEN_REGEX)).map((match) => ({
+    token: String(match[0] || "").trim(),
+    index: Number(match.index || 0),
+  }));
+}
+
+function resolveVidaLaboralRowEndDate(segment, dateTokens) {
+  const raw = String(segment || "");
+  if (/(?:\b---+\b|\bactualidad\b|\ben alta\b|\bsin baja\b)/i.test(raw)) return null;
+  if (!Array.isArray(dateTokens) || dateTokens.length === 0) return null;
+  if (dateTokens.length >= 3) return normalizeLooseDate(dateTokens[2]?.token || null);
+  if (dateTokens.length === 2) {
+    const first = normalizeLooseDate(dateTokens[0]?.token || null);
+    const second = normalizeLooseDate(dateTokens[1]?.token || null);
+    if (first && second && first !== second) return second;
+  }
+  return null;
+}
+
+function extractContributionCode(value) {
+  const raw = String(value || "");
+  const match =
+    raw.match(/\b(?:general|reta|autonomo|autónomo)?\s*(\d{10,12})\b/i) ||
+    raw.match(/\bccc\b[:\s-]*(\d{10,12})\b/i);
+  return String(match?.[1] || "").trim() || null;
+}
+
+function cleanEmployerCoreText(value) {
+  return String(value || "")
+    .replace(/\b(?:general|reta|autonomo|autónomo|regimen especial trabajadores autonomos|régimen especial trabajadores autónomos)\b/gi, " ")
+    .replace(/\b\d{10,12}\b/g, " ")
+    .replace(/\b(?:ct|ctp|g\.?c\.?|dias|días|fecha alta|fecha efecto alta|fecha baja)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+export function extractVidaLaboralTabularRows(text) {
+  const normalized = normalizeVidaLaboralTableLayout(text);
+  if (!normalized) return [];
+
+  const lines = normalized
+    .split(/\n+/)
+    .map((line) => String(line || "").trim())
+    .filter(Boolean);
+
+  const rows = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!VIDA_LABORAL_REGIMEN_REGEX.test(line) && !/\b\d{10,12}\b/.test(line)) continue;
+    if (isVidaLaboralLegalNoise(line)) continue;
+
+    const dateTokens = findDateTokenIndexes(line);
+    if (dateTokens.length === 0) continue;
+
+    const firstDateIndex = dateTokens[0]?.index ?? -1;
+    if (firstDateIndex < 0) continue;
+
+    const contributionCode = extractContributionCode(line);
+    const beforeDates = line.slice(0, firstDateIndex).trim();
+    const employerRaw = cleanEmployerCoreText(beforeDates);
+    const employerName = extractCompanyNameFromVidaLaboralSegment(employerRaw) || cleanupVidaLaboralCompanyText(employerRaw) || null;
+    const selfEmployment = detectSelfEmployment(`${beforeDates} ${line}`);
+    const provinceMeta = extractProvincePrefixFromContributionCode(`${contributionCode || ""} ${line}`);
+    const startDate = normalizeLooseDate(dateTokens[0]?.token || null);
+    const effectStartDate = normalizeLooseDate(dateTokens[1]?.token || null);
+    const endDate = resolveVidaLaboralRowEndDate(line, dateTokens);
+    const administrative = detectAdministrativeKeywords(`${employerName || ""} ${line}`);
+    const ignoredReason = detectAdministrativeIgnoredReason(`${employerName || ""} ${line}`);
+    const hasUsableEmployer = Boolean(employerName) || selfEmployment.matched;
+
+    if (!hasUsableEmployer || !startDate) continue;
+
+    rows.push({
+      raw_block_index: index,
+      text: line,
+      company_name:
+        employerName || (selfEmployment.matched ? "Trabajo por cuenta propia / Autónomo" : "Empresa detectada"),
+      start_date: startDate,
+      effect_start_date: effectStartDate,
+      end_date: endDate,
+      contribution_code: contributionCode,
+      province_prefix: provinceMeta.province_prefix,
+      province_hint: provinceMeta.province_hint,
+      self_employment_matched: Boolean(selfEmployment.matched),
+      administrative_matched: Boolean(administrative.matched),
+      ignored_reason: ignoredReason,
+      split_from_parent: false,
+      split_reason: ["tabular_row"],
+      classification_reasons: ["tabular_row_canonical"],
+    });
+  }
+
+  return rows;
 }
 
 export function splitIntoRawMovementBlocks(text) {
@@ -919,7 +1033,16 @@ export function scoreEmploymentCandidate({
 
 export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction, employmentRecords } = {}) {
   const rows = Array.isArray(employmentRecords) ? employmentRecords : [];
-  const rawBlocks = splitIntoRawMovementBlocks(text);
+  const tabularRows = extractVidaLaboralTabularRows(text);
+  const rawBlocks = tabularRows.length > 0
+    ? tabularRows.map((row) => ({
+        raw_block_index: row.raw_block_index,
+        text: row.text,
+        split_from_parent: row.split_from_parent,
+        split_reason: row.split_reason,
+        canonical_row: row,
+      }))
+    : splitIntoRawMovementBlocks(text);
   const extractedEntries = [];
   const debugEntries = [];
   const EMPLOYMENT_SCORE_THRESHOLD = 0.46;
@@ -936,11 +1059,12 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
     const rawBlock = rawBlocks[index];
     const segment = String(rawBlock?.text || "").trim();
     if (!segment) continue;
+    const canonicalRow = rawBlock?.canonical_row && typeof rawBlock.canonical_row === "object" ? rawBlock.canonical_row : null;
     const debugEntryBase = {
       raw_block_index: Number(rawBlock?.raw_block_index || index),
       normalized_excerpt: segment.slice(0, 220),
-      province_prefix: null,
-      province_hint: null,
+      province_prefix: canonicalRow?.province_prefix || null,
+      province_hint: canonicalRow?.province_hint || null,
       split_from_parent: Boolean(rawBlock?.split_from_parent),
       split_reason: Array.isArray(rawBlock?.split_reason) ? rawBlock.split_reason : [],
     };
@@ -982,15 +1106,24 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
       continue;
     }
 
-    const startDate = normalizeLooseDate(dateTokens[0]);
-    const endDate = normalizeLooseDate(dateTokens[1] || null);
-    const companyName = extractCompanyNameFromVidaLaboralSegment(segment);
-    const selfEmployment = detectSelfEmployment(segment);
-    const provinceMeta = extractProvincePrefixFromContributionCode(segment);
+    const startDate = canonicalRow?.start_date || normalizeLooseDate(dateTokens[0]);
+    const endDate = canonicalRow?.end_date ?? normalizeLooseDate(dateTokens[1] || null);
+    const companyName = canonicalRow?.company_name || extractCompanyNameFromVidaLaboralSegment(segment);
+    const selfEmployment = canonicalRow
+      ? { matched: Boolean(canonicalRow?.self_employment_matched), keywords: canonicalRow?.self_employment_matched ? ["autonomo"] : [] }
+      : detectSelfEmployment(segment);
+    const provinceMeta = canonicalRow
+      ? {
+          province_prefix: canonicalRow?.province_prefix || null,
+          province_hint: canonicalRow?.province_hint || null,
+        }
+      : extractProvincePrefixFromContributionCode(segment);
     const laborPattern = detectLaborRelationshipPattern(segment, provinceMeta);
     const structuralLaborPattern = detectStructuralLaborPattern(segment, startDate, endDate, provinceMeta);
-    const ignoredReason = detectAdministrativeIgnoredReason(`${companyName || ""} ${segment}`);
-    const administrative = detectAdministrativeKeywords(`${companyName || ""} ${segment}`);
+    const ignoredReason = canonicalRow?.ignored_reason || detectAdministrativeIgnoredReason(`${companyName || ""} ${segment}`);
+    const administrative = canonicalRow
+      ? { matched: Boolean(canonicalRow?.administrative_matched), keywords: canonicalRow?.administrative_matched ? ["administrative"] : [] }
+      : detectAdministrativeKeywords(`${companyName || ""} ${segment}`);
     const classification = scoreEmploymentCandidate({
       segment,
       companyName,
@@ -1004,10 +1137,12 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
     const hasPlausibleEmployer = Boolean(companyName) && classification.employer_plausibility >= 0.3;
     const hasLaborPattern = laborPattern.matched;
     const hasStructuralLaborPattern = structuralLaborPattern.matched;
+    const isCanonicalTableRow = Boolean(canonicalRow && companyName && startDate);
     const hasStrongLaborSignal =
       Boolean(selfEmployment.matched) ||
       hasLaborPattern ||
       hasStructuralLaborPattern ||
+      isCanonicalTableRow ||
       (hasPlausibleEmployer && classification.date_plausibility >= 0.65);
     const dominatedByNumericNoise = hasStrongLaborSignal
       ? classification.numeric_noise_penalty > 0.45
@@ -1020,6 +1155,7 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
       ((classification.score >= EMPLOYMENT_SCORE_THRESHOLD) ||
         hasLaborPattern ||
         hasStructuralLaborPattern ||
+        isCanonicalTableRow ||
         (selfEmployment.matched && classification.score >= SELF_EMPLOYMENT_SCORE_THRESHOLD)) &&
       classification.score < LOW_CONFIDENCE_PROMOTION_THRESHOLD;
 
@@ -1032,6 +1168,7 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
       ((classification.score >= EMPLOYMENT_SCORE_THRESHOLD) ||
         hasLaborPattern ||
         hasStructuralLaborPattern ||
+        isCanonicalTableRow ||
         (selfEmployment.matched && classification.score >= SELF_EMPLOYMENT_SCORE_THRESHOLD))
     ) {
       entryType = "employment";
@@ -1041,6 +1178,7 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
       : [];
     if (!hasPlausibleEmployer && hasLaborPattern) classificationReasons.push("no_employer_but_labor_pattern");
     if (hasStructuralLaborPattern) classificationReasons.push("structural_labor_pattern");
+    if (isCanonicalTableRow) classificationReasons.push("tabular_row_canonical");
     for (const reason of laborPattern.reasons) {
       classificationReasons.push(`labor_pattern:${reason}`);
     }
@@ -1076,7 +1214,18 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
       for (const row of rows) {
         const companyMatch = compareCompanyName(companyName, row);
         const dateScore = dateCompatibility(startDate, endDate, row?.start_date, row?.end_date);
-        const score = clamp01(companyMatch.score * 0.6 + dateScore * 0.4);
+        const startExact = startDate && row?.start_date && normalizeLooseDate(startDate) === normalizeLooseDate(row?.start_date) ? 1 : 0;
+        const endAligned =
+          (!endDate && !row?.end_date) || (endDate && row?.end_date && normalizeLooseDate(endDate) === normalizeLooseDate(row?.end_date))
+            ? 1
+            : 0;
+        const currentAligned = !endDate && !row?.end_date ? 1 : 0;
+        const score = clamp01(
+          companyMatch.score * 0.5 +
+            dateScore * 0.25 +
+            startExact * 0.2 +
+            Math.max(endAligned * 0.03, currentAligned * 0.05),
+        );
         if (score > suggestedMatchScore) {
           suggestedMatchScore = score;
           suggestedMatchEmploymentRecordId = String(row?.id || "") || null;
@@ -1105,6 +1254,7 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
       linked_employment_record_id: null,
       subtype: selfEmployment.matched ? "self_employment" : null,
       self_employment: Boolean(selfEmployment.matched),
+      contribution_code: canonicalRow?.contribution_code || extractContributionCode(segment),
       province_prefix: provinceMeta.province_prefix,
       province_hint: provinceMeta.province_hint,
       classification_reasons: classificationReasons,
@@ -1282,6 +1432,7 @@ export function extractVidaLaboralEmploymentEntriesWithDebug({ text, extraction,
     total_raw_text_length: rawText.length,
     total_raw_blocks_before_split: rawBlocksBeforeSplit.length,
     total_blocks_after_split: rawBlocks.length,
+    total_table_rows_detected: tabularRows.length,
     total_employment: debugEntries.filter((entry) => String(entry?.type || "") === "employment").length,
     total_administrative: debugEntries.filter((entry) => String(entry?.type || "") === "administrative").length,
     total_discarded: debugEntries.filter((entry) => String(entry?.type || "") === "discarded").length,

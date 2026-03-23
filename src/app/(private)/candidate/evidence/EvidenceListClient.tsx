@@ -33,6 +33,17 @@ async function readJsonSafe(response: Response) {
   }
 }
 
+function SpinnerIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeOpacity="0.2" strokeWidth="3" fill="none" />
+      <path d="M21 12a9 9 0 0 0-9-9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none">
+        <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite" />
+      </path>
+    </svg>
+  )
+}
+
 function buildEvidenceDeleteWarningMessage(affectedExperiences: any[]) {
   const affected = Array.isArray(affectedExperiences) ? affectedExperiences : []
   if (affected.length === 0) {
@@ -77,6 +88,8 @@ export default function EvidenceListClient({
   const [savingReconciliationId, setSavingReconciliationId] = useState<string | null>(null)
   const [reconciliationFeedback, setReconciliationFeedback] = useState<Record<string, any>>({})
   const [expandedAdministrativeByEvidence, setExpandedAdministrativeByEvidence] = useState<Record<string, boolean>>({})
+  const [activityState, setActivityState] = useState<null | "uploading" | "processing" | "reconciling" | "deleting">(null)
+  const [activityText, setActivityText] = useState<string | null>(null)
 
   const supabase = useMemo(
     () =>
@@ -130,6 +143,58 @@ export default function EvidenceListClient({
   useEffect(() => {
     void reloadList()
   }, [reloadList])
+
+  useEffect(() => {
+    const hasBackgroundProcessing = items.some((item) => {
+      const status = String(item?.processing_status || "").trim().toLowerCase()
+      return status === "queued" || status === "processing"
+    })
+
+    if (busy) {
+      setActivityState("uploading")
+      setActivityText("Estamos registrando el documento y arrancando el análisis automático.")
+      return
+    }
+    if (savingReconciliationId) {
+      setActivityState("reconciling")
+      setActivityText("Estamos guardando la conciliación y actualizando verificación, confianza y experiencias.")
+      return
+    }
+    if (deletingId) {
+      setActivityState("deleting")
+      setActivityText("Estamos eliminando el documento y recalculando el impacto sobre experiencias y confianza.")
+      return
+    }
+    if (hasBackgroundProcessing) {
+      setActivityState("processing")
+      setActivityText("Documento recibido. Estamos procesando el análisis automático y refrescaremos el estado al terminar.")
+      return
+    }
+    setActivityState(null)
+    setActivityText(null)
+  }, [busy, deletingId, items, savingReconciliationId])
+
+  useEffect(() => {
+    const shouldPoll =
+      busy ||
+      Boolean(savingReconciliationId) ||
+      items.some((item) => {
+        const status = String(item?.processing_status || "").trim().toLowerCase()
+        return status === "queued" || status === "processing"
+      })
+
+    if (!shouldPoll) return
+    let active = true
+    const interval = window.setInterval(() => {
+      if (!active) return
+      void reloadList()
+      router.refresh()
+    }, 3500)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [busy, items, reloadList, router, savingReconciliationId])
 
   const evidenceTypeOptions = useMemo(() => getEvidenceTypeOptions(), [])
   const requiresExperience = requiresExperienceAssociation(selectedEvidenceType)
@@ -219,6 +284,8 @@ export default function EvidenceListClient({
     setBusy(true)
     setIsError(false)
     setMessage("Preparando la subida del documento…")
+    setActivityState("uploading")
+    setActivityText("Preparando análisis. Estamos registrando el documento y arrancando el análisis automático.")
 
     try {
       const fileSha256 = await sha256Hex(selectedFile)
@@ -272,6 +339,7 @@ export default function EvidenceListClient({
       setSelectedFile(null)
       setMessage("Documento registrado. Iniciaremos el análisis automático en segundo plano.")
       await reloadList()
+      router.refresh()
     } catch (error: any) {
       setIsError(true)
       setMessage(String(error?.message || error || "No se pudo registrar la evidencia."))
@@ -372,6 +440,8 @@ export default function EvidenceListClient({
     setSavingReconciliationId(evidenceId)
     setIsError(false)
     setMessage("Guardando conciliación de experiencias…")
+    setActivityState("reconciling")
+    setActivityText("Guardando conciliación. Vamos a actualizar experiencias, verificación y confianza.")
     try {
       const res = await fetch(`/api/candidate/evidence/${encodeURIComponent(evidenceId)}`, {
         method: "PATCH",
@@ -414,6 +484,7 @@ export default function EvidenceListClient({
         return next
       })
       await reloadList()
+      router.refresh()
     } catch (error: any) {
       setIsError(true)
       setMessage(String(error?.message || error || "No se pudo guardar la conciliación."))
@@ -786,6 +857,38 @@ export default function EvidenceListClient({
           </div>
         ) : null}
       </div>
+
+      {activityState ? (
+        <div
+          style={{
+            marginBottom: 16,
+            borderRadius: 14,
+            border: "1px solid #bfdbfe",
+            background: "#eff6ff",
+            padding: 14,
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 10,
+            color: "#1e3a8a",
+          }}
+        >
+          <div style={{ marginTop: 1, display: "flex" }}>
+            <SpinnerIcon />
+          </div>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>
+              {activityState === "uploading"
+                ? "Preparando análisis…"
+                : activityState === "reconciling"
+                  ? "Actualizando conciliación…"
+                  : activityState === "deleting"
+                    ? "Eliminando documento…"
+                    : "Procesando documento…"}
+            </div>
+            <div style={{ marginTop: 4, fontSize: 12 }}>{activityText}</div>
+          </div>
+        </div>
+      ) : null}
 
       <div
         style={{
