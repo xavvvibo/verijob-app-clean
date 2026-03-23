@@ -152,7 +152,7 @@ export default async function CandidateEvidencePage(props: any) {
     });
   }
 
-  const items: EvidenceItem[] = (evidences || []).map((r: any) => buildEvidenceUiItem(r));
+  const items = (evidences || []).map((r: any) => buildEvidenceUiItem(r));
 
   return (
     <DashboardShell title="Evidencias">
