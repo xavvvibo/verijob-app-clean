@@ -127,7 +127,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (updated.requested_by) {
     await recalculateAndPersistCandidateTrustScore(String(updated.requested_by)).catch(() => {});
 
-    await syncCandidateProfileReadiness(admin, updated.requested_by).catch(() => {});
+    await syncCandidateProfileReadiness(owner.admin, updated.requested_by).catch(() => {});
   }
 
   return json(200, {
