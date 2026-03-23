@@ -262,19 +262,19 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
     ? null
     : identityMatch === "high"
       ? isVidaLaboral
-        ? "Documento oficial procesado. Aporta confianza alta y ya puedes revisar las experiencias detectadas."
+        ? "Documento procesado. Aporta confianza alta y ya puedes revisar las experiencias detectadas."
         : "Esta evidencia aporta confianza alta."
       : identityMatch === "medium"
         ? isVidaLaboral
-          ? "Documento oficial procesado. Coincidencia razonable y listo para revisión."
+          ? "Documento procesado. Coincidencia razonable y listo para revisión."
           : "Esta evidencia aporta confianza media."
       : identityMatch === "low"
         ? "No se ha podido verificar completamente la identidad. Revisa los datos."
       : identityMatch === "none"
         ? "Posible conflicto de identidad. Revisa los datos antes de validar el documento."
       : isVidaLaboral
-        ? "Documento oficial procesado. Revisa y vincula las experiencias detectadas."
-      : impact === "alta"
+        ? "Documento procesado. Revisa y vincula las experiencias detectadas."
+        : impact === "alta"
         ? "Esta evidencia aporta confianza alta."
         : impact === "media"
           ? "Esta evidencia aporta confianza media."
@@ -336,7 +336,7 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
         ? ""
         : identityMatch === "high"
         ? identityConfirmedBy === "official_id"
-          ? "Identidad confirmada por documento oficial"
+          ? "Identidad confirmada por documento"
           : identityConfirmedBy === "name_subset_match" || identityConfirmedBy === "name_tolerant_match"
             ? "Coincidencia alta pese a variación en el nombre mostrado"
             : "Titular del documento coincide con tu perfil"

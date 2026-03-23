@@ -113,7 +113,8 @@ function isDocumentaryOfficialVerification(row: any) {
   return channel === "documentary" && (
     source === "documentary_official" ||
     method === "official_document_auto" ||
-    reason === "vida_laboral_linked_high_confidence"
+    reason === "vida_laboral_linked_high_confidence" ||
+    reason === "vida_laboral_cea_verified_signal"
   );
 }
 
@@ -354,7 +355,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     const status = String(item?.status_text || "").toLowerCase();
     const normalizedEmploymentStatus = normalizeEmploymentRecordVerificationStatus(status);
     if (status === "verified" || status === "approved" || normalizedEmploymentStatus === EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFIED) {
-      badges.add(isDocumentaryOfficialVerification(linkedVerification) ? "Verificada por documento oficial" : "Verificado por empresa");
+      badges.add(isDocumentaryOfficialVerification(linkedVerification) ? "Verificada por documento" : "Verificado por empresa");
     }
     if (method === "documentary" && !isDocumentaryOfficialVerification(linkedVerification)) badges.add("Verificación documental");
     for (const ev of linkedEvidences) {

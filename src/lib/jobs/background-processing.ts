@@ -18,6 +18,7 @@ import {
   computeDocumentaryMatching,
   extractDocumentarySignals,
   extractVidaLaboralEmploymentEntriesWithDebug,
+  extractVidaLaboralMetadata,
 } from "@/lib/candidate/documentary-processing";
 import { buildIdentityRecord } from "@/lib/security/identity";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
@@ -786,14 +787,20 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       extractedIdentityHash: extractedIdentityRecord?.identityHash || null,
       evidenceType,
     });
+    const vidaLaboralText =
+      evidenceType === "vida_laboral"
+        ? await extractCvTextFromBuffer(fileBuffer, fileName).catch(() => "")
+        : "";
     const vidaLaboralExtraction =
       evidenceType === "vida_laboral"
         ? extractVidaLaboralEmploymentEntriesWithDebug({
-            text: await extractCvTextFromBuffer(fileBuffer, fileName).catch(() => ""),
+            text: vidaLaboralText,
             extraction: extractionResult.extraction,
             employmentRecords: Array.isArray(employmentRows) ? employmentRows : [],
           })
         : { entries: [], grouped_employment_entries: [], debug_summary: null, debug_entries: [] };
+    const vidaLaboralMetadata =
+      evidenceType === "vida_laboral" ? extractVidaLaboralMetadata(vidaLaboralText) : null;
     const extractedEmploymentEntries = Array.isArray(vidaLaboralExtraction?.entries)
       ? vidaLaboralExtraction.entries
       : [];
@@ -853,6 +860,11 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       ),
       extracted_employment_entries: extractedEmploymentEntries,
       grouped_employment_entries: groupedEmploymentEntries,
+      cea_present: Boolean(vidaLaboralMetadata?.cea_present),
+      cea_id: vidaLaboralMetadata?.cea_id || null,
+      cea_date: vidaLaboralMetadata?.cea_date || null,
+      cea_code: vidaLaboralMetadata?.cea_code || null,
+      cea_extraction_confidence: vidaLaboralMetadata?.cea_extraction_confidence ?? null,
       debug_summary: vidaLaboralExtraction?.debug_summary || null,
       debug_entries: Array.isArray(vidaLaboralExtraction?.debug_entries) ? vidaLaboralExtraction.debug_entries : [],
       link_state: matching.link_state,
@@ -909,7 +921,9 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       if (String(evidenceType || "").trim().toLowerCase() === "vida_laboral") {
         documentaryProcessing.verification_source = "documentary_official";
         documentaryProcessing.verification_method = "official_document_auto";
-        documentaryProcessing.verification_reason = "vida_laboral_linked_high_confidence";
+        documentaryProcessing.verification_reason = vidaLaboralMetadata?.cea_present
+          ? "vida_laboral_cea_verified_signal"
+          : "vida_laboral_linked_high_confidence";
         documentaryProcessing.auto_verified_employment_record_ids = [linkedEmploymentRecordId];
       }
       await supabase

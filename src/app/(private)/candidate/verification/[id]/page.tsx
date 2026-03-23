@@ -8,10 +8,13 @@ function toEsDate(value?: string | null) {
   return d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-function mapStatus(statusRaw: unknown, revokedAt?: string | null) {
+function mapStatus(statusRaw: unknown, revokedAt?: string | null, verificationChannel?: string | null) {
   if (revokedAt) return "Revocada";
   const status = String(statusRaw || "").toLowerCase();
-  if (status === "verified" || status === "approved") return "Verificada por empresa vía Email corporativo";
+  const channel = String(verificationChannel || "").toLowerCase();
+  if (status === "verified" || status === "approved") {
+    return channel === "documentary" ? "Verificada por documento" : "Verificada por empresa vía Email corporativo";
+  }
   if (status === "pending_company") return "Pendiente de validación";
   if (status === "reviewing") return "En revisión";
   if (status === "rejected") return "Rechazada";
@@ -27,6 +30,33 @@ function mapCompanyVerificationStatus(statusRaw: unknown) {
   if (status === "unverified_external") return "Validación por Email corporativo";
   if (status === "unverified") return "Empresa no verificada";
   return "Estado de empresa no disponible";
+}
+
+function sanitizeCandidateRequestContext(value: any) {
+  const requestContext = value && typeof value === "object" ? { ...value } : value;
+  if (!requestContext || typeof requestContext !== "object") return requestContext;
+
+  const documentaryProcessing =
+    requestContext.documentary_processing && typeof requestContext.documentary_processing === "object"
+      ? { ...requestContext.documentary_processing }
+      : null;
+
+  if (documentaryProcessing) {
+    delete documentaryProcessing.cea_present;
+    delete documentaryProcessing.cea_id;
+    delete documentaryProcessing.cea_date;
+    delete documentaryProcessing.cea_code;
+    delete documentaryProcessing.cea_extraction_confidence;
+    requestContext.documentary_processing = documentaryProcessing;
+  }
+
+  delete requestContext.cea_present;
+  delete requestContext.cea_id;
+  delete requestContext.cea_date;
+  delete requestContext.cea_code;
+  delete requestContext.cea_extraction_confidence;
+
+  return requestContext;
 }
 
 export default async function CandidateVerificationPage(props: any) {
@@ -75,10 +105,11 @@ export default async function CandidateVerificationPage(props: any) {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  const statusLabel = mapStatus(vr.status, vr.revoked_at);
+  const statusLabel = mapStatus(vr.status, vr.revoked_at, vr.verification_channel);
   const companyVerificationLabel = mapCompanyVerificationStatus(vr.company_verification_status_snapshot);
   const companyName = vr.company_name_snapshot || er?.company_name_freeform || vr.company_name_target || "Empresa";
   const evidenceRows = Array.isArray(evidences) ? evidences : [];
+  const sanitizedRequestContext = sanitizeCandidateRequestContext(vr.request_context);
 
   return (
     <div className="p-8 space-y-6">
@@ -163,12 +194,12 @@ export default async function CandidateVerificationPage(props: any) {
           </div>
         ) : null}
 
-        {vr.request_context ? (
+        {sanitizedRequestContext ? (
           <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
             <span className="font-semibold text-gray-900">Contexto de solicitud: </span>
-            {typeof vr.request_context === "string"
-              ? vr.request_context
-              : JSON.stringify(vr.request_context)}
+            {typeof sanitizedRequestContext === "string"
+              ? sanitizedRequestContext
+              : JSON.stringify(sanitizedRequestContext)}
           </div>
         ) : null}
 

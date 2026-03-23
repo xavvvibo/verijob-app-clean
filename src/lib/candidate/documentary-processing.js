@@ -437,6 +437,80 @@ export function detectSelfEmployment(value) {
   };
 }
 
+export function normalizeCEACode(value) {
+  const compact = String(value || "")
+    .trim()
+    .replace(/[\s.-]+/g, "")
+    .toUpperCase();
+  return compact || null;
+}
+
+function normalizeCEAId(value) {
+  const compact = String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toUpperCase();
+  return compact || null;
+}
+
+function extractFirstPageCandidateText(value) {
+  const raw = String(value || "");
+  if (!raw.trim()) return "";
+  const pageBreak = raw.split(/\f|(?:\n\s*\n\s*\n)+|PAGE\s+2\b/i)[0];
+  return String(pageBreak || raw).slice(0, 2500).trim();
+}
+
+export function extractVidaLaboralCEA(value) {
+  const firstPage = extractFirstPageCandidateText(value);
+  if (!firstPage) {
+    return {
+      cea_present: false,
+      cea_id: null,
+      cea_date: null,
+      cea_code: null,
+      cea_extraction_confidence: null,
+    };
+  }
+
+  const normalized = firstPage.replace(/\r/g, "\n").replace(/\u00a0/g, " ");
+  const normalizedHeader = normalizeText(normalized);
+  const hasReferenceSection =
+    normalizedHeader.includes("referencias electronicas") || normalizedHeader.includes("referencias electronicas");
+  const ceaCodeMatch =
+    normalized.match(/\b(?:codigo|c[oó]digo)\s+cea\b[:\s-]*([A-Z0-9][A-Z0-9\s.-]{5,})/i) ||
+    normalized.match(/\bCEA\b[:\s-]*([A-Z0-9][A-Z0-9\s.-]{5,})/i);
+  const ceaDateMatch =
+    normalized.match(/\bfecha\b[:\s-]*(\d{2}[/-]\d{2}[/-]\d{4}|\d{4}-\d{2}-\d{2})/i);
+  const ceaIdMatch =
+    normalized.match(/\bId\.?\s*CEA\b[:\s-]*([A-Z0-9][A-Z0-9\s.-]{3,})/i) ||
+    normalized.match(/\bId(?:entificador)?\.?\s*CEA\b[:\s-]*([A-Z0-9][A-Z0-9\s.-]{3,})/i);
+
+  const ceaCode = normalizeCEACode(ceaCodeMatch?.[1] || null);
+  const ceaId = normalizeCEAId(ceaIdMatch?.[1] || null);
+  const ceaDate = normalizeLooseDate(ceaDateMatch?.[1] || null);
+  const present = Boolean(ceaCode || ceaId || ceaDate);
+  const confidence = present
+    ? clamp01(
+        (hasReferenceSection ? 0.35 : 0) +
+          (ceaCode ? 0.4 : 0) +
+          (ceaDate ? 0.15 : 0) +
+          (ceaId ? 0.1 : 0),
+      )
+    : null;
+
+  return {
+    cea_present: present,
+    cea_id: ceaId,
+    cea_date: ceaDate,
+    cea_code: ceaCode,
+    cea_extraction_confidence: confidence,
+  };
+}
+
+export function extractVidaLaboralMetadata(value) {
+  return extractVidaLaboralCEA(value);
+}
+
 export function extractProvincePrefixFromContributionCode(value) {
   const raw = String(value || "");
   const match = raw.match(

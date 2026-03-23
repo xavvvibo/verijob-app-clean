@@ -166,6 +166,7 @@ function shouldAutoVerifyVidaLaboralEntry(params: {
     : [];
   const hasStrongLaborSignal =
     Boolean(entry?.self_employment) ||
+    Boolean(params.processing?.cea_present) ||
     reasons.includes("structural_labor_pattern") ||
     reasons.includes("promoted_low_confidence") ||
     reasons.some((value: string) => value.startsWith("labor_pattern:")) ||
@@ -428,7 +429,9 @@ export async function PATCH(req: Request, ctx: any) {
 
       processing.verification_source = "documentary_official";
       processing.verification_method = "official_document_auto";
-      processing.verification_reason = "vida_laboral_linked_high_confidence";
+      processing.verification_reason = processing?.cea_present
+        ? "vida_laboral_cea_verified_signal"
+        : "vida_laboral_linked_high_confidence";
       processing.auto_verified_employment_record_ids = autoVerifiedEmploymentRecordIds;
       summary.auto_verified_count = autoVerifiedEmploymentRecordIds.length;
       summary.auto_verified_employment_record_ids = autoVerifiedEmploymentRecordIds;
@@ -447,7 +450,7 @@ export async function PATCH(req: Request, ctx: any) {
     summary.created_profile_experience_ids = Array.from(new Set(summary.created_profile_experience_ids.filter(Boolean)));
     summary.message = summary.material_changes
       ? summary.auto_verified_count > 0
-        ? `Conciliación guardada. ${summary.linked_existing_count} experiencias vinculadas, ${summary.created_count} creadas, ${summary.auto_verified_count} verificadas automáticamente por documento oficial y ${summary.ignored_count + summary.auto_ignored_count} movimientos ignorados.`
+        ? `Conciliación guardada. ${summary.linked_existing_count} experiencias vinculadas, ${summary.created_count} creadas, ${summary.auto_verified_count} verificadas automáticamente por documento y ${summary.ignored_count + summary.auto_ignored_count} movimientos ignorados.`
         : `Conciliación guardada. ${summary.linked_existing_count} experiencias vinculadas, ${summary.created_count} creadas y ${summary.ignored_count + summary.auto_ignored_count} movimientos ignorados.`
       : `Conciliación guardada. No se ha creado ni vinculado ninguna experiencia; los movimientos detectados fueron ignorados por no corresponder a experiencia laboral CV.`;
     processing.reconciliation_summary = summary;
@@ -463,7 +466,11 @@ export async function PATCH(req: Request, ctx: any) {
         verification_source: summary.auto_verified_count > 0 ? "documentary_official" : nextContext.verification_source,
         verification_method: summary.auto_verified_count > 0 ? "official_document_auto" : nextContext.verification_method,
         verification_reason:
-          summary.auto_verified_count > 0 ? "vida_laboral_linked_high_confidence" : nextContext.verification_reason,
+          summary.auto_verified_count > 0
+            ? processing?.cea_present
+              ? "vida_laboral_cea_verified_signal"
+              : "vida_laboral_linked_high_confidence"
+            : nextContext.verification_reason,
       },
     };
     if (summary.auto_verified_count > 0) {

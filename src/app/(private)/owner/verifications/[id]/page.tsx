@@ -69,6 +69,10 @@ export default async function OwnerVerificationDetailPage({ params }: { params: 
   const employment = employmentRes.data as any;
   const evidences = Array.isArray(evidencesRes.data) ? evidencesRes.data : [];
   const requestContext = verification.request_context && typeof verification.request_context === "object" ? verification.request_context : {};
+  const documentaryProcessing =
+    requestContext?.documentary_processing && typeof requestContext.documentary_processing === "object"
+      ? requestContext.documentary_processing
+      : {};
   const verifierEmailSignal =
     requestContext?.verifier_email_signal && typeof requestContext.verifier_email_signal === "object"
       ? requestContext.verifier_email_signal
@@ -157,6 +161,22 @@ export default async function OwnerVerificationDetailPage({ params }: { params: 
         </section>
 
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-slate-900">Señal documental interna</h2>
+          {documentaryProcessing?.cea_present ? (
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              <Card label="Estado interno" value="Documento oficial con referencia verificable" />
+              <Card label="Confianza extracción CEA" value={String(documentaryProcessing?.cea_extraction_confidence ?? "—")} />
+              <Card label="Fecha CEA" value={String(documentaryProcessing?.cea_date || "—")} />
+              <Card label="Código CEA" value={String(documentaryProcessing?.cea_code || "—")} />
+              <Card label="Id. CEA" value={String(documentaryProcessing?.cea_id || "—")} />
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-slate-600">No hay referencia CEA extraída para esta evidencia documental.</p>
+          )}
+        </section>
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-slate-900">Evidencias asociadas</h2>
           {evidences.length === 0 ? (
             <p className="mt-3 text-sm text-slate-600">No hay evidencias asociadas a esta verificación.</p>
@@ -195,7 +215,6 @@ export default async function OwnerVerificationDetailPage({ params }: { params: 
               </table>
             </div>
           )}
-        </section>
       </section>
     </div>
   );

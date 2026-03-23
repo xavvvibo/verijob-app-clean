@@ -20,7 +20,8 @@ function isDocumentaryOfficialVerification(row: any) {
   return channel === "documentary" && (
     source === "documentary_official" ||
     method === "official_document_auto" ||
-    reason === "vida_laboral_linked_high_confidence"
+    reason === "vida_laboral_linked_high_confidence" ||
+    reason === "vida_laboral_cea_verified_signal"
   );
 }
 
@@ -179,7 +180,7 @@ export default async function CandidateExperiencePage({
       const importedFromCv = importedSet.has(sig);
       const { employmentRecord, verification } = resolveLinkedVerification(r);
       const status = String(verification?.status || employmentRecord?.verification_status || "").trim().toLowerCase();
-      if (isDocumentaryOfficialVerification(verification)) return "Verificada por documento oficial";
+      if (isDocumentaryOfficialVerification(verification)) return "Verificada por documento";
       if (
         String(verification?.verification_channel || "").trim().toLowerCase() === "email" &&
         (status === "verified" || status === "approved")
