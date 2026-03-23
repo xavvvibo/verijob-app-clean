@@ -1,5 +1,6 @@
 export type EvidenceItem = {
   id: string | null;
+  evidence_id: string | null;
   verification_request_id: string | null;
   created_at: string | null;
   evidence_type: string | null;
@@ -102,8 +103,11 @@ export function buildEvidenceUiItem(input: any): EvidenceItem {
     documentaryProcessing?.summary ??
     null;
 
+  const evidenceId = row.id != null ? String(row.id) : null;
+
   return {
-    id: row.id ?? null,
+    id: evidenceId,
+    evidence_id: evidenceId,
     verification_request_id: row.verification_request_id ?? verification?.id ?? null,
     created_at: row.created_at ?? null,
     evidence_type: row.evidence_type ?? null,
