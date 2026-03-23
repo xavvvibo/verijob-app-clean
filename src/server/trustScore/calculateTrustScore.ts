@@ -5,7 +5,8 @@ import {
   normalizeValidationStatus,
   EVIDENCE_VALIDATION_INTERNAL,
 } from "@/lib/candidate/evidence-types";
-import { resolveDocumentaryMatchLevel } from "@/lib/candidate/documentary-processing";
+import * as documentaryProcessing from "@/lib/candidate/documentary-processing";
+const { resolveDocumentaryMatchLevel } = documentaryProcessing;
 import { isVerifiedEmploymentRecordStatus } from "@/lib/verification/employment-record-verification-status";
 import { verificationTrustWeightForSignal } from "@/lib/verification/verifier-email-signal";
 

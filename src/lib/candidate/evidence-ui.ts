@@ -21,8 +21,40 @@ export type EvidenceItem = {
   file_name: string | null;
   mime_type: string | null;
   file_size: number | null;
+  processing_status: string | null;
+  processing_label: string | null;
+  analysis_completed: boolean;
+  match_level: string | null;
+  match_label: string | null;
+  match_summary: string | null;
   raw: any;
 };
+
+function normalizeProcessingLabel(processingStatus: string | null, validationStatus: string | null, inconsistencyReason: string | null) {
+  const p = String(processingStatus || "").trim().toLowerCase();
+  const v = String(validationStatus || "").trim().toLowerCase();
+
+  if (p === "queued") return "Documento recibido. Pendiente de análisis automático.";
+  if (p === "processing") return "Estamos analizando el documento.";
+  if (p === "failed") return "No pudimos completar el análisis automático todavía.";
+  if (v === "valid" || v === "validated") return "Documento analizado correctamente.";
+  if (v === "invalid" || v === "rejected") {
+    return inconsistencyReason
+      ? `Documento con incidencias: ${inconsistencyReason}`
+      : "Documento con incidencias detectadas.";
+  }
+  return "Documento recibido.";
+}
+
+function normalizeMatchLabel(matchLevel: string | null) {
+  const v = String(matchLevel || "").trim().toLowerCase();
+  if (!v) return null;
+  if (v === "high") return "Coincidencia alta";
+  if (v === "medium") return "Coincidencia media";
+  if (v === "low") return "Coincidencia baja";
+  if (v === "inconclusive") return "Coincidencia no concluyente";
+  return matchLevel;
+}
 
 export function buildEvidenceUiItem(input: any): EvidenceItem {
   const row = input || {};
@@ -36,11 +68,38 @@ export function buildEvidenceUiItem(input: any): EvidenceItem {
     verification?.employment_records ||
     null;
 
-  const status =
+  const documentaryProcessing =
+    verification?.request_context?.documentary_processing &&
+    typeof verification.request_context.documentary_processing === "object"
+      ? verification.request_context.documentary_processing
+      : {};
+
+  const validationStatus =
     row.validation_status ??
     row.status ??
     verification?.status ??
     employment?.verification_status ??
+    null;
+
+  const processingStatus =
+    documentaryProcessing?.processing_status ??
+    documentaryProcessing?.status ??
+    null;
+
+  const inconsistencyReason =
+    row.inconsistency_reason ??
+    documentaryProcessing?.error ??
+    documentaryProcessing?.processing_summary ??
+    null;
+
+  const matchLevel =
+    documentaryProcessing?.overall_match_level ??
+    documentaryProcessing?.match_level ??
+    null;
+
+  const matchSummary =
+    documentaryProcessing?.processing_summary ??
+    documentaryProcessing?.summary ??
     null;
 
   return {
@@ -50,8 +109,8 @@ export function buildEvidenceUiItem(input: any): EvidenceItem {
     evidence_type: row.evidence_type ?? null,
     document_type: row.document_type ?? null,
     document_scope: row.document_scope ?? null,
-    validation_status: status,
-    inconsistency_reason: row.inconsistency_reason ?? null,
+    validation_status: validationStatus,
+    inconsistency_reason: inconsistencyReason,
     trust_weight:
       typeof row.trust_weight === "number"
         ? row.trust_weight
@@ -85,6 +144,12 @@ export function buildEvidenceUiItem(input: any): EvidenceItem {
         : row.file_size != null
           ? Number(row.file_size) || null
           : null,
+    processing_status: processingStatus,
+    processing_label: normalizeProcessingLabel(processingStatus, validationStatus, inconsistencyReason),
+    analysis_completed: ["succeeded", "completed", "done", "failed"].includes(String(processingStatus || "").trim().toLowerCase()),
+    match_level: matchLevel,
+    match_label: normalizeMatchLabel(matchLevel),
+    match_summary: matchSummary,
     raw: row,
   };
 }

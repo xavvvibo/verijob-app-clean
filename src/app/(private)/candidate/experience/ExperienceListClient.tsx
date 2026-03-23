@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { buildVerificationPayload } from "@/lib/fix-verification-payload";
 
@@ -86,6 +86,15 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
   const [verifyStateById, setVerifyStateById] = useState<Record<string, VerifyState>>({});
   const [verifyMessageById, setVerifyMessageById] = useState<Record<string, string | null>>({});
 
+  useEffect(() => {
+    setRows(initialRows || []);
+    setExpandedId((prev) => {
+      if (!initialRows?.length) return null;
+      if (prev && initialRows.some((row) => row.id === prev)) return prev;
+      return initialRows[0]?.id || null;
+    });
+  }, [initialRows]);
+
   function patchRow(id: string, patch: Partial<Row>) {
     setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
     setMessage(null);
@@ -130,10 +139,10 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
   }
 
   async function requestVerification(row: Row) {
-    const Email = String(verificationEmailById[row.id] || "").trim().toLowerCase();
-    if (!EMAIL_RE.test(Email)) {
+    const email = String(verificationEmailById[row.id] || "").trim().toLowerCase();
+    if (!EMAIL_RE.test(email)) {
       setVerifyStateById((prev) => ({ ...prev, [row.id]: "error" }));
-      setVerifyMessageById((prev) => ({ ...prev, [row.id]: "Introduce un Email válido." }));
+      setVerifyMessageById((prev) => ({ ...prev, [row.id]: "Introduce un email válido." }));
       return;
     }
 
@@ -152,12 +161,11 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
       const payload = buildVerificationPayload(
         {
           ...row,
-          company_email: Email,
+          company_email: email,
         },
         user.id,
-        Email,
+        email,
       );
-      console.log("PAYLOAD_FINAL_EXPERIENCE_LIST", payload);
 
       const res = await fetch("/api/candidate/verification/create", {
         method: "POST",
@@ -168,7 +176,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
 
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(json?.details || json?.error || "No hemos podido enviar la solicitud. Revisa el Email o inténtalo de nuevo.");
+        throw new Error(json?.details || json?.error || "No hemos podido enviar la solicitud. Revisa el email o inténtalo de nuevo.");
       }
 
       setRows((prev) =>
@@ -188,21 +196,21 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
         ...prev,
         [row.id]:
           json?.already_exists === true
-            ? "Ya existía una solicitud activa para esta experiencia y este Email. Hemos reutilizado la solicitud existente."
-            : "Solicitud enviada correctamente",
+            ? "Ya existía una solicitud activa para esta experiencia y este email. Hemos reutilizado la solicitud existente."
+            : "Solicitud enviada correctamente.",
       }));
     } catch (err: any) {
       setVerifyStateById((prev) => ({ ...prev, [row.id]: "error" }));
       setVerifyMessageById((prev) => ({
         ...prev,
-        [row.id]: err?.message || "No hemos podido enviar la solicitud. Revisa el Email o inténtalo de nuevo.",
+        [row.id]: err?.message || "No hemos podido enviar la solicitud. Revisa el email o inténtalo de nuevo.",
       }));
     }
   }
 
   async function deleteRow(row: Row) {
     const confirmed = window.confirm(
-      `Vas a eliminar la experiencia de ${row.role_title || "puesto"} en ${row.company_name || "esta empresa"}. Esta acción no afecta a tu perfil público hasta que la lista se actualice, pero sí eliminará esta entrada de tu historial.`
+      `Vas a eliminar la experiencia de ${row.role_title || "puesto"} en ${row.company_name || "esta empresa"}.`
     );
     if (!confirmed) return;
 
@@ -401,7 +409,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                       <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
                         <div className="text-sm font-semibold text-sky-900">Solicitar verificación</div>
                         <p className="mt-1 text-xs text-sky-800">
-                          Indica el Email de la empresa o de la persona que puede validar esta experiencia.
+                          Indica el email de la empresa o de la persona que puede validar esta experiencia.
                         </p>
                         <label className="mt-3 block">
                           <div className="text-xs font-semibold text-gray-900">Email verificador</div>
@@ -422,47 +430,33 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                                 setVerifyMessageById((prev) => ({ ...prev, [row.id]: null }));
                               }
                             }}
-                            placeholder="ejemplo@empresa.com"
-                            data-1p-ignore="true"
-                            data-lpignore="true"
-                            className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                            placeholder="rrhh@empresa.com"
+                            className="mt-1 w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm"
                           />
                         </label>
-
                         <div className="mt-3 flex flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => void requestVerification(row)}
-                            disabled={verifyState === "loading" || verifyState === "success"}
-                            className="inline-flex items-center justify-center rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+                            disabled={verifyState === "loading"}
+                            className="inline-flex items-center justify-center rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-800 disabled:opacity-60"
                           >
-                            {verifyState === "loading"
-                              ? "Enviando solicitud…"
-                              : verifyState === "success"
-                                ? "Validación en curso"
-                                : "Solicitar verificación"}
+                            {verifyState === "loading" ? "Enviando…" : "Enviar solicitud"}
                           </button>
                         </div>
-
                         {verifyMessage ? (
                           <div
-                            className={`mt-3 rounded-lg border p-2 text-xs ${
-                              verifyState === "success"
-                                ? "border-green-200 bg-green-50 text-green-800"
-                                : verifyState === "error"
-                                  ? "border-red-200 bg-red-50 text-red-700"
-                                  : "border-gray-200 bg-white text-gray-700"
+                            className={`mt-3 rounded-lg border p-3 text-xs ${
+                              verifyState === "error"
+                                ? "border-rose-200 bg-rose-50 text-rose-700"
+                                : "border-emerald-200 bg-emerald-50 text-emerald-700"
                             }`}
                           >
                             {verifyMessage}
                           </div>
                         ) : null}
                       </div>
-                    ) : (
-                      <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-                        Esta experiencia ya está verificada. Puedes seguir vinculando documentación si necesitas reforzarla.
-                      </div>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </div>

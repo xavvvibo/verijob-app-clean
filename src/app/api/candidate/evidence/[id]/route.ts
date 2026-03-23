@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
-import { groupAndMergeEmploymentEntries } from "@/lib/candidate/documentary-processing";
+import * as documentaryProcessing from "@/lib/candidate/documentary-processing";
 import { buildEmploymentRecordDocumentaryResolvedUpdate } from "@/lib/candidate/documentary-flow";
 import { applyVerificationRemovalImpact, collectVerificationAffectedExperiences } from "@/lib/verification/verification-impact";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
+
+const groupAndMergeEmploymentEntries = (documentaryProcessing as any).groupAndMergeEmploymentEntries;
 
 function json(status: number, body: any) {
   const res = NextResponse.json(body, { status });

@@ -14,12 +14,8 @@ import {
   buildEmploymentRecordDocumentaryPendingReviewUpdate,
   buildEmploymentRecordDocumentaryResolvedUpdate,
 } from "@/lib/candidate/documentary-flow";
-import {
-  computeDocumentaryMatching,
-  extractDocumentarySignals,
-  extractVidaLaboralEmploymentEntriesWithDebug,
-  extractVidaLaboralMetadata,
-} from "@/lib/candidate/documentary-processing";
+import * as documentaryProcessing from "@/lib/candidate/documentary-processing";
+const { computeDocumentaryMatching, extractDocumentarySignals, extractVidaLaboralEmploymentEntriesWithDebug, extractVidaLaboralMetadata } = documentaryProcessing;
 import { buildIdentityRecord } from "@/lib/security/identity";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 import {

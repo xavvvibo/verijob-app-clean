@@ -14,22 +14,58 @@ export class CvExtractionError extends Error {
 
 const MAX_CV_SIZE_BYTES = 8 * 1024 * 1024;
 
-async function tryParsePdfWith(buf: Buffer) {
+function normalizeExtractedText(value: any) {
+  return String(value || "")
+    .replace(/\u0000/g, " ")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\r/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+async function tryParsePdfWithDebuggingDisabled(buf: Buffer) {
   const parserModule = await import("pdf-parse-debugging-disabled");
   const parser: any = (parserModule as any)?.default || parserModule;
   const out = await parser(buf as any);
-  const text = (out?.text || "").toString().trim();
+  const text = normalizeExtractedText(out?.text || "");
   if (!text) throw new Error("empty_pdf_text");
   return text;
+}
+
+async function tryParsePdfWithStandardParser(buf: Buffer) {
+  const parserModule = await import("pdf-parse");
+  const parser: any = (parserModule as any)?.default || parserModule;
+  const out = await parser(buf as any);
+  const text = normalizeExtractedText(out?.text || "");
+  if (!text) throw new Error("empty_pdf_text");
+  return text;
+}
+
+async function tryParsePdfWithFallbacks(buf: Buffer) {
+  const errors: string[] = [];
+
+  try {
+    return await tryParsePdfWithDebuggingDisabled(buf);
+  } catch (e: any) {
+    errors.push(`debugging-disabled: ${String(e?.message || e)}`);
+  }
+
+  try {
+    return await tryParsePdfWithStandardParser(buf);
+  } catch (e: any) {
+    errors.push(`standard: ${String(e?.message || e)}`);
+  }
+
+  throw new Error(errors.join(" | ") || "pdf_extract_failed");
 }
 
 function validateCvBuffer(buf: Buffer, filename?: string) {
   const name = (filename || "").toLowerCase();
   if (!buf || buf.length === 0) {
-    throw new CvExtractionError("empty_file", "El archivo esta vacio.");
+    throw new CvExtractionError("empty_file", "El archivo está vacío.");
   }
   if (buf.length > MAX_CV_SIZE_BYTES) {
-    throw new CvExtractionError("file_too_large", "El archivo supera el tamano maximo permitido de 8 MB.", false);
+    throw new CvExtractionError("file_too_large", "El archivo supera el tamaño máximo permitido de 8 MB.", false);
   }
 
   const looksPdfByName = name.endsWith(".pdf");
@@ -49,7 +85,7 @@ function validateCvBuffer(buf: Buffer, filename?: string) {
 
 /**
  * Extrae texto de un CV desde un Buffer (PDF o DOCX).
- * PDF: pdf-parse-debugging-disabled cargado en lazy import para no evaluar pdfjs-dist/canvas en module scope.
+ * PDF: intenta dos parsers de forma secuencial para reducir falsos fallos.
  * DOCX: mammoth.
  */
 export async function extractCvTextFromBuffer(buf: Buffer, filename?: string): Promise<string> {
@@ -60,15 +96,18 @@ export async function extractCvTextFromBuffer(buf: Buffer, filename?: string): P
   const looksDocxByName = name.endsWith(".docx") || name.endsWith(".doc");
   const isPdfByMagic =
     buf.length >= 4 &&
-    buf[0] === 0x25 && buf[1] === 0x50 && buf[2] === 0x44 && buf[3] === 0x46; // %PDF
+    buf[0] === 0x25 &&
+    buf[1] === 0x50 &&
+    buf[2] === 0x44 &&
+    buf[3] === 0x46;
 
   if (looksPdfByName || isPdfByMagic) {
     try {
-      return await tryParsePdfWith(buf);
+      return await tryParsePdfWithFallbacks(buf);
     } catch (e: any) {
       throw new CvExtractionError(
         "pdf_extract_failed",
-        `No hemos podido leer este PDF. Puedes continuar completando tu perfil manualmente. Detalle tecnico: ${e?.message || String(e)}`
+        `No hemos podido leer este PDF. Puedes continuar completando tu perfil manualmente. Detalle técnico: ${e?.message || String(e)}`
       );
     }
   }
@@ -76,26 +115,25 @@ export async function extractCvTextFromBuffer(buf: Buffer, filename?: string): P
   if (looksDocxByName) {
     try {
       const res = await mammoth.extractRawText({ buffer: buf });
-      const text = (res?.value || "").toString().trim();
+      const text = normalizeExtractedText(res?.value || "");
       if (!text) throw new Error("empty_docx_text");
       return text;
     } catch (e: any) {
       throw new CvExtractionError(
         "docx_extract_failed",
-        `No hemos podido leer este DOCX. Puedes continuar completando tu perfil manualmente. Detalle tecnico: ${e?.message || String(e)}`
+        `No hemos podido leer este DOCX. Puedes continuar completando tu perfil manualmente. Detalle técnico: ${e?.message || String(e)}`
       );
     }
   }
 
-  // Fallbacks si no hay extensión fiable
   try {
     const res = await mammoth.extractRawText({ buffer: buf });
-    const text = (res?.value || "").toString().trim();
+    const text = normalizeExtractedText(res?.value || "");
     if (text) return text;
   } catch {}
 
   try {
-    const text = await tryParsePdfWith(buf);
+    const text = await tryParsePdfWithFallbacks(buf);
     if (text) return text;
   } catch {}
 
