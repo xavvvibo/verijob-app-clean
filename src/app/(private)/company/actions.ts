@@ -135,7 +135,7 @@ export async function setCompanyVerificationStatus(input: SetCompanyVerification
     if (candidateId) {
       await recalculateAndPersistCandidateTrustScore(candidateId).catch(() => {});
 
-      await syncCandidateProfileReadiness(admin, candidateId).catch(() => {});
+      await syncCandidateProfileReadiness(supabase, candidateId).catch(() => {});
     }
   }
 
