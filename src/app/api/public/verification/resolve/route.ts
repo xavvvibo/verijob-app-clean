@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
+import { syncCandidateProfileReadiness } from "@/server/candidateProfile/syncReadiness";
 import {
   isMissingExternalResolvedColumn,
   isVerificationExternallyResolved,
@@ -282,6 +283,8 @@ export async function POST(req: Request) {
 
     if (requestRow.requested_by && confidence.level === "high" && confidence.trustScoreAwarded > 0) {
       await recalculateAndPersistCandidateTrustScore(String(requestRow.requested_by)).catch(() => {});
+
+      await syncCandidateProfileReadiness(admin, requestRow.requested_by).catch(() => {});
     }
 
     if (requestRow.requested_by) {

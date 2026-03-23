@@ -2,6 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
+import { syncCandidateProfileReadiness } from "@/server/candidateProfile/syncReadiness";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
 import { readEffectiveCompanySubscriptionState } from "@/lib/billing/effectiveSubscription";
@@ -133,6 +134,8 @@ export async function setCompanyVerificationStatus(input: SetCompanyVerification
     const candidateId = String((employment as any)?.candidate_id || "").trim();
     if (candidateId) {
       await recalculateAndPersistCandidateTrustScore(candidateId).catch(() => {});
+
+      await syncCandidateProfileReadiness(admin, candidateId).catch(() => {});
     }
   }
 

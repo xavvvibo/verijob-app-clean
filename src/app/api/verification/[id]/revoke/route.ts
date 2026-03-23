@@ -4,6 +4,7 @@ import { createClient as createSbAdmin } from "@supabase/supabase-js";
 import { createClient } from "@/utils/supabase/server";
 import { applyVerificationRemovalImpact, collectVerificationAffectedExperiences } from "@/lib/verification/verification-impact";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
+import { syncCandidateProfileReadiness } from "@/server/candidateProfile/syncReadiness";
 
 function json(status: number, body: any) {
   const res = NextResponse.json(body, { status });
@@ -232,6 +233,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     }
 
     await recalculateAndPersistCandidateTrustScore(String(user.id)).catch(() => {});
+
+
+    await syncCandidateProfileReadiness(admin, user.id).catch(() => {});
 
     return json(200, {
       ok: true,

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireOwner } from "@/app/api/internal/owner/_lib";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
+import { syncCandidateProfileReadiness } from "@/server/candidateProfile/syncReadiness";
 import { markEmploymentRecordVerificationDecision } from "@/lib/verification/employment-record-status";
 
 function json(status: number, body: any) {
@@ -125,6 +126,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
   if (updated.requested_by) {
     await recalculateAndPersistCandidateTrustScore(String(updated.requested_by)).catch(() => {});
+
+    await syncCandidateProfileReadiness(admin, updated.requested_by).catch(() => {});
   }
 
   return json(200, {
