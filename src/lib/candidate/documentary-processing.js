@@ -920,6 +920,20 @@ export function groupAndMergeEmploymentEntries(entries = []) {
   );
   const groups = new Map();
 
+  const entryRange = (entry) => {
+    const start = toMonthIndex(entry?.start_date) ?? Number.POSITIVE_INFINITY;
+    const end = toMonthIndex(entry?.end_date) ?? Number.POSITIVE_INFINITY;
+    return { start, end };
+  };
+
+  const rangesOverlap = (rangeA, rangeB) => {
+    const aStart = Math.min(rangeA.start, rangeA.end);
+    const aEnd = Math.max(rangeA.start, rangeA.end);
+    const bStart = Math.min(rangeB.start, rangeB.end);
+    const bEnd = Math.max(rangeB.start, rangeB.end);
+    return aEnd >= bStart - 2 && bEnd >= aStart - 2;
+  };
+
   for (const entry of employmentEntries) {
     const selfEmployment = Boolean(entry?.self_employment) || String(entry?.subtype || "") === "self_employment";
     const employerKey = normalizeEmployerKey(entry?.company_name);
@@ -930,15 +944,28 @@ export function groupAndMergeEmploymentEntries(entries = []) {
       ? ["self_employment", employerKey || "autonomo", provincePrefix || provinceHint || "none"].join("|")
       : [employerKey || "unknown_employer", provincePrefix || provinceHint || "none", suggestedMatchId || "no_match"].join("|");
 
-    const current = groups.get(groupingKey) || [];
-    current.push(entry);
-    groups.set(groupingKey, current);
+    const range = entryRange(entry);
+    const currentGroups = groups.get(groupingKey) || [];
+    let placed = false;
+    for (const groupEntries of currentGroups) {
+      const groupRange = entryRange(groupEntries[0]);
+      if (rangesOverlap(groupRange, range)) {
+        groupEntries.push(entry);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      currentGroups.push([entry]);
+    }
+    groups.set(groupingKey, currentGroups);
   }
 
-  return Array.from(groups.entries())
-    .map(([groupKey, groupEntries], index) => {
+  const merged = [];
+  groups.forEach((groupBuckets) => {
+    groupBuckets.forEach((groupEntries, index) => {
       const companyName = pickBestCompanyName(groupEntries);
-      const normalizedCompanyKey = normalizeEmployerKey(companyName) || groupKey;
+      const normalizedCompanyKey = normalizeEmployerKey(companyName) || `group_${index}`;
       const startDate = mergeEntryDate(groupEntries, "start_date", "min");
       const missingEnd = groupEntries.some((entry) => !String(entry?.end_date || "").trim());
       const endDate = missingEnd ? null : mergeEntryDate(groupEntries, "end_date", "max");
@@ -978,8 +1005,8 @@ export function groupAndMergeEmploymentEntries(entries = []) {
             ? "ignored"
             : "pending";
 
-      return {
-        entry_id: `grouped_vida_laboral_${index + 1}`,
+      merged.push({
+        entry_id: `grouped_vida_laboral_${merged.length + 1}`,
         type: "employment",
         subtype: groupEntries.some((entry) => entry?.self_employment) ? "self_employment" : null,
         self_employment: groupEntries.some((entry) => entry?.self_employment),
@@ -1004,13 +1031,15 @@ export function groupAndMergeEmploymentEntries(entries = []) {
         classification_reasons: classificationReasons,
         concise_summary: `${companyName} · ${startDate || "—"} — ${missingEnd ? "Actualidad" : endDate || "—"}`,
         raw_text: null,
-      };
-    })
-    .sort((a, b) => {
-      const aDate = toMonthIndex(a?.end_date || a?.start_date || "") ?? -1;
-      const bDate = toMonthIndex(b?.end_date || b?.start_date || "") ?? -1;
-      return bDate - aDate;
+      });
     });
+  });
+
+  return merged.sort((a, b) => {
+    const aDate = toMonthIndex(a?.end_date || a?.start_date || "") ?? -1;
+    const bDate = toMonthIndex(b?.end_date || b?.start_date || "") ?? -1;
+    return bDate - aDate;
+  });
 }
 
 export function scoreEmploymentCandidate({
