@@ -387,10 +387,34 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
 
   const { data: candidateProfile } = await service
     .from("candidate_profiles")
-    .select("allow_company_email_contact,allow_company_phone_contact,job_search_status,availability_start,preferred_workday,preferred_roles,work_zones,availability_schedule,trust_score,trust_score_breakdown,raw_cv_json")
+    .select("allow_company_email_contact,allow_company_phone_contact,job_search_status,availability_start,preferred_workday,preferred_roles,work_zones,availability_schedule,trust_score,trust_score_breakdown,raw_cv_json,profile_ready_for_company_access,profile_ready_reason")
     .eq("user_id", link.candidate_id)
     .maybeSingle();
   const candidateCollections = await readCandidateProfileCollections(service, String(link.candidate_id), { candidateProfile });
+
+  const profileReadyForCompanyAccess = Boolean((candidateProfile as any)?.profile_ready_for_company_access);
+  const profileReadyReason = String((candidateProfile as any)?.profile_ready_reason || "").trim() || "verification_pending";
+
+  if (mode === "full" && !profileReadyForCompanyAccess) {
+    return json(409, {
+      error: "candidate_profile_incomplete",
+      user_message: "El perfil todavía no está listo para desbloqueo. No se ha consumido ningún acceso.",
+      candidate_id: link.candidate_id,
+      view_mode: "preview",
+      unlocked: false,
+      access_consumed: false,
+      profile_ready_for_company_access: false,
+      profile_ready_reason: profileReadyReason,
+      gate: {
+        allowed: false,
+        consumed: false,
+        requires_overage: false,
+        overage_price: null,
+        credits_remaining: null,
+        period_start: null,
+      },
+    });
+  }
 
   const { data: verifications } = await service
     .from("verification_summary")

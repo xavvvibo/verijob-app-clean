@@ -485,7 +485,7 @@ export default function CandidateOverview() {
   }, [profileCompletionScore]);
 
   const overviewStatus = useMemo(() => {
-    if (metrics.verified > 0) return "Perfil con validación activa";
+    if (metrics.verified > 0) return "Perfil listo para empresas";
     if (metrics.total > 0) return "Verificación en curso";
     if (experienceCount > 0) return "Perfil iniciado";
     return "Perfil por activar";
@@ -641,7 +641,7 @@ export default function CandidateOverview() {
             <h2 className="mt-2 text-2xl font-semibold text-slate-900">{overviewStatus}</h2>
             <p className="mt-2 text-sm text-slate-600">
               {metrics.verified > 0
-                ? "Tu perfil ya transmite confianza a las empresas con una experiencia validada."
+                ? "Tu perfil ya tiene al menos una experiencia validada y debería poder mostrarse a empresas con acceso autorizado."
                 : metrics.total > 0
                   ? "Ya has enviado una solicitud. Mientras llega la respuesta, puedes reforzar tu perfil con documentación."
                   : experienceCount > 0
