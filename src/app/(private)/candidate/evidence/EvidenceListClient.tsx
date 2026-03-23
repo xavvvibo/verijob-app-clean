@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { createBrowserClient } from "@supabase/ssr"
+import { useRouter } from "next/navigation"
 import {
   getEvidenceTypeOptions,
   requiresExperienceAssociation,
@@ -37,6 +38,7 @@ export default function EvidenceListClient({
   experienceOptions,
   preselectedExperienceId,
 }: Props) {
+  const router = useRouter()
   const [items, setItems] = useState<any[]>(initialItems || [])
   const [selectedExperienceId, setSelectedExperienceId] = useState(preselectedExperienceId || "")
   const [selectedEvidenceType, setSelectedEvidenceType] = useState(
@@ -111,6 +113,38 @@ export default function EvidenceListClient({
     () => experienceOptions.find((item: any) => item.id === selectedExperienceId)?.label || null,
     [experienceOptions, selectedExperienceId]
   )
+  const defaultEvidenceType = preselectedExperienceId ? "contrato_trabajo" : "vida_laboral"
+
+  function resetDeletedEvidenceLocalState(deletedId: string, remainingItems: any[]) {
+    setSelectedFile(null)
+    setBusy(false)
+    setSavingReconciliationId(null)
+    setIsError(false)
+    setMessage("Documento eliminado. Ya puedes subir otro documento.")
+    setReconciliationDrafts((prev) => {
+      const next = { ...prev }
+      delete next[deletedId]
+      return next
+    })
+    setReconciliationFeedback((prev) => {
+      const next = { ...prev }
+      delete next[deletedId]
+      return next
+    })
+    setExpandedAdministrativeByEvidence((prev) => {
+      const next = { ...prev }
+      delete next[deletedId]
+      return next
+    })
+
+    if (remainingItems.length === 0) {
+      setSelectedExperienceId(preselectedExperienceId || "")
+      setSelectedEvidenceType(defaultEvidenceType)
+      setReconciliationDrafts({})
+      setReconciliationFeedback({})
+      setExpandedAdministrativeByEvidence({})
+    }
+  }
 
   const focusedItems = useMemo(() => {
     if (!selectedExperienceId) return items
@@ -242,8 +276,11 @@ export default function EvidenceListClient({
       if (!res.ok) {
         throw new Error(String(json?.details || json?.error || "No se pudo eliminar la evidencia."))
       }
-      setItems((prev) => prev.filter((item) => item.id !== id))
+      const nextItems = items.filter((item) => item.id !== id)
+      setItems(nextItems)
+      resetDeletedEvidenceLocalState(id, nextItems)
       await reloadList()
+      router.refresh()
     } catch (error: any) {
       setIsError(true)
       setMessage(String(error?.message || error || "No se pudo eliminar la evidencia."))
@@ -348,7 +385,6 @@ export default function EvidenceListClient({
     const summary = reconciliationFeedback[String(item.evidence_id || "")] || item.reconciliation_summary || null
     const employmentEntries = (groupedEntries.length > 0 ? groupedEntries : entries).filter((entry: any) => String(entry?.type || "employment") === "employment")
     const administrativeEntries = entries.filter((entry: any) => String(entry?.type || "employment") === "administrative")
-    console.log("EMPLOYMENT_ENTRIES", employmentEntries)
     const showAdministrative = Boolean(expandedAdministrativeByEvidence[String(item.evidence_id || "")])
 
     return (
