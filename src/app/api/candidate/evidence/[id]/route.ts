@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { groupAndMergeEmploymentEntries } from "@/lib/candidate/documentary-processing";
+import { buildEmploymentRecordDocumentaryResolvedUpdate } from "@/lib/candidate/documentary-flow";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 
 function json(status: number, body: any) {
@@ -107,6 +108,82 @@ async function createEmploymentRecordFromVidaLaboralEntry(params: {
     employmentRecordId: String((materialized as any).employmentRecordId),
     profileExperienceId: String(insertProfileExperience.data.id),
   };
+}
+
+function normalizeEvidenceType(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function isOfficialVidaLaboralEvidence(evidence: any) {
+  const candidates = [
+    normalizeEvidenceType(evidence?.evidence_type),
+    normalizeEvidenceType(evidence?.document_type),
+  ].filter(Boolean);
+  return candidates.includes("vida_laboral");
+}
+
+function resolveIdentityMatch(processing: any) {
+  return String(processing?.identity_match || processing?.matching?.identity_match || "")
+    .trim()
+    .toLowerCase();
+}
+
+function toNumber(value: unknown) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function shouldAutoVerifyVidaLaboralEntry(params: {
+  evidence: any;
+  processing: any;
+  entry: any;
+}) {
+  if (!isOfficialVidaLaboralEvidence(params.evidence)) return false;
+  const processingStatus = String(params.processing?.processing_status || params.processing?.status || "")
+    .trim()
+    .toLowerCase();
+  if (processingStatus !== "processed" && processingStatus !== "completed") return false;
+
+  const identityMatch = resolveIdentityMatch(params.processing);
+  if (identityMatch !== "high" && identityMatch !== "medium") return false;
+
+  const entry = params.entry || {};
+  const linkedEmploymentRecordId = String(entry?.linked_employment_record_id || "").trim();
+  if (!linkedEmploymentRecordId) return false;
+
+  const confidence = Math.max(
+    toNumber(entry?.group_score),
+    toNumber(entry?.confidence),
+    toNumber(entry?.suggested_match_score),
+  );
+  const suggestedMatchId = String(entry?.suggested_match_employment_record_id || "").trim();
+  const reasons = Array.isArray(entry?.classification_reasons)
+    ? entry.classification_reasons.map((value: any) => String(value || "").trim().toLowerCase())
+    : [];
+  const hasStrongLaborSignal =
+    Boolean(entry?.self_employment) ||
+    reasons.includes("structural_labor_pattern") ||
+    reasons.includes("promoted_low_confidence") ||
+    reasons.some((value: string) => value.startsWith("labor_pattern:")) ||
+    Boolean(entry?.source_entry_count);
+
+  return confidence >= 0.55 || suggestedMatchId === linkedEmploymentRecordId || hasStrongLaborSignal;
+}
+
+async function markProfileExperienceVerificationSource(params: {
+  admin: any;
+  profileExperienceId: string;
+  verificationRequestId: string;
+}) {
+  if (!params.profileExperienceId) return;
+  await params.admin
+    .from("profile_experiences")
+    .update({ matched_verification_id: params.verificationRequestId })
+    .eq("id", params.profileExperienceId);
 }
 
 export async function DELETE(_req: Request, ctx: any) {
@@ -221,8 +298,11 @@ export async function PATCH(req: Request, ctx: any) {
       material_changes: false,
       linked_employment_record_ids: [] as string[],
       created_profile_experience_ids: [] as string[],
+      auto_verified_count: 0,
+      auto_verified_employment_record_ids: [] as string[],
       message: "",
     };
+    const profileExperienceIdsToMark = new Set<string>();
 
     const nextEntries = [];
     for (const currentEntry of currentEntries) {
@@ -260,7 +340,10 @@ export async function PATCH(req: Request, ctx: any) {
         summary.created_count += 1;
         summary.material_changes = true;
         if (nextEntry.linked_employment_record_id) summary.linked_employment_record_ids.push(nextEntry.linked_employment_record_id);
-        if (nextEntry.created_profile_experience_id) summary.created_profile_experience_ids.push(nextEntry.created_profile_experience_id);
+        if (nextEntry.created_profile_experience_id) {
+          summary.created_profile_experience_ids.push(nextEntry.created_profile_experience_id);
+          profileExperienceIdsToMark.add(nextEntry.created_profile_experience_id);
+        }
         nextEntries.push(nextEntry);
         continue;
       }
@@ -277,6 +360,7 @@ export async function PATCH(req: Request, ctx: any) {
         nextEntry.linked_employment_record_id = String((materialized as any).employmentRecordId || "");
         summary.linked_existing_count += 1;
         summary.material_changes = true;
+        profileExperienceIdsToMark.add(choice.replace(/^profile:/, "").trim());
         if (nextEntry.linked_employment_record_id) summary.linked_employment_record_ids.push(nextEntry.linked_employment_record_id);
         nextEntries.push(nextEntry);
         continue;
@@ -313,14 +397,58 @@ export async function PATCH(req: Request, ctx: any) {
     processing.link_state = nextEntries.some((entry: any) => String(entry?.reconciliation_status || "") === "linked")
       ? "reconciled"
       : "reconciliation_required";
+    const autoVerifiedEmploymentRecordIds = Array.from(
+      new Set(
+        nextEntries
+          .filter((entry: any) => String(entry?.reconciliation_status || "") === "linked")
+          .filter((entry: any) => shouldAutoVerifyVidaLaboralEntry({ evidence, processing, entry }))
+          .map((entry: any) => String(entry?.linked_employment_record_id || "").trim())
+          .filter(Boolean),
+      ),
+    );
+    const nowIso = new Date().toISOString();
+    if (autoVerifiedEmploymentRecordIds.length > 0) {
+      const employmentPatch = buildEmploymentRecordDocumentaryResolvedUpdate({
+        verificationRequestId: String(vr.id),
+        nowIso,
+      });
+      await admin
+        .from("employment_records")
+        .update(employmentPatch)
+        .in("id", autoVerifiedEmploymentRecordIds)
+        .eq("candidate_id", user.id);
+
+      for (const profileExperienceId of profileExperienceIdsToMark) {
+        await markProfileExperienceVerificationSource({
+          admin,
+          profileExperienceId,
+          verificationRequestId: String(vr.id),
+        });
+      }
+
+      processing.verification_source = "documentary_official";
+      processing.verification_method = "official_document_auto";
+      processing.verification_reason = "vida_laboral_linked_high_confidence";
+      processing.auto_verified_employment_record_ids = autoVerifiedEmploymentRecordIds;
+      summary.auto_verified_count = autoVerifiedEmploymentRecordIds.length;
+      summary.auto_verified_employment_record_ids = autoVerifiedEmploymentRecordIds;
+    } else {
+      processing.auto_verified_employment_record_ids = [];
+      summary.auto_verified_count = 0;
+      summary.auto_verified_employment_record_ids = [];
+    }
     processing.processing_summary =
-      nextEntries.filter((entry: any) => String(entry?.reconciliation_status || "") === "linked").length > 0
-        ? "Experiencias de vida laboral reconciliadas con el perfil."
+      summary.auto_verified_count > 0
+        ? "Documento oficial conciliado. Las experiencias vinculadas han quedado verificadas automáticamente."
+        : nextEntries.filter((entry: any) => String(entry?.reconciliation_status || "") === "linked").length > 0
+          ? "Experiencias de vida laboral reconciliadas con el perfil."
         : "Revisa y vincula las experiencias detectadas en la fe de vida laboral.";
     summary.linked_employment_record_ids = Array.from(new Set(summary.linked_employment_record_ids.filter(Boolean)));
     summary.created_profile_experience_ids = Array.from(new Set(summary.created_profile_experience_ids.filter(Boolean)));
     summary.message = summary.material_changes
-      ? `Conciliación guardada. ${summary.linked_existing_count} experiencias vinculadas, ${summary.created_count} creadas y ${summary.ignored_count + summary.auto_ignored_count} movimientos ignorados.`
+      ? summary.auto_verified_count > 0
+        ? `Conciliación guardada. ${summary.linked_existing_count} experiencias vinculadas, ${summary.created_count} creadas, ${summary.auto_verified_count} verificadas automáticamente por documento oficial y ${summary.ignored_count + summary.auto_ignored_count} movimientos ignorados.`
+        : `Conciliación guardada. ${summary.linked_existing_count} experiencias vinculadas, ${summary.created_count} creadas y ${summary.ignored_count + summary.auto_ignored_count} movimientos ignorados.`
       : `Conciliación guardada. No se ha creado ni vinculado ninguna experiencia; los movimientos detectados fueron ignorados por no corresponder a experiencia laboral CV.`;
     processing.reconciliation_summary = summary;
 
@@ -329,9 +457,23 @@ export async function PATCH(req: Request, ctx: any) {
       documentary_processing: processing,
     };
 
+    const verificationRequestUpdatePayload: Record<string, any> = {
+      request_context: {
+        ...nextContext,
+        verification_source: summary.auto_verified_count > 0 ? "documentary_official" : nextContext.verification_source,
+        verification_method: summary.auto_verified_count > 0 ? "official_document_auto" : nextContext.verification_method,
+        verification_reason:
+          summary.auto_verified_count > 0 ? "vida_laboral_linked_high_confidence" : nextContext.verification_reason,
+      },
+    };
+    if (summary.auto_verified_count > 0) {
+      verificationRequestUpdatePayload.status = "verified";
+      verificationRequestUpdatePayload.resolved_at = nowIso;
+    }
+
     const { error: updateErr } = await admin
       .from("verification_requests")
-      .update({ request_context: nextContext })
+      .update(verificationRequestUpdatePayload)
       .eq("id", vr.id);
 
     if (updateErr) return json(400, { error: "reconciliation_update_failed", details: updateErr.message });

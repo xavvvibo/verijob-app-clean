@@ -906,6 +906,12 @@ async function processEvidenceDocumentJob(evidenceId: string): Promise<JobSummar
       ) {
         employmentUpdate.company_name = String(extractionResult.extraction.company_name).trim();
       }
+      if (String(evidenceType || "").trim().toLowerCase() === "vida_laboral") {
+        documentaryProcessing.verification_source = "documentary_official";
+        documentaryProcessing.verification_method = "official_document_auto";
+        documentaryProcessing.verification_reason = "vida_laboral_linked_high_confidence";
+        documentaryProcessing.auto_verified_employment_record_ids = [linkedEmploymentRecordId];
+      }
       await supabase
         .from("employment_records")
         .update(employmentUpdate)

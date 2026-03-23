@@ -395,6 +395,9 @@ export default function EvidenceListClient({
               <span style={{ borderRadius: 999, background: "#dcfce7", color: "#166534", padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>
                 {Number(summary?.created_count || 0)} creadas
               </span>
+              <span style={{ borderRadius: 999, background: "#d1fae5", color: "#065f46", padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>
+                {Number(summary?.auto_verified_count || 0)} verificadas por documento oficial
+              </span>
               <span style={{ borderRadius: 999, background: "#fef3c7", color: "#92400e", padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>
                 {Number(summary?.ignored_count || 0) + Number(summary?.auto_ignored_count || 0)} ignoradas
               </span>

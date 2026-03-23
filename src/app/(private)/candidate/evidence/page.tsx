@@ -82,6 +82,8 @@ type EvidenceItem = {
     material_changes: boolean;
     linked_employment_record_ids: string[];
     created_profile_experience_ids: string[];
+    auto_verified_count: number;
+    auto_verified_employment_record_ids: string[];
     message: string;
   } | null;
   person_check_label: string;

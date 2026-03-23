@@ -11,6 +11,19 @@ import ExperienceListClient from "./ExperienceListClient";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+function isDocumentaryOfficialVerification(row: any) {
+  const channel = String(row?.verification_channel || "").trim().toLowerCase();
+  const requestContext = row?.request_context && typeof row.request_context === "object" ? row.request_context : {};
+  const source = String(requestContext?.verification_source || requestContext?.documentary_processing?.verification_source || "").trim().toLowerCase();
+  const method = String(requestContext?.verification_method || requestContext?.documentary_processing?.verification_method || "").trim().toLowerCase();
+  const reason = String(requestContext?.verification_reason || requestContext?.documentary_processing?.verification_reason || "").trim().toLowerCase();
+  return channel === "documentary" && (
+    source === "documentary_official" ||
+    method === "official_document_auto" ||
+    reason === "vida_laboral_linked_high_confidence"
+  );
+}
+
 export default async function CandidateExperiencePage({
   searchParams,
 }: {
@@ -45,12 +58,23 @@ export default async function CandidateExperiencePage({
       .maybeSingle(),
     supabase
       .from("employment_records")
-      .select("id, position, company_name_freeform, start_date, end_date")
+      .select("id, position, company_name_freeform, start_date, end_date, verification_status, last_verification_request_id")
       .eq("candidate_id", au.user.id),
   ]);
 
-  const verificationIds = (rows || []).map((x: any) => x.matched_verification_id).filter(Boolean);
-  const verificationMap = new Map<string, { status: string | null; is_revoked: boolean | null; requested_at?: string | null; resolved_at?: string | null }>();
+  const verificationIds = Array.from(
+    new Set(
+      [...(rows || []).map((x: any) => x.matched_verification_id), ...(employmentRows || []).map((x: any) => x.last_verification_request_id)].filter(Boolean),
+    ),
+  );
+  const verificationMap = new Map<string, {
+    status: string | null;
+    is_revoked: boolean | null;
+    requested_at?: string | null;
+    resolved_at?: string | null;
+    verification_channel?: string | null;
+    request_context?: any;
+  }>();
   if (verificationIds.length > 0) {
     const [{ data: linkedRows }, { data: requestRows }] = await Promise.all([
       supabase
@@ -59,7 +83,7 @@ export default async function CandidateExperiencePage({
       .in("verification_id", verificationIds as string[]),
       supabase
       .from("verification_requests")
-      .select("id,status,requested_at,resolved_at")
+      .select("id,status,requested_at,resolved_at,verification_channel,request_context")
       .in("id", verificationIds as string[]),
     ]);
     for (const row of linkedRows || []) {
@@ -75,6 +99,8 @@ export default async function CandidateExperiencePage({
         status: (row as any).status ?? existing.status,
         requested_at: (row as any).requested_at ?? null,
         resolved_at: (row as any).resolved_at ?? null,
+        verification_channel: (row as any).verification_channel ?? null,
+        request_context: (row as any).request_context ?? null,
       });
     }
   }
@@ -96,57 +122,72 @@ export default async function CandidateExperiencePage({
     (importedRows || []).map((r: any) => `${norm(r?.title)}|${norm(r?.company_name)}|${norm(r?.start_date)}|${norm(r?.end_date)}`)
   );
 
-  function resolveStatus(row: any): "Sin verificar" | "Verificación solicitada" | "En revisión" | "Verificada" | "Revocada" {
-    const linkedId = row?.matched_verification_id as string | null;
-    if (!linkedId) {
-      return "Sin verificar";
-    }
-    const linked = verificationMap.get(linkedId);
-    if (!linked) return "Verificación solicitada";
-    if (linked.is_revoked) return "Revocada";
-    const status = String(linked.status || "").toLowerCase();
-    if (status === "verified" || status === "approved") return "Verificada";
-    if (status === "revoked") return "Revocada";
-    if (status === "reviewing" || status === "in_review") return "En revisión";
-    if (status === "rejected") return "Sin verificar";
-    return "Verificación solicitada";
-  }
-
-  function lastActionLabel(row: any) {
-    const linkedId = row?.matched_verification_id as string | null;
-    if (!linkedId) {
-      const sig = `${norm(row?.role_title)}|${norm(row?.company_name)}|${norm(row?.start_date)}|${norm(row?.end_date)}`;
-      return importedSet.has(sig) ? "Importada desde tu CV. Revísala, corrígela si hace falta y luego solicita verificación o sube evidencia." : "Sin solicitudes enviadas";
-    }
-    const linked = verificationMap.get(linkedId);
-    if (!linked) return "Solicitud de verificación enviada";
-    if (linked.resolved_at) return `Resuelta: ${linked.resolved_at}`;
-    if (linked.requested_at) return `Enviada: ${linked.requested_at}`;
-    return "Solicitud en curso";
-  }
-
-  const employmentBySignature = new Map<string, string>();
+  const employmentBySignature = new Map<string, any>();
   for (const row of employmentRows || []) {
     const key = experienceMatchKey(row);
     if (key && !employmentBySignature.has(key)) {
-      employmentBySignature.set(key, String((row as any)?.id || ""));
+      employmentBySignature.set(key, row);
     }
+  }
+
+  function resolveLinkedVerification(row: any) {
+    const employmentRecord = employmentBySignature.get(experienceMatchKey(row)) || null;
+    const linkedId = String(row?.matched_verification_id || employmentRecord?.last_verification_request_id || "").trim();
+    const verification = linkedId ? verificationMap.get(linkedId) || null : null;
+    return { employmentRecord, linkedId, verification };
   }
 
   const normalizedRows = (rows || []).map((r: any) => ({
     id: String(r.id),
     profile_experience_id: String(r.id),
-    employment_record_id: employmentBySignature.get(experienceMatchKey(r)) || "",
+    employment_record_id: String((employmentBySignature.get(experienceMatchKey(r)) as any)?.id || ""),
     role_title: r.role_title ?? null,
     company_name: r.company_name ?? null,
     start_date: r.start_date ?? null,
     end_date: r.end_date ?? null,
     description: r.description ?? null,
-    status: resolveStatus(r),
-    last_action: lastActionLabel(r),
-    source_label: importedSet.has(`${norm(r?.role_title)}|${norm(r?.company_name)}|${norm(r?.start_date)}|${norm(r?.end_date)}`)
-      ? "Importada desde CV"
-      : null,
+    status: (() => {
+      const { employmentRecord, linkedId, verification } = resolveLinkedVerification(r);
+      if (!linkedId) return "Sin verificar";
+      if (verification?.is_revoked) return "Revocada";
+      const status = String(verification?.status || employmentRecord?.verification_status || "").toLowerCase();
+      if (status === "verified" || status === "approved" || status === "verified_document") return "Verificada";
+      if (status === "revoked") return "Revocada";
+      if (status === "reviewing" || status === "in_review") return "En revisión";
+      if (status === "rejected") return "Sin verificar";
+      return "Verificación solicitada";
+    })(),
+    last_action: (() => {
+      const sig = `${norm(r?.role_title)}|${norm(r?.company_name)}|${norm(r?.start_date)}|${norm(r?.end_date)}`;
+      const importedFromCv = importedSet.has(sig);
+      const { employmentRecord, linkedId, verification } = resolveLinkedVerification(r);
+      if (!linkedId) {
+        return importedFromCv
+          ? "Importada desde tu CV. Revísala, corrígela si hace falta y luego solicita verificación o sube evidencia."
+          : "Sin solicitudes enviadas";
+      }
+      if (isDocumentaryOfficialVerification(verification) && String(employmentRecord?.verification_status || "").trim()) {
+        return "Verificada automáticamente por vida laboral.";
+      }
+      if (!verification) return "Solicitud de verificación enviada";
+      if (verification.resolved_at) return `Resuelta: ${verification.resolved_at}`;
+      if (verification.requested_at) return `Enviada: ${verification.requested_at}`;
+      return "Solicitud en curso";
+    })(),
+    source_label: (() => {
+      const sig = `${norm(r?.role_title)}|${norm(r?.company_name)}|${norm(r?.start_date)}|${norm(r?.end_date)}`;
+      const importedFromCv = importedSet.has(sig);
+      const { employmentRecord, verification } = resolveLinkedVerification(r);
+      const status = String(verification?.status || employmentRecord?.verification_status || "").trim().toLowerCase();
+      if (isDocumentaryOfficialVerification(verification)) return "Verificada por documento oficial";
+      if (
+        String(verification?.verification_channel || "").trim().toLowerCase() === "email" &&
+        (status === "verified" || status === "approved")
+      ) {
+        return "Verificada por empresa";
+      }
+      return importedFromCv ? "Importada desde CV" : null;
+    })(),
   }));
 
   const companyCvImportFlag = Array.isArray(resolvedSearchParams?.company_cv_import)

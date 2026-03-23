@@ -104,6 +104,19 @@ function toEvidenceVerificationBadge(rawType: unknown) {
   return "Verificación documental";
 }
 
+function isDocumentaryOfficialVerification(row: any) {
+  const channel = String(row?.verification_channel || "").trim().toLowerCase();
+  const requestContext = row?.request_context && typeof row.request_context === "object" ? row.request_context : {};
+  const source = String(requestContext?.verification_source || requestContext?.documentary_processing?.verification_source || "").trim().toLowerCase();
+  const method = String(requestContext?.verification_method || requestContext?.documentary_processing?.verification_method || "").trim().toLowerCase();
+  const reason = String(requestContext?.verification_reason || requestContext?.documentary_processing?.verification_reason || "").trim().toLowerCase();
+  return channel === "documentary" && (
+    source === "documentary_official" ||
+    method === "official_document_auto" ||
+    reason === "vida_laboral_linked_high_confidence"
+  );
+}
+
 function getRoleSkills(experiences: any[]) {
   const stopWords = new Set(["de", "la", "el", "en", "y", "con", "para", "del"]);
   const counts = new Map<string, number>();
@@ -212,21 +225,6 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   }
   const verificationIds = rows.map((r: any) => r.verification_id).filter(Boolean);
 
-  const { data: evidenceRows } = verificationIds.length
-    ? await admin
-        .from("evidences")
-        .select("verification_request_id,document_type,evidence_type,validation_status,document_scope")
-        .in("verification_request_id", verificationIds)
-    : ({ data: [] } as any);
-  const evidenceByVerification = new Map<string, any[]>();
-  for (const evidence of asArray(evidenceRows)) {
-    const key = String((evidence as any)?.verification_request_id || "");
-    if (!key) continue;
-    const current = evidenceByVerification.get(key) || [];
-    current.push(evidence);
-    evidenceByVerification.set(key, current);
-  }
-
   const verifiedRows = rows.filter((r: any) => isVerifiedStatus(r?.status));
   const verifiedWork = verifiedRows.filter((r: any) => !isEducationVerification(r)).length;
   const verifiedEducation = verifiedRows.filter((r: any) => isEducationVerification(r)).length;
@@ -238,6 +236,37 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     .limit(24);
 
   const employmentRows = Array.isArray(employmentRecords) ? employmentRecords : [];
+  const allVerificationIds = Array.from(
+    new Set([
+      ...verificationIds,
+      ...employmentRows.map((record: any) => record?.last_verification_request_id).filter(Boolean),
+    ]),
+  );
+  const { data: verificationRequests } = allVerificationIds.length
+    ? await admin
+        .from("verification_requests")
+        .select("id,status,verification_channel,request_context,resolved_at,created_at")
+        .in("id", allVerificationIds as string[])
+    : ({ data: [] } as any);
+  const verificationRequestById = new Map<string, any>();
+  for (const row of asArray(verificationRequests)) {
+    const verificationId = String((row as any)?.id || "");
+    if (verificationId) verificationRequestById.set(verificationId, row);
+  }
+  const { data: evidenceRows } = allVerificationIds.length
+    ? await admin
+        .from("evidences")
+        .select("verification_request_id,document_type,evidence_type,validation_status,document_scope")
+        .in("verification_request_id", allVerificationIds)
+    : ({ data: [] } as any);
+  const evidenceByVerification = new Map<string, any[]>();
+  for (const evidence of asArray(evidenceRows)) {
+    const key = String((evidence as any)?.verification_request_id || "");
+    if (!key) continue;
+    const current = evidenceByVerification.get(key) || [];
+    current.push(evidence);
+    evidenceByVerification.set(key, current);
+  }
   const verifiedEmploymentFromRecords = employmentRows.filter((record: any) =>
     isVerifiedEmploymentRecordStatus(record?.verification_status),
   ).length;
@@ -261,7 +290,9 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   });
 
   const experiencesFromEmployment = employmentRows.map((record: any) => {
-    const linkedVerification = verificationById.get(String(record?.last_verification_request_id || ""));
+    const linkedVerificationId = String(record?.last_verification_request_id || "");
+    const linkedVerification =
+      verificationRequestById.get(linkedVerificationId) || verificationById.get(linkedVerificationId);
     const recordStatus = normalizeEmploymentRecordVerificationStatus(record?.verification_status || null);
     const summaryStatusRaw = String(linkedVerification?.status_effective || linkedVerification?.status || "").trim();
     const statusText =
@@ -277,6 +308,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     const reuseCount = Number(linkedVerification?.reuse_count ?? 0);
     return {
       experience_id: String(record?.id || ""),
+      linked_verification_id: linkedVerificationId || null,
       position: record?.position || null,
       company_name: record?.company_name_freeform || null,
       start_date: record?.start_date || null,
@@ -294,6 +326,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
 
   const experiencesFallback = rows.slice(0, 24).map((row: any, index: number) => ({
     experience_id: String(row?.verification_id || `fallback-${index}`),
+    linked_verification_id: String(row?.verification_id || `fallback-${index}`),
     position: row?.position || null,
     company_name: row?.company_name || row?.company_name_target || null,
     start_date: row?.start_date || null,
@@ -307,9 +340,13 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
 
   const experiences = experiencesFromEmployment.length ? experiencesFromEmployment : experiencesFallback;
 
-  const verificationsById = new Map<string, any>((rows || []).map((x: any) => [String(x?.verification_id || ""), x]));
+  const verificationEntries: Array<[string, any]> = [
+    ...(rows || []).map((x: any) => [String(x?.verification_id || ""), x] as [string, any]),
+    ...asArray(verificationRequests).map((x: any) => [String(x?.id || ""), x] as [string, any]),
+  ];
+  const verificationsById = new Map<string, any>(verificationEntries);
   const experiencesEnriched = experiences.map((item: any) => {
-    const verificationId = String(item?.experience_id || "");
+    const verificationId = String(item?.linked_verification_id || item?.experience_id || "");
     const linkedVerification = verificationsById.get(verificationId) || null;
     const linkedEvidences = evidenceByVerification.get(verificationId) || [];
     const badges = new Set<string>();
@@ -317,9 +354,9 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     const status = String(item?.status_text || "").toLowerCase();
     const normalizedEmploymentStatus = normalizeEmploymentRecordVerificationStatus(status);
     if (status === "verified" || status === "approved" || normalizedEmploymentStatus === EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFIED) {
-      badges.add("Verificado por empresa");
+      badges.add(isDocumentaryOfficialVerification(linkedVerification) ? "Verificada por documento oficial" : "Verificado por empresa");
     }
-    if (method === "documentary") badges.add("Verificación documental");
+    if (method === "documentary" && !isDocumentaryOfficialVerification(linkedVerification)) badges.add("Verificación documental");
     for (const ev of linkedEvidences) {
       const b = toEvidenceVerificationBadge((ev as any)?.document_type || (ev as any)?.evidence_type);
       if (b) badges.add(b);

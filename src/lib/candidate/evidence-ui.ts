@@ -81,6 +81,8 @@ export type CandidateEvidenceUiItem = {
     material_changes: boolean;
     linked_employment_record_ids: string[];
     created_profile_experience_ids: string[];
+    auto_verified_count: number;
+    auto_verified_employment_record_ids: string[];
     message: string;
   } | null;
   person_check_label: string;
@@ -239,6 +241,10 @@ export function buildEvidenceUiItem(r: any): CandidateEvidenceUiItem {
             : [],
           created_profile_experience_ids: Array.isArray(processing.reconciliation_summary.created_profile_experience_ids)
             ? processing.reconciliation_summary.created_profile_experience_ids.map((value: any) => String(value || "")).filter(Boolean)
+            : [],
+          auto_verified_count: Number(processing.reconciliation_summary.auto_verified_count || 0),
+          auto_verified_employment_record_ids: Array.isArray(processing.reconciliation_summary.auto_verified_employment_record_ids)
+            ? processing.reconciliation_summary.auto_verified_employment_record_ids.map((value: any) => String(value || "")).filter(Boolean)
             : [],
           message: String(processing.reconciliation_summary.message || "").trim(),
         }
