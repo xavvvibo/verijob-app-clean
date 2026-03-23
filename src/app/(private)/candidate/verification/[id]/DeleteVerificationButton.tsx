@@ -4,8 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   buildVerificationRevokeRequest,
+  buildVerificationRemovalWarningMessage,
   getVerificationRevokeEndpoint,
   getVerificationRevokeErrorMessage,
+  getVerificationRevokePreviewEndpoint,
 } from "@/lib/candidate/verification-revoke";
 
 export default function DeleteVerificationButton({ verificationId }: { verificationId: string }) {
@@ -14,8 +16,30 @@ export default function DeleteVerificationButton({ verificationId }: { verificat
   const [message, setMessage] = useState<string | null>(null);
 
   async function onDelete() {
+    let previewPayload: any = null;
+    try {
+      const previewRes = await fetch(getVerificationRevokePreviewEndpoint(verificationId), {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      });
+      previewPayload = await previewRes.json().catch(() => ({}));
+      if (!previewRes.ok) {
+        throw new Error(
+          getVerificationRevokeErrorMessage({
+            responseOk: false,
+            payload: previewPayload,
+            fallback: "No se pudo preparar la eliminación de la verificación.",
+          }) || "No se pudo preparar la eliminación de la verificación.",
+        );
+      }
+    } catch (e: any) {
+      setMessage(e?.message || "No se pudo preparar la eliminación de la verificación.");
+      return;
+    }
+
     const ok = window.confirm(
-      "¿Seguro que quieres borrar esta verificación?\n\nSe revocará la solicitud y se actualizarán tus métricas de perfil."
+      buildVerificationRemovalWarningMessage(previewPayload?.affected_experiences),
     );
     if (!ok) return;
     setLoading(true);
@@ -35,7 +59,12 @@ export default function DeleteVerificationButton({ verificationId }: { verificat
         fallback: "No se pudo eliminar la verificación.",
       });
       if (errorMessage) throw new Error(errorMessage);
-      setMessage("Verificación eliminada correctamente.");
+      const affectedCount = Array.isArray(data?.affected_experiences) ? data.affected_experiences.length : 0;
+      setMessage(
+        affectedCount > 0
+          ? `Verificación eliminada correctamente. ${affectedCount} experiencia(s) han perdido esta verificación.`
+          : "Verificación eliminada correctamente.",
+      );
       setTimeout(() => {
         router.replace("/candidate/verifications");
         router.refresh();

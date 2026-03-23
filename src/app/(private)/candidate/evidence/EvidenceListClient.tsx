@@ -33,6 +33,30 @@ async function readJsonSafe(response: Response) {
   }
 }
 
+function buildEvidenceDeleteWarningMessage(affectedExperiences: any[]) {
+  const affected = Array.isArray(affectedExperiences) ? affectedExperiences : []
+  if (affected.length === 0) {
+    return "¿Seguro que quieres eliminar este documento?"
+  }
+
+  const listed = affected
+    .slice(0, 8)
+    .map((item: any) => `- ${String(item?.label || "Experiencia vinculada").trim()}`)
+    .join("\n")
+  const extraCount = Math.max(0, affected.length - 8)
+
+  return [
+    "Al eliminar este documento, también se retirará la verificación de las siguientes experiencias:",
+    listed,
+    extraCount > 0 ? `- y ${extraCount} experiencia(s) más` : "",
+    "",
+    "Las experiencias seguirán existiendo, pero dejarán de figurar como verificadas.",
+    "¿Confirmas que quieres continuar?",
+  ]
+    .filter(Boolean)
+    .join("\n")
+}
+
 export default function EvidenceListClient({
   initialItems,
   experienceOptions,
@@ -264,6 +288,21 @@ export default function EvidenceListClient({
       return
     }
 
+    const previewRes = await fetch(`/api/candidate/evidence/${encodeURIComponent(id)}?preview=1`, {
+      method: "GET",
+      credentials: "include",
+      cache: "no-store",
+    })
+    const previewJson = await readJsonSafe(previewRes)
+    if (!previewRes.ok) {
+      setIsError(true)
+      setMessage(String(previewJson?.details || previewJson?.error || "No se pudo preparar la eliminación del documento."))
+      return
+    }
+
+    const confirmed = window.confirm(buildEvidenceDeleteWarningMessage(previewJson?.affected_experiences))
+    if (!confirmed) return
+
     setDeletingId(id)
     setIsError(false)
     setMessage(null)
@@ -279,6 +318,11 @@ export default function EvidenceListClient({
       const nextItems = items.filter((item) => item.id !== id)
       setItems(nextItems)
       resetDeletedEvidenceLocalState(id, nextItems)
+      if (Array.isArray(json?.affected_experiences) && json.affected_experiences.length > 0) {
+        setMessage(
+          `Documento eliminado. ${json.affected_experiences.length} experiencia(s) han dejado de figurar como verificadas.`,
+        )
+      }
       await reloadList()
       router.refresh()
     } catch (error: any) {

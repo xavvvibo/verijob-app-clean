@@ -3,6 +3,7 @@ import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { groupAndMergeEmploymentEntries } from "@/lib/candidate/documentary-processing";
 import { buildEmploymentRecordDocumentaryResolvedUpdate } from "@/lib/candidate/documentary-flow";
+import { applyVerificationRemovalImpact, collectVerificationAffectedExperiences } from "@/lib/verification/verification-impact";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
 
 function json(status: number, body: any) {
@@ -14,6 +15,60 @@ function json(status: number, body: any) {
 async function resolveRouteId(ctx: any) {
   const params = typeof ctx?.params?.then === "function" ? await ctx.params : ctx?.params;
   return String(params?.id || "").trim();
+}
+
+async function buildEvidenceDeletePreview(params: {
+  evidenceId: string;
+  userId: string;
+  supabase: any;
+}) {
+  const { evidenceId, userId, supabase } = params;
+  const { data: row, error: rowErr } = await supabase
+    .from("evidences")
+    .select("id,verification_request_id")
+    .eq("id", evidenceId)
+    .eq("uploaded_by", userId)
+    .maybeSingle();
+
+  if (rowErr) return { status: 400, body: { error: "lookup_failed", details: rowErr.message } };
+  if (!row) return { status: 404, body: { error: "not_found" } };
+
+  const verificationRequestId = String((row as any)?.verification_request_id || "").trim();
+  if (!verificationRequestId) {
+    return { status: 200, body: { ok: true, verification_removed: false, affected_experiences: [] } };
+  }
+
+  const admin = createServiceRoleClient() as any;
+  const { count } = await admin
+    .from("evidences")
+    .select("id", { count: "exact", head: true })
+    .eq("verification_request_id", verificationRequestId);
+  const remainingAfterDelete = Math.max(0, Number(count || 0) - 1);
+  if (remainingAfterDelete > 0) {
+    return { status: 200, body: { ok: true, verification_removed: false, affected_experiences: [] } };
+  }
+
+  const impact = await collectVerificationAffectedExperiences({
+    admin,
+    verificationId: verificationRequestId,
+    candidateId: userId,
+  });
+
+  if (impact.error) {
+    return {
+      status: 400,
+      body: { error: "impact_preview_failed", details: String(impact.error.message || "impact_preview_failed") },
+    };
+  }
+
+  return {
+    status: 200,
+    body: {
+      ok: true,
+      verification_removed: true,
+      affected_experiences: (impact.affected || []).filter((item: any) => item?.loses_verification),
+    },
+  };
 }
 
 async function materializeEmploymentRecordFromProfileExperience(params: {
@@ -198,6 +253,12 @@ export async function DELETE(_req: Request, ctx: any) {
   const id = await resolveRouteId(ctx);
   if (!id) return json(400, { error: "missing_id" });
 
+  const previewIntent = new URL(_req.url).searchParams.get("preview") === "1";
+  if (previewIntent) {
+    const preview = await buildEvidenceDeletePreview({ evidenceId: id, userId: user.id, supabase });
+    return json(preview.status, preview.body);
+  }
+
   const { data: row, error: rowErr } = await supabase
     .from("evidences")
     .select("id,verification_request_id")
@@ -220,6 +281,11 @@ export async function DELETE(_req: Request, ctx: any) {
       .eq("verification_request_id", verificationRequestId);
 
     if (Number(count || 0) === 0) {
+      const impact = await applyVerificationRemovalImpact({
+        admin,
+        verificationId: verificationRequestId,
+        candidateId: user.id,
+      });
       const { data: vr } = await admin
         .from("verification_requests")
         .select("request_context")
@@ -233,14 +299,45 @@ export async function DELETE(_req: Request, ctx: any) {
 
       await admin
         .from("verification_requests")
-        .update({ request_context: nextContext })
+        .update({
+          status: "revoked",
+          revoked_at: new Date().toISOString(),
+          revoked_reason: "supporting_evidence_deleted",
+          request_context: nextContext,
+        })
         .eq("id", verificationRequestId);
+
+      await recalculateAndPersistCandidateTrustScore(user.id).catch(() => {});
+
+      return json(200, {
+        ok: true,
+        id,
+        affected_experiences: (impact.affected || []).filter((item: any) => item?.loses_verification),
+      });
     }
   }
 
   await recalculateAndPersistCandidateTrustScore(user.id).catch(() => {});
 
   return json(200, { ok: true, id });
+}
+
+export async function GET(req: Request, ctx: any) {
+  const previewIntent = new URL(req.url).searchParams.get("preview") === "1";
+  if (!previewIntent) return json(405, { error: "method_not_allowed" });
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) return json(401, { error: "unauthorized" });
+
+  const id = await resolveRouteId(ctx);
+  if (!id) return json(400, { error: "missing_id" });
+
+  const preview = await buildEvidenceDeletePreview({ evidenceId: id, userId: user.id, supabase });
+  return json(preview.status, preview.body);
 }
 
 export async function PATCH(req: Request, ctx: any) {
