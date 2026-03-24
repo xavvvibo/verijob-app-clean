@@ -28,8 +28,22 @@ export type EvidenceItem = {
   match_level: string | null;
   match_label: string | null;
   match_summary: string | null;
+  extracted_employment_entries: any[];
+  grouped_employment_entries: any[];
+  reconciliation_summary: any | null;
+  supports_multiple_experiences: boolean;
+  supporting_employment_record_ids: string[];
+  supporting_experiences_label: string | null;
+  person_check_label: string;
+  company_check_label: string;
+  date_check_label: string;
+  position_check_label: string;
   raw: any;
 };
+
+function asArray(value: any) {
+  return Array.isArray(value) ? value : [];
+}
 
 function normalizeProcessingLabel(processingStatus: string | null, validationStatus: string | null, inconsistencyReason: string | null) {
   const p = String(processingStatus || "").trim().toLowerCase();
@@ -55,6 +69,17 @@ function normalizeMatchLabel(matchLevel: string | null) {
   if (v === "low") return "Coincidencia baja";
   if (v === "inconclusive") return "Coincidencia no concluyente";
   return matchLevel;
+}
+
+function normalizeCheckLabel(value: any, fallbackOk: string, fallbackUnknown: string) {
+  const v = String(value || "").trim();
+  return v || fallbackUnknown;
+}
+
+function buildSupportingExperiencesLabel(ids: string[]) {
+  if (!ids.length) return null;
+  if (ids.length === 1) return "Da soporte a 1 experiencia.";
+  return `Da soporte a ${ids.length} experiencias.`;
 }
 
 export function buildEvidenceUiItem(input: any): EvidenceItem {
@@ -102,6 +127,39 @@ export function buildEvidenceUiItem(input: any): EvidenceItem {
     documentaryProcessing?.processing_summary ??
     documentaryProcessing?.summary ??
     null;
+
+  const extractedEmploymentEntries = asArray(
+    documentaryProcessing?.extracted_employment_entries ??
+    documentaryProcessing?.employment_entries
+  );
+
+  const groupedEmploymentEntries = asArray(
+    documentaryProcessing?.grouped_employment_entries ??
+    documentaryProcessing?.reconciled_employment_entries
+  );
+
+  const reconciliationSummary =
+    documentaryProcessing?.reconciliation_summary &&
+    typeof documentaryProcessing.reconciliation_summary === "object"
+      ? documentaryProcessing.reconciliation_summary
+      : null;
+
+  const supportingEmploymentRecordIds = Array.from(
+    new Set(
+      [
+        ...asArray(documentaryProcessing?.supporting_employment_record_ids),
+        ...asArray(reconciliationSummary?.linked_employment_record_ids),
+        ...asArray(reconciliationSummary?.auto_verified_employment_record_ids),
+      ]
+        .map((v) => String(v || "").trim())
+        .filter(Boolean)
+    )
+  );
+
+  const supportsMultipleExperiences =
+    Boolean(documentaryProcessing?.supports_multiple_experiences) ||
+    supportingEmploymentRecordIds.length > 1 ||
+    String(row.document_scope || "").trim().toLowerCase() === "global";
 
   const evidenceId = row.id != null ? String(row.id) : null;
 
@@ -154,6 +212,32 @@ export function buildEvidenceUiItem(input: any): EvidenceItem {
     match_level: matchLevel,
     match_label: normalizeMatchLabel(matchLevel),
     match_summary: matchSummary,
+    extracted_employment_entries: extractedEmploymentEntries,
+    grouped_employment_entries: groupedEmploymentEntries,
+    reconciliation_summary: reconciliationSummary,
+    supports_multiple_experiences: supportsMultipleExperiences,
+    supporting_employment_record_ids: supportingEmploymentRecordIds,
+    supporting_experiences_label: buildSupportingExperiencesLabel(supportingEmploymentRecordIds),
+    person_check_label: normalizeCheckLabel(
+      documentaryProcessing?.person_check_label,
+      "Identidad revisada.",
+      "Comprobación de identidad pendiente."
+    ),
+    company_check_label: normalizeCheckLabel(
+      documentaryProcessing?.company_check_label,
+      "Empresa revisada.",
+      "Comprobación de empresa pendiente."
+    ),
+    date_check_label: normalizeCheckLabel(
+      documentaryProcessing?.date_check_label,
+      "Fechas revisadas.",
+      "Comprobación de fechas pendiente."
+    ),
+    position_check_label: normalizeCheckLabel(
+      documentaryProcessing?.position_check_label,
+      "Puesto revisado.",
+      "Comprobación de puesto pendiente."
+    ),
     raw: row,
   };
 }
