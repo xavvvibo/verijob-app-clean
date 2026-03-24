@@ -7,6 +7,11 @@ import { createClient } from "@/utils/supabase/browser";
 import { VerificationBadge } from "@/components/brand/VerificationBadge";
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
 import { mapCandidateAvailability } from "@/lib/candidate/availability";
+import {
+  buildCandidateOverviewNextActions,
+  computeCandidateOverviewMetrics,
+  resolveCandidateOverviewStatus,
+} from "@/lib/candidate/overview-metrics";
 
 type ProfileLite = {
   full_name?: string | null;
@@ -436,23 +441,16 @@ export default function CandidateOverview() {
     };
   }, []);
 
-  const metrics = useMemo(() => {
-    const total = Math.max(verifications.length, employmentRecords.length, experienceCount);
-    const verified = employmentRecords.filter((row) => {
-      const s = String(row?.verification_status || "").toLowerCase().trim();
-      return s === "verified" || s === "approved" || s === "verified_document";
-    }).length;
-    const inProcess = verifications.filter((v) => {
-      const s = String(v.status || "").toLowerCase();
-      return s.includes("pending") || s.includes("review") || s.includes("requested");
-    }).length;
-    const confirmed = verifications.filter((v) => !!v.company_confirmed).length;
-    const evidences = verifications.reduce((acc, v) => acc + Number(v.evidence_count || 0), 0);
-    const baseScore = total ? Math.round(((verified / total) * 0.5 + (confirmed / total) * 0.3 + Math.min(1, evidences / Math.max(1, total * 2)) * 0.2) * 100) : 0;
-    const score = trustScore == null ? baseScore : clamp(trustScore);
-
-    return { total, verified, inProcess, confirmed, evidences, score };
-  }, [employmentRecords, experienceCount, verifications, trustScore]);
+  const metrics = useMemo(
+    () =>
+      computeCandidateOverviewMetrics({
+        verifications,
+        employmentRecords,
+        experienceCount,
+        trustScore,
+      }),
+    [employmentRecords, experienceCount, trustScore, verifications]
+  );
 
   const educationCount = useMemo(() => listCount(candidateProfile?.education), [candidateProfile]);
   const achievementsCount = useMemo(
@@ -484,29 +482,15 @@ export default function CandidateOverview() {
     return "Perfil inicial";
   }, [profileCompletionScore]);
 
-  const overviewStatus = useMemo(() => {
-    if (metrics.verified > 0) return "Perfil listo para empresas";
-    if (metrics.total > 0) return "Verificación en curso";
-    if (experienceCount > 0) return "Perfil iniciado";
-    return "Perfil por activar";
-  }, [experienceCount, metrics.total, metrics.verified]);
+  const overviewStatus = useMemo(
+    () => resolveCandidateOverviewStatus({ experienceCount, metrics }),
+    [experienceCount, metrics]
+  );
 
-  const overviewNextActions = useMemo(() => {
-    const actions: Array<{ label: string; href: string }> = [];
-    if (experienceCount === 0) {
-      actions.push({ label: "Añadir tu primera experiencia", href: "/candidate/experience?new=1#manual-experience" });
-    }
-    if (experienceCount > 0 && metrics.total === 0) {
-      actions.push({ label: "Enviar una verificación", href: "/candidate/verifications/new" });
-    }
-    if (metrics.total > 0 && metrics.evidences === 0) {
-      actions.push({ label: "Subir documentación", href: "/candidate/evidence" });
-    }
-    if (profileCompletionScore < 70) {
-      actions.push({ label: "Completar tu perfil", href: "/candidate/profile" });
-    }
-    return actions.slice(0, 3);
-  }, [experienceCount, metrics.evidences, metrics.total, profileCompletionScore]);
+  const overviewNextActions = useMemo(
+    () => buildCandidateOverviewNextActions({ experienceCount, metrics, profileCompletionScore }),
+    [experienceCount, metrics, profileCompletionScore]
+  );
 
   const trustState = useMemo(
     () =>
@@ -642,8 +626,10 @@ export default function CandidateOverview() {
             <p className="mt-2 text-sm text-slate-600">
               {metrics.verified > 0
                 ? "Tu perfil ya tiene al menos una experiencia validada y debería poder mostrarse a empresas con acceso autorizado."
-                : metrics.total > 0
-                  ? "Ya has enviado una solicitud. Mientras llega la respuesta, puedes reforzar tu perfil con documentación."
+                : metrics.inProcess > 0
+                  ? "Ya has enviado una solicitud y el estado del perfil ya refleja esa revision en curso."
+                  : metrics.rejected > 0
+                    ? "Una solicitud anterior no salio adelante. Revisa la experiencia y vuelve a intentarlo con mejor contexto o documentacion."
                   : experienceCount > 0
                     ? "Ya has arrancado tu perfil. El siguiente paso más útil es pedir una verificación."
                     : "Empieza añadiendo una experiencia para activar tu perfil profesional."}
@@ -694,7 +680,7 @@ export default function CandidateOverview() {
         <Kpi label="Confianza actual" value={trustState.title} />
         <Kpi label="Perfil completado" value={`${profileCompletionScore}%`} />
         <Kpi label="Experiencias verificadas" value={metrics.verified} />
-        <Kpi label="En proceso" value={metrics.inProcess} />
+        <Kpi label="Solicitudes activas" value={metrics.inProcess} />
         <Kpi label="Documentación" value={metrics.evidences} />
       </section>
 

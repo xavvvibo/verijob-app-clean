@@ -17,6 +17,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     details: "La resolución pública de CV por user_id queda deshabilitada. Usa el endpoint canónico por token público.",
     route: "/pages/api/public/cv/[user_id]",
     source_of_truth: "/api/public/candidate/[token]",
-    candidate_id: userId,
   });
 }

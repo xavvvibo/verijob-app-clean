@@ -86,12 +86,7 @@ export default function Topbar({ role }: { role?: Role }) {
   async function logout() {
     if (loggingOut) return;
     setLoggingOut(true);
-    try {
-      await supabase.auth.signOut().catch(() => null);
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(() => null);
-    } finally {
-      window.location.href = "/login?logout=1";
-    }
+    window.location.href = "/logout";
   }
 
   return (
@@ -148,7 +143,7 @@ export default function Topbar({ role }: { role?: Role }) {
               className="inline-flex rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
               title="Cerrar sesión"
             >
-              {loggingOut ? "Cerrando…" : "Cerrar sesión"}
+              {loggingOut ? "Saliendo..." : "Cerrar sesión"}
             </button>
           </div>
         </div>

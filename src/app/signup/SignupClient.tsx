@@ -6,43 +6,18 @@ import { useSearchParams } from "next/navigation";
 import { vjEvents } from "@/lib/analytics";
 import { createClient } from "@/utils/supabase/browser";
 import type { EmailOtpType } from "@supabase/supabase-js";
-
-const OTP_RESEND_SECONDS = 60;
+import {
+  OTP_RESEND_SECONDS,
+  getOtpHelpMessage,
+  mapOtpErrorMessage,
+  verifyOtpWithFallbacks,
+} from "@/lib/auth/email-otp";
 
 function safeNext(raw: string | null) {
   const fallback = "/";
   if (!raw) return fallback;
   if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
   return fallback;
-}
-
-function mapOtpErrorMessage(raw: string | null | undefined) {
-  const msg = String(raw || "").trim();
-  const normalized = msg.toLowerCase();
-  if (!msg) return "No se pudo completar la operación. Inténtalo de nuevo.";
-  if (
-    normalized.includes("sending magic link email") ||
-    normalized.includes("error sending") ||
-    normalized.includes("smtp") ||
-    normalized.includes("email provider")
-  ) {
-    return "No se pudo enviar el código por email en este momento. Inténtalo de nuevo en unos minutos.";
-  }
-  if (normalized.includes("email") && (normalized.includes("invalid") || normalized.includes("not valid"))) {
-    return "El email no es válido. Revisa el formato e inténtalo de nuevo.";
-  }
-  if (
-    normalized.includes("expired") ||
-    normalized.includes("invalid") ||
-    normalized.includes("otp_expired") ||
-    normalized.includes("token")
-  ) {
-    return "El código es inválido o ha caducado. Solicita un nuevo código e inténtalo otra vez.";
-  }
-  if (normalized.includes("rate") || normalized.includes("too many")) {
-    return "Has realizado demasiados intentos. Espera unos minutos y vuelve a intentarlo.";
-  }
-  return msg;
 }
 
 function getEmailRedirectTo() {
@@ -106,28 +81,25 @@ export default function SignupClient() {
   }, [otpExpiresAt]);
 
   async function verifySignupOtp(supabase: ReturnType<typeof createClient>, cleanEmail: string, cleanToken: string) {
-    const attemptedTypes: EmailOtpType[] = ["signup", "email"];
-    let lastError: any = null;
+    const attemptedTypes: EmailOtpType[] = ["signup", "email", "magiclink"];
+    const result = await verifyOtpWithFallbacks(supabase, {
+      email: cleanEmail,
+      token: cleanToken,
+      types: attemptedTypes,
+    });
+
+    if (result.ok) return result;
 
     for (const otpType of attemptedTypes) {
-      const { error } = await supabase.auth.verifyOtp({
-        email: cleanEmail,
-        token: cleanToken,
-        type: otpType,
-      });
-
-      if (!error) return { ok: true as const, otpType };
-
-      lastError = error;
       console.warn("[auth][signup][verifyOtp] attempt_failed", {
         otpType,
-        message: error.message,
-        status: (error as any)?.status ?? null,
-        code: (error as any)?.code ?? null,
+        message: result.error?.message,
+        status: (result.error as any)?.status ?? null,
+        code: (result.error as any)?.code ?? null,
       });
     }
 
-    return { ok: false as const, error: lastError };
+    return result;
   }
 
   async function sendOtp(e: React.FormEvent) {
@@ -167,6 +139,7 @@ export default function SignupClient() {
 
       vjEvents.signup(isCompanyMode ? "company" : "candidate");
       setStep("otp");
+      setToken("");
       setOtpExpiresAt(Date.now() + OTP_RESEND_SECONDS * 1000);
       setIsError(false);
       setMsg(step === "otp" ? "Hemos reenviado un nuevo código a tu email." : "Código enviado. Revisa tu email.");
@@ -329,9 +302,7 @@ export default function SignupClient() {
 
         {step === "otp" ? (
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-            {secondsLeft > 0
-              ? `El codigo puede caducar pronto. Si no llega o falla, podras pedir uno nuevo en ${secondsLeft}s.`
-              : "Si el codigo ha caducado, solicita uno nuevo para completar el registro."}
+            {getOtpHelpMessage(secondsLeft)}
           </div>
         ) : null}
 
@@ -348,16 +319,32 @@ export default function SignupClient() {
         </button>
 
         {step === "otp" ? (
-          <button
-            type="button"
-            disabled={loading || secondsLeft > 0}
-            onClick={() =>
-              void sendOtp({ preventDefault() {} } as React.FormEvent)
-            }
-            className="w-full rounded-lg border border-slate-200 bg-white py-3 font-medium text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {secondsLeft > 0 ? `Reenviar codigo en ${secondsLeft}s` : "Reenviar codigo"}
-          </button>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <button
+              type="button"
+              disabled={loading || secondsLeft > 0}
+              onClick={() =>
+                void sendOtp({ preventDefault() {} } as React.FormEvent)
+              }
+              className="w-full rounded-lg border border-slate-200 bg-white py-3 font-medium text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {secondsLeft > 0 ? `Reenviar codigo en ${secondsLeft}s` : "Reenviar codigo"}
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => {
+                setStep("email");
+                setToken("");
+                setOtpExpiresAt(null);
+                setMsg(null);
+                setIsError(false);
+              }}
+              className="w-full rounded-lg border border-slate-200 bg-white py-3 font-medium text-slate-900 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Cambiar email
+            </button>
+          </div>
         ) : null}
       </form>
 

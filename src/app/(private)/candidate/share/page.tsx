@@ -250,6 +250,16 @@ export default function CandidatePublicProfilePage() {
             >
               Copiar enlace
             </button>
+            {link ? (
+              <a
+                href={link}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex w-full justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+              >
+                Abrir enlace publico real
+              </a>
+            ) : null}
             {planCapabilities.canShareByQr ? (
               <button
                 type="button"
@@ -280,6 +290,7 @@ export default function CandidatePublicProfilePage() {
           {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
           <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
             <p className="font-semibold text-slate-900">Tu plan actual: {planCapabilities.label}</p>
+            <p className="mt-1">Enlace canonico publico: {link ? "listo para compartir" : "pendiente de generar"}</p>
             <p className="mt-1">Compartir por link: sí</p>
             <p>Compartir por QR: {planCapabilities.canShareByQr ? "sí" : "no"}</p>
             <p>Descarga de CV verificado: {planCapabilities.canDownloadVerifiedCv ? "sí" : "no"}</p>

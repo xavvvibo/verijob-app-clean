@@ -13,6 +13,7 @@ import {
 import { readCandidateProfileCollections } from "@/lib/candidate/profile-collections";
 import { mapCandidateAvailability } from "@/lib/candidate/availability";
 import { toExperienceVerificationBadgeLabels } from "@/lib/candidate/experience-verification-badges";
+import { sanitizePublicCandidatePayload } from "@/lib/public/public-profile-payload";
 import {
   getExperienceVisibilitySetting,
   readCandidateSkills,
@@ -507,7 +508,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     sector,
   };
 
-  return json(200, {
+  return json(200, sanitizePublicCandidatePayload({
     route_version: "public-candidate-token-v1",
     token: linkResolved.token,
     candidate_id: candidateId,
@@ -523,7 +524,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
         full_name: internalPreviewAllowed ? profileFullName : publicName,
       },
       headline: profileTitle,
-      location: profileLocation,
+      location: internalPreviewAllowed ? profileLocation : approximateLocation,
       languages: internalPreviewAllowed ? publicLanguages : [],
       education: internalPreviewAllowed ? educationItems : [],
       experiences: internalPreviewAllowed ? experiencesEnriched : [],
@@ -540,5 +541,5 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       recommendations: internalPreviewAllowed ? derivedRecommendations : [],
       skills: verifiedSkills,
     },
-  });
+  }, { internalPreviewAllowed }));
 }
