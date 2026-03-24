@@ -29,6 +29,10 @@ type Credibility = {
 };
 
 type TrustComponents = {
+  documentary?: number | null;
+  company?: number | null;
+  peer?: number | null;
+  cvConsistency?: number | null;
   verification?: number | null;
   evidence?: number | null;
   consistency?: number | null;
@@ -46,6 +50,7 @@ type TimelineRow = {
   end_date?: string | null;
   created_at?: string | null;
   resolved_at?: string | null;
+  verification_badges?: string[] | null;
 };
 
 type PreviewSnapshot = {
@@ -428,10 +433,11 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
           Este bloque resume la solidez verificable del perfil para reducir riesgo de contratación.
         </p>
         <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          <BreakdownBar label="Verificaciones" value={Number(trustComponents?.verification ?? 0)} />
-          <BreakdownBar label="Evidencias" value={Number(trustComponents?.evidence ?? 0)} />
-          <BreakdownBar label="Consistencia" value={Number(trustComponents?.consistency ?? 0)} />
-          <BreakdownBar label="Cobertura histórica" value={Number(trustComponents?.reuse ?? 0)} />
+          <BreakdownBar label="Documental" value={Number(trustComponents?.documentary ?? trustComponents?.evidence ?? 0)} />
+          <BreakdownBar label="Empresa" value={Number(trustComponents?.company ?? trustComponents?.verification ?? 0)} />
+          <BreakdownBar label="Peer" value={Number(trustComponents?.peer ?? 0)} />
+          <BreakdownBar label="Reuse" value={Number(trustComponents?.reuse ?? 0)} />
+          <BreakdownBar label="Consistencia CV" value={Number(trustComponents?.cvConsistency ?? trustComponents?.consistency ?? 0)} />
         </div>
       </section>
 
@@ -454,6 +460,15 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
                     </span>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                    {Array.isArray(item.verification_badges) && item.verification_badges.length ? (
+                      <div className="flex flex-wrap gap-1.5">
+                        {item.verification_badges.map((badge) => (
+                          <span key={`${item.verification_id}-${badge}`} className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 font-semibold text-blue-800">
+                            {badge}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                     <span>Evidencias: <span className="font-semibold text-slate-900">{Number(item.evidence_count ?? 0)}</span></span>
                     <span>Confirmaciones históricas: <span className="font-semibold text-slate-900">{Number(item.reuse_count ?? 0)}</span></span>
                     {item.verification_id ? (

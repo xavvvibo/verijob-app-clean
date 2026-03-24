@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/utils/supabase/server";
+import { getTrustBreakdownLegacyCompat, normalizeTrustBreakdown } from "@/lib/trust/trust-model";
 
 export async function GET() {
   const supabase = await createClient();
@@ -24,17 +25,22 @@ export async function GET() {
   }
 
   const breakdown = (data as any)?.trust_score_breakdown || {};
-  const components = breakdown?.components || {};
+  const normalized = normalizeTrustBreakdown(breakdown);
+  const legacy = getTrustBreakdownLegacyCompat(breakdown);
 
   return NextResponse.json({
     route_version: "cv-trust-score-v1-compat-canonical",
     trust_score: Number((data as any)?.trust_score ?? 0),
-    experiences_total: Number(breakdown?.total ?? 0),
-    verified_experiences: Number(breakdown?.approved ?? 0),
-    evidences_total: Number(breakdown?.evidences ?? 0),
-    reuse_total: Number(breakdown?.reuseEvents ?? 0),
+    experiences_total: Number(breakdown?.experience_total ?? normalized.meta.experience_total ?? 0),
+    verified_experiences: Number(legacy.approved ?? 0),
+    evidences_total: Number(legacy.evidences ?? 0),
+    reuse_total: Number(legacy.reuseEvents ?? 0),
     source_of_truth: "candidate_profiles.trust_score",
     deprecated_legacy_table: "candidate_cv_trust_scores",
-    components
+    components: normalized.display,
+    breakdown: {
+      ...breakdown,
+      ...legacy,
+    },
   });
 }

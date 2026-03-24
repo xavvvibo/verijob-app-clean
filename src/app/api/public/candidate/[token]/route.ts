@@ -12,6 +12,7 @@ import {
 } from "@/lib/verification/employment-record-verification-status";
 import { readCandidateProfileCollections } from "@/lib/candidate/profile-collections";
 import { mapCandidateAvailability } from "@/lib/candidate/availability";
+import { getTrustBreakdownLegacyCompat, getTrustVerificationLabel, normalizeTrustBreakdown } from "@/lib/trust/trust-model";
 
 type Params = { token: string };
 
@@ -93,15 +94,8 @@ function toPublicName(fullNameRaw: unknown) {
 }
 
 function toEvidenceVerificationBadge(rawType: unknown) {
-  const v = String(rawType || "").toLowerCase();
-  if (!v) return null;
-  if (v.includes("contract")) return "Contrato validado";
-  if (v.includes("payroll") || v.includes("nomina")) return "Nómina validada";
-  if (v.includes("social") || v.includes("vida_laboral")) return "Informe de vida laboral validado";
-  if (v.includes("reference")) return "Referencia empresarial verificada";
-  if (v.includes("documentary")) return "Verificación documental";
-  if (v.includes("certificate")) return "Certificado validado";
-  return "Verificación documental";
+  const label = getTrustVerificationLabel(rawType);
+  return label ? label : "Documental";
 }
 
 function isDocumentaryOfficialVerification(row: any) {
@@ -284,6 +278,8 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const educationTotal = candidateCollections.education.length;
 
   const trustScore = Number(candidateProfile?.trust_score ?? 0);
+  const normalizedTrustBreakdown = normalizeTrustBreakdown(candidateProfile?.trust_score_breakdown);
+  const legacyTrustBreakdown = getTrustBreakdownLegacyCompat(candidateProfile?.trust_score_breakdown);
   const profileStatus = resolveProfileStatus({
     totalVerifications,
     evidencesCount: evidences,
@@ -355,14 +351,15 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     const status = String(item?.status_text || "").toLowerCase();
     const normalizedEmploymentStatus = normalizeEmploymentRecordVerificationStatus(status);
     if (status === "verified" || status === "approved" || normalizedEmploymentStatus === EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFIED) {
-      badges.add(isDocumentaryOfficialVerification(linkedVerification) ? "Verificada por documento" : "Verificado por empresa");
+      badges.add(isDocumentaryOfficialVerification(linkedVerification) ? "Vida laboral" : "Verificación empresa");
     }
-    if (method === "documentary" && !isDocumentaryOfficialVerification(linkedVerification)) badges.add("Verificación documental");
+    if (method === "documentary" && !isDocumentaryOfficialVerification(linkedVerification)) badges.add("Documental");
+    if (method === "peer") badges.add("Peer");
     for (const ev of linkedEvidences) {
       const b = toEvidenceVerificationBadge((ev as any)?.document_type || (ev as any)?.evidence_type);
       if (b) badges.add(b);
     }
-    if (!badges.size && Number(item?.evidence_count || 0) > 0) badges.add("Verificación documental");
+    if (!badges.size && Number(item?.evidence_count || 0) > 0) badges.add("Documental");
     return {
       ...item,
       verification_method: method || null,
@@ -442,11 +439,15 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     languages: internalPreviewAllowed ? publicLanguages : [],
     summary: internalPreviewAllowed ? profileSummary : null,
     trust_score: trustScore,
+    trust_score_breakdown: normalizedTrustBreakdown.display,
+    trust_score_components: normalizedTrustBreakdown.display,
     experiences_total: rows.length,
     verified_experiences: publicVerifiedExperienceCount,
     confirmed_experiences: confirmed,
     evidences_total: evidences,
     evidences_count: evidences,
+    reuse_total: Number(legacyTrustBreakdown.reuseEvents ?? 0),
+    reuse_companies: Number(legacyTrustBreakdown.reuseCompanies ?? 0),
     education_total: internalPreviewAllowed ? educationTotal : 0,
     achievements_total: internalPreviewAllowed ? candidateCollections.achievements_catalog.all.length : 0,
     verified_work_count: verifiedWork,

@@ -45,10 +45,11 @@ export default function VerifiedCV({ data }: Props) {
         <section className="mt-6 break-inside-avoid rounded-xl border border-slate-200 p-4">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Desglose de confianza</h2>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <TrustItem label="Verificaciones" value={Number((trustComponents as any)?.verification ?? 0)} />
-            <TrustItem label="Evidencias" value={Number((trustComponents as any)?.evidence ?? 0)} />
-            <TrustItem label="Consistencia" value={Number((trustComponents as any)?.consistency ?? 0)} />
-            <TrustItem label="Cobertura histórica" value={Number((trustComponents as any)?.reuse ?? 0)} />
+            <TrustItem label="Documental" value={Number((trustComponents as any)?.documentary ?? (trustComponents as any)?.evidence ?? 0)} />
+            <TrustItem label="Empresa" value={Number((trustComponents as any)?.company ?? (trustComponents as any)?.verification ?? 0)} />
+            <TrustItem label="Peer" value={Number((trustComponents as any)?.peer ?? 0)} />
+            <TrustItem label="Reuse" value={Number((trustComponents as any)?.reuse ?? 0)} />
+            <TrustItem label="Consistencia CV" value={Number((trustComponents as any)?.cvConsistency ?? (trustComponents as any)?.consistency ?? 0)} />
           </div>
         </section>
       ) : null}

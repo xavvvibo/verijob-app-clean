@@ -23,6 +23,8 @@ export type EvidenceItem = {
   mime_type: string | null;
   file_size: number | null;
   processing_status: string | null;
+  user_status_label: string;
+  user_status_reason: string | null;
   processing_label: string | null;
   analysis_completed: boolean;
   match_level: string | null;
@@ -38,6 +40,15 @@ export type EvidenceItem = {
   company_check_label: string;
   date_check_label: string;
   position_check_label: string;
+  document_name?: string | null;
+  evidence_type_key?: string | null;
+  experience?: string | null;
+  dates?: string | null;
+  status?: string | null;
+  reason?: string | null;
+  scope_label?: string | null;
+  trust_label?: string | null;
+  trust_impact?: string | null;
   raw: any;
 };
 
@@ -59,6 +70,48 @@ function normalizeProcessingLabel(processingStatus: string | null, validationSta
       : "Documento con incidencias detectadas.";
   }
   return "Documento recibido.";
+}
+
+function normalizeEvidenceDisplayName(input: any) {
+  const type = String(input?.evidence_type || input?.document_type || "").trim().toLowerCase();
+  if (type.includes("vida_laboral")) return "Vida laboral";
+  if (type.includes("contrato")) return "Contrato";
+  if (type.includes("nomina")) return "Nómina";
+  if (type.includes("certificado")) return "Certificado de empresa";
+  return "Documento";
+}
+
+function normalizeScopeLabel(value: string | null) {
+  const raw = String(value || "").trim().toLowerCase();
+  return raw === "global" ? "Aplica a varias experiencias" : "Asociado a una experiencia";
+}
+
+function normalizeUserEvidenceStatus(args: {
+  processingStatus: string | null;
+  validationStatus: string | null;
+  inconsistencyReason: string | null;
+  matchLevel: string | null;
+}) {
+  const processing = String(args.processingStatus || "").trim().toLowerCase();
+  const validation = String(args.validationStatus || "").trim().toLowerCase();
+  const reason = String(args.inconsistencyReason || "").trim() || null;
+  const match = String(args.matchLevel || "").trim().toLowerCase();
+
+  if (processing === "queued") return { label: "Documento recibido", reason: "Hemos recibido el documento y lo revisaremos enseguida." };
+  if (processing === "processing") return { label: "En análisis", reason: "Estamos revisando si encaja con la experiencia indicada." };
+  if (match === "conflict" || validation === "rejected" || validation === "invalid") {
+    return { label: "No alineado con la experiencia", reason: reason || "El documento no encaja con la experiencia seleccionada." };
+  }
+  if (match === "low" || match === "inconclusive") {
+    return { label: "Coincidencia dudosa", reason: reason || "Necesita revisión porque la coincidencia no es suficientemente clara." };
+  }
+  if (validation === "uploaded" || validation === "auto_processing" || validation === "needs_review") {
+    return { label: "Pendiente de revisión", reason: "Todavía no cuenta como verificación cerrada." };
+  }
+  if (validation === "valid" || validation === "validated" || validation === "approved") {
+    return { label: "Pendiente de revisión", reason: "El documento se ha procesado, pero aún requiere validación final." };
+  }
+  return { label: "Documento recibido", reason };
 }
 
 function normalizeMatchLabel(matchLevel: string | null) {
@@ -162,6 +215,14 @@ export function buildEvidenceUiItem(input: any): EvidenceItem {
     String(row.document_scope || "").trim().toLowerCase() === "global";
 
   const evidenceId = row.id != null ? String(row.id) : null;
+  const userStatus = normalizeUserEvidenceStatus({
+    processingStatus,
+    validationStatus,
+    inconsistencyReason,
+    matchLevel,
+  });
+  const position = employment?.position ?? null;
+  const companyName = employment?.company_name_freeform ?? null;
 
   return {
     id: evidenceId,
@@ -187,8 +248,8 @@ export function buildEvidenceUiItem(input: any): EvidenceItem {
       verification?.employment_record_id ??
       employment?.id ??
       null,
-    position: employment?.position ?? null,
-    company_name_freeform: employment?.company_name_freeform ?? null,
+    position,
+    company_name_freeform: companyName,
     start_date: employment?.start_date ?? null,
     end_date: employment?.end_date ?? null,
     is_current:
@@ -207,6 +268,8 @@ export function buildEvidenceUiItem(input: any): EvidenceItem {
           ? Number(row.file_size) || null
           : null,
     processing_status: processingStatus,
+    user_status_label: userStatus.label,
+    user_status_reason: userStatus.reason,
     processing_label: normalizeProcessingLabel(processingStatus, validationStatus, inconsistencyReason),
     analysis_completed: ["succeeded", "completed", "done", "failed"].includes(String(processingStatus || "").trim().toLowerCase()),
     match_level: matchLevel,
@@ -238,6 +301,15 @@ export function buildEvidenceUiItem(input: any): EvidenceItem {
       "Puesto revisado.",
       "Comprobación de puesto pendiente."
     ),
+    document_name: normalizeEvidenceDisplayName(row),
+    evidence_type_key: String(row.evidence_type ?? row.document_type ?? "").trim().toLowerCase() || "documento",
+    experience: [position || "Experiencia", companyName || "Empresa"].filter(Boolean).join(" · "),
+    dates: [employment?.start_date || null, employment?.end_date || (employment?.is_current ? "Actualidad" : null)].filter(Boolean).join(" — ") || null,
+    status: userStatus.label,
+    reason: userStatus.reason,
+    scope_label: normalizeScopeLabel(row.document_scope ?? null),
+    trust_label: userStatus.reason,
+    trust_impact: matchLevel === "high" ? "media" : matchLevel === "medium" ? "baja-media" : "baja",
     raw: row,
   };
 }

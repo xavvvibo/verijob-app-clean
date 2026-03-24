@@ -10,10 +10,18 @@ function statusLabel(status: string | null | undefined) {
   const raw = String(status || "").toLowerCase();
   if (raw === "pending_company") return "Pendiente de validación";
   if (raw === "reviewing") return "En revisión";
-  if (raw === "verified") return "Verificada por empresa vía Email corporativo";
+  if (raw === "verified") return "Verificación completada";
   if (raw === "rejected") return "Rechazada";
   if (raw === "revoked") return "Revocada";
-  return "Desconocido";
+  return "En seguimiento";
+}
+
+function channelLabel(rawValue: string | null | undefined) {
+  const raw = String(rawValue || "").toLowerCase();
+  if (raw === "documentary") return "Documental";
+  if (raw === "email") return "Email corporativo";
+  if (raw === "peer") return "Peer";
+  return "Verificación";
 }
 
 function companySignalLabel(status: string | null | undefined) {
@@ -98,7 +106,7 @@ export default async function CandidateVerificationsPage() {
                     <div className="text-xs text-slate-500">{row.external_email_target || "Sin Email"}</div>
                   </td>
                   <td className="px-4 py-3 text-slate-700">{statusLabel(row.status)}</td>
-                  <td className="px-4 py-3 text-slate-700">{row.verification_channel || "Email"}</td>
+                  <td className="px-4 py-3 text-slate-700">{channelLabel(row.verification_channel)}</td>
                   <td className="px-4 py-3 text-slate-700">{companySignalLabel(row.company_verification_status_snapshot)}</td>
                   <td className="px-4 py-3 text-slate-700">{fmt(row.requested_at || row.created_at)}</td>
                   <td className="px-4 py-3">

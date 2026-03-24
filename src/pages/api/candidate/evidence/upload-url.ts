@@ -16,6 +16,7 @@ import {
   isMissingExternalResolvedColumn,
   isVerificationExternallyResolved,
 } from "@/lib/verification/external-resolution";
+import { validateEvidenceFileMeta } from "@/lib/candidate/file-validation";
 
 const BUCKET = "evidence";
 const MAX_MB = 20;
@@ -111,14 +112,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         route: "/pages/api/candidate/evidence/upload-url",
       });
     }
-    if (!ALLOWED_MIME.has(mime)) {
-      return json(res, 400, { error: "Tipo de archivo no permitido", route: "/pages/api/candidate/evidence/upload-url", mime });
-    }
-    if (!Number.isFinite(size_bytes) || size_bytes <= 0) {
-      return json(res, 400, { error: "size_bytes inválido", route: "/pages/api/candidate/evidence/upload-url" });
-    }
-    if (size_bytes > MAX_MB * 1024 * 1024) {
-      return json(res, 400, { error: "Archivo demasiado grande", route: "/pages/api/candidate/evidence/upload-url", max_mb: MAX_MB });
+    const fileValidation = validateEvidenceFileMeta({
+      filename: original_name,
+      mime,
+      sizeBytes: size_bytes,
+      maxSizeBytes: MAX_MB * 1024 * 1024,
+    });
+    if (!fileValidation.ok) {
+      return json(res, 400, { error: fileValidation.code, details: fileValidation.message, route: "/pages/api/candidate/evidence/upload-url", max_mb: MAX_MB });
     }
     if (!isHexSha256(file_sha256 ?? undefined)) {
       return json(res, 400, {

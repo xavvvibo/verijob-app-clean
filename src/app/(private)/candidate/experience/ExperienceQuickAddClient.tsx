@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter, useSearchParams } from "next/navigation";
+import { parseExperienceDateInput } from "@/lib/candidate/experience-date-input";
+
+const EXPERIENCE_CREATED_EVENT = "candidate:experience-created";
 
 export default function ExperienceQuickAddClient() {
   const supabase = useMemo(() => createClient(), []);
@@ -46,16 +49,22 @@ export default function ExperienceQuickAddClient() {
         throw new Error("Indica empresa, puesto y fecha de inicio.");
       }
 
-      const { error } = await supabase.from("profile_experiences").insert({
+      const parsedStart = parseExperienceDateInput(startDate);
+      const parsedEnd = isCurrent ? { storageValue: null } : parseExperienceDateInput(endDate, { allowPresent: true });
+      if (!parsedStart.storageValue) throw new Error("Indica una fecha de inicio válida.");
+
+      const payload = {
         user_id: au.user.id,
         role_title: roleTitle.trim(),
         company_name: companyName.trim(),
-        start_date: `${startDate.trim()}-01`,
-        end_date: isCurrent ? null : endDate.trim() ? `${endDate.trim()}-01` : null,
+        start_date: parsedStart.storageValue,
+        end_date: isCurrent ? null : parsedEnd.storageValue,
         description: description.trim() || null,
         matched_verification_id: null,
         confidence: null,
-      });
+      };
+
+      const { data, error } = await supabase.from("profile_experiences").insert(payload).select("id,role_title,company_name,start_date,end_date,description").single();
 
       if (error) throw new Error(error.message);
 
@@ -67,6 +76,7 @@ export default function ExperienceQuickAddClient() {
       setDescription("");
       setIsCurrent(false);
       setOpen(false);
+      window.dispatchEvent(new CustomEvent(EXPERIENCE_CREATED_EVENT, { detail: data || payload }));
       router.refresh();
     } catch (err: any) {
       setMessage(err?.message || "No se pudo añadir la experiencia");
@@ -121,16 +131,25 @@ export default function ExperienceQuickAddClient() {
           </label>
           <label className="block">
             <div className="text-xs font-semibold text-gray-900">Fecha inicio</div>
-            <input type="month" lang="es" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm" required />
+            <input
+              type="text"
+              inputMode="numeric"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              placeholder="AAAA-MM o MM/AAAA"
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              required
+            />
           </label>
           <label className="block">
             <div className="text-xs font-semibold text-gray-900">Fecha fin</div>
             <input
-              type="month"
-              lang="es"
+              type="text"
+              inputMode="numeric"
               value={endDate}
               onChange={(e) => setEndDate(e.target.value)}
               disabled={isCurrent}
+              placeholder="AAAA-MM, MM/AAAA o Actualidad"
               className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
             />
           </label>
@@ -154,6 +173,7 @@ export default function ExperienceQuickAddClient() {
             <button type="submit" disabled={saving} className="inline-flex rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60">
               {saving ? "Guardando…" : "Guardar experiencia"}
             </button>
+            <p className="mt-2 text-xs text-gray-500">Formato recomendado: `AAAA-MM`. También puedes usar `MM/AAAA` y marcar “Trabajo actualmente aquí”.</p>
           </div>
         </form>
       ) : null}

@@ -5,6 +5,7 @@ import { Card, CardTitle } from  "@/app/_components/ui";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import CvUploadAndParse from "@/components/candidate/profile/CvUploadAndParse";
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
+import { getTrustVerificationLabel } from "@/lib/trust/trust-model";
 import ExperienceQuickAddClient from "./ExperienceQuickAddClient";
 import ExperienceListClient from "./ExperienceListClient";
 
@@ -196,6 +197,20 @@ export default async function CandidateExperiencePage({
         return "Verificada por empresa";
       }
       return importedFromCv ? "Importada desde CV" : null;
+    })(),
+    verification_labels: (() => {
+      const { verification } = resolveLinkedVerification(r);
+      const badges = new Set<string>();
+      if (isDocumentaryOfficialVerification(verification)) badges.add("Vida laboral");
+      const method = String(verification?.verification_channel || "").trim().toLowerCase();
+      if (method === "email" || method === "company") badges.add("Verificación empresa");
+      if (method === "peer") badges.add("Peer");
+      if (method === "documentary" && !isDocumentaryOfficialVerification(verification)) badges.add("Documental");
+      for (const key of [verification?.request_context?.document_type, verification?.request_context?.evidence_type]) {
+        const label = getTrustVerificationLabel(key);
+        if (label) badges.add(label);
+      }
+      return Array.from(badges);
     })(),
   }));
 

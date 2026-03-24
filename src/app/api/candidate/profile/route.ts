@@ -12,6 +12,7 @@ import {
   replaceCandidateEducationCollection,
   replaceCandidateLanguagesCollection,
 } from "@/lib/candidate/profile-collections";
+import { normalizeTrustBreakdown } from "@/lib/trust/trust-model";
 
 const PROFILE_PERSONAL_FIELDS = ["full_name", "phone", "title", "location"] as const;
 
@@ -269,8 +270,11 @@ function normalizeCompatibilityAchievementItems(items: any[]) {
 }
 
 function buildProfilePayload(candidateProfile: any, collections: Awaited<ReturnType<typeof readCandidateProfileCollections>>, experienceTimeline: any[]) {
+  const normalizedTrustBreakdown = normalizeTrustBreakdown(candidateProfile?.trust_score_breakdown);
   return {
     ...(candidateProfile || {}),
+    trust_score_breakdown: normalizedTrustBreakdown.display,
+    trust_score_components: normalizedTrustBreakdown.display,
     education: collections.education,
     languages: collections.language_labels,
     certifications: collections.certifications,

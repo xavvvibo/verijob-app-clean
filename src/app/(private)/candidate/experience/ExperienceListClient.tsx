@@ -2,8 +2,12 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { buildVerificationPayload } from "@/lib/fix-verification-payload";
+import { parseExperienceDateInput, toExperienceInputValue } from "@/lib/candidate/experience-date-input";
+
+const EXPERIENCE_CREATED_EVENT = "candidate:experience-created";
 
 type ExperienceStatus =
   | "Sin verificar"
@@ -23,6 +27,7 @@ type Row = {
   status: ExperienceStatus;
   last_action: string;
   source_label?: string | null;
+  verification_labels?: string[] | null;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -54,17 +59,6 @@ function formatExperienceDate(value: string | null, { isEnd = false }: { isEnd?:
   return raw;
 }
 
-function normalizeDateForSave(value: string | null) {
-  const raw = String(value || "").trim();
-  if (!raw) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
-  const ym = raw.match(/^(\d{4})-(\d{2})$/);
-  if (ym) return `${ym[1]}-${ym[2]}-01`;
-  const dmy = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
-  return raw;
-}
-
 function statusClasses(status: ExperienceStatus) {
   if (status === "Verificada") return "border-emerald-200 bg-emerald-50 text-emerald-800";
   if (status === "Revocada") return "border-rose-200 bg-rose-50 text-rose-700";
@@ -75,6 +69,7 @@ function statusClasses(status: ExperienceStatus) {
 
 export default function ExperienceListClient({ initialRows }: { initialRows: Row[] }) {
   const supabase = useMemo(() => createClient(), []);
+  const router = useRouter();
   const [rows, setRows] = useState<Row[]>(initialRows);
   const [expandedId, setExpandedId] = useState<string | null>(initialRows[0]?.id || null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -95,6 +90,30 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
     });
   }, [initialRows]);
 
+  useEffect(() => {
+    const onCreated = (event: Event) => {
+      const detail = (event as CustomEvent<any>).detail || {};
+      const nextRow: Row = {
+        id: String(detail.id || `tmp-${Date.now()}`),
+        employment_record_id: null,
+        role_title: detail.role_title ?? null,
+        company_name: detail.company_name ?? null,
+        start_date: detail.start_date ?? null,
+        end_date: detail.end_date ?? null,
+        description: detail.description ?? null,
+        status: "Sin verificar",
+        last_action: "Experiencia guardada",
+        source_label: null,
+        verification_labels: [],
+      };
+      setRows((prev) => [nextRow, ...prev]);
+      setExpandedId(nextRow.id);
+      setMessage("Experiencia guardada correctamente.");
+    };
+    window.addEventListener(EXPERIENCE_CREATED_EVENT, onCreated as EventListener);
+    return () => window.removeEventListener(EXPERIENCE_CREATED_EVENT, onCreated as EventListener);
+  }, []);
+
   function patchRow(id: string, patch: Partial<Row>) {
     setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
     setMessage(null);
@@ -106,7 +125,15 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
 
     const roleTitle = String(row.role_title || "").trim();
     const companyName = String(row.company_name || "").trim();
-    const startDate = normalizeDateForSave(row.start_date || null);
+    let startDate: string | null = null;
+    let endDate: string | null = null;
+    try {
+      startDate = parseExperienceDateInput(row.start_date || null).storageValue;
+      endDate = isCurrent ? null : parseExperienceDateInput(row.end_date || null, { allowPresent: true }).storageValue;
+    } catch (error: any) {
+      setMessage(error?.message || "Revisa el formato de las fechas.");
+      return;
+    }
 
     if (!roleTitle || !companyName || !startDate) {
       setMessage("Cada experiencia debe incluir empresa, puesto y fecha de inicio.");
@@ -121,7 +148,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
       role_title: roleTitle,
       company_name: companyName,
       start_date: startDate,
-      end_date: isCurrent ? null : normalizeDateForSave(row.end_date || null),
+      end_date: endDate,
       description: String(row.description || "").trim() || null,
     };
 
@@ -136,6 +163,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
     patchRow(id, { end_date: payload.end_date });
     setEditingId(null);
     setMessage("Experiencia actualizada correctamente.");
+    router.refresh();
   }
 
   async function requestVerification(row: Row) {
@@ -229,6 +257,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
     if (expandedId === row.id) setExpandedId(null);
     if (editingId === row.id) setEditingId(null);
     setMessage("Experiencia eliminada correctamente.");
+    router.refresh();
   }
 
   if (rows.length === 0) {
@@ -274,6 +303,11 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                       {row.source_label}
                     </span>
                   ) : null}
+                  {Array.isArray(row.verification_labels) && row.verification_labels.map((label) => (
+                    <span key={`${row.id}-${label}`} className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-800">
+                      {label}
+                    </span>
+                  ))}
                   <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClasses(row.status)}`}>
                     {row.status}
                   </span>
@@ -317,18 +351,20 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                             className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
                           />
                           <input
-                            type="month"
-                            lang="es"
-                            value={(row.start_date || "").slice(0, 7)}
+                            type="text"
+                            inputMode="numeric"
+                            value={toExperienceInputValue(row.start_date || "")}
                             onChange={(e) => patchRow(row.id, { start_date: e.target.value })}
+                            placeholder="AAAA-MM o MM/AAAA"
                             className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
                           />
                           <input
-                            type="month"
-                            lang="es"
-                            value={(row.end_date || "").slice(0, 7)}
+                            type="text"
+                            inputMode="numeric"
+                            value={toExperienceInputValue(row.end_date || "")}
                             onChange={(e) => patchRow(row.id, { end_date: e.target.value })}
                             disabled={!!editingCurrentById[row.id]}
+                            placeholder="AAAA-MM, MM/AAAA o Actualidad"
                             className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm disabled:bg-gray-100"
                           />
                         </div>
@@ -368,6 +404,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                             Cerrar edición
                           </button>
                         </div>
+                        <p className="text-xs text-slate-500">Puedes escribir `AAAA-MM`, `MM/AAAA` o dejar la fecha final vacía si sigue en curso.</p>
                       </div>
                     ) : null}
                   </div>

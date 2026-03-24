@@ -8,12 +8,15 @@ import {
   requiresExperienceAssociation,
 } from "@/lib/candidate/evidence-types"
 import { buildEvidenceUiItem } from "@/lib/candidate/evidence-ui"
+import { validateEvidenceFileMeta } from "@/lib/candidate/file-validation"
 
 type Props = {
   initialItems: any[]
   experienceOptions: any[]
   preselectedExperienceId?: string
 }
+
+const MAX_EVIDENCE_SIZE_BYTES = 20 * 1024 * 1024
 
 async function sha256Hex(file: File) {
   const buffer = await file.arrayBuffer()
@@ -282,6 +285,18 @@ export default function EvidenceListClient({
       return
     }
 
+    const fileValidation = validateEvidenceFileMeta({
+      filename: selectedFile.name,
+      mime: selectedFile.type,
+      sizeBytes: selectedFile.size,
+      maxSizeBytes: MAX_EVIDENCE_SIZE_BYTES,
+    })
+    if (!fileValidation.ok) {
+      setIsError(true)
+      setMessage(fileValidation.message)
+      return
+    }
+
     setBusy(true)
     setIsError(false)
     setMessage("Preparando la subida del documento…")
@@ -338,7 +353,7 @@ export default function EvidenceListClient({
       }
 
       setSelectedFile(null)
-      setMessage("Documento registrado. Iniciaremos el análisis automático en segundo plano.")
+      setMessage("Documento recibido. En breve verás si queda en análisis, pendiente de revisión o con coincidencia dudosa.")
       await reloadList()
       router.refresh()
     } catch (error: any) {
@@ -771,6 +786,9 @@ export default function EvidenceListClient({
       >
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
           <span style={{ fontWeight: 700, color: "#0f172a" }}>{item.document_name}</span>
+          <span style={{ borderRadius: 999, background: "#e0f2fe", color: "#075985", padding: "4px 10px", fontSize: 12, fontWeight: 700 }}>
+            {item.user_status_label || item.status}
+          </span>
           {showAnalysisOutcome ? (
             <span style={{ borderRadius: 999, background: impactTone.bg, color: impactTone.color, padding: "4px 10px", fontSize: 12, fontWeight: 600 }}>
               {impactLabel}
@@ -791,6 +809,9 @@ export default function EvidenceListClient({
           <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>{item.dates}</div>
         ) : null}
         <div style={{ fontSize: 13, color: "#0f172a", marginBottom: 4 }}>{item.processing_label}</div>
+        {item.user_status_reason ? (
+          <div style={{ fontSize: 13, color: "#334155", marginBottom: 4 }}>{item.user_status_reason}</div>
+        ) : null}
         {showAnalysisOutcome && item.match_summary ? (
           <div style={{ fontSize: 13, color: "#334155", marginBottom: 4 }}>{item.match_summary}</div>
         ) : null}
@@ -949,7 +970,24 @@ export default function EvidenceListClient({
             <input
               type="file"
               accept=".pdf,image/jpeg,image/png,image/webp"
-              onChange={(event) => setSelectedFile(event.target.files?.[0] || null)}
+              onChange={(event) => {
+                const nextFile = event.target.files?.[0] || null
+                setSelectedFile(nextFile)
+                if (!nextFile) return
+                const validation = validateEvidenceFileMeta({
+                  filename: nextFile.name,
+                  mime: nextFile.type,
+                  sizeBytes: nextFile.size,
+                  maxSizeBytes: MAX_EVIDENCE_SIZE_BYTES,
+                })
+                if (!validation.ok) {
+                  setIsError(true)
+                  setMessage(validation.message)
+                } else {
+                  setIsError(false)
+                  setMessage(null)
+                }
+              }}
               style={{ border: "1px solid #cbd5e1", borderRadius: 10, padding: "10px 12px", fontSize: 14 }}
             />
           </label>

@@ -23,6 +23,7 @@ import {
   isVerificationExternallyResolved,
 } from "@/lib/verification/external-resolution";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
+import { validateEvidenceFileMeta } from "@/lib/candidate/file-validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -383,9 +384,19 @@ export async function POST(req: Request) {
       const verificationRequestId = String(body?.verification_request_id ?? "").trim();
       const fileSha256 = String(body?.file_sha256 ?? "").trim().toLowerCase() || null;
 
-      if (!ALLOWED_MIME.has(mime)) return json(400, { error: "Tipo de archivo no permitido", mime });
-      if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) return json(400, { error: "size_bytes inválido" });
-      if (sizeBytes > MAX_MB * 1024 * 1024) return json(400, { error: "Archivo demasiado grande", max_mb: MAX_MB });
+      const fileValidation = validateEvidenceFileMeta({
+        filename,
+        mime,
+        sizeBytes,
+        maxSizeBytes: MAX_MB * 1024 * 1024,
+      });
+      if (!fileValidation.ok) {
+        return json(400, {
+          error: fileValidation.code,
+          details: fileValidation.message,
+          max_mb: MAX_MB,
+        });
+      }
       if (!isHexSha256(fileSha256 || undefined)) return json(400, { error: "file_sha256 inválido" });
       if (!verificationRequestId && !employmentRecordRef && requiresExperienceAssociation(evidenceType)) {
         return json(400, { error: "Selecciona una experiencia para este tipo de documento" });
@@ -447,9 +458,14 @@ export async function POST(req: Request) {
     const fileSha256 = String(formData.get("file_sha256") || "").trim().toLowerCase() || null;
 
     if (!(file instanceof File)) return json(400, { error: "Selecciona un documento para subir." });
-    if (!ALLOWED_MIME.has(mime)) return json(400, { error: "Tipo de archivo no permitido", mime });
-    if (file.size <= 0 || file.size > MAX_MB * 1024 * 1024) {
-      return json(400, { error: "Archivo demasiado grande", max_mb: MAX_MB });
+    const fileValidation = validateEvidenceFileMeta({
+      filename: file.name,
+      mime,
+      sizeBytes: file.size,
+      maxSizeBytes: MAX_MB * 1024 * 1024,
+    });
+    if (!fileValidation.ok) {
+      return json(400, { error: fileValidation.code, details: fileValidation.message, max_mb: MAX_MB });
     }
     if (!isHexSha256(fileSha256 || undefined)) return json(400, { error: "file_sha256 inválido" });
     if (!verificationRequestId && !employmentRecordRef && requiresExperienceAssociation(evidenceType)) {

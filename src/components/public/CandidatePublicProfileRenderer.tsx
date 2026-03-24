@@ -42,16 +42,18 @@ export type PublicCandidateTeaser = {
     verification_badges?: string[] | null;
   }> | null;
   trust_score_breakdown?: {
-    verification?: number;
-    evidence?: number;
-    consistency?: number;
+    documentary?: number;
+    company?: number;
+    peer?: number;
     reuse?: number;
+    cvConsistency?: number;
   } | null;
   trust_score_components?: {
-    verification?: number;
-    evidence?: number;
-    consistency?: number;
+    documentary?: number;
+    company?: number;
+    peer?: number;
     reuse?: number;
+    cvConsistency?: number;
   } | null;
 };
 
@@ -280,19 +282,21 @@ export function CandidatePublicProfileRenderer({
   const trustComponents = useMemo(() => {
     const raw = teaser?.trust_score_components || teaser?.trust_score_breakdown || {};
     const normalized = {
-      verification: clampPercent(Number((raw as any)?.verification ?? 0)),
-      evidence: clampPercent(Number((raw as any)?.evidence ?? 0)),
-      consistency: clampPercent(Number((raw as any)?.consistency ?? 0)),
+      documentary: clampPercent(Number((raw as any)?.documentary ?? (raw as any)?.evidence ?? 0)),
+      company: clampPercent(Number((raw as any)?.company ?? (raw as any)?.verification ?? 0)),
+      peer: clampPercent(Number((raw as any)?.peer ?? 0)),
       reuse: clampPercent(Number((raw as any)?.reuse ?? 0)),
+      cvConsistency: clampPercent(Number((raw as any)?.cvConsistency ?? (raw as any)?.consistency ?? 0)),
     };
-    if (normalized.verification + normalized.evidence + normalized.consistency + normalized.reuse > 0) {
+    if (normalized.documentary + normalized.company + normalized.peer + normalized.reuse + normalized.cvConsistency > 0) {
       return normalized;
     }
     const base = Math.max(1, Number(teaser?.experiences_total ?? experiences.length));
     return {
-      verification: clampPercent((Number(teaser?.verified_experiences ?? 0) / base) * 100),
-      evidence: clampPercent((Number(teaser?.evidences_total ?? 0) / Math.max(1, base * 2)) * 100),
-      consistency: clampPercent(
+      documentary: clampPercent((Number(teaser?.evidences_total ?? 0) / Math.max(1, base * 2)) * 100),
+      company: clampPercent((Number(teaser?.verified_experiences ?? 0) / base) * 100),
+      peer: 0,
+      cvConsistency: clampPercent(
         ((Number(Boolean(teaser?.title)) + Number(Boolean(teaser?.summary)) + Number(publicLanguages.length > 0)) / 3) * 100
       ),
       reuse: clampPercent((Number(teaser?.reuse_total ?? 0) / base) * 100),
@@ -583,10 +587,11 @@ export function CandidatePublicProfileRenderer({
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Desglose de confianza</div>
                       <div className="mt-3 space-y-2">
-                        <TrustBreakdownBar label="Verificaciones" value={trustComponents.verification} />
-                        <TrustBreakdownBar label="Evidencias" value={trustComponents.evidence} />
-                        <TrustBreakdownBar label="Consistencia" value={trustComponents.consistency} />
-                        <TrustBreakdownBar label="Cobertura histórica" value={trustComponents.reuse} />
+                        <TrustBreakdownBar label="Documental" value={trustComponents.documentary} />
+                        <TrustBreakdownBar label="Empresa" value={trustComponents.company} />
+                        <TrustBreakdownBar label="Peer" value={trustComponents.peer} />
+                        <TrustBreakdownBar label="Reuse" value={trustComponents.reuse} />
+                        <TrustBreakdownBar label="Consistencia CV" value={trustComponents.cvConsistency} />
                       </div>
                     </div>
                   ) : (

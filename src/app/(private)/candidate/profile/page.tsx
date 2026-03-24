@@ -2,6 +2,7 @@ import { createClient } from "@/utils/supabase/server";
 import Link from "next/link";
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
 import { buildCandidateExperienceTrustTimeline } from "@/lib/candidate/experience-trust";
+import { getTrustBreakdownDisplayEntries, normalizeTrustBreakdown } from "@/lib/trust/trust-model";
 import CandidateProfileIdentityClient from "./CandidateProfileIdentityClient";
 
 export const dynamic = "force-dynamic";
@@ -43,7 +44,7 @@ export default async function CandidateProfilePage() {
       .maybeSingle(),
     supabase
       .from("candidate_profiles")
-      .select("raw_cv_json")
+      .select("raw_cv_json,trust_score,trust_score_breakdown")
       .eq("user_id", user.id)
       .maybeSingle(),
     supabase
@@ -66,6 +67,9 @@ export default async function CandidateProfilePage() {
       .order("start_date", { ascending: false }),
   ]);
   const importSummary = summarizeCompanyCvImportUpdates((candidateProfile as any)?.raw_cv_json);
+  const trustScore = Number((candidateProfile as any)?.trust_score ?? 0);
+  const trustBreakdown = normalizeTrustBreakdown((candidateProfile as any)?.trust_score_breakdown);
+  const trustEntries = getTrustBreakdownDisplayEntries((candidateProfile as any)?.trust_score_breakdown);
   const verificationRows = Array.isArray(verifications) ? verifications : [];
   const verifiedCount = verificationRows.filter((row: any) => {
     const status = String(row?.status || "").toLowerCase();
@@ -122,7 +126,7 @@ export default async function CandidateProfilePage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Confianza del perfil</p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-900">{trustTitle}</h2>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-900">{trustTitle} · {trustScore}</h2>
             <p className="mt-2 max-w-2xl text-sm text-slate-600">{trustSummary}</p>
             <div className="mt-4 flex flex-wrap gap-2">
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
@@ -138,6 +142,19 @@ export default async function CandidateProfilePage() {
                 {profileReady ? "Perfil completado" : "Perfil por completar"}
               </span>
             </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+              {trustEntries.map((entry) => (
+                <div key={entry.key} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                  <div className="text-xs text-slate-500">{entry.label}</div>
+                  <div className="mt-1 text-sm font-semibold text-slate-900">{entry.value}%</div>
+                </div>
+              ))}
+            </div>
+            {trustBreakdown.meta.model ? (
+              <p className="mt-3 text-xs text-slate-500">
+                Modelo activo: {trustBreakdown.meta.model}{trustBreakdown.meta.updated_at ? ` · actualizado ${formatMonthYear(trustBreakdown.meta.updated_at)}` : ""}
+              </p>
+            ) : null}
           </div>
 
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">

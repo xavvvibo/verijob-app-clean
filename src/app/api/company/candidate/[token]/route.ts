@@ -12,6 +12,7 @@ import {
 } from "@/lib/company/profile-access";
 import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
 import { readCandidateProfileCollections } from "@/lib/candidate/profile-collections";
+import { getTrustBreakdownLegacyCompat, getTrustVerificationLabel, normalizeTrustBreakdown } from "@/lib/trust/trust-model";
 
 type Params = { token: string };
 
@@ -502,6 +503,8 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     0
   );
   const trustScore = Number((candidateProfile as any)?.trust_score ?? 0);
+  const normalizedTrustBreakdown = normalizeTrustBreakdown((candidateProfile as any)?.trust_score_breakdown);
+  const legacyTrustBreakdown = getTrustBreakdownLegacyCompat((candidateProfile as any)?.trust_score_breakdown);
   const profileStatus = resolveProfileStatus({
     totalVerifications,
     evidencesCount,
@@ -515,7 +518,6 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     trust_score: trustScore,
     profile_status: profileStatus,
   };
-  const breakdownRaw = (candidateProfile as any)?.trust_score_breakdown || {};
   const profileExperienceRows = Array.isArray(experienceCountRes.data) ? experienceCountRes.data : [];
   const employmentRows = Array.isArray(employmentRowsRes.data) ? employmentRowsRes.data : [];
   const experienceRows =
@@ -626,6 +628,8 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     verification_breakdown: verificationBreakdown,
     languages_detected: languagesDetected,
     trust_score: trustScore,
+    trust_score_breakdown: normalizedTrustBreakdown.display,
+    reuse_total: Number(legacyTrustBreakdown.reuseEvents ?? 0),
     onboarding_completion: onboardingCompletion,
     onboarding_status: companyImportInProgress ? "candidate_onboarding_in_progress" : "ready",
     profile_state: profileState,
@@ -843,38 +847,41 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     accessConsumed = false;
   }
 
-  const experiencesBase = Math.max(1, verificationRows.length || 0);
   const trustComponents = {
-    verification: Number.isFinite(Number(breakdownRaw?.verification))
-      ? clampPercent(Number(breakdownRaw.verification))
-      : clampPercent((verifiedRows.length / experiencesBase) * 100),
-    evidence: Number.isFinite(Number(breakdownRaw?.evidence))
-      ? clampPercent(Number(breakdownRaw.evidence))
-      : clampPercent((evidencesCount / Math.max(1, experiencesBase * 2)) * 100),
-    consistency: Number.isFinite(Number(breakdownRaw?.consistency))
-      ? clampPercent(Number(breakdownRaw.consistency))
-      : clampPercent(
-          ((Number(Boolean((safe as any)?.title)) + Number(Boolean((safe as any)?.location)) + Number(!!(candidateProfile as any)?.job_search_status)) / 3) * 100
-        ),
-    reuse: Number.isFinite(Number(breakdownRaw?.reuse))
-      ? clampPercent(Number(breakdownRaw.reuse))
-      : clampPercent(
-          (verificationRows.reduce((acc: number, r: any) => acc + Number(r?.reuse_count ?? 0), 0) / experiencesBase) * 100
-        ),
+    documentary: normalizedTrustBreakdown.display.documentary,
+    company: normalizedTrustBreakdown.display.company,
+    peer: normalizedTrustBreakdown.display.peer,
+    reuse: normalizedTrustBreakdown.display.reuse,
+    cvConsistency: normalizedTrustBreakdown.display.cvConsistency,
+    verification: normalizedTrustBreakdown.legacy.verification,
+    evidence: normalizedTrustBreakdown.legacy.evidence,
+    consistency: normalizedTrustBreakdown.legacy.consistency,
   };
   const verificationTimeline = verificationRows
-    .map((row: any) => ({
-      verification_id: String(row?.verification_id || ""),
-      position: row?.position || null,
-      company_name: row?.company_name || row?.company_name_target || null,
-      status: String(row?.status_effective || row?.status || "unknown"),
-      evidence_count: Number(row?.evidence_count ?? row?.evidences_count ?? 0),
-      reuse_count: Number(row?.reuse_count ?? 0),
-      start_date: row?.start_date || null,
-      end_date: row?.end_date || null,
-      created_at: row?.created_at || null,
-      resolved_at: row?.resolved_at || null,
-    }))
+    .map((row: any) => {
+      const badges = new Set<string>();
+      const method = String(row?.verification_channel || "").trim().toLowerCase();
+      if (method === "company" || method === "email") badges.add("Verificación empresa");
+      if (method === "peer") badges.add("Peer");
+      if (method === "documentary") badges.add("Documental");
+      for (const key of [row?.document_type, row?.evidence_type]) {
+        const label = getTrustVerificationLabel(key);
+        if (label) badges.add(label);
+      }
+      return {
+        verification_id: String(row?.verification_id || ""),
+        position: row?.position || null,
+        company_name: row?.company_name || row?.company_name_target || null,
+        status: String(row?.status_effective || row?.status || "unknown"),
+        evidence_count: Number(row?.evidence_count ?? row?.evidences_count ?? 0),
+        reuse_count: Number(row?.reuse_count ?? 0),
+        start_date: row?.start_date || null,
+        end_date: row?.end_date || null,
+        created_at: row?.created_at || null,
+        resolved_at: row?.resolved_at || null,
+        verification_badges: Array.from(badges),
+      };
+    })
     .sort((a, b) => {
       const ta = Date.parse(String(a.resolved_at || a.created_at || 0));
       const tb = Date.parse(String(b.resolved_at || b.created_at || 0));
