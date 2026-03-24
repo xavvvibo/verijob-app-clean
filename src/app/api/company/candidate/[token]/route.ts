@@ -4,7 +4,6 @@ import { createServiceRoleClient } from "@/utils/supabase/service";
 import { sanitizePublic } from "@/utils/sanitizePublic";
 import { normalizeCandidatePublicToken, resolveActiveCandidatePublicLink } from "@/lib/public/candidate-public-link";
 import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
-import { normalizeCompanyProfileAccessProductKey } from "@/lib/company/profile-access-products";
 import { resolveSafeCandidateName } from "@/lib/company-candidate-import-shared";
 import {
   deriveCompanyCandidateAccess,
@@ -12,9 +11,12 @@ import {
 } from "@/lib/company/profile-access";
 import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
 import { readCandidateProfileCollections } from "@/lib/candidate/profile-collections";
-import { getTrustBreakdownLegacyCompat, getTrustVerificationLabel, normalizeTrustBreakdown } from "@/lib/trust/trust-model";
+import { toExperienceVerificationBadgeLabels } from "@/lib/candidate/experience-verification-badges";
+import { getTrustBreakdownLegacyCompat, normalizeTrustBreakdown } from "@/lib/trust/trust-model";
 
 type Params = { token: string };
+
+export const runtime = "nodejs";
 
 function json(status: number, body: any) {
   const res = NextResponse.json(body, { status });
@@ -164,39 +166,6 @@ function yearsFromExperienceRows(rows: any[]) {
   const max = Math.max(...valid, Date.now());
   const years = Math.max(0, Math.round(((max - min) / (365.25 * 24 * 60 * 60 * 1000)) * 10) / 10);
   return years > 0 ? Math.round(years) : null;
-}
-
-async function resolveConsumptionSource(args: {
-  service: ReturnType<typeof createServiceRoleClient>;
-  companyId: string;
-  viewerUserId: string;
-}) {
-  const latestPurchase = await args.service
-    .from("stripe_oneoff_purchases")
-    .select("product_key,created_at")
-    .eq("company_id", args.companyId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const purchaseKey = normalizeCompanyProfileAccessProductKey((latestPurchase.data as any)?.product_key);
-  if (purchaseKey === "company_single_cv") return "single_unlock";
-  if (purchaseKey === "company_pack_5") return "pack_credit";
-
-  const latestGrant = await args.service
-    .from("credit_grants")
-    .select("source_type,metadata,created_at")
-    .eq("user_id", args.viewerUserId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const sourceType = String((latestGrant.data as any)?.source_type || "").trim().toLowerCase();
-  const productKey = normalizeCompanyProfileAccessProductKey((latestGrant.data as any)?.metadata?.product_key);
-  if (productKey === "company_single_cv") return "single_unlock";
-  if (productKey === "company_pack_5") return "pack_credit";
-  if (sourceType.includes("promo")) return "promo";
-  return "grant";
 }
 
 export async function GET(req: Request, ctx: { params: Promise<Params> }) {
@@ -422,6 +391,30 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
     .select("*")
     .eq("candidate_id", link.candidate_id);
 
+  const verificationRows = Array.isArray(verifications) ? verifications : [];
+  const verificationIds = Array.from(
+    new Set(
+      verificationRows
+        .map((row: any) => String(row?.verification_id || "").trim())
+        .filter(Boolean),
+    ),
+  );
+
+  const [verificationRequestsRes, evidenceRowsRes] = await Promise.all([
+    verificationIds.length
+      ? service
+          .from("verification_requests")
+          .select("id,status,verification_channel,request_context,company_confirmed")
+          .in("id", verificationIds as string[])
+      : Promise.resolve({ data: [], error: null } as any),
+    verificationIds.length
+      ? service
+          .from("evidences")
+          .select("verification_request_id,document_type,evidence_type")
+          .in("verification_request_id", verificationIds as string[])
+      : Promise.resolve({ data: [], error: null } as any),
+  ]);
+
   const [experienceCountRes, employmentRowsRes, linkedInviteRes] = await Promise.all([
     service
       .from("profile_experiences")
@@ -493,7 +486,20 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
       ? (candidateProfile as any).availability_schedule
       : [],
   };
-  const verificationRows = Array.isArray(verifications) ? verifications : [];
+  const verificationRequestById = new Map<string, any>();
+  for (const row of Array.isArray(verificationRequestsRes.data) ? verificationRequestsRes.data : []) {
+    const id = String((row as any)?.id || "").trim();
+    if (id) verificationRequestById.set(id, row);
+  }
+  const evidenceByVerification = new Map<string, any[]>();
+  for (const row of Array.isArray(evidenceRowsRes.data) ? evidenceRowsRes.data : []) {
+    const id = String((row as any)?.verification_request_id || "").trim();
+    if (!id) continue;
+    const current = evidenceByVerification.get(id) || [];
+    current.push(row);
+    evidenceByVerification.set(id, current);
+  }
+
   const verifiedRows = verificationRows.filter((r: any) => isVerifiedStatus(r?.status));
   const verifiedWorkCount = verifiedRows.filter((r: any) => !isEducationVerification(r)).length;
   const verifiedEducationCount = verifiedRows.filter((r: any) => isEducationVerification(r)).length;
@@ -696,147 +702,21 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   let accessConsumed = false;
 
   if (access.access_status !== "active") {
-    // Consumo de crédito solo cuando se pide el perfil completo y no existe acceso activo.
-    const gateRes = await supabase.rpc("vj_consume_company_profile_view", {
-      p_candidate_id: link.candidate_id,
+    gate = {
+      ...gate,
+      allowed: false,
+      consumed: false,
+      credits_remaining: profileAccessCredits.available,
+    };
+    return json(402, {
+      error: "profile_locked",
+      user_message: "Primero desbloquea el perfil completo para tu empresa.",
+      reason: profileAccessCredits.available > 0 ? "unlock_required" : "no_credits",
+      credits_remaining: profileAccessCredits.available,
+      upgrade_url: "/company/upgrade",
+      preview: snapshot,
+      access,
     });
-    gate = gateRes.data;
-    const gateErr = gateRes.error;
-    logCompanyCandidateResponse("gate:result", {
-      candidate_id: link.candidate_id,
-      company_id: companyId || null,
-      access_status_before: access?.access_status ?? null,
-      gate,
-      gate_error: gateErr?.message || null,
-    });
-
-    if (gateErr) {
-      console.error("[company-candidate-token] gate failed", {
-        candidate_id: link.candidate_id,
-        company_id: (requesterProfile as any)?.active_company_id || null,
-        message: gateErr.message,
-        code: (gateErr as any)?.code || null,
-      });
-      return json(500, { error: "Gate failed" });
-    }
-
-    if (!gate?.allowed) {
-      return json(402, {
-        error: "No credits",
-        reason: gate?.reason ?? "no_credits",
-        credits_remaining: gate?.credits_remaining ?? profileAccessCredits.available,
-        upgrade_url: "/company/upgrade",
-        preview: snapshot,
-        access,
-      });
-    }
-
-    if (companyId && gate?.allowed) {
-      const verificationId = String(verificationRows.find((row: any) => row?.verification_id)?.verification_id || "").trim() || null;
-      const source = await resolveConsumptionSource({
-        service,
-        companyId,
-        viewerUserId: au.user.id,
-      });
-      const existingConsumptionRes = await service
-        .from("profile_view_consumptions")
-        .select("id,created_at,source")
-        .eq("company_id", companyId)
-        .eq("candidate_id", link.candidate_id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (existingConsumptionRes.error) {
-        console.error("[company-candidate-token] existing consumption read failed", {
-          candidate_id: link.candidate_id,
-          company_id: companyId,
-          viewer_user_id: au.user.id,
-          message: existingConsumptionRes.error.message,
-        });
-        return json(500, {
-          error: "unlock_state_read_failed",
-          details: existingConsumptionRes.error.message,
-        });
-      }
-
-      const existingConsumption = existingConsumptionRes.data as any;
-      if (existingConsumption?.id) {
-        resolvedAccess = deriveCompanyCandidateAccess(existingConsumption.created_at, existingConsumption.source || source);
-        logCompanyCandidateResponse("unlock:existing-consumption", {
-          candidate_id: link.candidate_id,
-          company_id: companyId,
-          consumption_id: existingConsumption.id,
-          access_status_after: resolvedAccess?.access_status ?? null,
-        });
-      } else {
-        const insertedAt = new Date().toISOString();
-        const insertConsumptionRes = await service.from("profile_view_consumptions").insert({
-          company_id: companyId,
-          viewer_user_id: au.user.id,
-          candidate_id: link.candidate_id,
-          verification_id: verificationId,
-          credits_spent: 1,
-          source,
-          created_at: insertedAt,
-        });
-
-        if (insertConsumptionRes.error) {
-          console.error("[company-candidate-token] consumption log failed", {
-            candidate_id: link.candidate_id,
-            company_id: companyId,
-            viewer_user_id: au.user.id,
-            message: insertConsumptionRes.error.message,
-          });
-          return json(500, {
-            error: "unlock_persistence_failed",
-            details: insertConsumptionRes.error.message,
-          });
-        }
-        accessConsumed = true;
-        logCompanyCandidateResponse("unlock:inserted-consumption", {
-          candidate_id: link.candidate_id,
-          company_id: companyId,
-          credits_spent: 1,
-          source,
-        });
-      }
-
-      const [reloadedAccess, reloadedCredits] = await Promise.all([
-        resolveCompanyCandidateAccess({
-          service,
-          companyId,
-          candidateId: String(link.candidate_id),
-        }),
-        resolveCompanyProfileAccessCredits({
-          service,
-          userId: au.user.id,
-          companyId,
-        }),
-      ]);
-
-      resolvedAccess = reloadedAccess;
-      gate = {
-        ...gate,
-        credits_remaining: reloadedCredits.available,
-      };
-
-      if (resolvedAccess.access_status !== "active") {
-        console.error("[company-candidate-token] unlock did not persist", {
-          candidate_id: link.candidate_id,
-          company_id: companyId,
-          viewer_user_id: au.user.id,
-          gate,
-        });
-        return json(409, {
-          error: "unlock_not_persisted",
-          details: "El unlock no quedó registrado correctamente.",
-          preview: snapshot,
-          access: resolvedAccess,
-          credits_remaining: reloadedCredits.available,
-        });
-      }
-    }
   } else {
     gate = {
       ...gate,
@@ -859,17 +739,11 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
   };
   const verificationTimeline = verificationRows
     .map((row: any) => {
-      const badges = new Set<string>();
-      const method = String(row?.verification_channel || "").trim().toLowerCase();
-      if (method === "company" || method === "email") badges.add("Verificación empresa");
-      if (method === "peer") badges.add("Peer");
-      if (method === "documentary") badges.add("Documental");
-      for (const key of [row?.document_type, row?.evidence_type]) {
-        const label = getTrustVerificationLabel(key);
-        if (label) badges.add(label);
-      }
+      const verificationId = String(row?.verification_id || "").trim();
+      const requestRow = verificationRequestById.get(verificationId) || null;
+      const evidenceRows = evidenceByVerification.get(verificationId) || [];
       return {
-        verification_id: String(row?.verification_id || ""),
+        verification_id: verificationId,
         position: row?.position || null,
         company_name: row?.company_name || row?.company_name_target || null,
         status: String(row?.status_effective || row?.status || "unknown"),
@@ -879,7 +753,16 @@ export async function GET(req: Request, ctx: { params: Promise<Params> }) {
         end_date: row?.end_date || null,
         created_at: row?.created_at || null,
         resolved_at: row?.resolved_at || null,
-        verification_badges: Array.from(badges),
+        verification_badges: toExperienceVerificationBadgeLabels({
+          verificationChannel: requestRow?.verification_channel || row?.verification_channel,
+          verificationStatus: row?.status_effective || row?.status,
+          companyConfirmed: requestRow?.company_confirmed ?? row?.company_confirmed,
+          evidenceCount: row?.evidence_count ?? row?.evidences_count,
+          documentType: row?.document_type,
+          evidenceType: row?.evidence_type,
+          requestContext: requestRow?.request_context || row?.request_context,
+          evidences: evidenceRows,
+        }),
       };
     })
     .sort((a, b) => {

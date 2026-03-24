@@ -281,7 +281,7 @@ export async function POST(req: Request) {
       }
     }
 
-    if (requestRow.requested_by && confidence.level === "high" && confidence.trustScoreAwarded > 0) {
+    if (requestRow.requested_by) {
       await recalculateAndPersistCandidateTrustScore(String(requestRow.requested_by)).catch(() => {});
 
       await syncCandidateProfileReadiness(admin, requestRow.requested_by).catch(() => {});

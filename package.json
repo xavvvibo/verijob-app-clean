@@ -8,6 +8,13 @@
     "start": "next start",
     "test": "node --test tests/**/*.test.mjs",
     "test:company-candidate-import": "node --test tests/company-candidate-import.test.mjs",
+    "test:smoke": "playwright test tests/smoke",
+    "test:smoke:auth": "playwright test tests/smoke --grep @auth",
+    "test:smoke:candidate": "playwright test tests/smoke --grep @candidate",
+    "test:smoke:company": "playwright test tests/smoke --grep @company",
+    "test:smoke:public-profile": "playwright test tests/smoke --grep @public-profile",
+    "test:smoke:headed": "playwright test tests/smoke --headed",
+    "playwright:install": "playwright install chromium",
     "lint": "eslint",
     "postbuild": "node scripts/vercel-fix-missing-manifests.cjs",
     "cleanup:test-users": "tsx scripts/cleanup-test-users.ts",
@@ -31,6 +38,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.52.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

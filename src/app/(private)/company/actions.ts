@@ -75,7 +75,7 @@ export async function setCompanyVerificationStatus(input: SetCompanyVerification
 
   const { data: vr } = await supabase
     .from("verification_requests")
-    .select("id,employment_record_id,company_id")
+    .select("id,employment_record_id,company_id,requested_by")
     .eq("id", verificationRequestId)
     .maybeSingle();
 
@@ -126,17 +126,13 @@ export async function setCompanyVerificationStatus(input: SetCompanyVerification
       .eq("id", vr.employment_record_id);
     if (erErr) throw new Error(erErr.message);
 
-    const { data: employment } = await supabase
-      .from("employment_records")
-      .select("candidate_id")
-      .eq("id", vr.employment_record_id)
-      .maybeSingle();
-    const candidateId = String((employment as any)?.candidate_id || "").trim();
-    if (candidateId) {
-      await recalculateAndPersistCandidateTrustScore(candidateId).catch(() => {});
+  }
 
-      await syncCandidateProfileReadiness(supabase, candidateId).catch(() => {});
-    }
+  const candidateId = String((vr as any)?.requested_by || "").trim();
+  if (candidateId) {
+    await recalculateAndPersistCandidateTrustScore(candidateId).catch(() => {});
+
+    await syncCandidateProfileReadiness(supabase, candidateId).catch(() => {});
   }
 
   return {

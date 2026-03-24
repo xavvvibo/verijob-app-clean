@@ -1,0 +1,1 @@
+Este archivo es intencionadamente incompatible para el smoke de evidencias.

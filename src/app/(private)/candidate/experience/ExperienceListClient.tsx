@@ -5,6 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { buildVerificationPayload } from "@/lib/fix-verification-payload";
+import {
+  getExperienceVerificationBadgeClasses,
+  resolveExperienceVerificationBadges,
+} from "@/lib/candidate/experience-verification-badges";
+import { buildExperienceVisibilityKey } from "@/lib/candidate/profile-visibility";
 import { parseExperienceDateInput, toExperienceInputValue } from "@/lib/candidate/experience-date-input";
 
 const EXPERIENCE_CREATED_EVENT = "candidate:experience-created";
@@ -18,6 +23,7 @@ type ExperienceStatus =
 
 type Row = {
   id: string;
+  profile_experience_id?: string | null;
   employment_record_id?: string | null;
   role_title: string | null;
   company_name: string | null;
@@ -28,6 +34,17 @@ type Row = {
   last_action: string;
   source_label?: string | null;
   verification_labels?: string[] | null;
+  public_visibility?: {
+    visible: boolean;
+    featured: boolean;
+  } | null;
+};
+
+type PublicPlanInfo = {
+  work: number | null;
+  featured: number | null;
+  label: string;
+  visibilityLabel: string;
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -67,7 +84,13 @@ function statusClasses(status: ExperienceStatus) {
   return "border-slate-200 bg-slate-50 text-slate-700";
 }
 
-export default function ExperienceListClient({ initialRows }: { initialRows: Row[] }) {
+export default function ExperienceListClient({
+  initialRows,
+  publicPlan,
+}: {
+  initialRows: Row[];
+  publicPlan?: PublicPlanInfo;
+}) {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const [rows, setRows] = useState<Row[]>(initialRows);
@@ -80,6 +103,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
   const [verificationEmailById, setVerificationEmailById] = useState<Record<string, string>>({});
   const [verifyStateById, setVerifyStateById] = useState<Record<string, VerifyState>>({});
   const [verifyMessageById, setVerifyMessageById] = useState<Record<string, string | null>>({});
+  const [savingVisibilityId, setSavingVisibilityId] = useState<string | null>(null);
 
   useEffect(() => {
     setRows(initialRows || []);
@@ -95,6 +119,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
       const detail = (event as CustomEvent<any>).detail || {};
       const nextRow: Row = {
         id: String(detail.id || `tmp-${Date.now()}`),
+        profile_experience_id: detail.profile_experience_id ?? detail.id ?? null,
         employment_record_id: null,
         role_title: detail.role_title ?? null,
         company_name: detail.company_name ?? null,
@@ -105,6 +130,10 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
         last_action: "Experiencia guardada",
         source_label: null,
         verification_labels: [],
+        public_visibility: {
+          visible: true,
+          featured: false,
+        },
       };
       setRows((prev) => [nextRow, ...prev]);
       setExpandedId(nextRow.id);
@@ -117,6 +146,92 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
   function patchRow(id: string, patch: Partial<Row>) {
     setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
     setMessage(null);
+  }
+
+  function getVisibleRowCount(nextRows: Row[]) {
+    return nextRows.filter((row) => row.public_visibility?.visible !== false).length;
+  }
+
+  function getFeaturedRowCount(nextRows: Row[]) {
+    return nextRows.filter((row) => row.public_visibility?.featured === true).length;
+  }
+
+  function buildVisibilityPayload(nextRows: Row[]) {
+    const experiences = Object.fromEntries(
+      nextRows.map((row) => {
+        const key = buildExperienceVisibilityKey({
+          employmentRecordId: row.employment_record_id,
+          profileExperienceId: row.profile_experience_id || row.id,
+          fallbackId: row.id,
+        });
+        return [
+          key,
+          {
+            visible: row.public_visibility?.visible !== false,
+            featured: row.public_visibility?.featured === true,
+          },
+        ];
+      }),
+    );
+    return { experiences };
+  }
+
+  async function saveVisibility(nextRows: Row[], rowId: string) {
+    setSavingVisibilityId(rowId);
+    setMessage(null);
+
+    try {
+      const res = await fetch("/api/candidate/profile", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          public_profile_settings: buildVisibilityPayload(nextRows),
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json?.error || "No se ha podido actualizar la visibilidad pública.");
+      }
+      setRows(nextRows);
+      setMessage("Configuración pública actualizada.");
+      router.refresh();
+    } catch (error: any) {
+      setMessage(error?.message || "No se ha podido actualizar la visibilidad pública.");
+    } finally {
+      setSavingVisibilityId(null);
+    }
+  }
+
+  async function updateVisibility(
+    rowId: string,
+    patch: Partial<NonNullable<Row["public_visibility"]>>,
+    planInfo?: PublicPlanInfo,
+  ) {
+    const nextRows = rows.map((row) => {
+      if (row.id !== rowId) return row;
+      const current = row.public_visibility || { visible: true, featured: false };
+      const nextVisibility = {
+        visible: patch.visible ?? current.visible,
+        featured: patch.featured ?? current.featured,
+      };
+      if (nextVisibility.featured) nextVisibility.visible = true;
+      return { ...row, public_visibility: nextVisibility };
+    });
+
+    if (planInfo?.work != null && getVisibleRowCount(nextRows) > planInfo.work) {
+      setMessage(`Tu plan ${planInfo.label} permite mostrar ${planInfo.visibilityLabel} en el perfil público.`);
+      return;
+    }
+
+    if (planInfo?.featured != null && getFeaturedRowCount(nextRows) > planInfo.featured) {
+      setMessage(
+        `Tu plan ${planInfo.label} permite destacar ${planInfo.featured} experiencia${planInfo.featured === 1 ? "" : "s"} en el perfil público.`,
+      );
+      return;
+    }
+
+    await saveVisibility(nextRows, rowId);
   }
 
   async function saveRow(id: string) {
@@ -279,9 +394,15 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
         const isEditing = editingId === row.id;
         const isSaving = savingId === row.id;
         const isDeleting = deletingId === row.id;
+        const isSavingVisibility = savingVisibilityId === row.id;
         const isVerified = row.status === "Verificada";
         const verifyState = verifyStateById[row.id] || "idle";
         const verifyMessage = verifyMessageById[row.id];
+        const verificationBadges = resolveExperienceVerificationBadges({
+          verificationBadges: row.verification_labels,
+        });
+        const primaryVerificationBadge = verificationBadges[0] || null;
+        const secondaryVerificationBadges = verificationBadges.slice(1, 3);
 
         return (
           <article key={row.id} id={`exp-${row.id}`} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
@@ -303,9 +424,19 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                       {row.source_label}
                     </span>
                   ) : null}
-                  {Array.isArray(row.verification_labels) && row.verification_labels.map((label) => (
-                    <span key={`${row.id}-${label}`} className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-semibold text-blue-800">
-                      {label}
+                  {primaryVerificationBadge ? (
+                    <span
+                      className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getExperienceVerificationBadgeClasses(primaryVerificationBadge.tone, "primary")}`}
+                    >
+                      {primaryVerificationBadge.label}
+                    </span>
+                  ) : null}
+                  {secondaryVerificationBadges.map((badge) => (
+                    <span
+                      key={`${row.id}-${badge.key}`}
+                      className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${getExperienceVerificationBadgeClasses(badge.tone)}`}
+                    >
+                      {badge.label}
                     </span>
                   ))}
                   <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${statusClasses(row.status)}`}>
@@ -327,6 +458,23 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
                 <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
                   <div className="space-y-3">
                     <div className="rounded-xl border border-slate-200 bg-white p-4">
+                      {primaryVerificationBadge ? (
+                        <div className="mb-3 flex flex-wrap gap-2">
+                          <span
+                            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getExperienceVerificationBadgeClasses(primaryVerificationBadge.tone, "primary")}`}
+                          >
+                            {primaryVerificationBadge.label}
+                          </span>
+                          {secondaryVerificationBadges.map((badge) => (
+                            <span
+                              key={`${row.id}-detail-${badge.key}`}
+                              className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${getExperienceVerificationBadgeClasses(badge.tone)}`}
+                            >
+                              {badge.label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
                       <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Detalle</div>
                       <p className="mt-2 text-sm text-slate-700">
                         {row.description || "Sin descripción todavía. Puedes completar esta experiencia antes de verificarla."}
@@ -411,6 +559,64 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
 
                   <div className="space-y-3">
                     <div className="rounded-xl border border-slate-200 bg-white p-4">
+                      <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                        <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Perfil público</div>
+                        <div className="mt-3 space-y-3">
+                          <label className="flex items-start gap-3 text-sm text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={row.public_visibility?.visible !== false}
+                              disabled={isSavingVisibility}
+                              onChange={(e) => {
+                                void updateVisibility(
+                                  row.id,
+                                  {
+                                    visible: e.target.checked,
+                                    featured: e.target.checked ? row.public_visibility?.featured === true : false,
+                                  },
+                                  publicPlan,
+                                );
+                              }}
+                              className="mt-0.5"
+                            />
+                            <span>
+                              <span className="block font-semibold text-slate-900">Visible en perfil público</span>
+                              <span className="block text-xs text-slate-500">
+                                Decide si esta experiencia aparece en la vista pública limitada.
+                              </span>
+                            </span>
+                          </label>
+                          <label className="flex items-start gap-3 text-sm text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={row.public_visibility?.featured === true}
+                              disabled={isSavingVisibility || row.public_visibility?.visible === false}
+                              onChange={(e) => {
+                                void updateVisibility(
+                                  row.id,
+                                  {
+                                    featured: e.target.checked,
+                                    visible: e.target.checked ? true : row.public_visibility?.visible !== false,
+                                  },
+                                  publicPlan,
+                                );
+                              }}
+                              className="mt-0.5"
+                            />
+                            <span>
+                              <span className="block font-semibold text-slate-900">Experiencia destacada</span>
+                              <span className="block text-xs text-slate-500">
+                                Se mostrará primero en el perfil público si entra en el límite de tu plan.
+                              </span>
+                            </span>
+                          </label>
+                          <p className="text-xs text-slate-500">
+                            {publicPlan?.work == null
+                              ? "Tu plan permite mostrar todas tus experiencias laborales."
+                              : `Tu plan ${publicPlan.label} permite mostrar hasta ${publicPlan.work} experiencia${publicPlan.work === 1 ? "" : "s"} laboral${publicPlan.work === 1 ? "" : "es"} y ${publicPlan.featured == null ? "destacadas ilimitadas" : `${publicPlan.featured} destacada${publicPlan.featured === 1 ? "" : "s"}`}.`}
+                          </p>
+                        </div>
+                      </div>
                       <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Acciones</div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {!isVerified ? (

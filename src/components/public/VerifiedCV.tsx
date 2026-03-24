@@ -1,4 +1,8 @@
 import type { PublicCandidatePayload } from "@/components/public/CandidatePublicProfileRenderer";
+import {
+  getExperienceVerificationBadgeClasses,
+  resolveExperienceVerificationBadges,
+} from "@/lib/candidate/experience-verification-badges";
 
 type Props = {
   data: PublicCandidatePayload;
@@ -59,23 +63,39 @@ export default function VerifiedCV({ data }: Props) {
           <h2 className="text-lg font-semibold">Experiencia</h2>
           <div className="mt-3 space-y-3">
             {experiences.map((exp, index) => (
-              <article
-                key={String(exp?.experience_id || `exp-${index}`)}
-                className="break-inside-avoid rounded-xl border border-slate-200 p-4"
-              >
-                <h3 className="font-semibold">{exp?.position || "Experiencia"}</h3>
-                <p className="text-sm text-slate-700">{exp?.company_name || "Empresa"}</p>
-                <p className="mt-1 text-xs text-slate-500">{formatPeriod(exp?.start_date, exp?.end_date)}</p>
-                {Array.isArray(exp?.verification_badges) && exp.verification_badges.length ? (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {exp.verification_badges.map((badge) => (
-                      <span key={`${exp?.experience_id}-${badge}`} className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
-                        {badge}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-              </article>
+              (() => {
+                const badges = resolveExperienceVerificationBadges({
+                  verificationBadges: exp?.verification_badges,
+                  verificationChannel: exp?.verification_method,
+                  verificationStatus: exp?.status_text,
+                  companyVerificationStatusSnapshot: exp?.company_verification_status_snapshot,
+                  evidenceCount: exp?.evidence_count,
+                });
+                const primary = badges[0] || null;
+                const secondary = badges.slice(1, 3);
+                return (
+                  <article
+                    key={String(exp?.experience_id || `exp-${index}`)}
+                    className="break-inside-avoid rounded-xl border border-slate-200 p-4"
+                  >
+                    <h3 className="font-semibold">{exp?.position || "Experiencia"}</h3>
+                    <p className="text-sm text-slate-700">{exp?.company_name || "Empresa"}</p>
+                    <p className="mt-1 text-xs text-slate-500">{formatPeriod(exp?.start_date, exp?.end_date)}</p>
+                    {primary ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getExperienceVerificationBadgeClasses(primary.tone, "primary")}`}>
+                          {primary.label}
+                        </span>
+                        {secondary.map((badge) => (
+                          <span key={`${exp?.experience_id}-${badge.key}`} className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getExperienceVerificationBadgeClasses(badge.tone)}`}>
+                            {badge.label}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </article>
+                );
+              })()
             ))}
           </div>
         </section>

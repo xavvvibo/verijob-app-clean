@@ -12,7 +12,14 @@ import {
 } from "@/lib/verification/employment-record-verification-status";
 import { readCandidateProfileCollections } from "@/lib/candidate/profile-collections";
 import { mapCandidateAvailability } from "@/lib/candidate/availability";
-import { getTrustBreakdownLegacyCompat, getTrustVerificationLabel, normalizeTrustBreakdown } from "@/lib/trust/trust-model";
+import { toExperienceVerificationBadgeLabels } from "@/lib/candidate/experience-verification-badges";
+import {
+  getExperienceVisibilitySetting,
+  readCandidateSkills,
+  readPublicProfileSettings,
+  resolveCandidatePublicLimits,
+} from "@/lib/candidate/profile-visibility";
+import { getTrustBreakdownLegacyCompat, normalizeTrustBreakdown } from "@/lib/trust/trust-model";
 
 type Params = { token: string };
 
@@ -93,23 +100,10 @@ function toPublicName(fullNameRaw: unknown) {
   return secondInitial ? `${first} ${secondInitial}.` : first;
 }
 
-function toEvidenceVerificationBadge(rawType: unknown) {
-  const label = getTrustVerificationLabel(rawType);
-  return label ? label : "Documental";
-}
-
-function isDocumentaryOfficialVerification(row: any) {
-  const channel = String(row?.verification_channel || "").trim().toLowerCase();
-  const requestContext = row?.request_context && typeof row.request_context === "object" ? row.request_context : {};
-  const source = String(requestContext?.verification_source || requestContext?.documentary_processing?.verification_source || "").trim().toLowerCase();
-  const method = String(requestContext?.verification_method || requestContext?.documentary_processing?.verification_method || "").trim().toLowerCase();
-  const reason = String(requestContext?.verification_reason || requestContext?.documentary_processing?.verification_reason || "").trim().toLowerCase();
-  return channel === "documentary" && (
-    source === "documentary_official" ||
-    method === "official_document_auto" ||
-    reason === "vida_laboral_linked_high_confidence" ||
-    reason === "vida_laboral_cea_verified_signal"
-  );
+function toApproximateLocation(rawValue: unknown) {
+  const raw = asText(rawValue, 140);
+  if (!raw) return null;
+  return raw.split(",")[0]?.trim() || raw;
 }
 
 function getRoleSkills(experiences: any[]) {
@@ -182,6 +176,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
 
   const candidateProfileSelect = [
     "summary",
+    "raw_cv_json",
     "trust_score",
     "trust_score_breakdown",
     "job_search_status",
@@ -275,6 +270,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   );
 
   const candidateProfile = (cp as any) || null;
+  const publicProfileSettings = readPublicProfileSettings(candidateProfile);
   const educationTotal = candidateCollections.education.length;
 
   const trustScore = Number(candidateProfile?.trust_score ?? 0);
@@ -346,24 +342,22 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     const verificationId = String(item?.linked_verification_id || item?.experience_id || "");
     const linkedVerification = verificationsById.get(verificationId) || null;
     const linkedEvidences = evidenceByVerification.get(verificationId) || [];
-    const badges = new Set<string>();
     const method = String(linkedVerification?.verification_channel || "").toLowerCase();
     const status = String(item?.status_text || "").toLowerCase();
     const normalizedEmploymentStatus = normalizeEmploymentRecordVerificationStatus(status);
-    if (status === "verified" || status === "approved" || normalizedEmploymentStatus === EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFIED) {
-      badges.add(isDocumentaryOfficialVerification(linkedVerification) ? "Vida laboral" : "Verificación empresa");
-    }
-    if (method === "documentary" && !isDocumentaryOfficialVerification(linkedVerification)) badges.add("Documental");
-    if (method === "peer") badges.add("Peer");
-    for (const ev of linkedEvidences) {
-      const b = toEvidenceVerificationBadge((ev as any)?.document_type || (ev as any)?.evidence_type);
-      if (b) badges.add(b);
-    }
-    if (!badges.size && Number(item?.evidence_count || 0) > 0) badges.add("Documental");
+    const verificationBadges = toExperienceVerificationBadgeLabels({
+      verificationChannel: linkedVerification?.verification_channel || item?.verification_method,
+      verificationStatus: linkedVerification?.status || item?.status_text,
+      companyVerificationStatusSnapshot: item?.company_verification_status_snapshot,
+      evidenceCount: item?.evidence_count,
+      requestContext: linkedVerification?.request_context,
+      evidences: linkedEvidences,
+      verificationBadges: item?.verification_badges,
+    });
     return {
       ...item,
       verification_method: method || null,
-      verification_badges: Array.from(badges),
+      verification_badges: verificationBadges,
       is_verified:
         status === "verified" ||
         status === "approved" ||
@@ -415,8 +409,10 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     })
     .slice(0, 10);
 
+  const manualSkills = readCandidateSkills(candidateProfile);
   const verifiedSkills = Array.from(
     new Set([
+      ...manualSkills.map((item) => item.name),
       ...getRoleSkills(experiencesEnriched),
       ...achievementItems.slice(0, 8),
     ])
@@ -426,16 +422,50 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const publicName = toPublicName(profileFullName);
   const profileTitle = asText((profile as any)?.title, 140) || null;
   const profileLocation = asText((profile as any)?.location, 140) || null;
+  const approximateLocation = toApproximateLocation((profile as any)?.location);
   const profileSummary = asText(candidateProfile?.summary, 1200) || null;
   const availability = mapCandidateAvailability(candidateProfile?.job_search_status) || null;
   const workMode = asText(candidateProfile?.preferred_workday, 80) || null;
   const sector = asText(asArray(candidateProfile?.preferred_roles)?.[0], 120) || null;
   const candidateCapabilities = getCandidatePlanCapabilities(latestSub?.plan || "free");
+  const publicLimits = resolveCandidatePublicLimits(latestSub?.plan || "free");
+  const visibleExperiences = experiencesEnriched
+    .filter((item: any) => {
+      const setting = getExperienceVisibilitySetting(publicProfileSettings, {
+        employmentRecordId: item?.experience_id,
+        fallbackId: item?.linked_verification_id || item?.experience_id,
+      });
+      return setting?.visible !== false;
+    })
+    .sort((a: any, b: any) => {
+      const aSetting = getExperienceVisibilitySetting(publicProfileSettings, {
+        employmentRecordId: a?.experience_id,
+        fallbackId: a?.linked_verification_id || a?.experience_id,
+      });
+      const bSetting = getExperienceVisibilitySetting(publicProfileSettings, {
+        employmentRecordId: b?.experience_id,
+        fallbackId: b?.linked_verification_id || b?.experience_id,
+      });
+      if (!!aSetting?.featured !== !!bSetting?.featured) return aSetting?.featured ? -1 : 1;
+      return 0;
+    });
+  const publicExperiences = visibleExperiences.slice(0, publicLimits.work ?? undefined);
+  const publicEducation = educationItems.slice(0, publicLimits.academic ?? undefined);
+  const featuredVisibleExperiences = visibleExperiences
+    .filter((item: any) =>
+      Boolean(
+        getExperienceVisibilitySetting(publicProfileSettings, {
+          employmentRecordId: item?.experience_id,
+          fallbackId: item?.linked_verification_id || item?.experience_id,
+        })?.featured,
+      ),
+    )
+    .slice(0, publicLimits.featured ?? undefined);
   const teaser = {
     full_name: internalPreviewAllowed ? profileFullName : publicName,
     public_name: publicName,
     title: profileTitle,
-    location: profileLocation,
+    location: internalPreviewAllowed ? profileLocation : approximateLocation,
     languages: internalPreviewAllowed ? publicLanguages : [],
     summary: internalPreviewAllowed ? profileSummary : null,
     trust_score: trustScore,
@@ -448,7 +478,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     evidences_count: evidences,
     reuse_total: Number(legacyTrustBreakdown.reuseEvents ?? 0),
     reuse_companies: Number(legacyTrustBreakdown.reuseCompanies ?? 0),
-    education_total: internalPreviewAllowed ? educationTotal : 0,
+    education_total: internalPreviewAllowed ? educationTotal : publicEducation.length,
     achievements_total: internalPreviewAllowed ? candidateCollections.achievements_catalog.all.length : 0,
     verified_work_count: verifiedWork,
     verified_education_count: internalPreviewAllowed ? verifiedEducation : 0,
@@ -464,19 +494,17 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       verifiedRows
         .map((row: any) => row?.resolved_at || row?.created_at || null)
         .find(Boolean) || null,
-    featured_verified_experiences: internalPreviewAllowed
-      ? experiencesEnriched
-          .filter((item: any) => Boolean(item?.is_verified))
-          .slice(0, 3)
-          .map((item: any) => ({
-            position: asText(item?.position, 120) || "Experiencia verificada",
-            company_name: asText(item?.company_name, 120) || null,
-            verification_badges: Array.isArray(item?.verification_badges) ? item.verification_badges.slice(0, 2) : [],
-          }))
-      : [],
+    featured_verified_experiences: (internalPreviewAllowed ? featuredVisibleExperiences : publicExperiences)
+      .filter((item: any) => Boolean(item?.is_verified))
+      .slice(0, 2)
+      .map((item: any) => ({
+        position: asText(item?.position, 120) || "Experiencia verificada",
+        company_name: asText(item?.company_name, 120) || null,
+        verification_badges: Array.isArray(item?.verification_badges) ? item.verification_badges.slice(0, 2) : [],
+      })),
     availability,
     work_mode: internalPreviewAllowed ? workMode : null,
-    sector: internalPreviewAllowed ? sector : null,
+    sector,
   };
 
   return json(200, {
@@ -484,8 +512,8 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     token: linkResolved.token,
     candidate_id: candidateId,
     teaser,
-    experiences: internalPreviewAllowed ? experiencesEnriched : [],
-    education: internalPreviewAllowed ? educationItems : [],
+    experiences: internalPreviewAllowed ? experiencesEnriched : publicExperiences,
+    education: internalPreviewAllowed ? educationItems : publicEducation,
     recommendations: internalPreviewAllowed ? derivedRecommendations : [],
     achievements: internalPreviewAllowed ? achievementItems : [],
     verified_skills: verifiedSkills,

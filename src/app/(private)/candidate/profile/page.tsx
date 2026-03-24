@@ -2,8 +2,10 @@ import { createClient } from "@/utils/supabase/server";
 import Link from "next/link";
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
 import { buildCandidateExperienceTrustTimeline } from "@/lib/candidate/experience-trust";
+import { readCandidateSkills } from "@/lib/candidate/profile-visibility";
 import { getTrustBreakdownDisplayEntries, normalizeTrustBreakdown } from "@/lib/trust/trust-model";
 import CandidateProfileIdentityClient from "./CandidateProfileIdentityClient";
+import CandidateProfileSkillsClient from "./CandidateProfileSkillsClient";
 
 export const dynamic = "force-dynamic";
 
@@ -67,6 +69,7 @@ export default async function CandidateProfilePage() {
       .order("start_date", { ascending: false }),
   ]);
   const importSummary = summarizeCompanyCvImportUpdates((candidateProfile as any)?.raw_cv_json);
+  const manualSkills = readCandidateSkills(candidateProfile);
   const trustScore = Number((candidateProfile as any)?.trust_score ?? 0);
   const trustBreakdown = normalizeTrustBreakdown((candidateProfile as any)?.trust_score_breakdown);
   const trustEntries = getTrustBreakdownDisplayEntries((candidateProfile as any)?.trust_score_breakdown);
@@ -262,6 +265,8 @@ export default async function CandidateProfilePage() {
           has_identity: false,
         }}
       />
+
+      <CandidateProfileSkillsClient initialSkills={manualSkills} />
     </div>
   );
 }

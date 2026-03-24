@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import CandidateQuickView from "@/components/company/CandidateQuickView";
+import { COMPANY_PROFILE_UNLOCKED_EVENT } from "@/components/company/ProfileUnlockAction";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import {
   computeCandidateQuickFit,
@@ -13,6 +14,7 @@ import {
   type CompanyCandidateWorkspaceRow,
 } from "@/lib/company/candidate-fit";
 import { companyVerificationMethodTone } from "@/lib/company/verification-method";
+import { normalizeCandidatePublicToken } from "@/lib/public/candidate-public-link";
 
 type Kpis = {
   pending_requests: number;
@@ -374,6 +376,51 @@ export default function CompanyDashboard() {
       window.clearInterval(interval);
     };
   }, [searchParams]);
+
+  useEffect(() => {
+    const handleUnlocked = (event: Event) => {
+      const detail = (event as CustomEvent<any>).detail || {};
+      const candidateToken = normalizeCandidatePublicToken(detail?.candidateToken);
+      const unlockedAt = String(detail?.unlocked_at || "").trim() || null;
+      const unlockedUntil = String(detail?.unlocked_until || "").trim() || null;
+      const remaining = Number(detail?.remaining_accesses || 0);
+      if (!candidateToken) return;
+
+      setCandidateData((prev) =>
+        prev
+          ? {
+              ...prev,
+              available_profile_accesses: remaining,
+              imports: Array.isArray(prev.imports)
+                ? prev.imports.map((item: any) =>
+                    normalizeCandidatePublicToken(item?.candidate_public_token) === candidateToken
+                      ? {
+                          ...item,
+                          access_status: "active",
+                          access_granted_at: unlockedAt,
+                          access_expires_at: unlockedUntil,
+                        }
+                      : item,
+                  )
+                : prev.imports,
+            }
+          : prev,
+      );
+      setQuickViewRow((prev) =>
+        prev && normalizeCandidatePublicToken((prev as any)?.candidate_public_token) === candidateToken
+          ? {
+              ...prev,
+              access_status: "active",
+              access_granted_at: unlockedAt,
+              access_expires_at: unlockedUntil,
+            }
+          : prev,
+      );
+    };
+
+    window.addEventListener(COMPANY_PROFILE_UNLOCKED_EVENT, handleUnlocked as EventListener);
+    return () => window.removeEventListener(COMPANY_PROFILE_UNLOCKED_EVENT, handleUnlocked as EventListener);
+  }, []);
 
   const companyName = resolveCompanyDisplayName(
     {

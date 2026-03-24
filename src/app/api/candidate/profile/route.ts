@@ -12,6 +12,13 @@ import {
   replaceCandidateEducationCollection,
   replaceCandidateLanguagesCollection,
 } from "@/lib/candidate/profile-collections";
+import {
+  mergeCandidateRawConfig,
+  normalizeCandidateSkills,
+  normalizePublicProfileSettings,
+  readCandidateSkills,
+  readPublicProfileSettings,
+} from "@/lib/candidate/profile-visibility";
 import { normalizeTrustBreakdown } from "@/lib/trust/trust-model";
 
 const PROFILE_PERSONAL_FIELDS = ["full_name", "phone", "title", "location"] as const;
@@ -26,7 +33,7 @@ async function getTableColumns(admin: any, tableName: string) {
     return new Set(data.map((row: any) => String(row?.column_name || "")));
   }
   if (tableName === "candidate_profiles") {
-    return new Set(["id", "user_id", "summary", "education", "trust_score", "trust_score_breakdown"]);
+    return new Set(["id", "user_id", "summary", "education", "trust_score", "trust_score_breakdown", "raw_cv_json"]);
   }
   if (tableName === "profiles") {
     return new Set(["id", "full_name", "phone", "title", "location", "updated_at"]);
@@ -285,6 +292,8 @@ function buildProfilePayload(candidateProfile: any, collections: Awaited<ReturnT
       certifications: collections.support.certifications,
       achievements: collections.support.achievements,
     },
+    skills: readCandidateSkills(candidateProfile),
+    public_profile_settings: readPublicProfileSettings(candidateProfile),
     experience_timeline: experienceTimeline,
   };
 }
@@ -354,21 +363,36 @@ export async function PUT(req: Request) {
     getTableColumns(admin, "profiles"),
   ]);
 
-  if (Object.prototype.hasOwnProperty.call(body || {}, "summary")) {
-    const payload: Record<string, any> = { user_id: user.id };
-    if (candidateProfileColumns.has("summary")) {
-      payload.summary = typeof body?.summary === "string" ? body.summary : candidateProfile?.summary ?? null;
+  const requestedCandidateProfilePatch: Record<string, any> = { user_id: user.id };
+  if (candidateProfileColumns.has("summary") && Object.prototype.hasOwnProperty.call(body || {}, "summary")) {
+    requestedCandidateProfilePatch.summary = typeof body?.summary === "string" ? body.summary : candidateProfile?.summary ?? null;
+  }
+  if (candidateProfileColumns.has("raw_cv_json")) {
+    const shouldWritePublicProfileSettings = Object.prototype.hasOwnProperty.call(body || {}, "public_profile_settings");
+    const shouldWriteSkills = Object.prototype.hasOwnProperty.call(body || {}, "skills");
+    if (shouldWritePublicProfileSettings || shouldWriteSkills) {
+      requestedCandidateProfilePatch.raw_cv_json = mergeCandidateRawConfig(candidateProfile, {
+        ...(shouldWritePublicProfileSettings
+          ? { public_profile_settings: normalizePublicProfileSettings(body?.public_profile_settings) }
+          : {}),
+        ...(shouldWriteSkills
+          ? { manual_skills: normalizeCandidateSkills(body?.skills) }
+          : {}),
+      });
     }
+  }
+
+  if (Object.keys(requestedCandidateProfilePatch).length > 1) {
     const res = await writeCandidateProfileRow({
       admin,
       userId: user.id,
       candidateProfile,
-      payload,
+      payload: requestedCandidateProfilePatch,
     });
     if (res.error) {
       return NextResponse.json({ error: "candidate_profile_write_failed", details: res.error.message }, { status: 400 });
     }
-    }
+  }
 
   const nextProfilePatch: Record<string, any> = {};
   for (const field of PROFILE_PERSONAL_FIELDS) {
@@ -495,6 +519,22 @@ export async function PUT(req: Request) {
     const persistedSummary = persistedCandidateProfile?.summary ?? null;
     if ((requestedSummary ?? null) !== (persistedSummary ?? null)) {
       return NextResponse.json({ error: "candidate_profile_persistence_mismatch", details: "El resumen profesional no quedó persistido tras la relectura." }, { status: 409 });
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body || {}, "skills")) {
+    const requestedSkills = normalizeCandidateSkills(body?.skills);
+    const persistedSkills = readCandidateSkills(persistedCandidateProfile);
+    if (!sameJson(requestedSkills, persistedSkills)) {
+      return NextResponse.json({ error: "candidate_skills_persistence_mismatch", details: "Las skills manuales no quedaron persistidas tras la relectura." }, { status: 409 });
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body || {}, "public_profile_settings")) {
+    const requestedSettings = normalizePublicProfileSettings(body?.public_profile_settings);
+    const persistedSettings = readPublicProfileSettings(persistedCandidateProfile);
+    if (!sameJson(requestedSettings, persistedSettings)) {
+      return NextResponse.json({ error: "candidate_visibility_persistence_mismatch", details: "La configuración de visibilidad pública no quedó persistida tras la relectura." }, { status: 409 });
     }
   }
 

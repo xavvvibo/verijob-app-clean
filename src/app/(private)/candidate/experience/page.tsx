@@ -5,26 +5,18 @@ import { Card, CardTitle } from  "@/app/_components/ui";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import CvUploadAndParse from "@/components/candidate/profile/CvUploadAndParse";
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
-import { getTrustVerificationLabel } from "@/lib/trust/trust-model";
+import { toExperienceVerificationBadgeLabels } from "@/lib/candidate/experience-verification-badges";
+import { getCandidatePlanCapabilities } from "@/lib/billing/planCapabilities";
+import {
+  getExperienceVisibilitySetting,
+  readPublicProfileSettings,
+  resolveCandidatePublicLimits,
+} from "@/lib/candidate/profile-visibility";
 import ExperienceQuickAddClient from "./ExperienceQuickAddClient";
 import ExperienceListClient from "./ExperienceListClient";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-function isDocumentaryOfficialVerification(row: any) {
-  const channel = String(row?.verification_channel || "").trim().toLowerCase();
-  const requestContext = row?.request_context && typeof row.request_context === "object" ? row.request_context : {};
-  const source = String(requestContext?.verification_source || requestContext?.documentary_processing?.verification_source || "").trim().toLowerCase();
-  const method = String(requestContext?.verification_method || requestContext?.documentary_processing?.verification_method || "").trim().toLowerCase();
-  const reason = String(requestContext?.verification_reason || requestContext?.documentary_processing?.verification_reason || "").trim().toLowerCase();
-  return channel === "documentary" && (
-    source === "documentary_official" ||
-    method === "official_document_auto" ||
-    reason === "vida_laboral_linked_high_confidence" ||
-    reason === "vida_laboral_cea_verified_signal"
-  );
-}
 
 export default async function CandidateExperiencePage({
   searchParams,
@@ -43,7 +35,7 @@ export default async function CandidateExperiencePage({
     .single();
   if (!profile) redirect("/onboarding");
 
-  const [{ data: rows }, { data: importedRows }, { data: candidateProfile }, { data: employmentRows }] = await Promise.all([
+  const [{ data: rows }, { data: importedRows }, { data: candidateProfile }, { data: employmentRows }, { data: latestSub }] = await Promise.all([
     supabase
       .from("profile_experiences")
       .select("id, role_title, company_name, start_date, end_date, description, matched_verification_id, confidence, created_at")
@@ -62,7 +54,17 @@ export default async function CandidateExperiencePage({
       .from("employment_records")
       .select("id, source_experience_id, position, company_name_freeform, start_date, end_date, verification_status, last_verification_request_id")
       .eq("candidate_id", au.user.id),
+    supabase
+      .from("subscriptions")
+      .select("plan,created_at")
+      .eq("user_id", au.user.id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
+  const publicProfileSettings = readPublicProfileSettings(candidateProfile);
+  const candidateCapabilities = getCandidatePlanCapabilities((latestSub as any)?.plan || "free");
+  const publicLimits = resolveCandidatePublicLimits((latestSub as any)?.plan || "free");
 
   const verificationIds = Array.from(
     new Set(
@@ -147,10 +149,19 @@ export default async function CandidateExperiencePage({
     return { employmentRecord, linkedId, verification };
   }
 
-  const normalizedRows = (rows || []).map((r: any) => ({
+  const normalizedRows = (rows || []).map((r: any) => {
+    const linkedEmploymentRecord =
+      employmentBySourceExperienceId.get(String(r?.id || "").trim()) ||
+      employmentBySignature.get(experienceMatchKey(r)) ||
+      null;
+    const visibilitySetting = getExperienceVisibilitySetting(publicProfileSettings, {
+      employmentRecordId: linkedEmploymentRecord?.id || null,
+      profileExperienceId: r?.id || null,
+    });
+    return {
     id: String(r.id),
     profile_experience_id: String(r.id),
-    employment_record_id: String((employmentBySignature.get(experienceMatchKey(r)) as any)?.id || ""),
+    employment_record_id: String((linkedEmploymentRecord as any)?.id || ""),
     role_title: r.role_title ?? null,
     company_name: r.company_name ?? null,
     start_date: r.start_date ?? null,
@@ -176,7 +187,14 @@ export default async function CandidateExperiencePage({
           ? "Importada desde tu CV. Revísala, corrígela si hace falta y luego solicita verificación o sube evidencia."
           : "Sin solicitudes enviadas";
       }
-      if (isDocumentaryOfficialVerification(verification) && String(employmentRecord?.verification_status || "").trim()) {
+      if (
+        toExperienceVerificationBadgeLabels({
+          verificationChannel: verification?.verification_channel,
+          verificationStatus: verification?.status || employmentRecord?.verification_status,
+          requestContext: verification?.request_context,
+        }).includes("Vida laboral") &&
+        String(employmentRecord?.verification_status || "").trim()
+      ) {
         return "Verificada automáticamente por vida laboral.";
       }
       if (!verification) return "Solicitud de verificación enviada";
@@ -188,31 +206,29 @@ export default async function CandidateExperiencePage({
       const sig = `${norm(r?.role_title)}|${norm(r?.company_name)}|${norm(r?.start_date)}|${norm(r?.end_date)}`;
       const importedFromCv = importedSet.has(sig);
       const { employmentRecord, verification } = resolveLinkedVerification(r);
-      const status = String(verification?.status || employmentRecord?.verification_status || "").trim().toLowerCase();
-      if (isDocumentaryOfficialVerification(verification)) return "Verificada por documento";
-      if (
-        String(verification?.verification_channel || "").trim().toLowerCase() === "email" &&
-        (status === "verified" || status === "approved")
-      ) {
-        return "Verificada por empresa";
-      }
+      const badges = toExperienceVerificationBadgeLabels({
+        verificationChannel: verification?.verification_channel,
+        verificationStatus: verification?.status || employmentRecord?.verification_status,
+        requestContext: verification?.request_context,
+      });
+      if (badges.includes("Vida laboral")) return "Verificada por documento";
+      if (badges.includes("Verificación empresa")) return "Verificada por empresa";
       return importedFromCv ? "Importada desde CV" : null;
     })(),
     verification_labels: (() => {
-      const { verification } = resolveLinkedVerification(r);
-      const badges = new Set<string>();
-      if (isDocumentaryOfficialVerification(verification)) badges.add("Vida laboral");
-      const method = String(verification?.verification_channel || "").trim().toLowerCase();
-      if (method === "email" || method === "company") badges.add("Verificación empresa");
-      if (method === "peer") badges.add("Peer");
-      if (method === "documentary" && !isDocumentaryOfficialVerification(verification)) badges.add("Documental");
-      for (const key of [verification?.request_context?.document_type, verification?.request_context?.evidence_type]) {
-        const label = getTrustVerificationLabel(key);
-        if (label) badges.add(label);
-      }
-      return Array.from(badges);
+      const { employmentRecord, verification } = resolveLinkedVerification(r);
+      return toExperienceVerificationBadgeLabels({
+        verificationChannel: verification?.verification_channel,
+        verificationStatus: verification?.status || employmentRecord?.verification_status,
+        requestContext: verification?.request_context,
+      });
     })(),
-  }));
+    public_visibility: {
+      visible: visibilitySetting?.visible !== false,
+      featured: visibilitySetting?.featured === true,
+    },
+  };
+  });
 
   const companyCvImportFlag = Array.isArray(resolvedSearchParams?.company_cv_import)
     ? resolvedSearchParams.company_cv_import[0]
@@ -300,8 +316,27 @@ export default async function CandidateExperiencePage({
             La fe de vida laboral se gestiona como evidencia global y puede reforzar varias experiencias.
           </div>
 
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+            <p className="font-semibold text-slate-900">Visibilidad pública según tu plan</p>
+            <p className="mt-1">
+              Plan actual: <span className="font-semibold">{candidateCapabilities.label}</span>. Puedes mostrar{" "}
+              <span className="font-semibold">{publicLimits.label}</span> y destacar{" "}
+              <span className="font-semibold">
+                {publicLimits.featured == null ? "experiencias ilimitadas" : `${publicLimits.featured} experiencia${publicLimits.featured === 1 ? "" : "s"}`}
+              </span>.
+            </p>
+          </div>
+
           <div className="mt-4">
-            <ExperienceListClient initialRows={normalizedRows as any} />
+            <ExperienceListClient
+              initialRows={normalizedRows as any}
+              publicPlan={{
+                work: publicLimits.work,
+                featured: publicLimits.featured,
+                label: candidateCapabilities.label,
+                visibilityLabel: publicLimits.label,
+              }}
+            />
           </div>
         </Card>
       </div>

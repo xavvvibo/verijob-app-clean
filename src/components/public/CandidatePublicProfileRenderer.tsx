@@ -7,6 +7,10 @@ import {
   normalizeEmploymentRecordVerificationStatus,
 } from "@/lib/verification/employment-record-verification-status";
 import { resolveExperienceTrustPresentation } from "@/lib/candidate/experience-trust";
+import {
+  getExperienceVerificationBadgeClasses,
+  resolveExperienceVerificationBadges,
+} from "@/lib/candidate/experience-verification-badges";
 
 export type PublicProfilePreviewMode = "public" | "registered" | "requesting" | "full";
 
@@ -360,6 +364,110 @@ export function CandidatePublicProfileRenderer({
   const showEducationTab = (!isOpenPublicView && isPrintMode) || activeTab === "education";
   const showRecommendationsTab = (!isOpenPublicView && isPrintMode) || activeTab === "recommendations";
   const showLanguagesTab = (!isOpenPublicView && isPrintMode) || activeTab === "languages";
+
+  if (isOpenPublicView) {
+    return (
+      <section className="rounded-[32px] border border-slate-200 bg-white/90 p-4 shadow-sm sm:p-5">
+        <div className="space-y-5">
+          <header className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/brand/verijob-logo-white-bg.png" alt="Verijob" className="h-6 w-auto object-contain" />
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Vista pública</span>
+                </div>
+                <h1 className="mt-2 text-3xl font-semibold text-slate-900">{displayName || "Candidato verificado"}</h1>
+                <p className="mt-1 text-sm font-medium text-blue-800">
+                  {[teaser?.title, teaser?.sector].filter(Boolean).join(" · ") || "Perfil profesional verificable"}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
+                  {teaser?.location ? <Pill>{teaser.location}</Pill> : null}
+                  <Pill>{verificationSummary.verified} verificaciones</Pill>
+                  <Pill>Trust score {Math.round(trust)}</Pill>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-right">
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-900">Perfil resumido</div>
+                <div className="mt-2 text-3xl font-semibold text-slate-900">{Math.round(trust)}</div>
+                <div className="text-sm text-slate-700">{trustStateLabel}</div>
+              </div>
+            </div>
+
+            <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-700">
+              Resumen público con señales verificables y una muestra limitada de trayectoria. Para ver el perfil completo hay que desbloquearlo.
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <a
+                href={signupUrl}
+                className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+              >
+                Desbloquear perfil completo
+              </a>
+              <a
+                href={loginUrl}
+                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Acceso empresa
+              </a>
+            </div>
+          </header>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <SignalCard label="Trust score" value={Math.round(trust)} hint="Confianza del perfil" />
+            <SignalCard label="Verificaciones" value={verificationSummary.verified} hint="Experiencias contrastadas" />
+            <SignalCard label="Experiencias visibles" value={experiences.length} hint="Muestra pública limitada" />
+          </div>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Experiencia destacada</h2>
+                <p className="mt-1 text-sm text-slate-600">Solo se muestran 1-2 experiencias resumidas según el plan del candidato.</p>
+              </div>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                Sin datos de contacto
+              </span>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {experiences.length ? (
+                experiences.map((exp, index) => {
+                  const verificationBadges = resolveExperienceVerificationBadges({
+                    verificationBadges: exp?.verification_badges,
+                    verificationChannel: exp?.verification_method,
+                    verificationStatus: exp?.status_text,
+                    companyVerificationStatusSnapshot: exp?.company_verification_status_snapshot,
+                    evidenceCount: exp?.evidence_count,
+                  });
+                  const primaryVerificationBadge = verificationBadges[0] || null;
+                  return (
+                    <article key={String(exp?.experience_id || `public-exp-${index}`)} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-base font-semibold text-slate-900">{exp?.position || "Experiencia profesional"}</h3>
+                          <p className="text-sm text-slate-600">{exp?.company_name || "Empresa verificada"}</p>
+                        </div>
+                        {primaryVerificationBadge ? (
+                          <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getExperienceVerificationBadgeClasses(primaryVerificationBadge.tone, "primary")}`}>
+                            {primaryVerificationBadge.label}
+                          </span>
+                        ) : null}
+                      </div>
+                    </article>
+                  );
+                })
+              ) : (
+                <Empty text="Todavía no hay experiencias públicas visibles." />
+              )}
+            </div>
+          </section>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="rounded-[32px] border border-slate-200 bg-white/75 p-3 shadow-sm print:rounded-none print:border-0 print:bg-white print:p-0 print:shadow-none sm:p-4 lg:p-5">
@@ -716,17 +824,31 @@ export function CandidatePublicProfileRenderer({
                         <ul className="mt-2 space-y-2">
                           {featuredVerifiedExperiences.map((item, idx) => (
                             <li key={`${item.position || "exp"}-${idx}`} className="rounded-xl border border-white/80 bg-white px-3 py-2">
+                              {(() => {
+                                const badges = resolveExperienceVerificationBadges({
+                                  verificationBadges: item.verification_badges,
+                                });
+                                const primary = badges[0] || null;
+                                const secondary = badges.slice(1, 2);
+                                return (
+                                  <>
                               <div className="text-sm font-semibold text-slate-900">{item.position || "Experiencia verificada"}</div>
                               {item.company_name ? <div className="text-xs text-slate-600">{item.company_name}</div> : null}
-                              {Array.isArray(item.verification_badges) && item.verification_badges.length ? (
+                              {primary ? (
                                 <div className="mt-1 flex flex-wrap gap-1.5">
-                                  {item.verification_badges.map((badge) => (
-                                    <span key={`${item.position || idx}-${badge}`} className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
-                                      {badge}
+                                  <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getExperienceVerificationBadgeClasses(primary.tone, "primary")}`}>
+                                    {primary.label}
+                                  </span>
+                                  {secondary.map((badge) => (
+                                    <span key={`${item.position || idx}-${badge.key}`} className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getExperienceVerificationBadgeClasses(badge.tone)}`}>
+                                      {badge.label}
                                     </span>
                                   ))}
                                 </div>
                               ) : null}
+                                  </>
+                                );
+                              })()}
                             </li>
                           ))}
                         </ul>
@@ -748,6 +870,15 @@ export function CandidatePublicProfileRenderer({
                             rawStatus: exp?.status_text,
                             evidenceCount: Number(exp?.evidence_count ?? 0),
                           });
+                          const verificationBadges = resolveExperienceVerificationBadges({
+                            verificationBadges: exp?.verification_badges,
+                            verificationChannel: exp?.verification_method,
+                            verificationStatus: exp?.status_text,
+                            companyVerificationStatusSnapshot: exp?.company_verification_status_snapshot,
+                            evidenceCount: exp?.evidence_count,
+                          });
+                          const primaryVerificationBadge = verificationBadges[0] || null;
+                          const secondaryVerificationBadges = verificationBadges.slice(1, 3);
                           return (
                             <article
                               key={String(exp?.experience_id || `public-exp-${index}`)}
@@ -764,13 +895,23 @@ export function CandidatePublicProfileRenderer({
                                 </span>
                               </div>
                               <p className="mt-3 text-sm text-slate-700">{trustPresentation.explanation}</p>
-                              {trustPresentation.support_label ? (
-                                <div className="mt-2">
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {primaryVerificationBadge ? (
+                                  <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getExperienceVerificationBadgeClasses(primaryVerificationBadge.tone, "primary")}`}>
+                                    {primaryVerificationBadge.label}
+                                  </span>
+                                ) : null}
+                                {secondaryVerificationBadges.map((badge) => (
+                                  <span key={`${exp?.experience_id}-${badge.key}`} className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getExperienceVerificationBadgeClasses(badge.tone)}`}>
+                                    {badge.label}
+                                  </span>
+                                ))}
+                                {trustPresentation.support_label ? (
                                   <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-800">
                                     {trustPresentation.support_label}
                                   </span>
-                                </div>
-                              ) : null}
+                                ) : null}
+                              </div>
                             </article>
                           );
                         })}
@@ -794,7 +935,15 @@ export function CandidatePublicProfileRenderer({
                             rawStatus: exp?.status_text,
                             evidenceCount: Number(exp?.evidence_count ?? 0),
                           });
-                          const badges = Array.isArray(exp?.verification_badges) ? exp.verification_badges : [];
+                          const verificationBadges = resolveExperienceVerificationBadges({
+                            verificationBadges: exp?.verification_badges,
+                            verificationChannel: exp?.verification_method,
+                            verificationStatus: exp?.status_text,
+                            companyVerificationStatusSnapshot: exp?.company_verification_status_snapshot,
+                            evidenceCount: exp?.evidence_count,
+                          });
+                          const primaryVerificationBadge = verificationBadges[0] || null;
+                          const secondaryVerificationBadges = verificationBadges.slice(1, 3);
                           return (
                             <li key={`timeline-${exp?.experience_id || index}`} className="mb-5 last:mb-0" style={{ breakInside: "avoid" }}>
                               <span className="absolute -left-[6px] mt-1.5 h-2.5 w-2.5 rounded-full bg-blue-600" />
@@ -810,11 +959,14 @@ export function CandidatePublicProfileRenderer({
                                   </span>
                                 </div>
                                 <p className="mt-2 text-xs text-slate-600">{trustPresentation.explanation}</p>
-                                {badges.length ? (
+                                {primaryVerificationBadge ? (
                                   <div className="mt-2 flex flex-wrap gap-1.5">
-                                    {badges.slice(0, 3).map((badge) => (
-                                      <span key={`${exp?.experience_id}-${badge}`} className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800">
-                                        {badge}
+                                    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getExperienceVerificationBadgeClasses(primaryVerificationBadge.tone, "primary")}`}>
+                                      {primaryVerificationBadge.label}
+                                    </span>
+                                    {secondaryVerificationBadges.map((badge) => (
+                                      <span key={`${exp?.experience_id}-${badge.key}`} className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${getExperienceVerificationBadgeClasses(badge.tone)}`}>
+                                        {badge.label}
                                       </span>
                                     ))}
                                   </div>
@@ -905,7 +1057,15 @@ export function CandidatePublicProfileRenderer({
                         evidenceCount: Number(exp?.evidence_count ?? 0),
                       });
                       const companyStatusBadge = getCompanyStatusBadge(exp?.company_verification_status_snapshot);
-                      const badges = Array.isArray(exp?.verification_badges) ? exp.verification_badges : [];
+                      const verificationBadges = resolveExperienceVerificationBadges({
+                        verificationBadges: exp?.verification_badges,
+                        verificationChannel: exp?.verification_method,
+                        verificationStatus: exp?.status_text,
+                        companyVerificationStatusSnapshot: exp?.company_verification_status_snapshot,
+                        evidenceCount: exp?.evidence_count,
+                      });
+                      const primaryVerificationBadge = verificationBadges[0] || null;
+                      const secondaryVerificationBadges = verificationBadges.slice(1, 3);
                       return (
                         <article
                           key={String(exp?.experience_id || `exp-${index}`)}
@@ -924,12 +1084,19 @@ export function CandidatePublicProfileRenderer({
                           </div>
 
                           <div className="mt-3 flex flex-wrap gap-2">
-                            {badges.map((badge) => (
+                            {primaryVerificationBadge ? (
                               <span
-                                key={`${exp?.experience_id || index}-${badge}`}
-                                className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800"
+                                className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getExperienceVerificationBadgeClasses(primaryVerificationBadge.tone, "primary")}`}
                               >
-                                {badge}
+                                {primaryVerificationBadge.label}
+                              </span>
+                            ) : null}
+                            {secondaryVerificationBadges.map((badge) => (
+                              <span
+                                key={`${exp?.experience_id || index}-${badge.key}`}
+                                className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getExperienceVerificationBadgeClasses(badge.tone)}`}
+                              >
+                                {badge.label}
                               </span>
                             ))}
                             <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${companyStatusBadge.className}`}>

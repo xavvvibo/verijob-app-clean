@@ -272,10 +272,13 @@ export default function CandidateQuickView({
                 )}
                 {canOpenSummary ? (
                   <ProfileUnlockAction
+                    candidateToken={String(row.candidate_public_token || "")}
                     href={`/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}?view=full`}
-                    requestHref={`/api/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}?mode=full`}
+                    requestHref={`/api/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}/unlock`}
                     availableAccesses={availableProfileAccesses}
                     alreadyUnlocked={row.access_status === "active"}
+                    unlockedAt={row.access_granted_at || null}
+                    unlockedUntil={row.access_expires_at || null}
                     primaryLabel={accessActionLabel}
                   />
                 ) : (
@@ -300,10 +303,12 @@ export default function CandidateQuickView({
                 <span className={`${actionClass()} cursor-not-allowed opacity-50`}>Archivar</span>
               </div>
               {row.access_status === "active" ? (
-                <p className="mt-4 text-sm font-medium text-emerald-700">Perfil desbloqueado por tu empresa.</p>
+                <p className="mt-4 text-sm font-medium text-emerald-700">
+                  Perfil desbloqueado por tu empresa{row.access_expires_at ? ` · no consume más accesos hasta ${formatDate(row.access_expires_at)}` : "."}
+                </p>
               ) : (
                 <p className="mt-4 text-sm text-slate-600">
-                  Acceder al perfil completo consumirá 1 acceso y quedará desbloqueado permanentemente para tu empresa.
+                  El primer desbloqueo consume 1 acceso. Después no volverá a consumir mientras siga dentro de la ventana activa.
                 </p>
               )}
             </article>

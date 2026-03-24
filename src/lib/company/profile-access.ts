@@ -1,3 +1,5 @@
+import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
+
 type AccessStatus = "active" | "expired" | "never";
 
 export const COMPANY_PROFILE_ACCESS_WINDOW_DAYS = Math.max(
@@ -12,6 +14,14 @@ export type CompanyCandidateAccess = {
   access_granted_at: string | null;
   access_expires_at: string | null;
   source: string | null;
+};
+
+export type CompanyProfileAccessState = {
+  is_unlocked: boolean;
+  consumes_credit: boolean;
+  remaining_accesses: number;
+  unlocked_at: string | null;
+  unlocked_until: string | null;
 };
 
 function toIso(value: unknown) {
@@ -103,4 +113,39 @@ export async function resolveCompanyCandidateAccessMap(args: {
     if (!out.has(candidateId)) out.set(candidateId, deriveCompanyCandidateAccess(null, null));
   }
   return out;
+}
+
+export async function getProfileAccessState(args: {
+  company_id: string;
+  candidate_id: string;
+  viewer_user_id?: string;
+  service?: any;
+}): Promise<CompanyProfileAccessState> {
+  const service =
+    args.service ||
+    (
+      await import("@/utils/supabase/service")
+    ).createServiceRoleClient();
+  const [access, credits] = await Promise.all([
+    resolveCompanyCandidateAccess({
+      service,
+      companyId: args.company_id,
+      candidateId: args.candidate_id,
+    }),
+    args.viewer_user_id
+      ? resolveCompanyProfileAccessCredits({
+          service,
+          userId: args.viewer_user_id,
+          companyId: args.company_id,
+        })
+      : Promise.resolve({ available: 0 }),
+  ]);
+
+  return {
+    is_unlocked: access.access_status === "active",
+    consumes_credit: access.access_status !== "active",
+    remaining_accesses: Number(credits?.available || 0),
+    unlocked_at: access.access_granted_at,
+    unlocked_until: access.access_expires_at,
+  };
 }

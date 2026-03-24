@@ -11,6 +11,10 @@ export type CandidatePlanCapabilities = {
   canDownloadVerifiedCv: boolean;
   activeWorkVerificationsLimit: number | null;
   activeAcademicVerificationsLimit: number | null;
+  publicWorkExperiencesLimit: number | null;
+  publicAcademicExperiencesLimit: number | null;
+  publicFeaturedExperiencesLimit: number | null;
+  publicProfileExperienceLabel: string;
   activeVerificationsLabel: string;
   summary: string;
 };
@@ -51,6 +55,10 @@ export function getCandidatePlanCapabilities(planRaw: unknown): CandidatePlanCap
       canDownloadVerifiedCv: true,
       activeWorkVerificationsLimit: null,
       activeAcademicVerificationsLimit: null,
+      publicWorkExperiencesLimit: null,
+      publicAcademicExperiencesLimit: null,
+      publicFeaturedExperiencesLimit: null,
+      publicProfileExperienceLabel: "Experiencias públicas ilimitadas",
       activeVerificationsLabel: "Ilimitadas",
       summary: "Todo lo de Pro, más verificaciones activas ilimitadas y descarga de CV verificado.",
     };
@@ -67,6 +75,10 @@ export function getCandidatePlanCapabilities(planRaw: unknown): CandidatePlanCap
       canDownloadVerifiedCv: false,
       activeWorkVerificationsLimit: 3,
       activeAcademicVerificationsLimit: 3,
+      publicWorkExperiencesLimit: 3,
+      publicAcademicExperiencesLimit: 3,
+      publicFeaturedExperiencesLimit: 1,
+      publicProfileExperienceLabel: "3 laborales + 3 académicas visibles",
       activeVerificationsLabel: "3 laborales + 3 académicas",
       summary: "Todo lo de Starter, más comparte tu perfil por QR y activa hasta 3 verificaciones laborales y 3 académicas.",
     };
@@ -83,6 +95,10 @@ export function getCandidatePlanCapabilities(planRaw: unknown): CandidatePlanCap
       canDownloadVerifiedCv: false,
       activeWorkVerificationsLimit: 2,
       activeAcademicVerificationsLimit: 2,
+      publicWorkExperiencesLimit: 2,
+      publicAcademicExperiencesLimit: 2,
+      publicFeaturedExperiencesLimit: 1,
+      publicProfileExperienceLabel: "2 laborales + 2 académicas visibles",
       activeVerificationsLabel: "2 laborales + 2 académicas",
       summary: "Todo lo de Free, más hasta 2 verificaciones laborales y 2 académicas activas.",
     };
@@ -98,6 +114,10 @@ export function getCandidatePlanCapabilities(planRaw: unknown): CandidatePlanCap
     canDownloadVerifiedCv: false,
     activeWorkVerificationsLimit: 1,
     activeAcademicVerificationsLimit: 1,
+    publicWorkExperiencesLimit: 1,
+    publicAcademicExperiencesLimit: 1,
+    publicFeaturedExperiencesLimit: 1,
+    publicProfileExperienceLabel: "1 laboral + 1 académica visible",
     activeVerificationsLabel: "1 laboral + 1 académica",
     summary: "Crea tu perfil verificable y compártelo por link. Incluye hasta 1 verificación laboral y 1 académica activas.",
   };

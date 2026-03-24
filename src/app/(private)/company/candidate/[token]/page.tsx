@@ -4,6 +4,10 @@ import { headers } from "next/headers";
 import ProfileViewCheckoutButtons from "./ProfileViewCheckoutButtons";
 import CheckoutReturnSyncNotice from "@/components/company/CheckoutReturnSyncNotice";
 import CompanyCandidateAccessCta from "./CompanyCandidateAccessCta";
+import {
+  getExperienceVerificationBadgeClasses,
+  resolveExperienceVerificationBadges,
+} from "@/lib/candidate/experience-verification-badges";
 
 type Ctx = {
   params: Promise<{ token: string }>;
@@ -237,11 +241,11 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
                 Vista parcial para decidir si merece la pena acceder al perfil completo. Esta vista no consume accesos.
               </p>
               <p className="mt-2 text-sm text-slate-600">
-                Acceder al perfil completo consumirá 1 acceso. El perfil quedará desbloqueado permanentemente para tu empresa.
+                El primer desbloqueo consume 1 acceso. Después no volverá a consumir mientras siga dentro de la ventana activa.
               </p>
               <p className="mt-2 text-sm text-slate-600">
                 {access?.access_status === "active" && access?.access_granted_at
-                  ? `Perfil desbloqueado por tu empresa desde ${formatDateTime(access.access_granted_at)}.`
+                  ? `Perfil desbloqueado por tu empresa desde ${formatDateTime(access.access_granted_at)}${access?.access_expires_at ? ` · no consume más accesos hasta ${formatDateTime(access.access_expires_at)}` : ""}.`
                   : access?.access_status === "expired" && access?.access_expires_at
                     ? `El acceso anterior expiró el ${formatDateTime(access.access_expires_at)}.`
                     : "Tu empresa todavía no ha desbloqueado este perfil completo."}
@@ -255,10 +259,13 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
             </div>
             <div className="flex flex-wrap gap-3">
               <CompanyCandidateAccessCta
+                candidateToken={token}
                 href={`/company/candidate/${encodeURIComponent(token)}?view=full`}
-                requestHref={`/api/company/candidate/${encodeURIComponent(token)}?mode=full`}
+                requestHref={`/api/company/candidate/${encodeURIComponent(token)}/unlock`}
                 availableAccesses={creditsRemaining}
                 alreadyUnlocked={access?.access_status === "active"}
+                unlockedAt={access?.access_granted_at ?? null}
+                unlockedUntil={access?.access_expires_at ?? null}
               />
               {access?.access_status !== "active" ? (
                 <ProfileViewCheckoutButtons returnPath={returnPath} upgradeUrl="/company/subscription" compact />
@@ -290,14 +297,17 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
             <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
               <h2 className="text-sm font-semibold text-slate-900">Siguiente paso</h2>
               <p className="mt-4 text-sm text-slate-600">
-                Si este candidato encaja, accede al perfil completo. Consumirá 1 acceso y quedará desbloqueado de forma permanente para tu empresa.
+                Si este candidato encaja, desbloquea el perfil completo. El primer acceso consume 1 crédito y los siguientes dentro de la ventana activa no vuelven a consumir.
               </p>
               <div className="mt-5 flex flex-wrap gap-3">
                 <CompanyCandidateAccessCta
+                  candidateToken={token}
                   href={`/company/candidate/${encodeURIComponent(token)}?view=full`}
-                  requestHref={`/api/company/candidate/${encodeURIComponent(token)}?mode=full`}
+                  requestHref={`/api/company/candidate/${encodeURIComponent(token)}/unlock`}
                   availableAccesses={creditsRemaining}
                   alreadyUnlocked={access?.access_status === "active"}
+                  unlockedAt={access?.access_granted_at ?? null}
+                  unlockedUntil={access?.access_expires_at ?? null}
                 />
                 {access?.access_status !== "active" ? (
                   <ProfileViewCheckoutButtons returnPath={returnPath} upgradeUrl="/company/subscription" compact />
@@ -445,46 +455,58 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
         <h2 className="text-base font-semibold text-gray-900">Historial verificable</h2>
         {timeline.length ? (
           <ol className="relative mt-3 ml-2 border-l border-slate-200 pl-4">
-            {timeline.map((item, idx) => (
-              <li key={item.verification_id || `timeline-${idx}`} className="mb-4 last:mb-0">
-                <span className="absolute -left-[6px] mt-1.5 h-2.5 w-2.5 rounded-full bg-blue-600" />
-                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{item.position || "Experiencia verificada"}</p>
-                      <p className="text-xs text-slate-600">{item.company_name || "Empresa no especificada"}</p>
-                      <p className="mt-1 text-[11px] text-slate-500">{formatPeriod(item.start_date, item.end_date)}</p>
-                    </div>
-                    <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusClass(item.status)}`}>
-                      {statusLabel(item.status)}
-                    </span>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
-                    {Array.isArray(item.verification_badges) && item.verification_badges.length ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {item.verification_badges.map((badge) => (
-                          <span key={`${item.verification_id}-${badge}`} className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 font-semibold text-blue-800">
-                            {badge}
-                          </span>
-                        ))}
+            {timeline.map((item, idx) => {
+              const verificationBadges = resolveExperienceVerificationBadges({
+                verificationBadges: item.verification_badges,
+                verificationStatus: item.status,
+                evidenceCount: item.evidence_count,
+              });
+              const primaryVerificationBadge = verificationBadges[0] || null;
+              const secondaryVerificationBadges = verificationBadges.slice(1, 3);
+              return (
+                <li key={item.verification_id || `timeline-${idx}`} className="mb-4 last:mb-0">
+                  <span className="absolute -left-[6px] mt-1.5 h-2.5 w-2.5 rounded-full bg-blue-600" />
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">{item.position || "Experiencia verificada"}</p>
+                        <p className="text-xs text-slate-600">{item.company_name || "Empresa no especificada"}</p>
+                        <p className="mt-1 text-[11px] text-slate-500">{formatPeriod(item.start_date, item.end_date)}</p>
                       </div>
-                    ) : null}
-                    <span>Evidencias: <span className="font-semibold text-slate-900">{Number(item.evidence_count ?? 0)}</span></span>
-                    <span>Confirmaciones históricas: <span className="font-semibold text-slate-900">{Number(item.reuse_count ?? 0)}</span></span>
-                    {item.verification_id ? (
-                      <a
-                        href={`/company/verification/${encodeURIComponent(String(item.verification_id))}`}
-                        className="ml-auto rounded-full border border-slate-300 bg-white px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-100"
-                      >
-                        {String(item.status || "").toLowerCase() === "verified" || String(item.status || "").toLowerCase() === "rejected"
-                          ? "Ver resolución"
-                          : "Confirmar experiencia"}
-                      </a>
-                    ) : null}
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-semibold ${statusClass(item.status)}`}>
+                        {statusLabel(item.status)}
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-600">
+                      {primaryVerificationBadge ? (
+                        <div className="flex flex-wrap gap-1.5">
+                          <span className={`rounded-full border px-2 py-0.5 font-semibold ${getExperienceVerificationBadgeClasses(primaryVerificationBadge.tone, "primary")}`}>
+                            {primaryVerificationBadge.label}
+                          </span>
+                          {secondaryVerificationBadges.map((badge) => (
+                            <span key={`${item.verification_id}-${badge.key}`} className={`rounded-full border px-2 py-0.5 font-semibold ${getExperienceVerificationBadgeClasses(badge.tone)}`}>
+                              {badge.label}
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      <span>Evidencias: <span className="font-semibold text-slate-900">{Number(item.evidence_count ?? 0)}</span></span>
+                      <span>Confirmaciones históricas: <span className="font-semibold text-slate-900">{Number(item.reuse_count ?? 0)}</span></span>
+                      {item.verification_id ? (
+                        <a
+                          href={`/company/verification/${encodeURIComponent(String(item.verification_id))}`}
+                          className="ml-auto rounded-full border border-slate-300 bg-white px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-100"
+                        >
+                          {String(item.status || "").toLowerCase() === "verified" || String(item.status || "").toLowerCase() === "rejected"
+                            ? "Ver resolución"
+                            : "Confirmar experiencia"}
+                        </a>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ol>
         ) : (
           <p className="mt-3 text-sm text-gray-600">Aún no hay historial verificable disponible.</p>

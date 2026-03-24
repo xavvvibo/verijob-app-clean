@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import CandidateQuickView from "@/components/company/CandidateQuickView";
-import ProfileUnlockAction from "@/components/company/ProfileUnlockAction";
+import ProfileUnlockAction, { COMPANY_PROFILE_UNLOCKED_EVENT } from "@/components/company/ProfileUnlockAction";
 import { normalizeCandidatePublicToken } from "@/lib/public/candidate-public-link";
 import {
   computeCandidateQuickFit,
@@ -203,6 +203,44 @@ export default function CompanyCandidatesClient() {
 
   useEffect(() => {
     void loadImports();
+  }, []);
+
+  useEffect(() => {
+    const handleUnlocked = (event: Event) => {
+      const detail = (event as CustomEvent<any>).detail || {};
+      const candidateToken = normalizeCandidatePublicToken(detail?.candidateToken);
+      const unlockedAt = String(detail?.unlocked_at || "").trim() || null;
+      const unlockedUntil = String(detail?.unlocked_until || "").trim() || null;
+      const remaining = Number(detail?.remaining_accesses || 0);
+      if (!candidateToken) return;
+
+      setAvailableProfileAccesses(remaining);
+      setImports((prev) =>
+        prev.map((row) =>
+          normalizeCandidatePublicToken(row.candidate_public_token) === candidateToken
+            ? {
+                ...row,
+                access_status: "active",
+                access_granted_at: unlockedAt,
+                access_expires_at: unlockedUntil,
+              }
+            : row,
+        ),
+      );
+      setQuickViewRow((prev) =>
+        prev && normalizeCandidatePublicToken(prev.candidate_public_token) === candidateToken
+          ? {
+              ...prev,
+              access_status: "active",
+              access_granted_at: unlockedAt,
+              access_expires_at: unlockedUntil,
+            }
+          : prev,
+      );
+    };
+
+    window.addEventListener(COMPANY_PROFILE_UNLOCKED_EVENT, handleUnlocked as EventListener);
+    return () => window.removeEventListener(COMPANY_PROFILE_UNLOCKED_EVENT, handleUnlocked as EventListener);
   }, []);
 
   useEffect(() => {
@@ -677,10 +715,14 @@ export default function CompanyCandidatesClient() {
                           )}
                           {canOpenSnapshot ? (
                             <ProfileUnlockAction
+                              candidateToken={String(row.candidate_public_token || "")}
                               href={`/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}?view=full`}
+                              requestHref={`/api/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}/unlock`}
                               availableAccesses={availableProfileAccesses}
                               alreadyUnlocked={row.access_status === "active"}
-                              primaryLabel="Acceder al perfil"
+                              unlockedAt={row.access_granted_at || null}
+                              unlockedUntil={row.access_expires_at || null}
+                              primaryLabel={row.access_status === "active" ? "Perfil desbloqueado" : "Desbloquear perfil (consume 1 acceso)"}
                             />
                           ) : (
                             <span className={actionButtonClass({ primary: true, disabled: true })}>Acceder al perfil</span>
