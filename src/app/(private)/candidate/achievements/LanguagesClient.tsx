@@ -5,23 +5,34 @@ import { createClient } from "@/utils/supabase/client";
 
 type LanguageRow = {
   id: string;
-  language?: string | null;
-  level?: string | null;
-  title?: string | null;
-  certificate_title?: string | null;
-  verification_status?: string | null;
+  language_name?: string | null;
+  proficiency_level?: string | null;
+  is_native?: boolean | null;
+  notes?: string | null;
+  source?: string | null;
+  display_order?: number | null;
+  is_visible?: boolean | null;
   created_at?: string | null;
 };
 
-const LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2", "Nativo"];
+const LEVELS = ["A1", "A2", "B1", "B2", "C1", "C2"];
 
-function resolveTitle(item: any) {
-  return String(item?.title || item?.certificate_title || "").trim();
+function resolveTitle(item: LanguageRow) {
+  return String(item?.notes || "").trim();
 }
 
-function resolveStatus(item: any) {
-  const raw = String(item?.verification_status || "").trim().toLowerCase();
-  if (raw === "verified" || raw === "document_verified" || raw === "validated") {
+function resolveLevel(item: LanguageRow) {
+  if (item?.is_native) return "Nativo";
+  return String(item?.proficiency_level || "—").trim() || "—";
+}
+
+function resolveStatus(item: LanguageRow) {
+  const rawSource = String(item?.source || "").trim().toLowerCase();
+  if (
+    rawSource === "documentary_verified" ||
+    rawSource === "verified_document" ||
+    rawSource === "evidence_verified"
+  ) {
     return {
       label: "Verificado documentalmente",
       className: "border-emerald-200 bg-emerald-50 text-emerald-700",
@@ -33,11 +44,14 @@ function resolveStatus(item: any) {
   };
 }
 
-function normalizePayload(input: { language: string; level: string; title: string }) {
+function normalizePayload(input: { language_name: string; proficiency_level: string; notes: string; is_native: boolean }) {
   return {
-    language: input.language.trim(),
-    level: input.level.trim(),
-    title: input.title.trim() || null,
+    language_name: input.language_name.trim(),
+    proficiency_level: input.is_native ? null : input.proficiency_level.trim(),
+    is_native: input.is_native,
+    notes: input.notes.trim() || null,
+    source: "self_declared",
+    is_visible: true,
   };
 }
 
@@ -50,23 +64,26 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const [newItem, setNewItem] = useState({
-    language: "",
-    level: "B1",
-    title: "",
+    language_name: "",
+    proficiency_level: "B1",
+    notes: "",
+    is_native: false,
   });
 
   const [draft, setDraft] = useState({
-    language: "",
-    level: "B1",
-    title: "",
+    language_name: "",
+    proficiency_level: "B1",
+    notes: "",
+    is_native: false,
   });
 
   function startEdit(item: LanguageRow) {
     setEditingId(item.id);
     setDraft({
-      language: String(item.language || "").trim(),
-      level: String(item.level || "B1").trim() || "B1",
-      title: resolveTitle(item),
+      language_name: String(item.language_name || "").trim(),
+      proficiency_level: String(item.proficiency_level || "B1").trim() || "B1",
+      notes: String(item.notes || "").trim(),
+      is_native: !!item.is_native,
     });
     setMessage(null);
   }
@@ -74,15 +91,16 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
   function cancelEdit() {
     setEditingId(null);
     setDraft({
-      language: "",
-      level: "B1",
-      title: "",
+      language_name: "",
+      proficiency_level: "B1",
+      notes: "",
+      is_native: false,
     });
   }
 
   async function addLanguage() {
     const payload = normalizePayload(newItem);
-    if (!payload.language) {
+    if (!payload.language_name) {
       setMessage("Indica al menos el idioma.");
       return;
     }
@@ -99,19 +117,24 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
     setSaving(false);
 
     if (error || !data) {
-      setMessage(`No se pudo añadir el idioma: ${error?.message || "error desconocido"}`);
+      setMessage(`No se pudo guardar el idioma: ${error?.message || "error desconocido"}`);
       return;
     }
 
     setItems((prev) => [data as LanguageRow, ...prev]);
-    setNewItem({ language: "", level: "B1", title: "" });
+    setNewItem({
+      language_name: "",
+      proficiency_level: "B1",
+      notes: "",
+      is_native: false,
+    });
     setAdding(false);
     setMessage("Idioma añadido correctamente.");
   }
 
   async function saveEdit(id: string) {
     const payload = normalizePayload(draft);
-    if (!payload.language) {
+    if (!payload.language_name) {
       setMessage("Indica al menos el idioma.");
       return;
     }
@@ -136,9 +159,12 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
         item.id === id
           ? {
               ...item,
-              language: payload.language,
-              level: payload.level,
-              title: payload.title,
+              language_name: payload.language_name,
+              proficiency_level: payload.proficiency_level,
+              notes: payload.notes,
+              is_native: payload.is_native,
+              source: payload.source,
+              is_visible: payload.is_visible,
             }
           : item,
       ),
@@ -179,7 +205,7 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
           <div>
             <h2 className="text-2xl font-semibold text-slate-900">Idiomas</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Mantén una lista limpia y fácil de revisar. Cada idioma muestra nivel, certificado y estado.
+              Lista compacta para revisar idioma, nivel, certificado y estado.
             </p>
           </div>
 
@@ -201,8 +227,8 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
               <label className="block">
                 <div className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Idioma</div>
                 <input
-                  value={newItem.language}
-                  onChange={(e) => setNewItem((prev) => ({ ...prev, language: e.target.value }))}
+                  value={newItem.language_name}
+                  onChange={(e) => setNewItem((prev) => ({ ...prev, language_name: e.target.value }))}
                   placeholder="Ej. Inglés"
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                 />
@@ -211,9 +237,10 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
               <label className="block">
                 <div className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Nivel</div>
                 <select
-                  value={newItem.level}
-                  onChange={(e) => setNewItem((prev) => ({ ...prev, level: e.target.value }))}
-                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                  value={newItem.proficiency_level}
+                  onChange={(e) => setNewItem((prev) => ({ ...prev, proficiency_level: e.target.value }))}
+                  disabled={newItem.is_native}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100"
                 >
                   {LEVELS.map((level) => (
                     <option key={level} value={level}>
@@ -226,8 +253,8 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
               <label className="block">
                 <div className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Título o certificado</div>
                 <input
-                  value={newItem.title}
-                  onChange={(e) => setNewItem((prev) => ({ ...prev, title: e.target.value }))}
+                  value={newItem.notes}
+                  onChange={(e) => setNewItem((prev) => ({ ...prev, notes: e.target.value }))}
                   placeholder="Ej. Cambridge C2 Proficiency"
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                 />
@@ -244,6 +271,15 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
                 </button>
               </div>
             </div>
+
+            <label className="mt-3 flex items-center gap-2 text-sm text-slate-700">
+              <input
+                type="checkbox"
+                checked={newItem.is_native}
+                onChange={(e) => setNewItem((prev) => ({ ...prev, is_native: e.target.checked }))}
+              />
+              Idioma nativo
+            </label>
           </div>
         ) : null}
 
@@ -278,15 +314,16 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
                     {isEditing ? (
                       <div className="grid gap-3 lg:grid-cols-[1.2fr_140px_1.5fr_220px_140px] lg:items-center">
                         <input
-                          value={draft.language}
-                          onChange={(e) => setDraft((prev) => ({ ...prev, language: e.target.value }))}
+                          value={draft.language_name}
+                          onChange={(e) => setDraft((prev) => ({ ...prev, language_name: e.target.value }))}
                           className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                         />
 
                         <select
-                          value={draft.level}
-                          onChange={(e) => setDraft((prev) => ({ ...prev, level: e.target.value }))}
-                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
+                          value={draft.proficiency_level}
+                          onChange={(e) => setDraft((prev) => ({ ...prev, proficiency_level: e.target.value }))}
+                          disabled={draft.is_native}
+                          className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:bg-slate-100"
                         >
                           {LEVELS.map((level) => (
                             <option key={level} value={level}>
@@ -296,16 +333,24 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
                         </select>
 
                         <input
-                          value={draft.title}
-                          onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))}
+                          value={draft.notes}
+                          onChange={(e) => setDraft((prev) => ({ ...prev, notes: e.target.value }))}
                           placeholder="Título o certificado"
                           className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                         />
 
-                        <div>
+                        <div className="space-y-2">
                           <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${status.className}`}>
                             {status.label}
                           </span>
+                          <label className="flex items-center gap-2 text-xs text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={draft.is_native}
+                              onChange={(e) => setDraft((prev) => ({ ...prev, is_native: e.target.checked }))}
+                            />
+                            Idioma nativo
+                          </label>
                         </div>
 
                         <div className="flex justify-end gap-2">
@@ -330,12 +375,12 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
                       <div className="grid gap-3 lg:grid-cols-[1.2fr_140px_1.5fr_220px_140px] lg:items-center">
                         <div>
                           <div className="text-sm font-semibold text-slate-900">
-                            {String(item.language || "Idioma sin indicar").trim()}
+                            {String(item.language_name || "Idioma sin indicar").trim()}
                           </div>
                         </div>
 
                         <div className="text-sm text-slate-700">
-                          {String(item.level || "—").trim()}
+                          {resolveLevel(item)}
                         </div>
 
                         <div className="text-sm text-slate-600">
@@ -370,7 +415,7 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
                     {!isEditing ? (
                       <div className="mt-3 grid gap-2 lg:hidden">
                         <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Nivel</div>
-                        <div className="text-sm text-slate-700">{String(item.level || "—").trim()}</div>
+                        <div className="text-sm text-slate-700">{resolveLevel(item)}</div>
                         <div className="text-xs uppercase tracking-[0.12em] text-slate-400">Título</div>
                         <div className="text-sm text-slate-600">{title || "Sin certificado indicado"}</div>
                       </div>
