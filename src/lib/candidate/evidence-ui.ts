@@ -119,8 +119,9 @@ function normalizeMatchLabel(matchLevel: string | null) {
   if (!v) return null;
   if (v === "high") return "Coincidencia alta";
   if (v === "medium") return "Coincidencia media";
-  if (v === "low") return "Coincidencia baja";
-  if (v === "inconclusive") return "Coincidencia no concluyente";
+  if (v === "low") return "Coincidencia dudosa";
+  if (v === "inconclusive") return "Coincidencia dudosa";
+  if (v === "conflict") return "No alineado con la experiencia";
   return matchLevel;
 }
 

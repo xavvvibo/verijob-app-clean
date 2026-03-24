@@ -13,13 +13,39 @@ function mapStatus(statusRaw: unknown, revokedAt?: string | null, verificationCh
   const status = String(statusRaw || "").toLowerCase();
   const channel = String(verificationChannel || "").toLowerCase();
   if (status === "verified" || status === "approved") {
-    return channel === "documentary" ? "Verificada por documento" : "Verificada por empresa vía Email corporativo";
+    return channel === "documentary" ? "Verificación documental completada" : "Verificación completada";
   }
   if (status === "pending_company") return "Pendiente de validación";
   if (status === "reviewing") return "En revisión";
   if (status === "rejected") return "Rechazada";
   if (status === "revoked") return "Revocada";
   return "En verificación";
+}
+
+function mapVerificationChannel(channelRaw: unknown) {
+  const channel = String(channelRaw || "").toLowerCase();
+  if (channel === "documentary") return "Documental";
+  if (channel === "email") return "Email corporativo";
+  if (channel === "peer") return "Peer";
+  return "Verificación";
+}
+
+function buildCandidateFacingRequestSummary(value: any) {
+  const requestContext = value && typeof value === "object" ? value : {};
+  const documentary = requestContext.documentary_processing && typeof requestContext.documentary_processing === "object"
+    ? requestContext.documentary_processing
+    : {};
+  const lines: string[] = [];
+  const status = String(documentary.processing_status || documentary.status || "").toLowerCase();
+  const match = String(documentary.overall_match_level || documentary.match_level || "").toLowerCase();
+  if (status === "queued") lines.push("Documento recibido y pendiente de análisis.");
+  if (status === "processing") lines.push("Documento en análisis.");
+  if (match === "high") lines.push("La coincidencia con la experiencia es alta.");
+  if (match === "medium") lines.push("La coincidencia con la experiencia es razonable, pero sigue en revisión.");
+  if (match === "low" || match === "inconclusive") lines.push("La coincidencia documental no es concluyente.");
+  const summary = String(documentary.processing_summary || "").trim();
+  if (summary) lines.push(summary);
+  return lines.slice(0, 3);
 }
 
 function mapCompanyVerificationStatus(statusRaw: unknown) {
@@ -109,7 +135,7 @@ export default async function CandidateVerificationPage(props: any) {
   const companyVerificationLabel = mapCompanyVerificationStatus(vr.company_verification_status_snapshot);
   const companyName = vr.company_name_snapshot || er?.company_name_freeform || vr.company_name_target || "Empresa";
   const evidenceRows = Array.isArray(evidences) ? evidences : [];
-  const sanitizedRequestContext = sanitizeCandidateRequestContext(vr.request_context);
+  const candidateSummary = buildCandidateFacingRequestSummary(sanitizeCandidateRequestContext(vr.request_context));
 
   return (
     <div className="p-8 space-y-6">
@@ -152,7 +178,7 @@ export default async function CandidateVerificationPage(props: any) {
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="border border-gray-200 rounded-2xl p-4">
             <div className="text-xs text-gray-500">Canal</div>
-            <div className="mt-1 text-sm font-semibold text-gray-900">{vr.verification_channel || "Email"}</div>
+            <div className="mt-1 text-sm font-semibold text-gray-900">{mapVerificationChannel(vr.verification_channel)}</div>
           </div>
           <div className="border border-gray-200 rounded-2xl p-4">
             <div className="text-xs text-gray-500">Creada</div>
@@ -194,12 +220,14 @@ export default async function CandidateVerificationPage(props: any) {
           </div>
         ) : null}
 
-        {sanitizedRequestContext ? (
+        {candidateSummary.length ? (
           <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
-            <span className="font-semibold text-gray-900">Contexto de solicitud: </span>
-            {typeof sanitizedRequestContext === "string"
-              ? sanitizedRequestContext
-              : JSON.stringify(sanitizedRequestContext)}
+            <span className="font-semibold text-gray-900">Estado documental: </span>
+            <ul className="mt-2 space-y-1">
+              {candidateSummary.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
           </div>
         ) : null}
 

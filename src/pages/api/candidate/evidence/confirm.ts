@@ -10,6 +10,7 @@ import {
 } from "@/lib/candidate/evidence-types";
 import { dispatchBackgroundJob } from "@/lib/jobs/background-processing";
 import { recalculateAndPersistCandidateTrustScore } from "@/server/trustScore/calculateTrustScore";
+import { validateEvidenceFileMeta } from "@/lib/candidate/file-validation";
 
 const ROUTE = "/pages/api/candidate/evidence/confirm";
 
@@ -163,6 +164,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (!isHexSha256(fileSha256 || undefined)) {
       return json(res, 400, { error: "invalid_file_sha256" });
+    }
+    const fileValidation = validateEvidenceFileMeta({
+      filename: originalFilename,
+      mime,
+      sizeBytes,
+      maxSizeBytes: 20 * 1024 * 1024,
+    });
+    if (!fileValidation.ok) {
+      return json(res, 400, { error: fileValidation.code, details: fileValidation.message });
     }
 
     const { data: verificationRequest, error: verificationRequestError } = await supabase

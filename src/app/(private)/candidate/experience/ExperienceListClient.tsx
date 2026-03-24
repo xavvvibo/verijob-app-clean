@@ -125,6 +125,7 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
 
     const roleTitle = String(row.role_title || "").trim();
     const companyName = String(row.company_name || "").trim();
+    const isCurrent = !!editingCurrentById[id];
     let startDate: string | null = null;
     let endDate: string | null = null;
     try {
@@ -143,7 +144,6 @@ export default function ExperienceListClient({ initialRows }: { initialRows: Row
     setSavingId(id);
     setMessage(null);
 
-    const isCurrent = !!editingCurrentById[id];
     const payload = {
       role_title: roleTitle,
       company_name: companyName,

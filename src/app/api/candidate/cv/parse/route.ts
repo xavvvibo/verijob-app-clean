@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { validateCvFileMeta } from "@/lib/candidate/file-validation";
 
 console.info("CV_PARSE_ROUTE_MODULE_LOADED");
 
@@ -126,6 +127,21 @@ export async function POST(req: Request) {
     console.info("CV_PARSE_ROUTE_BEFORE_BODY");
     const requestJson = await req.json().catch(() => null);
     const body = BodySchema.parse(requestJson);
+    const fileValidation = validateCvFileMeta({
+      filename: body.original_filename,
+      mime: body.mime_type,
+      sizeBytes: body.size_bytes,
+      maxSizeBytes: 8 * 1024 * 1024,
+    });
+    if (!fileValidation.ok) {
+      return json(400, {
+        ok: false,
+        fatal: true,
+        error: fileValidation.code,
+        details: fileValidation.message,
+        debug_stage: "body",
+      });
+    }
     debugStage = "body";
     console.info("CV_PARSE_ROUTE_BODY_OK", {
       storagePath: body.storage_path,
@@ -218,6 +234,7 @@ export async function POST(req: Request) {
       .single();
 
     if (jobErr || !job) {
+      await admin.from("cv_uploads").delete().eq("id", upload.id).catch(() => {});
       return json(
         400,
         {
@@ -350,7 +367,7 @@ export async function POST(req: Request) {
       runner_status: runnerStatus,
       runner_error: runnerError,
       processing_dispatched: runnerTriggered,
-      processing_error: runnerTriggered ? null : runnerError || "No pudimos iniciar el análisis automático.",
+        processing_error: runnerTriggered ? null : "No pudimos iniciar el análisis automático. Inténtalo de nuevo en unos minutos.",
       fatal: false,
       debug_stage: debugStage,
     };
@@ -410,7 +427,7 @@ export async function POST(req: Request) {
         runner_status: null,
         runner_error: fatalMessage,
         processing_dispatched: false,
-        processing_error: fatalMessage,
+        processing_error: "No hemos podido dejar el proceso de análisis en un estado válido. Vuelve a intentarlo.",
         fatal: false,
         debug_stage: debugStage,
       });
@@ -424,7 +441,7 @@ export async function POST(req: Request) {
       {
         ok: false,
         error: "bad_request",
-        details: fatalMessage,
+        details: fatalMessage.includes("ZodError") ? "La petición del CV no es válida." : fatalMessage,
         fatal: true,
         debug_stage: debugStage,
       },

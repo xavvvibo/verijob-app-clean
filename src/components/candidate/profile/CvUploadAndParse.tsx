@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import { normalizeCvLanguages, shouldApplyParsedResultOnce } from "@/lib/candidate/cv-parse-normalize";
+import { validateCvFileMeta } from "@/lib/candidate/file-validation";
 
 type Job = {
   id: string;
@@ -41,16 +42,25 @@ type ImportResult = {
 const MAX_CV_SIZE_BYTES = 8 * 1024 * 1024;
 
 function isSupportedCvFile(file: File) {
-  const mime = String(file.type || "").toLowerCase();
-  const lowerName = String(file.name || "").toLowerCase();
-  return (
-    mime.includes("pdf") ||
-    mime.includes("wordprocessingml") ||
-    mime.includes("msword") ||
-    lowerName.endsWith(".pdf") ||
-    lowerName.endsWith(".docx") ||
-    lowerName.endsWith(".doc")
-  );
+  return validateCvFileMeta({
+    filename: file.name,
+    mime: file.type,
+    sizeBytes: file.size,
+    maxSizeBytes: MAX_CV_SIZE_BYTES,
+  }).ok;
+}
+
+async function readJsonSafe(response: Response) {
+  const text = await response.text().catch(() => "");
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {
+      error: "invalid_json_response",
+      details: text.slice(0, 500),
+    };
+  }
 }
 
 function toFriendlyCvError(raw: string | null | undefined) {
@@ -70,6 +80,12 @@ function toFriendlyCvError(raw: string | null | undefined) {
   }
   if (lower.includes("unsupported_file_type")) {
     return "Formato no soportado. Usa PDF o DOCX, o completa tu perfil manualmente.";
+  }
+  if (lower.includes("invalid_json_response")) {
+    return "No hemos podido completar el análisis en este momento. Inténtalo de nuevo en unos minutos.";
+  }
+  if (lower.includes("dispatch") || lower.includes("runner_failed")) {
+    return "No hemos podido arrancar el análisis automático. Vuelve a intentarlo en unos minutos.";
   }
   return msg;
 }
@@ -374,12 +390,14 @@ export default function CvUploadAndParse() {
       return;
     }
 
-    if (!isSupportedCvFile(file)) {
-      setMsg("Formato no soportado. Usa PDF o DOCX.");
-      return;
-    }
-    if (file.size > MAX_CV_SIZE_BYTES) {
-      setMsg("El archivo supera el tamano maximo permitido de 8 MB.");
+    const fileValidation = validateCvFileMeta({
+      filename: file.name,
+      mime: file.type,
+      sizeBytes: file.size,
+      maxSizeBytes: MAX_CV_SIZE_BYTES,
+    })
+    if (!fileValidation.ok) {
+      setMsg(fileValidation.message)
       return;
     }
 
@@ -414,7 +432,7 @@ export default function CvUploadAndParse() {
           sha256: null,
         }),
       });
-      const parseBody = await parseRes.json().catch(() => ({}));
+      const parseBody = await readJsonSafe(parseRes);
       if (!parseRes.ok || !parseBody?.job_id) {
         throw new Error(
           parseBody?.details ||
