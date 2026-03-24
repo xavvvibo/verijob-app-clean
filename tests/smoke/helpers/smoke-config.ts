@@ -4,6 +4,12 @@ export type SmokeActorConfig = {
   authMode: "signup" | "login";
 };
 
+function deriveEmailDomain(email: string) {
+  const normalized = String(email || "").trim().toLowerCase();
+  const at = normalized.lastIndexOf("@");
+  return at >= 0 ? normalized.slice(at + 1) : "";
+}
+
 function readActor(prefix: "COMPANY" | "CANDIDATE"): SmokeActorConfig {
   const email = String(process.env[`SMOKE_${prefix}_EMAIL`] || "").trim();
   const otp = String(process.env[`SMOKE_${prefix}_OTP`] || "").trim() || undefined;
@@ -16,6 +22,7 @@ export const smokeConfig = {
   execution: {
     candidateFirstSpecs: ["tests/smoke/smoke-candidate.spec.ts", "tests/smoke/smoke-public-profile.spec.ts"],
     companySpecs: ["tests/smoke/smoke-company.spec.ts"],
+    betaGateSpecs: ["tests/smoke/smoke-beta-journey.spec.ts"],
   },
   company: readActor("COMPANY"),
   candidate: readActor("CANDIDATE"),
@@ -41,7 +48,10 @@ export const smokeConfig = {
     description: String(process.env.SMOKE_CANDIDATE_DESCRIPTION || "Atención en sala, caja y apoyo operativo.").trim(),
   },
   candidateVerification: {
-    verifierEmail: String(process.env.SMOKE_CANDIDATE_VERIFIER_EMAIL || "rrhh@empresa.com").trim(),
+    verifierEmail: String(
+      process.env.SMOKE_CANDIDATE_VERIFIER_EMAIL ||
+        `rrhh@${deriveEmailDomain(String(process.env.SMOKE_COMPANY_CONTACT_EMAIL || process.env.SMOKE_COMPANY_EMAIL || "empresa.com")) || "empresa.com"}`,
+    ).trim(),
   },
 };
 

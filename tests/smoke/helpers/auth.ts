@@ -6,7 +6,7 @@ export type SmokeActorContext = {
   close: () => Promise<void>;
 };
 
-async function createActorContext(browser: Browser, actorLabel: "candidate" | "company"): Promise<SmokeActorContext> {
+async function createActorContext(browser: Browser, actorLabel: "candidate" | "company" | "public"): Promise<SmokeActorContext> {
   console.log(`[smoke] Running ${actorLabel} flow in isolated context`);
   const context = await browser.newContext();
   const page = await context.newPage();
@@ -25,6 +25,10 @@ export async function createCandidateContext(browser: Browser) {
 
 export async function createCompanyContext(browser: Browser) {
   return createActorContext(browser, "company");
+}
+
+export async function createPublicContext(browser: Browser) {
+  return createActorContext(browser, "public");
 }
 
 async function fillOtp(page: Page, otp: string) {

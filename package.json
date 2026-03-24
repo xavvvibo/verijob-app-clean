@@ -10,6 +10,7 @@
     "test:company-candidate-import": "node --test tests/company-candidate-import.test.mjs",
     "test:smoke": "playwright test tests/smoke",
     "test:smoke:auth": "playwright test tests/smoke --grep @auth",
+    "test:smoke:beta": "playwright test tests/smoke --grep @beta-gate",
     "test:smoke:candidate": "playwright test tests/smoke --grep @candidate",
     "test:smoke:company": "playwright test tests/smoke --grep @company",
     "test:smoke:public-profile": "playwright test tests/smoke --grep @public-profile",
