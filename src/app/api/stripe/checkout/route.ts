@@ -43,6 +43,14 @@ function toOwnerProductKey(planKey: string | null) {
   return normalized || null;
 }
 
+function isCompanyPlanKey(planKey: string | null) {
+  return String(planKey || "").trim().toLowerCase().startsWith("company_");
+}
+
+function isCandidatePlanKey(planKey: string | null) {
+  return String(planKey || "").trim().toLowerCase().startsWith("candidate_");
+}
+
 async function createCheckoutSession(req: Request) {
   const stripe = getStripe();
   const supabase = await createRouteHandlerClient();
@@ -89,19 +97,31 @@ async function createCheckoutSession(req: Request) {
     return NextResponse.json({ error: "unsupported_plan", details: String(planRaw ?? "") }, { status: 400 });
   }
 
-  const isCompanyPlan = String(selection.planKey || "").startsWith("company_");
+  const { data: profile, error: profileErr } = await supabase
+    .from("profiles")
+    .select("role,active_company_id")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (profileErr) {
+    return NextResponse.json({ error: "profile_context_unavailable", details: profileErr.message }, { status: 400 });
+  }
+
+  const actorRole = String((profile as any)?.role || "").trim().toLowerCase();
+  const isCompanyPlan = isCompanyPlanKey(selection.planKey);
+  const isCandidatePlan = isCandidatePlanKey(selection.planKey);
+  const isOneoffPurchase = selection.mode === "payment";
+
+  if (isCompanyPlan && actorRole !== "company") {
+    return NextResponse.json({ error: "company_plan_requires_company_role" }, { status: 403 });
+  }
+
+  if (isCandidatePlan && actorRole === "company") {
+    return NextResponse.json({ error: "candidate_plan_requires_candidate_role" }, { status: 403 });
+  }
+
   let activeCompanyId = "";
   if (isCompanyPlan) {
-    const { data: profile, error: profileErr } = await supabase
-      .from("profiles")
-      .select("active_company_id")
-      .eq("id", user.id)
-      .maybeSingle();
-
-    if (profileErr) {
-      return NextResponse.json({ error: "company_context_unavailable", details: profileErr.message }, { status: 400 });
-    }
-
     activeCompanyId = String((profile as any)?.active_company_id || "").trim();
     if (!activeCompanyId) {
       return NextResponse.json({ error: "company_context_required" }, { status: 403 });
@@ -119,25 +139,52 @@ async function createCheckoutSession(req: Request) {
   const cancelPath = safeReturnPath ? `${safeReturnPath}${safeReturnPath.includes("?") ? "&" : "?"}checkout=cancel` : defaultCancel;
   const successUrl = `${origin}${successPath}`;
   const cancelUrl = `${origin}${cancelPath}`;
+  const baseMetadata = {
+    user_id: user.id,
+    company_id: activeCompanyId,
+    actor_role: actorRole,
+    plan_key: selection.planKey,
+    product_key: toOwnerProductKey(selection.planKey) || "",
+    price_id: selection.priceId,
+    checkout_kind: isOneoffPurchase ? "oneoff_purchase" : "subscription",
+    return_path: safeReturnPath || "",
+  };
 
-  const session = await stripe.checkout.sessions.create({
+  const sessionPayload: Stripe.Checkout.SessionCreateParams = {
     mode: selection.mode,
     line_items: [{ price: selection.priceId, quantity: 1 }],
     allow_promotion_codes: true,
     client_reference_id: user.id,
     success_url: successUrl,
     cancel_url: cancelUrl,
-    metadata: {
-      user_id: user.id,
-      company_id: activeCompanyId,
-      plan_key: selection.planKey,
-      product_key: toOwnerProductKey(selection.planKey) || "",
-      price_id: selection.priceId,
-      return_path: safeReturnPath || "",
-    },
-  });
+    metadata: baseMetadata,
+  };
 
-  return NextResponse.json({ ok: true, route_version: "stripe-checkout-v1-app", url: session.url }, { status: 200 });
+  if (selection.mode === "subscription") {
+    sessionPayload.subscription_data = {
+      metadata: baseMetadata,
+    };
+  } else {
+    sessionPayload.payment_intent_data = {
+      metadata: baseMetadata,
+    };
+  }
+
+  const session = await stripe.checkout.sessions.create(sessionPayload);
+
+  return NextResponse.json(
+    {
+      ok: true,
+      route_version: "stripe-checkout-v2-app",
+      url: session.url,
+      checkout: {
+        mode: selection.mode,
+        plan_key: selection.planKey,
+        price_id: selection.priceId,
+      },
+    },
+    { status: 200 }
+  );
 }
 
 export async function POST(req: Request) {

@@ -5,7 +5,7 @@ import {
   normalizeCompanyProfileAccessProductKey,
   resolveCompanyProfileAccessCreditsGranted,
 } from "@/lib/company/profile-access-products";
-import { resolvePlanFromPriceId } from "@/utils/stripe/priceMapping";
+import { normalizePlanKey, resolvePlanFromPriceId } from "@/utils/stripe/priceMapping";
 import { buildSubscriptionLifecycleEmail } from "@/lib/email/templates/subscriptionLifecycle";
 import { sendTransactionalEmail } from "@/server/email/sendTransactionalEmail";
 import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
@@ -31,6 +31,16 @@ function json(res: NextApiResponse, status: number, body: any) {
 
 function resolveAppUrl() {
   return String(process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es").replace(/\/+$/, "");
+}
+
+function asObject(value: unknown) {
+  return value && typeof value === "object" ? (value as Record<string, any>) : {};
+}
+
+function isMissingWebhookEventsTable(error: any) {
+  const code = String(error?.code || "").trim();
+  const message = String(error?.message || "").toLowerCase();
+  return code === "42P01" || code === "PGRST205" || message.includes("stripe_webhook_events");
 }
 
 async function getTableColumns(supabase: any, tableName: string) {
@@ -130,6 +140,149 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     );
     const subscriptionsColumns = await getTableColumns(supabase, "subscriptions");
     const subscriptionsHasCompanyId = subscriptionsColumns.has("company_id");
+
+    async function claimWebhookEvent(event: Stripe.Event) {
+      const payload = {
+        livemode: Boolean(event.livemode),
+        created: typeof event.created === "number" ? event.created : null,
+        api_version: event.api_version || null,
+        object: (event.data?.object as any)?.object || null,
+      };
+      const objectId = String((event.data?.object as any)?.id || "").trim() || null;
+
+      const existing = await supabase
+        .from("stripe_webhook_events")
+        .select("stripe_event_id,status,attempts")
+        .eq("stripe_event_id", event.id)
+        .maybeSingle();
+
+      if (existing.error && !isMissingWebhookEventsTable(existing.error)) {
+        throw new Error(`stripe_webhook_event_read_failed_${existing.error.message}`);
+      }
+
+      if (existing.error && isMissingWebhookEventsTable(existing.error)) {
+        return { proceed: true, reason: "event_log_table_missing" as const };
+      }
+
+      if (existing.data?.status === "processed") {
+        await supabase
+          .from("stripe_webhook_events")
+          .update({
+            attempts: Number(existing.data?.attempts || 1) + 1,
+            last_seen_at: new Date().toISOString(),
+          })
+          .eq("stripe_event_id", event.id);
+        return { proceed: false, reason: "already_processed" as const };
+      }
+
+      if (existing.data?.status === "processing") {
+        await supabase
+          .from("stripe_webhook_events")
+          .update({
+            attempts: Number(existing.data?.attempts || 1) + 1,
+            last_seen_at: new Date().toISOString(),
+          })
+          .eq("stripe_event_id", event.id);
+        return { proceed: false, reason: "already_processing" as const };
+      }
+
+      if (existing.data) {
+        const resume = await supabase
+          .from("stripe_webhook_events")
+          .update({
+            event_type: event.type,
+            livemode: Boolean(event.livemode),
+            object_id: objectId,
+            api_version: event.api_version || null,
+            status: "processing",
+            attempts: Number(existing.data?.attempts || 1) + 1,
+            last_seen_at: new Date().toISOString(),
+            last_error: null,
+            payload,
+          })
+          .eq("stripe_event_id", event.id);
+
+        if (resume.error) {
+          throw new Error(`stripe_webhook_event_resume_failed_${resume.error.message}`);
+        }
+
+        return { proceed: true, reason: "resumed" as const };
+      }
+
+      const inserted = await supabase.from("stripe_webhook_events").insert({
+        stripe_event_id: event.id,
+        event_type: event.type,
+        livemode: Boolean(event.livemode),
+        object_id: objectId,
+        api_version: event.api_version || null,
+        status: "processing",
+        payload,
+      });
+
+      if (inserted.error && isMissingWebhookEventsTable(inserted.error)) {
+        return { proceed: true, reason: "event_log_table_missing" as const };
+      }
+
+      if (inserted.error) {
+        const duplicateCode = String(inserted.error.code || "").trim();
+        if (duplicateCode === "23505") {
+          return { proceed: false, reason: "duplicate_insert" as const };
+        }
+        throw new Error(`stripe_webhook_event_claim_failed_${inserted.error.message}`);
+      }
+
+      return { proceed: true, reason: "claimed" as const };
+    }
+
+    async function finalizeWebhookEvent(event: Stripe.Event, args: { status: "processed" | "failed"; error?: string | null }) {
+      const updateRes = await supabase
+        .from("stripe_webhook_events")
+        .update({
+          status: args.status,
+          processed_at: args.status === "processed" ? new Date().toISOString() : null,
+          last_seen_at: new Date().toISOString(),
+          last_error: args.error ? String(args.error).slice(0, 2000) : null,
+        })
+        .eq("stripe_event_id", event.id);
+
+      if (updateRes.error && !isMissingWebhookEventsTable(updateRes.error)) {
+        console.error("[stripe-webhook] event-finalize-failed", {
+          event_id: event.id,
+          status: args.status,
+          error: updateRes.error.message,
+        });
+      }
+    }
+
+    function resolveCanonicalPlanKey(args: {
+      priceId?: string | null;
+      metadataPlanKey?: string | null;
+      expectedMode?: "subscription" | "payment";
+    }) {
+      const byPrice = resolvePlanFromPriceId(args.priceId);
+      if (byPrice && (!args.expectedMode || byPrice.mode === args.expectedMode)) {
+        return byPrice.planKey;
+      }
+
+      const metadataPlanKey = String(args.metadataPlanKey || "").trim();
+      if (!metadataPlanKey) return null;
+
+      try {
+        const normalized = normalizePlanKey(metadataPlanKey);
+        const resolved = resolvePlanFromPriceId(args.priceId);
+        if (!resolved || resolved.planKey === normalized) {
+          if (!args.expectedMode) return normalized;
+          const normalizedMode = normalized === "company_single_profile" || normalized === "company_pack5_profiles"
+            ? "payment"
+            : "subscription";
+          return normalizedMode === args.expectedMode ? normalized : null;
+        }
+      } catch {
+        return null;
+      }
+
+      return null;
+    }
 
     async function resolveUserEmail(userId: string): Promise<string | null> {
       const authRes = await supabase.auth.admin.getUserById(userId);
@@ -410,9 +563,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         typeof subscription.items.data[0].price !== "string"
           ? subscription.items.data[0].price.id
           : (subscription.items?.data?.[0]?.price as any)?.id ?? null;
-      const resolved = resolvePlanFromPriceId(priceId);
       const metadataPlanKey = String((subscription.metadata as any)?.plan_key || "").trim() || null;
-      const resolvedPlanKey = resolved?.planKey ?? metadataPlanKey;
+      const resolvedPlanKey = resolveCanonicalPlanKey({
+        priceId,
+        metadataPlanKey,
+        expectedMode: "subscription",
+      });
+      if (!resolvedPlanKey) {
+        throw new Error(`subscription_plan_unresolved_${subscription.id}`);
+      }
       const companyId =
         String(args.companyId || "").trim() ||
         (isCompanyPlan(resolvedPlanKey)
@@ -438,7 +597,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         company_id: companyId,
         stripe_customer_id: (subscription.customer as string) ?? null,
         stripe_subscription_id: subscription.id,
-        plan: resolved?.planKey ?? priceId,
+        plan: resolvedPlanKey,
         status: subscription.status,
         current_period_end: periodEnd,
         cancel_at_period_end: subscription.cancel_at_period_end ?? false,
@@ -446,7 +605,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         metadata: {
           ...(subscription.metadata ?? {}),
           price_id: priceId,
-          resolved_plan_key: resolved?.planKey ?? null,
+          resolved_plan_key: resolvedPlanKey,
           sync_source_event: args.sourceEvent,
         },
         updated_at: new Date(),
@@ -454,124 +613,167 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
       return {
         userId,
-        planKey: resolved?.planKey ?? (priceId ? String(priceId) : null),
+        planKey: resolvedPlanKey,
         previousPlanKey: previousByStripe?.plan ? String(previousByStripe.plan) : null,
         periodEndIso: periodEnd ? periodEnd.toISOString() : null,
         cancelAtPeriodEnd: Boolean(subscription.cancel_at_period_end),
       };
     }
 
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object as Stripe.Checkout.Session;
-      const userId = String(session.client_reference_id || (session.metadata as any)?.user_id || "").trim() || null;
-      const subscriptionId = session.subscription as string | null;
-      const sessionPriceId =
-        String((session.metadata as any)?.price_id || "").trim() ||
-        String(((session as any)?.amount_subtotal ? (session as any)?.price_id : "") || "").trim() ||
-        null;
-      const oneoffProduct = normalizeOneoffProduct({
-        planKey: String((session.metadata as any)?.plan_key || (session.metadata as any)?.product_key || "").trim() || null,
-        priceId: sessionPriceId,
+    const claim = await claimWebhookEvent(event);
+    if (!claim.proceed) {
+      return json(res, 200, {
+        received: true,
+        deduped: true,
+        dedupe_reason: claim.reason,
+        event_type: event.type,
+        event_id: event.id,
       });
+    }
 
-      if (userId && !subscriptionId && oneoffProduct) {
-        const companyId = await resolveCompanyIdForSession(session, userId);
-        if (!companyId) {
-          throw new Error(`company_id_unresolved_for_oneoff_${session.id}`);
+    try {
+      if (event.type === "checkout.session.completed") {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const sessionMetadata = asObject(session.metadata);
+        const userId = String(session.client_reference_id || sessionMetadata.user_id || "").trim() || null;
+        const subscriptionId = typeof session.subscription === "string"
+          ? session.subscription
+          : String((session.subscription as any)?.id || "").trim() || null;
+        const sessionPriceId = String(sessionMetadata.price_id || "").trim() || null;
+        const oneoffProduct = normalizeOneoffProduct({
+          planKey: String(sessionMetadata.plan_key || sessionMetadata.product_key || "").trim() || null,
+          priceId: sessionPriceId,
+        });
+
+        if (!userId) {
+          throw new Error(`checkout_user_unresolved_${session.id}`);
         }
 
-        await persistOneoffPurchase({
-          session,
-          userId,
-          companyId,
-          productKey: oneoffProduct.productKey,
-          creditsGranted: oneoffProduct.creditsGranted,
-          priceId: sessionPriceId || "",
-        });
-      }
+        if (!subscriptionId && oneoffProduct) {
+          const companyId = await resolveCompanyIdForSession(session, userId);
+          if (!companyId) {
+            throw new Error(`company_id_unresolved_for_oneoff_${session.id}`);
+          }
 
-        if (userId && subscriptionId) {
+          await persistOneoffPurchase({
+            session,
+            userId,
+            companyId,
+            productKey: oneoffProduct.productKey,
+            creditsGranted: oneoffProduct.creditsGranted,
+            priceId: sessionPriceId || "",
+          });
+        }
+
+        if (subscriptionId) {
           const subCtx = await upsertSubscription({
             userId,
-            companyId: String((session.metadata as any)?.company_id || "").trim() || null,
+            companyId: String(sessionMetadata.company_id || "").trim() || null,
             checkoutSessionId: session.id,
             subscriptionId,
             sourceEvent: event.type,
-        });
-        await sendSubscriptionEmail({
-          kind: "plan_updated",
-          userId: subCtx.userId,
-          planKey: subCtx.planKey,
-          previousPlanKey: subCtx.previousPlanKey,
-          immediate: true,
-          periodEnd: subCtx.periodEndIso,
-          sourceEvent: event.type,
-          sourceEventId: event.id,
-        });
+          });
+          await sendSubscriptionEmail({
+            kind: "plan_updated",
+            userId: subCtx.userId,
+            planKey: subCtx.planKey,
+            previousPlanKey: subCtx.previousPlanKey,
+            immediate: true,
+            periodEnd: subCtx.periodEndIso,
+            sourceEvent: event.type,
+            sourceEventId: event.id,
+          });
+        }
+
+        await finalizeWebhookEvent(event, { status: "processed" });
+        return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
       }
 
-      return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
-    }
+      if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
+        const sub = event.data.object as Stripe.Subscription;
+        if (sub?.id) {
+          const subCtx = await upsertSubscription({
+            subscriptionId: sub.id,
+            sourceEvent: event.type,
+          });
 
-    if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") {
-      const sub = event.data.object as Stripe.Subscription;
-      if (sub?.id) {
-        const subCtx = await upsertSubscription({
-          subscriptionId: sub.id,
-          sourceEvent: event.type,
-        });
+          if (event.type === "customer.subscription.updated") {
+            const prev = ((event as any)?.data?.previous_attributes || {}) as Record<string, any>;
+            const becameCancelAtPeriodEnd =
+              typeof prev.cancel_at_period_end === "boolean" &&
+              prev.cancel_at_period_end === false &&
+              sub.cancel_at_period_end === true;
+            const itemsChanged = Boolean(prev.items);
+            if (becameCancelAtPeriodEnd) {
+              await sendSubscriptionEmail({
+                kind: "subscription_changed",
+                userId: subCtx.userId,
+                planKey: subCtx.planKey,
+                previousPlanKey: subCtx.previousPlanKey,
+                immediate: false,
+                effectiveAt: subCtx.periodEndIso,
+                periodEnd: subCtx.periodEndIso,
+                reason: "La cancelación o downgrade se aplicará al final del periodo.",
+                sourceEvent: event.type,
+                sourceEventId: event.id,
+              });
+            } else if (itemsChanged && subCtx.previousPlanKey && subCtx.previousPlanKey !== subCtx.planKey) {
+              await sendSubscriptionEmail({
+                kind: "plan_updated",
+                userId: subCtx.userId,
+                planKey: subCtx.planKey,
+                previousPlanKey: subCtx.previousPlanKey,
+                immediate: true,
+                periodEnd: subCtx.periodEndIso,
+                sourceEvent: event.type,
+                sourceEventId: event.id,
+              });
+            }
+          }
+        }
+        await finalizeWebhookEvent(event, { status: "processed" });
+        return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
+      }
 
-        if (event.type === "customer.subscription.updated") {
-          const prev = ((event as any)?.data?.previous_attributes || {}) as Record<string, any>;
-          const becameCancelAtPeriodEnd =
-            typeof prev.cancel_at_period_end === "boolean" &&
-            prev.cancel_at_period_end === false &&
-            sub.cancel_at_period_end === true;
-          const itemsChanged = Boolean(prev.items);
-          if (becameCancelAtPeriodEnd) {
+      if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
+        const invoice = event.data.object as any;
+        const subscriptionId =
+          typeof invoice.subscription === "string"
+            ? invoice.subscription
+            : ((invoice.subscription as any)?.id ?? null);
+        if (subscriptionId) {
+          const subCtx = await upsertSubscription({
+            subscriptionId,
+            sourceEvent: event.type,
+          });
+          if (String(invoice?.billing_reason || "").toLowerCase() === "subscription_cycle") {
             await sendSubscriptionEmail({
-              kind: "subscription_changed",
+              kind: "subscription_renewed",
               userId: subCtx.userId,
               planKey: subCtx.planKey,
-              previousPlanKey: subCtx.previousPlanKey,
-              immediate: false,
-              effectiveAt: subCtx.periodEndIso,
-              periodEnd: subCtx.periodEndIso,
-              reason: "La cancelación o downgrade se aplicará al final del periodo.",
-              sourceEvent: event.type,
-              sourceEventId: event.id,
-            });
-          } else if (itemsChanged && subCtx.previousPlanKey && subCtx.previousPlanKey !== subCtx.planKey) {
-            await sendSubscriptionEmail({
-              kind: "plan_updated",
-              userId: subCtx.userId,
-              planKey: subCtx.planKey,
-              previousPlanKey: subCtx.previousPlanKey,
-              immediate: true,
               periodEnd: subCtx.periodEndIso,
               sourceEvent: event.type,
               sourceEventId: event.id,
             });
           }
         }
+        await finalizeWebhookEvent(event, { status: "processed" });
+        return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
       }
-      return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
-    }
 
-    if (event.type === "invoice.paid" || event.type === "invoice.payment_succeeded") {
-      const invoice = event.data.object as any;
-      const subscriptionId =
-        typeof invoice.subscription === "string"
-          ? invoice.subscription
-          : ((invoice.subscription as any)?.id ?? null);
-      if (subscriptionId) {
-        const subCtx = await upsertSubscription({
-          subscriptionId,
-          sourceEvent: event.type,
-        });
-        if (String(invoice?.billing_reason || "").toLowerCase() === "subscription_cycle") {
+      if (event.type === "invoice.payment_failed") {
+        const invoice = event.data.object as any;
+        const subscriptionId =
+          typeof invoice.subscription === "string"
+            ? invoice.subscription
+            : ((invoice.subscription as any)?.id ?? null);
+        if (subscriptionId) {
+          const subCtx = await upsertSubscription({
+            subscriptionId,
+            sourceEvent: event.type,
+          });
           await sendSubscriptionEmail({
-            kind: "subscription_renewed",
+            kind: "payment_failed",
             userId: subCtx.userId,
             planKey: subCtx.planKey,
             periodEnd: subCtx.periodEndIso,
@@ -579,70 +781,53 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             sourceEventId: event.id,
           });
         }
+        await finalizeWebhookEvent(event, { status: "processed" });
+        return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
       }
-      return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
-    }
 
-    if (event.type === "invoice.payment_failed") {
-      const invoice = event.data.object as any;
-      const subscriptionId =
-        typeof invoice.subscription === "string"
-          ? invoice.subscription
-          : ((invoice.subscription as any)?.id ?? null);
-      if (subscriptionId) {
-        const subCtx = await upsertSubscription({
-          subscriptionId,
-          sourceEvent: event.type,
-        });
-        await sendSubscriptionEmail({
-          kind: "payment_failed",
-          userId: subCtx.userId,
-          planKey: subCtx.planKey,
-          periodEnd: subCtx.periodEndIso,
-          sourceEvent: event.type,
-          sourceEventId: event.id,
-        });
-      }
-      return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
-    }
+      if (event.type === "customer.subscription.deleted") {
+        const sub = event.data.object as Stripe.Subscription;
+        if (sub?.id) {
+          const previousSub = await supabase
+            .from("subscriptions")
+            .select("user_id,plan,current_period_end")
+            .eq("stripe_subscription_id", sub.id)
+            .maybeSingle();
+          const { error } = await supabase
+            .from("subscriptions")
+            .update({
+              status: "canceled",
+              cancel_at_period_end: true,
+              updated_at: new Date(),
+            })
+            .eq("stripe_subscription_id", sub.id);
 
-    if (event.type === "customer.subscription.deleted") {
-      const sub = event.data.object as Stripe.Subscription;
-      if (sub?.id) {
-        const previousSub = await supabase
-          .from("subscriptions")
-          .select("user_id,plan,current_period_end")
-          .eq("stripe_subscription_id", sub.id)
-          .maybeSingle();
-        const { error } = await supabase
-          .from("subscriptions")
-          .update({
-            status: "canceled",
-            cancel_at_period_end: true,
-            updated_at: new Date(),
-          })
-          .eq("stripe_subscription_id", sub.id);
+          if (error) throw new Error(`Supabase cancel update failed: ${error.message}`);
 
-        if (error) throw new Error(`Supabase cancel update failed: ${error.message}`);
-
-        const userId = String(previousSub.data?.user_id || "").trim() || (await resolveUserIdForSubscription(sub));
-        if (userId) {
-          await sendSubscriptionEmail({
-            kind: "subscription_changed",
-            userId,
-            planKey: String(previousSub.data?.plan || "free"),
-            immediate: true,
-            periodEnd: previousSub.data?.current_period_end ? new Date(previousSub.data.current_period_end).toISOString() : null,
-            reason: "Tu suscripción ha sido cancelada.",
-            sourceEvent: event.type,
-            sourceEventId: event.id,
-          });
+          const userId = String(previousSub.data?.user_id || "").trim() || (await resolveUserIdForSubscription(sub));
+          if (userId) {
+            await sendSubscriptionEmail({
+              kind: "subscription_changed",
+              userId,
+              planKey: String(previousSub.data?.plan || "free"),
+              immediate: true,
+              periodEnd: previousSub.data?.current_period_end ? new Date(previousSub.data.current_period_end).toISOString() : null,
+              reason: "Tu suscripción ha sido cancelada.",
+              sourceEvent: event.type,
+              sourceEventId: event.id,
+            });
+          }
         }
+        await finalizeWebhookEvent(event, { status: "processed" });
+        return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
       }
-      return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
-    }
 
-    return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
+      await finalizeWebhookEvent(event, { status: "processed" });
+      return json(res, 200, { received: true, event_type: event.type, event_id: event.id });
+    } catch (e: any) {
+      await finalizeWebhookEvent(event, { status: "failed", error: e?.message ?? String(e) });
+      throw e;
+    }
   } catch (e: any) {
     console.error("[stripe-webhook] fatal:", {
       message: e?.message ?? String(e),
