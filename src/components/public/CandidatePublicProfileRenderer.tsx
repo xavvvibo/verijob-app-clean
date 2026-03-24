@@ -384,7 +384,7 @@ export function CandidatePublicProfileRenderer({
                 <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
                   {teaser?.location ? <Pill>{teaser.location}</Pill> : null}
                   <Pill>{verificationSummary.verified} verificaciones</Pill>
-                  <Pill>Trust score {Math.round(trust)}</Pill>
+                  <Pill>Trust score del perfil {Math.round(trust)}</Pill>
                 </div>
               </div>
 
@@ -416,7 +416,7 @@ export function CandidatePublicProfileRenderer({
           </header>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <SignalCard label="Trust score" value={Math.round(trust)} hint="Confianza del perfil" />
+            <SignalCard label="Trust score del perfil" value={Math.round(trust)} hint="Confianza visible para empresa" />
             <SignalCard label="Verificaciones" value={verificationSummary.verified} hint="Experiencias contrastadas" />
             <SignalCard label="Experiencias visibles" value={experiences.length} hint="Muestra pública limitada" />
           </div>
@@ -693,7 +693,7 @@ export function CandidatePublicProfileRenderer({
                   </div>
                   {!isOpenPublicView ? (
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Desglose de confianza</div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Qué compone el trust score</div>
                       <div className="mt-3 space-y-2">
                         <TrustBreakdownBar label="Documental" value={trustComponents.documentary} />
                         <TrustBreakdownBar label="Empresa" value={trustComponents.company} />
@@ -701,6 +701,9 @@ export function CandidatePublicProfileRenderer({
                         <TrustBreakdownBar label="Reuse" value={trustComponents.reuse} />
                         <TrustBreakdownBar label="Consistencia CV" value={trustComponents.cvConsistency} />
                       </div>
+                      <p className="mt-3 text-xs leading-5 text-slate-500">
+                        El trust score resume señales públicas y verificables. Ayuda a priorizar, pero no sustituye la revisión humana del perfil.
+                      </p>
                     </div>
                   ) : (
                     <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-slate-700">

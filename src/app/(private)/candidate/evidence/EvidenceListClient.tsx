@@ -809,6 +809,15 @@ export default function EvidenceListClient({
           <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>{item.dates}</div>
         ) : null}
         <div style={{ fontSize: 13, color: "#0f172a", marginBottom: 4 }}>{item.processing_label}</div>
+        <div style={{ fontSize: 12, color: "#64748b", marginBottom: 8 }}>
+          {item.status === "verified"
+            ? "Este documento ya sostiene una validación visible."
+            : item.user_status_label === "Coincidencia dudosa"
+              ? "Hemos recibido el documento, pero necesitamos revisar mejor si corresponde a esta experiencia."
+              : item.user_status_label === "No alineado con la experiencia"
+                ? "El documento está registrado, pero ahora mismo no refuerza esta experiencia."
+                : "El documento ya está registrado y seguiremos actualizando su estado en esta misma pantalla."}
+        </div>
         {item.user_status_reason ? (
           <div style={{ fontSize: 13, color: "#334155", marginBottom: 4 }}>{item.user_status_reason}</div>
         ) : null}
@@ -877,13 +886,37 @@ export default function EvidenceListClient({
           {selectedExperienceLabel ? "Documentación vinculada a esta experiencia" : "Evidencias"}
         </h2>
         <p style={{ margin: "8px 0 0", color: "#475569" }}>
-          Tus documentos pueden reforzar la credibilidad del perfil. Cada evidencia muestra su estado de análisis, su coincidencia con la experiencia y su aporte cualitativo a confianza.
+          Tus documentos refuerzan la credibilidad del perfil, pero no verifican nada por sí solos hasta que el sistema pueda analizarlos o revisarlos correctamente.
         </p>
         {selectedExperienceLabel ? (
           <div style={{ marginTop: 10, fontSize: 13, color: "#0f172a", fontWeight: 600 }}>
             Experiencia activa: {selectedExperienceLabel}
           </div>
         ) : null}
+        <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {[
+            "Documento recibido",
+            "En análisis",
+            "Coincidencia dudosa",
+            "No alineado con la experiencia",
+            "Pendiente de revisión",
+          ].map((label) => (
+            <span
+              key={label}
+              style={{
+                borderRadius: 999,
+                border: "1px solid #dbe4f0",
+                background: "#fff",
+                color: "#334155",
+                padding: "4px 10px",
+                fontSize: 12,
+                fontWeight: 600,
+              }}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
       </div>
 
       {activityState ? (
@@ -931,6 +964,19 @@ export default function EvidenceListClient({
           Subir nueva documentación
         </div>
         <div style={{ display: "grid", gap: 12 }}>
+          <div
+            style={{
+              borderRadius: 12,
+              border: "1px solid #e2e8f0",
+              background: "#f8fafc",
+              padding: 12,
+              fontSize: 12,
+              color: "#475569",
+              lineHeight: 1.6,
+            }}
+          >
+            Sube solo documentos oficiales o laborales legibles. Si el documento no encaja bien con la experiencia elegida, lo verás indicado y no contará como validación sólida.
+          </div>
           <label style={{ display: "grid", gap: 6 }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: "#334155" }}>Tipo documental</span>
             <select
@@ -997,8 +1043,8 @@ export default function EvidenceListClient({
               style={{
                 borderRadius: 12,
                 padding: "10px 12px",
-                background: isError ? "#fef2f2" : "#eff6ff",
-                color: isError ? "#b91c1c" : "#1d4ed8",
+                background: isError ? "#fef2f2" : "#f0fdf4",
+                color: isError ? "#b91c1c" : "#166534",
                 fontSize: 13,
               }}
             >

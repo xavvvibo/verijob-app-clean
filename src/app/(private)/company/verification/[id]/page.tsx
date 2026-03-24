@@ -163,7 +163,7 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
           </div>
           <h1 className="mt-2 text-3xl font-semibold text-slate-900">Validación de experiencia</h1>
           <p className="mt-2 text-sm text-slate-600">
-            Revisa el estado, la confianza de la validación y decide si necesitas documentación adicional.
+            Revisa exactamente qué experiencia te piden confirmar, qué señales la sostienen ya y deja una decisión clara y trazable.
           </p>
         </div>
 
@@ -246,7 +246,7 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
 
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Dominio verificador verificador del verificador</div>
+                  <div className="text-xs uppercase tracking-wide text-slate-500">Dominio del email verificador</div>
                   <div className="mt-1 text-sm font-semibold text-slate-900">
                     {requestRow.verifier_email_domain || "Pendiente"}
                   </div>
@@ -328,12 +328,31 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">
-                <span>Dominio verificador verificador</span>
+                <span>Dominio del email verificador</span>
                 <span className="font-semibold text-slate-900">
                   {requestRow.verifier_email_domain || "—"}
                 </span>
               </div>
             </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="text-sm font-semibold text-slate-900">Qué estás confirmando</div>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="mt-2 text-sm text-slate-600">
+                Estás validando si la persona trabajó realmente en <span className="font-semibold text-slate-900">{companyLabel}</span> en el puesto <span className="font-semibold text-slate-900">{roleLabel}</span> durante el periodo indicado.
+              </p>
+              <p className="mt-2 text-xs text-slate-500">
+                Si no puedes confirmarlo con seguridad, recházalo o deja una nota breve para mantener la trazabilidad.
+              </p>
+            </div>
+
+            {requestRow.resolution_notes ? (
+              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="text-xs uppercase tracking-wide text-slate-500">Notas registradas</div>
+                <p className="mt-2 text-sm text-slate-700">{requestRow.resolution_notes}</p>
+              </div>
+            ) : null}
           </div>
         </div>
       </section>

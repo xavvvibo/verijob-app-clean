@@ -46,7 +46,7 @@ export default function DecisionPanel(props: {
         <div>
           <h2 className="text-base font-semibold text-slate-900">Resolver verificación</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Confirma o rechaza esta experiencia laboral. La resolución quedará registrada con trazabilidad.
+            Confirma o rechaza esta experiencia laboral. La decisión impactará en el estado visible para el candidato y quedará registrada con trazabilidad.
           </p>
         </div>
         <div className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700">
@@ -61,7 +61,7 @@ export default function DecisionPanel(props: {
           onChange={(e) => setNote(e.target.value)}
           rows={3}
           className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none ring-blue-500/50 placeholder:text-slate-400 focus:ring-2"
-          placeholder="Ej: Evidencia válida / Faltan documentos / Fechas inconsistentes..."
+          placeholder="Ej: Confirmado por RRHH / No consta en nuestros registros / Falta contexto..."
           disabled={disabled}
         />
       </div>
@@ -97,11 +97,11 @@ export default function DecisionPanel(props: {
       </div>
       {status === "verified" || status === "rejected" ? (
         <p className="mt-3 text-xs font-medium text-slate-600">
-          Esta solicitud ya está resuelta. Si vuelves al listado, verás el estado actualizado.
+          Esta solicitud ya está resuelta y no volverá a consumir trabajo operativo salvo que se abra un caso nuevo.
         </p>
       ) : null}
       <p className="mt-3 text-xs text-slate-500">
-        Verificar experiencias recibidas es gratuito para empresas.
+        Verificar experiencias recibidas es gratuito para empresas. Solo confirma aquello que puedas sostener con seguridad.
       </p>
     </section>
   );

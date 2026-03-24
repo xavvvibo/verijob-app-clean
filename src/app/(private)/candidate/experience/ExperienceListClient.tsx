@@ -99,6 +99,7 @@ export default function ExperienceListClient({
   const [savingId, setSavingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [messageTone, setMessageTone] = useState<"success" | "error" | "info">("success");
   const [editingCurrentById, setEditingCurrentById] = useState<Record<string, boolean>>({});
   const [verificationEmailById, setVerificationEmailById] = useState<Record<string, string>>({});
   const [verifyStateById, setVerifyStateById] = useState<Record<string, VerifyState>>({});
@@ -137,6 +138,7 @@ export default function ExperienceListClient({
       };
       setRows((prev) => [nextRow, ...prev]);
       setExpandedId(nextRow.id);
+      setMessageTone("success");
       setMessage("Experiencia guardada correctamente.");
     };
     window.addEventListener(EXPERIENCE_CREATED_EVENT, onCreated as EventListener);
@@ -146,6 +148,11 @@ export default function ExperienceListClient({
   function patchRow(id: string, patch: Partial<Row>) {
     setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
     setMessage(null);
+  }
+
+  function setFeedback(nextMessage: string | null, tone: "success" | "error" | "info" = "success") {
+    setMessageTone(tone);
+    setMessage(nextMessage);
   }
 
   function getVisibleRowCount(nextRows: Row[]) {
@@ -178,7 +185,7 @@ export default function ExperienceListClient({
 
   async function saveVisibility(nextRows: Row[], rowId: string) {
     setSavingVisibilityId(rowId);
-    setMessage(null);
+    setFeedback(null);
 
     try {
       const res = await fetch("/api/candidate/profile", {
@@ -194,10 +201,10 @@ export default function ExperienceListClient({
         throw new Error(json?.error || "No se ha podido actualizar la visibilidad pública.");
       }
       setRows(nextRows);
-      setMessage("Configuración pública actualizada.");
+      setFeedback("Configuración pública actualizada. La vista pública ya refleja este cambio.", "success");
       router.refresh();
     } catch (error: any) {
-      setMessage(error?.message || "No se ha podido actualizar la visibilidad pública.");
+      setFeedback(error?.message || "No se ha podido actualizar la visibilidad pública.", "error");
     } finally {
       setSavingVisibilityId(null);
     }
@@ -220,13 +227,14 @@ export default function ExperienceListClient({
     });
 
     if (planInfo?.work != null && getVisibleRowCount(nextRows) > planInfo.work) {
-      setMessage(`Tu plan ${planInfo.label} permite mostrar ${planInfo.visibilityLabel} en el perfil público.`);
+      setFeedback(`Tu plan ${planInfo.label} permite mostrar ${planInfo.visibilityLabel} en el perfil público. Ajusta qué experiencia dejas visible.`, "error");
       return;
     }
 
     if (planInfo?.featured != null && getFeaturedRowCount(nextRows) > planInfo.featured) {
-      setMessage(
+      setFeedback(
         `Tu plan ${planInfo.label} permite destacar ${planInfo.featured} experiencia${planInfo.featured === 1 ? "" : "s"} en el perfil público.`,
+        "error",
       );
       return;
     }
@@ -247,17 +255,17 @@ export default function ExperienceListClient({
       startDate = parseExperienceDateInput(row.start_date || null).storageValue;
       endDate = isCurrent ? null : parseExperienceDateInput(row.end_date || null, { allowPresent: true }).storageValue;
     } catch (error: any) {
-      setMessage(error?.message || "Revisa el formato de las fechas.");
+      setFeedback(error?.message || "Revisa el formato de las fechas.", "error");
       return;
     }
 
     if (!roleTitle || !companyName || !startDate) {
-      setMessage("Cada experiencia debe incluir empresa, puesto y fecha de inicio.");
+      setFeedback("Cada experiencia debe incluir empresa, puesto y fecha de inicio.", "error");
       return;
     }
 
     setSavingId(id);
-    setMessage(null);
+    setFeedback(null);
 
     const payload = {
       role_title: roleTitle,
@@ -271,13 +279,13 @@ export default function ExperienceListClient({
     setSavingId(null);
 
     if (error) {
-      setMessage(`No se pudo guardar la experiencia: ${error.message}`);
+      setFeedback(`No se pudo guardar la experiencia: ${error.message}`, "error");
       return;
     }
 
     patchRow(id, { end_date: payload.end_date });
     setEditingId(null);
-    setMessage("Experiencia actualizada correctamente.");
+    setFeedback("Experiencia actualizada correctamente. Ya puedes seguir verificándola o dejarla visible en tu perfil público.", "success");
     router.refresh();
   }
 
@@ -358,20 +366,20 @@ export default function ExperienceListClient({
     if (!confirmed) return;
 
     setDeletingId(row.id);
-    setMessage(null);
+    setFeedback(null);
 
     const { error } = await supabase.from("profile_experiences").delete().eq("id", row.id);
     setDeletingId(null);
 
     if (error) {
-      setMessage(`No se pudo eliminar la experiencia: ${error.message}`);
+      setFeedback(`No se pudo eliminar la experiencia: ${error.message}`, "error");
       return;
     }
 
     setRows((prev) => prev.filter((entry) => entry.id !== row.id));
     if (expandedId === row.id) setExpandedId(null);
     if (editingId === row.id) setEditingId(null);
-    setMessage("Experiencia eliminada correctamente.");
+    setFeedback("Experiencia eliminada correctamente.", "success");
     router.refresh();
   }
 
@@ -386,7 +394,17 @@ export default function ExperienceListClient({
   return (
     <div className="space-y-3">
       {message ? (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-700">{message}</div>
+        <div
+          className={`rounded-lg border p-3 text-sm ${
+            messageTone === "error"
+              ? "border-rose-200 bg-rose-50 text-rose-700"
+              : messageTone === "info"
+                ? "border-blue-200 bg-blue-50 text-blue-700"
+                : "border-green-200 bg-green-50 text-green-700"
+          }`}
+        >
+          {message}
+        </div>
       ) : null}
 
       {rows.map((row) => {
@@ -480,6 +498,15 @@ export default function ExperienceListClient({
                         {row.description || "Sin descripción todavía. Puedes completar esta experiencia antes de verificarla."}
                       </p>
                       <p className="mt-3 text-xs text-slate-500">Última acción: {row.last_action}</p>
+                      <p className="mt-2 text-xs text-slate-500">
+                        {row.status === "Verificada"
+                          ? "Esta experiencia ya aporta confianza real a tu perfil."
+                          : row.status === "En revisión" || row.status === "Validación solicitada"
+                            ? "Esta experiencia está en marcha. Puedes reforzarla con documentación mientras se revisa."
+                            : row.status === "Revocada"
+                              ? "La verificación ya no está activa. Revísala antes de volver a compartirla."
+                              : "Todavía no tiene validación activa. Puedes solicitarla o subir documentación de soporte."}
+                      </p>
                     </div>
 
                     {isEditing ? (
@@ -614,6 +641,9 @@ export default function ExperienceListClient({
                             {publicPlan?.work == null
                               ? "Tu plan permite mostrar todas tus experiencias laborales."
                               : `Tu plan ${publicPlan.label} permite mostrar hasta ${publicPlan.work} experiencia${publicPlan.work === 1 ? "" : "s"} laboral${publicPlan.work === 1 ? "" : "es"} y ${publicPlan.featured == null ? "destacadas ilimitadas" : `${publicPlan.featured} destacada${publicPlan.featured === 1 ? "" : "s"}`}.`}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            Guarda aquí lo que quieres enseñar fuera de VERIJOB. El perfil público siempre sigue siendo resumido y protegido.
                           </p>
                         </div>
                       </div>

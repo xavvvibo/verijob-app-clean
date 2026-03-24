@@ -32,7 +32,7 @@ export default function VerifiedCV({ data }: Props) {
         <p className="mt-1 text-sm text-slate-600">Perfil profesional con señales verificables para evaluación empresarial.</p>
         <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
           {teaser?.location ? <span className="rounded-full border border-slate-200 px-2.5 py-1">{teaser.location}</span> : null}
-          <span className="rounded-full border border-slate-200 px-2.5 py-1">Trust Score: {Number(teaser?.trust_score ?? 0)}</span>
+          <span className="rounded-full border border-slate-200 px-2.5 py-1">Trust score del perfil: {Number(teaser?.trust_score ?? 0)}</span>
           <span className="rounded-full border border-slate-200 px-2.5 py-1">Verificadas: {Number(teaser?.verified_experiences ?? 0)}</span>
           <span className="rounded-full border border-slate-200 px-2.5 py-1">Evidencias: {Number(teaser?.evidences_total ?? 0)}</span>
         </div>
@@ -47,7 +47,10 @@ export default function VerifiedCV({ data }: Props) {
 
       {trustComponents ? (
         <section className="mt-6 break-inside-avoid rounded-xl border border-slate-200 p-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Desglose de confianza</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">Qué compone el trust score</h2>
+          <p className="mt-2 text-xs leading-5 text-slate-600">
+            Este valor resume señales documentales, validación empresarial, peer, reuse y consistencia general del perfil.
+          </p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <TrustItem label="Documental" value={Number((trustComponents as any)?.documentary ?? (trustComponents as any)?.evidence ?? 0)} />
             <TrustItem label="Empresa" value={Number((trustComponents as any)?.company ?? (trustComponents as any)?.verification ?? 0)} />

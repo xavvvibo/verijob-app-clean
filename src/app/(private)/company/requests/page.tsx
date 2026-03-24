@@ -270,9 +270,9 @@ export default async function CompanyRequestsPage({
   return (
     <div className="space-y-6">
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Solicitudes de validación de validación</h1>
+        <h1 className="text-2xl font-semibold text-slate-900">Solicitudes de validación</h1>
         <p className="mt-2 text-sm text-slate-600">
-          Revisa aquí las solicitudes de validación que llegan desde candidatos y gestiona las que estén pendientes.
+          Revisa aquí qué experiencia te están pidiendo confirmar, si ya trae soporte documental y qué solicitudes requieren una decisión.
         </p>
         {!planActive ? (
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -282,6 +282,14 @@ export default async function CompanyRequestsPage({
             </Link>
           </div>
         ) : null}
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          <p className="font-semibold text-slate-900">Cómo priorizar esta cola</p>
+          <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
+            <li>Primero revisa las pendientes con evidencias.</li>
+            <li>Después resuelve las recientes que aún no tienen respuesta.</li>
+            <li>Las resueltas siguen aquí para trazabilidad, no para volver a decidir.</li>
+          </ul>
+        </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-5">
@@ -346,6 +354,16 @@ export default async function CompanyRequestsPage({
                 <div className="mt-1 text-sm text-slate-500">
                   {row.start_date ? formatDate(row.start_date) : "Pendiente"} — {row.end_date ? formatDate(row.end_date) : "Actualidad"}
                 </div>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 font-semibold text-slate-700">
+                    {row.evidence_count} {row.evidence_count === 1 ? "evidencia" : "evidencias"}
+                  </span>
+                  {row.reuse_events > 0 ? (
+                    <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 font-semibold text-blue-800">
+                      {row.reuse_events} reutilización{row.reuse_events === 1 ? "" : "es"}
+                    </span>
+                  ) : null}
+                </div>
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -376,6 +394,11 @@ export default async function CompanyRequestsPage({
                 <div className="mt-2 text-sm font-semibold text-slate-900">{row.actions_count}</div>
               </div>
             </div>
+            <p className="mt-4 text-xs text-slate-500">
+              {isPendingStatus(row.status_effective)
+                ? "Pendiente de decisión. Abre el detalle para confirmar o rechazar la experiencia con contexto."
+                : "Solicitud ya resuelta. El detalle mantiene la trazabilidad completa de la decisión."}
+            </p>
           </article>
         ))}
       </section>

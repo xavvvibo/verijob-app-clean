@@ -172,6 +172,9 @@ export default function CandidatePublicProfilePage() {
             <p className="mt-1">
               Verás exactamente la misma jerarquía de confianza por experiencia: verificadas primero, luego las reforzadas con documentación, después las que están en proceso y al final las que aún no están validadas.
             </p>
+            <p className="mt-1">
+              La vista pública sigue siendo limitada: no enseña tu contacto completo ni el historial completo salvo que una empresa desbloquee el perfil dentro del producto.
+            </p>
           </div>
         </header>
 
@@ -204,6 +207,7 @@ export default function CandidatePublicProfilePage() {
               <li>Vista pública resumida: señales de confianza y trayectoria profesional sin parecer un CV completo.</li>
               <li>Vista completa: más detalle por experiencia y datos visibles según permisos y plan.</li>
               <li>Los estados por experiencia mantienen el mismo lenguaje: Alta confianza, Verificación en proceso, Confianza media y Sin validar todavía.</li>
+              <li>El trust score visible es orientativo para empresas y se apoya en verificaciones reales, no en promesas del candidato.</li>
             </ul>
           </div>
 
