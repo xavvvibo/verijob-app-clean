@@ -108,10 +108,6 @@ function buildTrustSignals(args: { verified: number; inProcess: number; evidence
   ];
 }
 
-function listCount(raw: any) {
-  return Array.isArray(raw) ? raw.length : 0;
-}
-
 function formatMonthYear(value?: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -473,7 +469,7 @@ function TrustRing({ score, stateTitle }: { score: number; stateTitle: string })
 
 function HeroMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white/95 px-4 py-3 shadow-sm shadow-slate-200/40">
+    <div className="rounded-2xl border border-slate-200/80 bg-white/95 px-4 py-3 shadow-sm shadow-slate-200/30">
       <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div>
       <div className="mt-1 text-lg font-semibold text-slate-900">{value}</div>
     </div>
@@ -482,11 +478,9 @@ function HeroMetric({ label, value }: { label: string; value: string }) {
 
 function ProgressMilestone({
   label,
-  description,
   status,
 }: {
   label: string;
-  description: string;
   status: "done" | "progress" | "pending";
 }) {
   const tone =
@@ -503,12 +497,11 @@ function ProgressMilestone({
         : "bg-slate-300";
 
   return (
-    <div className={`rounded-[22px] border px-4 py-4 ${tone}`}>
+    <div className={`rounded-full border px-4 py-3 ${tone}`}>
       <div className="flex items-center gap-3">
         <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
         <p className="text-sm font-semibold">{label}</p>
       </div>
-      <p className="mt-2 text-xs leading-5 opacity-90">{description}</p>
     </div>
   );
 }
@@ -527,12 +520,12 @@ function InsightCard({
   tone: string;
 }) {
   return (
-    <article className={`rounded-[28px] border p-6 shadow-sm ${tone}`}>
+    <article className={`rounded-[28px] border p-5 shadow-sm ${tone}`}>
       <h3 className="text-base font-semibold text-slate-900">{title}</h3>
       <p className="mt-2 text-sm leading-6 text-slate-700">{body}</p>
       <Link
         href={href}
-        className="mt-5 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+        className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
       >
         {cta}
       </Link>
@@ -545,7 +538,7 @@ function ExperienceSummaryCard({ item }: { item: any }) {
   const impact = resolveExperienceImpact(item);
 
   return (
-    <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
+    <article className="rounded-[26px] border border-slate-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h3 className="text-base font-semibold text-slate-900">{item.role_title || "Experiencia profesional"}</h3>
@@ -566,10 +559,8 @@ function ExperienceSummaryCard({ item }: { item: any }) {
         </div>
       </div>
 
-      <p className="mt-3 text-sm leading-6 text-slate-700">{resolveExperienceValueCopy(item)}</p>
-
       <div className="mt-4 flex items-center justify-between gap-3">
-        <p className="text-xs text-slate-500">{item.explanation}</p>
+        <p className="text-sm text-slate-600">{resolveExperienceValueCopy(item)}</p>
         <Link href={cta.href} className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50">
           {cta.label}
         </Link>
@@ -597,9 +588,7 @@ function PublicProfileCard({
         <div className="max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Esto es lo que verá una empresa</p>
           <h2 className="mt-2 text-2xl font-semibold text-slate-900">Perfil público verificable</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Tu perfil público es la versión profesional con la que una empresa te evaluará fuera del panel. Muestra señales de confianza sin exponer datos sensibles.
-          </p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Tu versión pública y compartible, preparada para generar confianza sin exponer datos sensibles.</p>
         </div>
         <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-right">
           <div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-900">Vista real de evaluación</div>
@@ -609,7 +598,7 @@ function PublicProfileCard({
       </div>
 
       <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+        <div className="rounded-[26px] border border-slate-200 bg-slate-50 p-5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
               Trust score {Math.round(trustScore)}
@@ -629,9 +618,9 @@ function PublicProfileCard({
           </p>
         </div>
 
-        <div className="rounded-3xl border border-slate-200 bg-white p-5">
+        <div className="rounded-[26px] border border-slate-200 bg-white p-5">
           <p className="text-sm font-semibold text-slate-900">Acciones rápidas</p>
-          <p className="mt-2 text-sm leading-6 text-slate-600">Revísalo como si fueras una empresa y compártelo cuando sientas que ya transmite tu mejor versión.</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Revísalo como si fueras una empresa y compártelo cuando ya te represente bien.</p>
           <div className="mt-4 flex flex-col gap-3">
             <Link href="/candidate/share" className="inline-flex justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
               Ver perfil público
@@ -656,24 +645,19 @@ function UpgradeCard({
 }) {
   return (
     <section className="rounded-3xl border border-violet-200 bg-gradient-to-br from-white via-violet-50 to-white p-6 shadow-sm">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">Siguiente nivel</p>
           <h2 className="mt-2 text-2xl font-semibold text-slate-900">Accede a una visibilidad profesional completa</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-700">
-            Presenta una versión más sólida y completa ante empresas, con más visibilidad, mejor presentación y herramientas para diferenciarte desde el primer vistazo.
-          </p>
-          <ul className="mt-4 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
-            <li className="rounded-2xl border border-violet-100 bg-white px-4 py-3">Más experiencias visibles en tu perfil público</li>
-            <li className="rounded-2xl border border-violet-100 bg-white px-4 py-3">QR profesional para compartir mejor</li>
-            <li className="rounded-2xl border border-violet-100 bg-white px-4 py-3">CV verificable descargable en planes superiores</li>
-            <li className="rounded-2xl border border-violet-100 bg-white px-4 py-3">Presentación más sólida frente a empresas</li>
+          <p className="mt-2 text-sm leading-6 text-slate-700">Presenta una versión más sólida ante empresas, con mejor visibilidad y una impresión más profesional.</p>
+          <ul className="mt-4 space-y-2 text-sm text-slate-700">
+            <li>Más experiencias visibles en tu perfil público</li>
+            <li>QR profesional para compartir mejor</li>
+            <li>CV verificable y presentación más sólida</li>
           </ul>
-          <p className="mt-4 text-sm leading-6 text-slate-600">
-            Los perfiles más completos transmiten más confianza desde la primera impresión.
-          </p>
+          <p className="mt-4 text-sm text-slate-600">Los perfiles más completos transmiten más confianza desde la primera impresión.</p>
         </div>
-        <div className="min-w-[260px] rounded-3xl border border-violet-200 bg-white p-5">
+        <div className="min-w-[260px]">
           <p className="text-sm font-semibold text-slate-900">Tu plan actual: {planLabel}</p>
           <p className="mt-2 text-sm leading-6 text-slate-600">{summary}</p>
           <Link href="/candidate/subscription" className="mt-5 inline-flex w-full justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
@@ -811,11 +795,6 @@ export default function CandidateOverview() {
     [employmentRecords, experienceCount, trustScore, verifications]
   );
 
-  const educationCount = useMemo(() => listCount(candidateProfile?.education), [candidateProfile]);
-  const achievementsCount = useMemo(
-    () => listCount(candidateProfile?.achievements_catalog?.all || candidateProfile?.achievements || candidateProfile?.certifications),
-    [candidateProfile]
-  );
   const companyCvImportSummary = useMemo(
     () => summarizeCompanyCvImportUpdates(candidateProfile?.raw_cv_json),
     [candidateProfile]
@@ -928,7 +907,7 @@ export default function CandidateOverview() {
   );
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-10">
       {importedFromCompanyCv ? (
         <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
           <p className="text-sm font-semibold text-amber-900">Perfil pre-rellenado desde un CV subido por empresa</p>
@@ -962,11 +941,11 @@ export default function CandidateOverview() {
         </section>
       ) : null}
 
-      <section className="relative overflow-hidden rounded-[36px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(96,165,250,0.18),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(15,23,42,0.06),_transparent_30%),linear-gradient(135deg,_#ffffff,_#f8fbff)] p-6 shadow-sm sm:p-8 xl:p-9">
+      <section className="relative overflow-hidden rounded-[36px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(96,165,250,0.18),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(15,23,42,0.06),_transparent_30%),linear-gradient(135deg,_#ffffff,_#f8fbff)] p-7 shadow-sm sm:p-9 xl:p-10">
         <div className="pointer-events-none absolute -left-16 top-0 h-40 w-40 rounded-full bg-blue-100/40 blur-3xl" />
         <div className="pointer-events-none absolute -right-20 bottom-0 h-52 w-52 rounded-full bg-slate-200/50 blur-3xl" />
 
-        <div className="relative grid gap-7 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_340px]">
+        <div className="relative grid gap-8 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_340px]">
           <div className="min-w-0">
             <div className="flex items-start gap-4">
               <AvatarView
@@ -989,15 +968,13 @@ export default function CandidateOverview() {
                   <VerificationBadge tone={profileCompletionScore >= 70 ? "company_verified" : "in_progress"}>
                     {profileStage}
                   </VerificationBadge>
-                  <VerificationBadge tone="business">{availabilityText}</VerificationBadge>
                 </div>
               </div>
             </div>
 
-            <div className="mt-7 grid gap-3 sm:grid-cols-3">
+            <div className="mt-7 grid gap-3 sm:grid-cols-2">
               <HeroMetric label="Estado visible" value={overviewStatus} />
-              <HeroMetric label="Perfil completado" value={`${profileCompletionScore}%`} />
-              <HeroMetric label="Experiencias cargadas" value={String(experienceCount)} />
+              <HeroMetric label="Disponibilidad" value={availabilityText} />
             </div>
 
             {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
@@ -1005,20 +982,19 @@ export default function CandidateOverview() {
           </div>
 
           <div className="rounded-[32px] border border-slate-200 bg-white/95 p-7 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Confianza del perfil</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Trust score</p>
             <div className="mt-5 flex flex-col gap-6 lg:flex-row lg:items-center">
               <TrustRing score={metrics.score} stateTitle={trustState.title} />
               <div className="min-w-0">
                 <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${trustState.tone}`}>
                   {metrics.verified > 0 ? "Perfil parcialmente verificado" : trustState.title}
                 </div>
-                <p className="mt-3 text-sm leading-6 text-slate-700">{trustState.summary}</p>
                 <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Cómo te ven las empresas ahora mismo</p>
                   <p className="mt-2 text-sm font-medium leading-6 text-slate-800">{employerLensCopy}</p>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {trustSignals.map((signal) => (
+                  {trustSignals.slice(0, 2).map((signal) => (
                     <span key={signal} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
                       {signal}
                     </span>
@@ -1050,26 +1026,22 @@ export default function CandidateOverview() {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+      <section className="rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Progreso del perfil</p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-900">Lo que ya has conseguido y lo que te falta</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">
-              Este panel convierte tu perfil en un proceso visible: experiencia, verificaciones, documentación y presentación final.
-            </p>
+            <h2 className="mt-2 text-xl font-semibold text-slate-900">Tu perfil, de un vistazo</h2>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
-            {profileCompletion?.completed || 0}/{profileCompletion?.total || 0} hitos de perfil completados
+          <div className="text-sm font-medium text-slate-600">
+            {profileCompletion?.completed || 0}/{profileCompletion?.total || 0} hitos completados
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 lg:grid-cols-4">
+        <div className="mt-4 flex flex-wrap gap-3">
           {profileMilestones.map((milestone) => (
             <ProgressMilestone
               key={milestone.id}
               label={milestone.label}
-              description={milestone.description}
               status={milestone.status as "done" | "progress" | "pending"}
             />
           ))}
@@ -1081,9 +1053,9 @@ export default function CandidateOverview() {
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Qué te falta para destacar</p>
           <h2 className="mt-2 text-2xl font-semibold text-slate-900">Acciones concretas para subir de nivel</h2>
         </div>
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-4 lg:grid-cols-2">
           {highlightCards.length ? (
-            highlightCards.map((card) => <InsightCard key={`${card.title}-${card.href}`} {...card} />)
+            highlightCards.slice(0, 2).map((card) => <InsightCard key={`${card.title}-${card.href}`} {...card} />)
           ) : (
             <InsightCard
               title="Tu perfil va bien encaminado"
@@ -1096,15 +1068,12 @@ export default function CandidateOverview() {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_340px]">
+      <section className="space-y-4">
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Experiencias clave</p>
               <h2 className="mt-2 text-2xl font-semibold text-slate-900">Experiencias que más pesan en tu perfil</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                No hace falta mostrarlo todo aquí. Estas son las experiencias que más influyen en cómo se interpreta tu perfil ahora mismo.
-              </p>
             </div>
             <Link href="/candidate/experience" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
               Ver todas las experiencias
@@ -1113,7 +1082,7 @@ export default function CandidateOverview() {
 
           <div className="mt-5 space-y-4">
             {experienceTimeline.length ? (
-              experienceTimeline.map((item: any) => <ExperienceSummaryCard key={item.id} item={item} />)
+              experienceTimeline.slice(0, 2).map((item: any) => <ExperienceSummaryCard key={item.id} item={item} />)
             ) : (
               <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
                 Todavía no hay experiencias suficientes para mostrar un resumen. Añade una experiencia o revisa las importadas para empezar a construir tu señal profesional.
@@ -1121,41 +1090,6 @@ export default function CandidateOverview() {
             )}
           </div>
         </section>
-
-        <div className="space-y-6">
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Navegación rápida</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <Link href="/candidate/profile" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Perfil</Link>
-              <Link href="/candidate/experience" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Experiencias</Link>
-              <Link href="/candidate/evidence" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Evidencias</Link>
-              <Link href="/candidate/verifications" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Verificaciones</Link>
-              <Link href="/candidate/education" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Formación</Link>
-              <Link href="/candidate/achievements" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Idiomas y logros</Link>
-            </div>
-          </section>
-
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Resumen del CV</p>
-            <div className="mt-4 grid gap-3">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Experiencia</div>
-                <div className="mt-1 text-lg font-semibold text-slate-900">{experienceCount}</div>
-                <p className="mt-1 text-sm text-slate-600">Experiencias detectadas o añadidas manualmente.</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Formación</div>
-                <div className="mt-1 text-lg font-semibold text-slate-900">{educationCount}</div>
-                <p className="mt-1 text-sm text-slate-600">Bloques académicos visibles en tu perfil.</p>
-              </div>
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Idiomas y logros</div>
-                <div className="mt-1 text-lg font-semibold text-slate-900">{achievementsCount}</div>
-                <p className="mt-1 text-sm text-slate-600">Señales adicionales que completan tu perfil.</p>
-              </div>
-            </div>
-          </section>
-        </div>
       </section>
 
       <PublicProfileCard
