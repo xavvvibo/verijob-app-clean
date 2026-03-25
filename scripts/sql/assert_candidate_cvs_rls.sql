@@ -14,6 +14,8 @@
 
 begin;
 
+reset role;
+
 do $$
 declare
   rls_enabled boolean;
@@ -39,8 +41,17 @@ begin
 end
 $$;
 
+set local role authenticated;
 select set_config('request.jwt.claim.role', 'authenticated', true);
 select set_config('request.jwt.claim.sub', :'candidate_a', true);
+
+do $$
+begin
+  if auth.uid()::text <> trim(both '''' from :'candidate_a') then
+    raise exception 'candidate_a_auth_uid_mismatch:%', auth.uid();
+  end if;
+end
+$$;
 
 insert into public.candidate_cvs (
   user_id
@@ -79,7 +90,17 @@ begin
 end
 $$;
 
+reset role;
+set local role authenticated;
 select set_config('request.jwt.claim.sub', :'candidate_b', true);
+
+do $$
+begin
+  if auth.uid()::text <> trim(both '''' from :'candidate_b') then
+    raise exception 'candidate_b_auth_uid_mismatch:%', auth.uid();
+  end if;
+end
+$$;
 
 do $$
 declare
@@ -110,6 +131,8 @@ begin
 end
 $$;
 
+reset role;
+set local role anon;
 select set_config('request.jwt.claim.role', 'anon', true);
 select set_config('request.jwt.claim.sub', '', true);
 
