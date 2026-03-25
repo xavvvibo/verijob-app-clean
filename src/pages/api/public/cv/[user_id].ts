@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { buildDeprecatedPublicCvResponse } from "@/lib/public/deprecated-public-cv-response";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "GET") {
@@ -12,10 +13,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   res.setHeader("Cache-Control", "no-store");
-  return res.status(410).json({
-    error: "route_deprecated",
-    details: "La resolución pública de CV por user_id queda deshabilitada. Usa el endpoint canónico por token público.",
-    route: "/pages/api/public/cv/[user_id]",
-    source_of_truth: "/api/public/candidate/[token]",
-  });
+  return res.status(410).json(buildDeprecatedPublicCvResponse());
 }
