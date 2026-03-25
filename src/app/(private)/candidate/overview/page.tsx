@@ -53,6 +53,11 @@ type TrustState = {
   tone: string;
 };
 
+type ExperienceImpact = {
+  label: string;
+  tone: string;
+};
+
 type SubscriptionStatePayload = {
   subscription?: {
     plan?: string | null;
@@ -133,40 +138,63 @@ function buildPrimaryAction(args: {
 }) {
   if (args.nextActions[0]) {
     const first = args.nextActions[0];
+    let label = first.label;
     let rationale = "Es la forma más rápida de reforzar cómo te verán las empresas.";
     if (first.href.includes("/candidate/evidence")) {
-      rationale = "Añadir documentación válida ayuda a reforzar tu credibilidad sin esperar a una nueva solicitud.";
+      label = "Sube una prueba y aumenta tu credibilidad";
+      rationale = "Una prueba real puede reforzar claramente tu perfil y hacerte más competitivo frente a otros candidatos.";
     } else if (first.href.includes("/candidate/verifications")) {
-      rationale = "Una verificación real es la señal más potente para una empresa cuando revisa tu perfil.";
+      label = "Mueve una verificación y gana solidez";
+      rationale = "Cerrar una verificación pendiente mejora tu señal profesional y reduce dudas cuando una empresa revisa tu perfil.";
     } else if (first.href.includes("/candidate/profile")) {
-      rationale = "Completar mejor tu perfil te hace más claro, más serio y más compartible.";
+      label = "Completa tu perfil y transmite más confianza";
+      rationale = "Los perfiles más completos resultan más claros, más serios y más creíbles desde la primera impresión.";
     } else if (first.href.includes("/candidate/experience")) {
+      label = "Añade tu experiencia y activa tu señal profesional";
       rationale = "Sin experiencia visible, tu perfil todavía no puede transmitir valor real a una empresa.";
     }
-    return { label: first.label, href: first.href, rationale };
+    return { label, href: first.href, rationale };
   }
 
   if (args.metrics.evidences === 0 && args.experienceCount > 0) {
     return {
-      label: "Subir documento para subir tu nivel",
+      label: "Sube una prueba y aumenta tu credibilidad",
       href: "/candidate/evidence",
-      rationale: "Un documento bien alineado puede reforzar una experiencia sin rehacer todo el perfil.",
+      rationale: "Un documento bien alineado puede reforzar claramente tu perfil sin rehacer todo lo demás.",
     };
   }
 
   if (args.profileCompletionScore < 70) {
     return {
-      label: "Completar perfil",
+      label: "Completa tu perfil y transmite más confianza",
       href: "/candidate/profile",
       rationale: "Un perfil más completo transmite mejor tu valor incluso antes de una verificación.",
     };
   }
 
   return {
-    label: "Ver perfil público",
+    label: "Revisa cómo te ven las empresas",
     href: "/candidate/share",
     rationale: "Revisa cómo te verán las empresas y comparte tu mejor versión.",
   };
+}
+
+function buildEmployerLensCopy(args: {
+  verified: number;
+  inProcess: number;
+  evidences: number;
+  profileCompletionScore: number;
+}) {
+  if (args.verified >= 2 || (args.verified >= 1 && args.evidences >= 1)) {
+    return "Tu perfil compite con ventaja frente a perfiles sin verificar y ya transmite una señal profesional sólida.";
+  }
+  if (args.verified >= 1 || args.inProcess >= 1 || args.evidences >= 1) {
+    return "Perfil con credibilidad media. Ya transmites señales reales, pero aún puedes destacar más.";
+  }
+  if (args.profileCompletionScore >= 60) {
+    return "Tu base es buena, pero sigues por debajo de un perfil reforzado con evidencias o verificaciones reales.";
+  }
+  return "Todavía estás lejos de tu mejor versión profesional. Un solo paso útil puede cambiar cómo te perciben.";
 }
 
 function buildProfileMilestones(args: {
@@ -217,8 +245,8 @@ function buildHighlightCards(args: {
   if (args.metrics.evidences === 0 && args.experienceCount > 0) {
     cards.push({
       title: "Aumenta tu Trust Score",
-      body: "Añade contrato, nómina, vida laboral o documentación útil para reforzar una experiencia real.",
-      cta: "Subir documento",
+      body: "Una evidencia válida puede reforzar claramente tu perfil y hacer que tu experiencia pese más cuando una empresa la revise.",
+      cta: "Sube una prueba",
       href: "/candidate/evidence",
       tone: "border-blue-200 bg-blue-50/70",
     });
@@ -227,8 +255,8 @@ function buildHighlightCards(args: {
   if (args.profileCompletionScore < 70) {
     cards.push({
       title: "Completa tu perfil",
-      body: "Un perfil más completo mejora tu lectura inicial y hace que tus verificaciones tengan más contexto.",
-      cta: "Completar perfil",
+      body: "Los perfiles más completos generan más confianza y facilitan que una empresa entienda tu valor desde el primer vistazo.",
+      cta: "Completa tu perfil",
       href: "/candidate/profile",
       tone: "border-amber-200 bg-amber-50/70",
     });
@@ -237,8 +265,8 @@ function buildHighlightCards(args: {
   if (args.metrics.inProcess > 0) {
     cards.push({
       title: "Refuerza una experiencia en curso",
-      body: "Si ya hay una solicitud enviada, aportar contexto o revisar su estado puede desbloquear antes tu credibilidad.",
-      cta: "Revisar verificaciones",
+      body: "Cerrar verificaciones pendientes mejora tu señal profesional y hace tu perfil más competitivo sin añadir ruido.",
+      cta: "Revisa verificaciones",
       href: "/candidate/verifications",
       tone: "border-emerald-200 bg-emerald-50/70",
     });
@@ -247,8 +275,8 @@ function buildHighlightCards(args: {
   if (args.metrics.verified === 0 && args.metrics.inProcess === 0 && args.experienceCount > 0) {
     cards.push({
       title: "Activa tu primera verificación",
-      body: "Una experiencia validada es la señal más potente para destacar frente a una empresa.",
-      cta: "Solicitar verificación",
+      body: "Una experiencia validada es la señal más potente para destacar frente a una empresa y elevar tu nivel de confianza.",
+      cta: "Solicita verificación",
       href: "/candidate/verifications/new",
       tone: "border-slate-200 bg-slate-50",
     });
@@ -278,6 +306,25 @@ function resolveExperienceCardCta(item: any) {
     return { label: "Revisar estado", href: "/candidate/verifications" };
   }
   return { label: "Reforzar experiencia", href: "/candidate/evidence" };
+}
+
+function resolveExperienceImpact(item: any): ExperienceImpact {
+  if (item?.status_label?.toLowerCase().includes("verificada")) {
+    return {
+      label: "Impacto en tu perfil: alto",
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
+    };
+  }
+  if (item?.status_label?.toLowerCase().includes("proceso") || item?.status_label?.toLowerCase().includes("curso")) {
+    return {
+      label: "Impacto en tu perfil: medio",
+      tone: "border-amber-200 bg-amber-50 text-amber-900",
+    };
+  }
+  return {
+    label: "Impacto en tu perfil: bajo",
+    tone: "border-slate-200 bg-slate-50 text-slate-700",
+  };
 }
 
 function AvatarView({
@@ -426,7 +473,7 @@ function TrustRing({ score, stateTitle }: { score: number; stateTitle: string })
 
 function HeroMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3">
+    <div className="rounded-2xl border border-slate-200/80 bg-white/95 px-4 py-3 shadow-sm shadow-slate-200/40">
       <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div>
       <div className="mt-1 text-lg font-semibold text-slate-900">{value}</div>
     </div>
@@ -456,7 +503,7 @@ function ProgressMilestone({
         : "bg-slate-300";
 
   return (
-    <div className={`rounded-2xl border px-4 py-4 ${tone}`}>
+    <div className={`rounded-[22px] border px-4 py-4 ${tone}`}>
       <div className="flex items-center gap-3">
         <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
         <p className="text-sm font-semibold">{label}</p>
@@ -480,12 +527,12 @@ function InsightCard({
   tone: string;
 }) {
   return (
-    <article className={`rounded-3xl border p-5 shadow-sm ${tone}`}>
+    <article className={`rounded-[28px] border p-6 shadow-sm ${tone}`}>
       <h3 className="text-base font-semibold text-slate-900">{title}</h3>
       <p className="mt-2 text-sm leading-6 text-slate-700">{body}</p>
       <Link
         href={href}
-        className="mt-5 inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+        className="mt-5 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
       >
         {cta}
       </Link>
@@ -495,9 +542,10 @@ function InsightCard({
 
 function ExperienceSummaryCard({ item }: { item: any }) {
   const cta = resolveExperienceCardCta(item);
+  const impact = resolveExperienceImpact(item);
 
   return (
-    <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+    <article className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h3 className="text-base font-semibold text-slate-900">{item.role_title || "Experiencia profesional"}</h3>
@@ -509,6 +557,7 @@ function ExperienceSummaryCard({ item }: { item: any }) {
 
         <div className="flex flex-wrap gap-2">
           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${item.status_tone}`}>{item.status_label}</span>
+          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${impact.tone}`}>{impact.label}</span>
           {item.support_label ? (
             <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">
               {item.support_label}
@@ -546,14 +595,14 @@ function PublicProfileCard({
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Así te verán las empresas</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Esto es lo que verá una empresa</p>
           <h2 className="mt-2 text-2xl font-semibold text-slate-900">Perfil público verificable</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">
-            Tu perfil público es la versión profesional y compartible de todo lo que ya estás construyendo aquí. Muestra señales de confianza sin exponer datos sensibles.
+            Tu perfil público es la versión profesional con la que una empresa te evaluará fuera del panel. Muestra señales de confianza sin exponer datos sensibles.
           </p>
         </div>
         <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-right">
-          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-900">Estado compartible</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-900">Vista real de evaluación</div>
           <div className="mt-2 text-lg font-semibold text-slate-900">{visibilityLabel}</div>
           <div className="text-xs text-slate-600">{verified} verificaciones visibles</div>
         </div>
@@ -582,6 +631,7 @@ function PublicProfileCard({
 
         <div className="rounded-3xl border border-slate-200 bg-white p-5">
           <p className="text-sm font-semibold text-slate-900">Acciones rápidas</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Revísalo como si fueras una empresa y compártelo cuando sientas que ya transmite tu mejor versión.</p>
           <div className="mt-4 flex flex-col gap-3">
             <Link href="/candidate/share" className="inline-flex justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
               Ver perfil público
@@ -609,9 +659,9 @@ function UpgradeCard({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">Siguiente nivel</p>
-          <h2 className="mt-2 text-2xl font-semibold text-slate-900">Desbloquea tu perfil profesional completo</h2>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-900">Accede a una visibilidad profesional completa</h2>
           <p className="mt-2 text-sm leading-6 text-slate-700">
-            Con un plan superior puedes mostrar más experiencias, compartir por QR y presentar una versión más potente de tu perfil frente a las empresas.
+            Presenta una versión más sólida y completa ante empresas, con más visibilidad, mejor presentación y herramientas para diferenciarte desde el primer vistazo.
           </p>
           <ul className="mt-4 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
             <li className="rounded-2xl border border-violet-100 bg-white px-4 py-3">Más experiencias visibles en tu perfil público</li>
@@ -619,6 +669,9 @@ function UpgradeCard({
             <li className="rounded-2xl border border-violet-100 bg-white px-4 py-3">CV verificable descargable en planes superiores</li>
             <li className="rounded-2xl border border-violet-100 bg-white px-4 py-3">Presentación más sólida frente a empresas</li>
           </ul>
+          <p className="mt-4 text-sm leading-6 text-slate-600">
+            Los perfiles más completos transmiten más confianza desde la primera impresión.
+          </p>
         </div>
         <div className="min-w-[260px] rounded-3xl border border-violet-200 bg-white p-5">
           <p className="text-sm font-semibold text-slate-900">Tu plan actual: {planLabel}</p>
@@ -863,9 +916,19 @@ export default function CandidateOverview() {
     candidateProfile?.public_profile_settings?.experienceVisibility?.length
       ? "Perfil compartible"
       : "Vista pública limitada";
+  const employerLensCopy = useMemo(
+    () =>
+      buildEmployerLensCopy({
+        verified: metrics.verified,
+        inProcess: metrics.inProcess,
+        evidences: metrics.evidences,
+        profileCompletionScore,
+      }),
+    [metrics.evidences, metrics.inProcess, metrics.verified, profileCompletionScore]
+  );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {importedFromCompanyCv ? (
         <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
           <p className="text-sm font-semibold text-amber-900">Perfil pre-rellenado desde un CV subido por empresa</p>
@@ -899,11 +962,11 @@ export default function CandidateOverview() {
         </section>
       ) : null}
 
-      <section className="relative overflow-hidden rounded-[36px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(96,165,250,0.18),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(15,23,42,0.06),_transparent_30%),linear-gradient(135deg,_#ffffff,_#f8fbff)] p-6 shadow-sm sm:p-7 xl:p-8">
+      <section className="relative overflow-hidden rounded-[36px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(96,165,250,0.18),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(15,23,42,0.06),_transparent_30%),linear-gradient(135deg,_#ffffff,_#f8fbff)] p-6 shadow-sm sm:p-8 xl:p-9">
         <div className="pointer-events-none absolute -left-16 top-0 h-40 w-40 rounded-full bg-blue-100/40 blur-3xl" />
         <div className="pointer-events-none absolute -right-20 bottom-0 h-52 w-52 rounded-full bg-slate-200/50 blur-3xl" />
 
-        <div className="relative grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_340px]">
+        <div className="relative grid gap-7 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_340px]">
           <div className="min-w-0">
             <div className="flex items-start gap-4">
               <AvatarView
@@ -931,7 +994,7 @@ export default function CandidateOverview() {
               </div>
             </div>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+            <div className="mt-7 grid gap-3 sm:grid-cols-3">
               <HeroMetric label="Estado visible" value={overviewStatus} />
               <HeroMetric label="Perfil completado" value={`${profileCompletionScore}%`} />
               <HeroMetric label="Experiencias cargadas" value={String(experienceCount)} />
@@ -941,15 +1004,19 @@ export default function CandidateOverview() {
             {loading ? <p className="mt-4 text-sm text-slate-500">Cargando tu panel…</p> : null}
           </div>
 
-          <div className="rounded-[32px] border border-slate-200 bg-white/90 p-6 shadow-sm">
+          <div className="rounded-[32px] border border-slate-200 bg-white/95 p-7 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Confianza del perfil</p>
-            <div className="mt-5 flex flex-col gap-5 lg:flex-row lg:items-center">
+            <div className="mt-5 flex flex-col gap-6 lg:flex-row lg:items-center">
               <TrustRing score={metrics.score} stateTitle={trustState.title} />
               <div className="min-w-0">
                 <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${trustState.tone}`}>
                   {metrics.verified > 0 ? "Perfil parcialmente verificado" : trustState.title}
                 </div>
                 <p className="mt-3 text-sm leading-6 text-slate-700">{trustState.summary}</p>
+                <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Cómo te ven las empresas ahora mismo</p>
+                  <p className="mt-2 text-sm font-medium leading-6 text-slate-800">{employerLensCopy}</p>
+                </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {trustSignals.map((signal) => (
                     <span key={signal} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
@@ -961,7 +1028,7 @@ export default function CandidateOverview() {
             </div>
           </div>
 
-          <div className="rounded-[32px] border border-slate-900 bg-slate-950 p-6 text-white shadow-sm">
+          <div className="rounded-[32px] border border-slate-900 bg-slate-950 p-7 text-white shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Tu siguiente mejor paso</p>
             <h2 className="mt-3 text-2xl font-semibold">{primaryAction.label}</h2>
             <p className="mt-3 text-sm leading-6 text-slate-300">{primaryAction.rationale}</p>
@@ -976,7 +1043,7 @@ export default function CandidateOverview() {
               <p className="mt-2 text-sm text-slate-200">
                 {metrics.verified > 0
                   ? "Seguir reforzando tu perfil mejora cómo te priorizan y cómo se interpreta tu historial."
-                  : "Este paso te acerca a un perfil más sólido, compartible y preparado para revisión empresarial."}
+                  : "Este paso puede hacer tu perfil más competitivo, más claro y más convincente para una empresa."}
               </p>
             </div>
           </div>
@@ -1012,7 +1079,7 @@ export default function CandidateOverview() {
       <section className="space-y-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Qué te falta para destacar</p>
-          <h2 className="mt-2 text-2xl font-semibold text-slate-900">Acciones concretas con impacto real</h2>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-900">Acciones concretas para subir de nivel</h2>
         </div>
         <div className="grid gap-4 lg:grid-cols-3">
           {highlightCards.length ? (
@@ -1020,7 +1087,7 @@ export default function CandidateOverview() {
           ) : (
             <InsightCard
               title="Tu perfil va bien encaminado"
-              body="Ya tienes una base sólida. El siguiente paso es mantener tu perfil actualizado y reforzar una experiencia cuando te interese ganar más credibilidad."
+              body="Ya tienes una base sólida. Mantener tu perfil al día y reforzar una experiencia cuando convenga te ayuda a seguir compitiendo con ventaja."
               cta="Ver verificaciones"
               href="/candidate/verifications"
               tone="border-slate-200 bg-white"
@@ -1034,9 +1101,9 @@ export default function CandidateOverview() {
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Experiencias clave</p>
-              <h2 className="mt-2 text-2xl font-semibold text-slate-900">Resumen inteligente de tu trayectoria</h2>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-900">Experiencias que más pesan en tu perfil</h2>
               <p className="mt-2 text-sm leading-6 text-slate-600">
-                No hace falta mostrarlo todo aquí. Estas son las experiencias que más ayudan a entender tu estado actual.
+                No hace falta mostrarlo todo aquí. Estas son las experiencias que más influyen en cómo se interpreta tu perfil ahora mismo.
               </p>
             </div>
             <Link href="/candidate/experience" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
