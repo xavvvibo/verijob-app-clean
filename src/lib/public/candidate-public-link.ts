@@ -39,6 +39,17 @@ export function normalizeCandidatePublicToken(raw: unknown) {
     return "";
   };
 
+  const extractEmbeddedUrl = (input: string) => {
+    const match = input.match(/https?:\/\/[^\s]+/i);
+    if (!match?.[0]) return "";
+    try {
+      const url = new URL(match[0]);
+      return extractFromPath(url.pathname);
+    } catch {
+      return extractFromPath(match[0].replace(/^https?:\/\//i, ""));
+    }
+  };
+
   if (/^https?:\/\//i.test(decoded)) {
     try {
       const url = new URL(decoded);
@@ -50,8 +61,20 @@ export function normalizeCandidatePublicToken(raw: unknown) {
     }
   }
 
+  const embeddedUrl = extractEmbeddedUrl(decoded);
+  if (embeddedUrl) return embeddedUrl;
+
   const extracted = extractFromPath(decoded);
   if (extracted) return extracted;
+
+  const embeddedPathToken =
+    decoded.match(/(?:^|[\s"'(])(?:\/p\/|\/public-candidate\/|\/company\/candidate\/)([A-Za-z0-9_-]{16,128})\b/i)?.[1] ||
+    "";
+  if (embeddedPathToken) return embeddedPathToken;
+
+  const inlineToken = decoded.match(/\b[A-Za-z0-9_-]{16,128}\b/)?.[0] || "";
+  if (inlineToken) return inlineToken;
+
   return decoded;
 }
 

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import CandidateQuickView from "@/components/company/CandidateQuickView";
 import ProfileUnlockAction, { COMPANY_PROFILE_UNLOCKED_EVENT } from "@/components/company/ProfileUnlockAction";
-import { normalizeCandidatePublicToken } from "@/lib/public/candidate-public-link";
+import { isCandidatePublicTokenFormat, normalizeCandidatePublicToken } from "@/lib/public/candidate-public-link";
 import {
   computeCandidateQuickFit,
   isCandidateVerified,
@@ -276,8 +276,8 @@ export default function CompanyCandidatesClient() {
   function openCandidate(event: React.FormEvent) {
     event.preventDefault();
     const value = normalizeCandidatePublicToken(token);
-    if (!value) {
-      setError("Introduce un token válido para abrir el candidato.");
+    if (!value || !isCandidatePublicTokenFormat(value)) {
+      setError("Introduce un token válido o pega la URL completa del perfil público para abrir el candidato.");
       return;
     }
     setError(null);
@@ -986,9 +986,12 @@ export default function CompanyCandidatesClient() {
                   <input
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
-                    placeholder="Pega aquí el token recibido"
+                    placeholder="Pega el token o la URL completa del perfil público"
                     className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
                   />
+                  <p className="mt-2 text-xs text-slate-500">
+                    Acepta tanto el token puro como enlaces del tipo <span className="font-mono">https://app.verijob.es/p/xxxxx</span>.
+                  </p>
                   <button
                     type="submit"
                     disabled={tokenDisabled}

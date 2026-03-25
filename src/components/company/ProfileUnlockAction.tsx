@@ -14,6 +14,7 @@ export default function ProfileUnlockAction({
   unlockedAt = null,
   unlockedUntil = null,
   primaryLabel = "Desbloquear perfil (consume 1 acceso)",
+  upgradeHref,
 }: {
   candidateToken?: string;
   href: string;
@@ -23,6 +24,7 @@ export default function ProfileUnlockAction({
   unlockedAt?: string | null;
   unlockedUntil?: string | null;
   primaryLabel?: string;
+  upgradeHref?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -167,6 +169,14 @@ export default function ProfileUnlockAction({
               >
                 Cancelar
               </button>
+              {upgradeHref && remainingAccesses <= 0 ? (
+                <a
+                  href={upgradeHref}
+                  className="inline-flex rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-900 hover:bg-blue-100"
+                >
+                  Comprar accesos
+                </a>
+              ) : null}
             </div>
           </div>
         </div>

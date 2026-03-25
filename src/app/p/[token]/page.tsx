@@ -2,6 +2,10 @@ export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { CandidatePublicProfileRenderer } from "@/components/public/CandidatePublicProfileRenderer";
+import { createClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/service";
+import { getProfileAccessState } from "@/lib/company/profile-access";
+import { resolveActiveCandidatePublicLink } from "@/lib/public/candidate-public-link";
 
 type Ctx = { params: Promise<{ token: string }> };
 
@@ -69,6 +73,52 @@ export default async function PublicCandidateProfilePage({
   }
 
   const canDownloadCv = Boolean(body?.teaser?.cv_download_enabled);
+  let companyViewer: {
+    is_authenticated_company: boolean;
+    available_accesses: number;
+    already_unlocked: boolean;
+    unlocked_at: string | null;
+    unlocked_until: string | null;
+  } | null = null;
+
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (user?.id) {
+      const { data: requesterProfile } = await supabase
+        .from("profiles")
+        .select("active_company_id")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const activeCompanyId = String((requesterProfile as any)?.active_company_id || "").trim();
+
+      if (activeCompanyId) {
+        const service = createServiceRoleClient();
+        const linkResolved = await resolveActiveCandidatePublicLink(service, token);
+        if (linkResolved.ok && linkResolved.link?.candidate_id) {
+          const accessState = await getProfileAccessState({
+            service,
+            company_id: activeCompanyId,
+            candidate_id: String(linkResolved.link.candidate_id),
+            viewer_user_id: user.id,
+          });
+          companyViewer = {
+            is_authenticated_company: true,
+            available_accesses: accessState.remaining_accesses,
+            already_unlocked: accessState.is_unlocked,
+            unlocked_at: accessState.unlocked_at,
+            unlocked_until: accessState.unlocked_until,
+          };
+        }
+      }
+    }
+  } catch {
+    companyViewer = null;
+  }
 
   return (
     <main className="min-h-screen bg-blue-50/40 px-5 py-10 sm:px-8 sm:py-14 xl:px-10">
@@ -77,6 +127,7 @@ export default async function PublicCandidateProfilePage({
           payload={{ ...body, token }}
           mode="public"
           companyAccess
+          companyViewer={companyViewer}
           renderMode={printMode && canDownloadCv ? "print" : "screen"}
         />
       </div>

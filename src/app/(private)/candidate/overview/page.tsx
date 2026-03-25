@@ -12,6 +12,7 @@ import {
   computeCandidateOverviewMetrics,
   resolveCandidateOverviewStatus,
 } from "@/lib/candidate/overview-metrics";
+import { getCandidatePlanCapabilities } from "@/lib/billing/planCapabilities";
 
 type ProfileLite = {
   full_name?: string | null;
@@ -52,6 +53,16 @@ type TrustState = {
   tone: string;
 };
 
+type SubscriptionStatePayload = {
+  subscription?: {
+    plan?: string | null;
+  } | null;
+};
+
+type PublicProfilePreviewPayload = Record<string, any> | null;
+
+const PUBLIC_PROFILE_ORIGIN = process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es";
+
 function clamp(n: number, a = 0, b = 100) {
   return Math.max(a, Math.min(b, n));
 }
@@ -65,20 +76,20 @@ function resolveTrustState(args: {
   if (args.verified >= 2 || (args.verified >= 1 && args.evidences >= 1) || args.profileCompletionScore >= 85) {
     return {
       title: "Alta confianza",
-      summary: "Tu perfil ya muestra señales claras de experiencia validada y credibilidad profesional.",
+      summary: "Tu perfil ya transmite señales sólidas y verificables. Añadir una prueba más puede reforzarlo todavía más.",
       tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
     };
   }
   if (args.verified >= 1 || args.inProcess >= 1 || args.evidences >= 1 || args.profileCompletionScore >= 55) {
     return {
       title: "Confianza media",
-      summary: "Ya has dado pasos sólidos. Una validación más o documentación adicional reforzarán tu perfil.",
+      summary: "Tu perfil ya transmite señales reales de credibilidad. Añadir evidencias o completar verificaciones puede reforzarlo aún más.",
       tone: "border-blue-200 bg-blue-50 text-blue-900",
     };
   }
   return {
-    title: "Perfil inicial",
-    summary: "Tu perfil ya está en marcha. La siguiente mejor acción es validar una experiencia o añadir documentación.",
+    title: "Perfil en progreso",
+    summary: "Tu perfil ya está en marcha. La siguiente mejor acción es completar una experiencia o activar tu primera verificación.",
     tone: "border-amber-200 bg-amber-50 text-amber-900",
   };
 }
@@ -86,137 +97,10 @@ function resolveTrustState(args: {
 function buildTrustSignals(args: { verified: number; inProcess: number; evidences: number; completed: boolean }) {
   return [
     `${args.verified} ${args.verified === 1 ? "experiencia verificada" : "experiencias verificadas"}`,
-    `${args.inProcess} ${args.inProcess === 1 ? "verificación en proceso" : "verificaciones en proceso"}`,
-    `${args.evidences} ${args.evidences === 1 ? "documento subido" : "documentos subidos"}`,
-    args.completed ? "Perfil completado" : "Perfil por completar",
+    `${args.inProcess} ${args.inProcess === 1 ? "verificación en curso" : "verificaciones en curso"}`,
+    `${args.evidences} ${args.evidences === 1 ? "documento útil" : "documentos útiles"}`,
+    args.completed ? "Perfil listo para compartir" : "Perfil todavía mejorable",
   ];
-}
-
-function TrustSnapshot({
-  state,
-  signals,
-  score,
-}: {
-  state: TrustState;
-  signals: string[];
-  score: number;
-}) {
-  const safeScore = clamp(score);
-  const progressStyle = {
-    background: `conic-gradient(rgb(15 23 42) ${safeScore * 3.6}deg, rgb(226 232 240) 0deg)`,
-  };
-  return (
-    <div className="w-full max-w-sm rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center gap-4">
-        <div className="relative flex h-24 w-24 items-center justify-center rounded-full" style={progressStyle}>
-          <div className="flex h-16 w-16 flex-col items-center justify-center rounded-full bg-white text-slate-900">
-            <span className="text-2xl font-semibold tabular-nums">{safeScore}</span>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">Trust</span>
-          </div>
-        </div>
-        <div className="min-w-0">
-          <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${state.tone}`}>
-            {state.title}
-          </div>
-          <p className="mt-3 text-sm leading-6 text-slate-600">{state.summary}</p>
-        </div>
-      </div>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {signals.map((signal) => (
-          <span key={signal} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
-            {signal}
-          </span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function Kpi({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">{label}</div>
-      <div className="mt-3 text-3xl font-semibold tabular-nums text-gray-900">{value}</div>
-    </div>
-  );
-}
-
-function SectionTab({
-  href,
-  label,
-  highlighted = false,
-}: {
-  href: string;
-  label: string;
-  highlighted?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={[
-        "inline-flex items-center rounded-full border px-4 py-2 text-sm font-semibold transition",
-        highlighted
-          ? "border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100"
-          : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50",
-      ].join(" ")}
-    >
-      {label}
-    </Link>
-  );
-}
-
-function QuickActionCard({
-  title,
-  description,
-  href,
-  cta,
-}: {
-  title: string;
-  description: string;
-  href: string;
-  cta: string;
-}) {
-  return (
-    <article className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-      <p className="mt-2 text-sm text-gray-600">{description}</p>
-      <div className="mt-4">
-        <Link
-          href={href}
-          className="inline-flex rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-900 hover:bg-gray-50"
-        >
-          {cta}
-        </Link>
-      </div>
-    </article>
-  );
-}
-
-function SummaryCard({
-  title,
-  summary,
-  href,
-  cta,
-}: {
-  title: string;
-  summary: string;
-  href: string;
-  cta: string;
-}) {
-  return (
-    <article className="rounded-2xl border border-gray-200 bg-white p-5">
-      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-      <p className="mt-2 text-sm text-gray-600">{summary}</p>
-      <div className="mt-4">
-        <Link
-          href={href}
-          className="inline-flex rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-900 hover:bg-gray-50"
-        >
-          {cta}
-        </Link>
-      </div>
-    </article>
-  );
 }
 
 function listCount(raw: any) {
@@ -239,6 +123,161 @@ function formatPeriod(start?: string | null, end?: string | null) {
 
 function formatTimelineDate(value?: string | null) {
   return formatMonthYear(value) || (value ? String(value) : "");
+}
+
+function buildPrimaryAction(args: {
+  nextActions: { label: string; href: string }[];
+  metrics: ReturnType<typeof computeCandidateOverviewMetrics>;
+  profileCompletionScore: number;
+  experienceCount: number;
+}) {
+  if (args.nextActions[0]) {
+    const first = args.nextActions[0];
+    let rationale = "Es la forma más rápida de reforzar cómo te verán las empresas.";
+    if (first.href.includes("/candidate/evidence")) {
+      rationale = "Añadir documentación válida ayuda a reforzar tu credibilidad sin esperar a una nueva solicitud.";
+    } else if (first.href.includes("/candidate/verifications")) {
+      rationale = "Una verificación real es la señal más potente para una empresa cuando revisa tu perfil.";
+    } else if (first.href.includes("/candidate/profile")) {
+      rationale = "Completar mejor tu perfil te hace más claro, más serio y más compartible.";
+    } else if (first.href.includes("/candidate/experience")) {
+      rationale = "Sin experiencia visible, tu perfil todavía no puede transmitir valor real a una empresa.";
+    }
+    return { label: first.label, href: first.href, rationale };
+  }
+
+  if (args.metrics.evidences === 0 && args.experienceCount > 0) {
+    return {
+      label: "Subir documento para subir tu nivel",
+      href: "/candidate/evidence",
+      rationale: "Un documento bien alineado puede reforzar una experiencia sin rehacer todo el perfil.",
+    };
+  }
+
+  if (args.profileCompletionScore < 70) {
+    return {
+      label: "Completar perfil",
+      href: "/candidate/profile",
+      rationale: "Un perfil más completo transmite mejor tu valor incluso antes de una verificación.",
+    };
+  }
+
+  return {
+    label: "Ver perfil público",
+    href: "/candidate/share",
+    rationale: "Revisa cómo te verán las empresas y comparte tu mejor versión.",
+  };
+}
+
+function buildProfileMilestones(args: {
+  experienceCount: number;
+  profileCompletionScore: number;
+  metrics: ReturnType<typeof computeCandidateOverviewMetrics>;
+}) {
+  return [
+    {
+      id: "profile",
+      label: "Perfil base completo",
+      description: "Foto, titular, ubicación y datos clave listos.",
+      status: args.profileCompletionScore >= 70 ? "done" : args.profileCompletionScore >= 35 ? "progress" : "pending",
+    },
+    {
+      id: "experience",
+      label: "Experiencias cargadas",
+      description: args.experienceCount > 0 ? `${args.experienceCount} registradas` : "Añade experiencia laboral",
+      status: args.experienceCount > 0 ? "done" : "pending",
+    },
+    {
+      id: "verification",
+      label: "Verificación activa",
+      description:
+        args.metrics.verified > 0
+          ? `${args.metrics.verified} verificada${args.metrics.verified === 1 ? "" : "s"}`
+          : args.metrics.inProcess > 0
+            ? `${args.metrics.inProcess} en curso`
+            : "Todavía sin verificar",
+      status: args.metrics.verified > 0 ? "done" : args.metrics.inProcess > 0 ? "progress" : "pending",
+    },
+    {
+      id: "documents",
+      label: "Documentación útil",
+      description: args.metrics.evidences > 0 ? `${args.metrics.evidences} subida${args.metrics.evidences === 1 ? "" : "s"}` : "Sin soporte documental todavía",
+      status: args.metrics.evidences > 0 ? "done" : "pending",
+    },
+  ];
+}
+
+function buildHighlightCards(args: {
+  metrics: ReturnType<typeof computeCandidateOverviewMetrics>;
+  profileCompletionScore: number;
+  experienceCount: number;
+}) {
+  const cards: Array<{ title: string; body: string; cta: string; href: string; tone: string }> = [];
+
+  if (args.metrics.evidences === 0 && args.experienceCount > 0) {
+    cards.push({
+      title: "Aumenta tu Trust Score",
+      body: "Añade contrato, nómina, vida laboral o documentación útil para reforzar una experiencia real.",
+      cta: "Subir documento",
+      href: "/candidate/evidence",
+      tone: "border-blue-200 bg-blue-50/70",
+    });
+  }
+
+  if (args.profileCompletionScore < 70) {
+    cards.push({
+      title: "Completa tu perfil",
+      body: "Un perfil más completo mejora tu lectura inicial y hace que tus verificaciones tengan más contexto.",
+      cta: "Completar perfil",
+      href: "/candidate/profile",
+      tone: "border-amber-200 bg-amber-50/70",
+    });
+  }
+
+  if (args.metrics.inProcess > 0) {
+    cards.push({
+      title: "Refuerza una experiencia en curso",
+      body: "Si ya hay una solicitud enviada, aportar contexto o revisar su estado puede desbloquear antes tu credibilidad.",
+      cta: "Revisar verificaciones",
+      href: "/candidate/verifications",
+      tone: "border-emerald-200 bg-emerald-50/70",
+    });
+  }
+
+  if (args.metrics.verified === 0 && args.metrics.inProcess === 0 && args.experienceCount > 0) {
+    cards.push({
+      title: "Activa tu primera verificación",
+      body: "Una experiencia validada es la señal más potente para destacar frente a una empresa.",
+      cta: "Solicitar verificación",
+      href: "/candidate/verifications/new",
+      tone: "border-slate-200 bg-slate-50",
+    });
+  }
+
+  return cards.slice(0, 3);
+}
+
+function resolveExperienceValueCopy(item: any) {
+  if (item?.status_label?.toLowerCase().includes("verificada")) {
+    return "Esta experiencia ya aporta credibilidad real a tu perfil.";
+  }
+  if (item?.status_label?.toLowerCase().includes("proceso") || item?.status_label?.toLowerCase().includes("curso")) {
+    return "Esta experiencia ya está generando señal, pero todavía necesita confirmación.";
+  }
+  if (item?.support_label) {
+    return "Podrías reforzarla con documentación o con una solicitud bien dirigida.";
+  }
+  return "Todavía no genera una señal fuerte. Puedes reforzarla con documentación o verificación.";
+}
+
+function resolveExperienceCardCta(item: any) {
+  if (item?.status_label?.toLowerCase().includes("verificada")) {
+    return { label: "Ver verificaciones", href: "/candidate/verifications" };
+  }
+  if (item?.status_label?.toLowerCase().includes("proceso") || item?.status_label?.toLowerCase().includes("curso")) {
+    return { label: "Revisar estado", href: "/candidate/verifications" };
+  }
+  return { label: "Reforzar experiencia", href: "/candidate/evidence" };
 }
 
 function AvatarView({
@@ -322,9 +361,9 @@ function AvatarView({
       <div className="relative h-28 w-28">
         {finalAvatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={finalAvatarUrl} alt={fullName || "Avatar"} className="h-28 w-28 rounded-full border border-gray-200 object-cover" />
+          <img src={finalAvatarUrl} alt={fullName || "Avatar"} className="h-28 w-28 rounded-[28px] border border-white/70 object-cover shadow-md" />
         ) : (
-          <div className="flex h-28 w-28 items-center justify-center rounded-full border border-gray-200 bg-gray-100 text-3xl font-semibold text-gray-700">
+          <div className="flex h-28 w-28 items-center justify-center rounded-[28px] border border-white/70 bg-white text-3xl font-semibold text-slate-700 shadow-md">
             {fallback}
           </div>
         )}
@@ -348,24 +387,248 @@ function AvatarView({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={saving}
-          className="rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+          className="rounded-xl bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-black disabled:opacity-60"
         >
-          {saving ? "Subiendo…" : "Subir foto"}
+          {saving ? "Subiendo…" : "Actualizar foto"}
         </button>
         {avatarUrl ? (
           <button
             type="button"
             onClick={() => void removeAvatar()}
             disabled={saving}
-            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+            className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
           >
-            Quitar foto
+            Quitar
           </button>
         ) : null}
       </div>
-      <p className="mt-2 text-xs text-gray-500">JPG, PNG o WEBP. Máximo 4MB.</p>
+      <p className="mt-2 text-xs text-slate-500">JPG, PNG o WEBP. Máximo 4MB.</p>
       {error ? <div className="mt-2 text-xs text-red-600">{error}</div> : null}
     </div>
+  );
+}
+
+function TrustRing({ score, stateTitle }: { score: number; stateTitle: string }) {
+  const safeScore = clamp(score);
+  const progressStyle = {
+    background: `conic-gradient(rgb(15 23 42) ${safeScore * 3.6}deg, rgb(219 234 254) 0deg)`,
+  };
+  return (
+    <div className="relative flex h-36 w-36 items-center justify-center rounded-full p-2" style={progressStyle}>
+      <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white text-center shadow-inner">
+        <span className="text-4xl font-semibold tabular-nums text-slate-900">{safeScore}</span>
+        <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Trust score</span>
+        <span className="mt-2 max-w-[88px] text-[11px] font-medium leading-4 text-slate-600">{stateTitle}</span>
+      </div>
+    </div>
+  );
+}
+
+function HeroMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{label}</div>
+      <div className="mt-1 text-lg font-semibold text-slate-900">{value}</div>
+    </div>
+  );
+}
+
+function ProgressMilestone({
+  label,
+  description,
+  status,
+}: {
+  label: string;
+  description: string;
+  status: "done" | "progress" | "pending";
+}) {
+  const tone =
+    status === "done"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+      : status === "progress"
+        ? "border-amber-200 bg-amber-50 text-amber-900"
+        : "border-slate-200 bg-white text-slate-700";
+  const dot =
+    status === "done"
+      ? "bg-emerald-500"
+      : status === "progress"
+        ? "bg-amber-500"
+        : "bg-slate-300";
+
+  return (
+    <div className={`rounded-2xl border px-4 py-4 ${tone}`}>
+      <div className="flex items-center gap-3">
+        <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
+        <p className="text-sm font-semibold">{label}</p>
+      </div>
+      <p className="mt-2 text-xs leading-5 opacity-90">{description}</p>
+    </div>
+  );
+}
+
+function InsightCard({
+  title,
+  body,
+  cta,
+  href,
+  tone,
+}: {
+  title: string;
+  body: string;
+  cta: string;
+  href: string;
+  tone: string;
+}) {
+  return (
+    <article className={`rounded-3xl border p-5 shadow-sm ${tone}`}>
+      <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+      <p className="mt-2 text-sm leading-6 text-slate-700">{body}</p>
+      <Link
+        href={href}
+        className="mt-5 inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+      >
+        {cta}
+      </Link>
+    </article>
+  );
+}
+
+function ExperienceSummaryCard({ item }: { item: any }) {
+  const cta = resolveExperienceCardCta(item);
+
+  return (
+    <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-slate-900">{item.role_title || "Experiencia profesional"}</h3>
+          <p className="mt-1 text-sm text-slate-600">{item.company_name || "Empresa no definida"}</p>
+          <p className="mt-2 text-xs font-medium uppercase tracking-[0.14em] text-slate-500">
+            {formatTimelineDate(item.start_date) || "Inicio no definido"} · {item.end_date ? formatTimelineDate(item.end_date) : "Actualidad"}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${item.status_tone}`}>{item.status_label}</span>
+          {item.support_label ? (
+            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">
+              {item.support_label}
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      <p className="mt-3 text-sm leading-6 text-slate-700">{resolveExperienceValueCopy(item)}</p>
+
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <p className="text-xs text-slate-500">{item.explanation}</p>
+        <Link href={cta.href} className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50">
+          {cta.label}
+        </Link>
+      </div>
+    </article>
+  );
+}
+
+function PublicProfileCard({
+  publicLink,
+  preview,
+  trustScore,
+  verified,
+  visibilityLabel,
+}: {
+  publicLink: string | null;
+  preview: PublicProfilePreviewPayload;
+  trustScore: number;
+  verified: number;
+  visibilityLabel: string;
+}) {
+  return (
+    <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="max-w-2xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Así te verán las empresas</p>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-900">Perfil público verificable</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Tu perfil público es la versión profesional y compartible de todo lo que ya estás construyendo aquí. Muestra señales de confianza sin exponer datos sensibles.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-right">
+          <div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-900">Estado compartible</div>
+          <div className="mt-2 text-lg font-semibold text-slate-900">{visibilityLabel}</div>
+          <div className="text-xs text-slate-600">{verified} verificaciones visibles</div>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+              Trust score {Math.round(trustScore)}
+            </span>
+            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
+              {preview?.teaser?.verified_experiences ?? verified} experiencias verificadas
+            </span>
+          </div>
+          <p className="mt-4 text-sm font-semibold text-slate-900">
+            {preview?.teaser?.public_name || "Perfil público activo"}
+          </p>
+          <p className="mt-1 text-sm text-slate-600">
+            {[preview?.teaser?.title, preview?.teaser?.location].filter(Boolean).join(" · ") || "Resumen profesional visible para empresa"}
+          </p>
+          <p className="mt-4 text-sm leading-6 text-slate-700">
+            {preview?.teaser?.summary || "Tu perfil público ya puede mostrar una muestra profesional, ordenada y verificable de tu trayectoria."}
+          </p>
+        </div>
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-5">
+          <p className="text-sm font-semibold text-slate-900">Acciones rápidas</p>
+          <div className="mt-4 flex flex-col gap-3">
+            <Link href="/candidate/share" className="inline-flex justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+              Ver perfil público
+            </Link>
+            <Link href="/candidate/share" className="inline-flex justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+              Compartir perfil
+            </Link>
+          </div>
+          <p className="mt-4 break-all text-xs text-slate-500">{publicLink || `${PUBLIC_PROFILE_ORIGIN}/p/[token]`}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function UpgradeCard({
+  planLabel,
+  summary,
+}: {
+  planLabel: string;
+  summary: string;
+}) {
+  return (
+    <section className="rounded-3xl border border-violet-200 bg-gradient-to-br from-white via-violet-50 to-white p-6 shadow-sm">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="max-w-2xl">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">Siguiente nivel</p>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-900">Desbloquea tu perfil profesional completo</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-700">
+            Con un plan superior puedes mostrar más experiencias, compartir por QR y presentar una versión más potente de tu perfil frente a las empresas.
+          </p>
+          <ul className="mt-4 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+            <li className="rounded-2xl border border-violet-100 bg-white px-4 py-3">Más experiencias visibles en tu perfil público</li>
+            <li className="rounded-2xl border border-violet-100 bg-white px-4 py-3">QR profesional para compartir mejor</li>
+            <li className="rounded-2xl border border-violet-100 bg-white px-4 py-3">CV verificable descargable en planes superiores</li>
+            <li className="rounded-2xl border border-violet-100 bg-white px-4 py-3">Presentación más sólida frente a empresas</li>
+          </ul>
+        </div>
+        <div className="min-w-[260px] rounded-3xl border border-violet-200 bg-white p-5">
+          <p className="text-sm font-semibold text-slate-900">Tu plan actual: {planLabel}</p>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{summary}</p>
+          <Link href="/candidate/subscription" className="mt-5 inline-flex w-full justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+            Desbloquear perfil completo
+          </Link>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -381,6 +644,9 @@ export default function CandidateOverview() {
   const [employmentRecords, setEmploymentRecords] = useState<EmploymentRecordLite[]>([]);
   const [trustScore, setTrustScore] = useState<number | null>(null);
   const [experienceCount, setExperienceCount] = useState<number>(0);
+  const [subscriptionPlan, setSubscriptionPlan] = useState<string | null>(null);
+  const [publicToken, setPublicToken] = useState<string | null>(null);
+  const [publicPreview, setPublicPreview] = useState<PublicProfilePreviewPayload>(null);
 
   useEffect(() => {
     let alive = true;
@@ -397,7 +663,7 @@ export default function CandidateOverview() {
 
         const userId = au.user.id;
 
-        const [profileRes, verificationsRes, employmentRes, profileApiRes, trustRes] = await Promise.all([
+        const [profileRes, verificationsRes, employmentRes, profileApiRes, trustRes, subscriptionRes] = await Promise.all([
           supabase
             .from("profiles")
             .select("full_name, title, location, avatar_url")
@@ -413,6 +679,9 @@ export default function CandidateOverview() {
             .eq("candidate_id", userId),
           fetch("/api/candidate/profile", { credentials: "include" }).then((r) => r.json().catch(() => ({}))),
           fetch("/api/candidate/trust-score", { credentials: "include" }).then((r) => r.json().catch(() => ({}))),
+          fetch("/api/account/subscription-state", { credentials: "include", cache: "no-store" }).then((r) =>
+            r.json().catch(() => ({})) as Promise<SubscriptionStatePayload>
+          ),
         ]);
 
         if (profileRes.error) throw profileRes.error;
@@ -427,12 +696,49 @@ export default function CandidateOverview() {
         setProfileCompletion((profileApiRes?.profile_completion || null) as ProfileCompletionPayload);
         setTrustScore(typeof trustRes?.trust_score === "number" ? trustRes.trust_score : null);
         setExperienceCount(Number(profileApiRes?.counts?.experience_count || 0));
+        setSubscriptionPlan(subscriptionRes?.subscription?.plan || null);
         setError(null);
       } catch (e: any) {
         if (!alive) return;
         setError(e?.message || "No se pudo cargar el dashboard");
       } finally {
         if (alive) setLoading(false);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+
+    (async () => {
+      try {
+        const linkRes = await fetch("/api/candidate/public-link", {
+          method: "POST",
+          credentials: "include",
+        });
+        const linkBody = await linkRes.json().catch(() => ({}));
+        if (!linkRes.ok || !linkBody?.token) return;
+
+        const nextToken = String(linkBody.token || "").trim();
+        if (!nextToken) return;
+        if (!alive) return;
+        setPublicToken(nextToken);
+
+        const previewRes = await fetch(`/api/public/candidate/${encodeURIComponent(nextToken)}?scope=internal`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const previewBody = await previewRes.json().catch(() => ({}));
+        if (!previewRes.ok || !alive) return;
+        setPublicPreview(previewBody || null);
+      } catch {
+        if (!alive) return;
+        setPublicToken(null);
+        setPublicPreview(null);
       }
     })();
 
@@ -471,13 +777,12 @@ export default function CandidateOverview() {
   }, [candidateProfile]);
   const companyCvPendingUpdates = companyCvImportSummary.totalPendingItems;
   const experienceTimeline = Array.isArray(candidateProfile?.experience_timeline)
-    ? candidateProfile.experience_timeline.slice(0, 4)
+    ? candidateProfile.experience_timeline.slice(0, 3)
     : [];
 
   const profileCompletionScore = Number(profileCompletion?.score || 0);
-
   const profileStage = useMemo(() => {
-    if (profileCompletionScore >= 85) return "Perfil sólido";
+    if (profileCompletionScore >= 85) return "Listo para empresas";
     if (profileCompletionScore >= 55) return "Perfil en progreso";
     return "Perfil inicial";
   }, [profileCompletionScore]);
@@ -490,6 +795,17 @@ export default function CandidateOverview() {
   const overviewNextActions = useMemo(
     () => buildCandidateOverviewNextActions({ experienceCount, metrics, profileCompletionScore }),
     [experienceCount, metrics, profileCompletionScore]
+  );
+
+  const primaryAction = useMemo(
+    () =>
+      buildPrimaryAction({
+        nextActions: overviewNextActions,
+        metrics,
+        profileCompletionScore,
+        experienceCount,
+      }),
+    [experienceCount, metrics, overviewNextActions, profileCompletionScore]
   );
 
   const trustState = useMemo(
@@ -514,10 +830,39 @@ export default function CandidateOverview() {
     [metrics.evidences, metrics.inProcess, metrics.verified, profileCompletionScore]
   );
 
+  const profileMilestones = useMemo(
+    () =>
+      buildProfileMilestones({
+        experienceCount,
+        profileCompletionScore,
+        metrics,
+      }),
+    [experienceCount, metrics, profileCompletionScore]
+  );
+
+  const highlightCards = useMemo(
+    () =>
+      buildHighlightCards({
+        metrics,
+        profileCompletionScore,
+        experienceCount,
+      }),
+    [experienceCount, metrics, profileCompletionScore]
+  );
+
   const availabilityText = useMemo(
     () => mapCandidateAvailability(candidateProfile?.job_search_status) || "Disponibilidad no definida",
     [candidateProfile?.job_search_status]
   );
+
+  const planCapabilities = useMemo(() => getCandidatePlanCapabilities(subscriptionPlan), [subscriptionPlan]);
+  const showUpgrade = planCapabilities.plan === "free" || planCapabilities.plan === "starter";
+  const publicLink = publicToken ? `${PUBLIC_PROFILE_ORIGIN}/p/${publicToken}` : null;
+  const publicVisibilityLabel =
+    publicPreview?.teaser?.profile_visibility ||
+    candidateProfile?.public_profile_settings?.experienceVisibility?.length
+      ? "Perfil compartible"
+      : "Vista pública limitada";
 
   return (
     <div className="space-y-6">
@@ -550,38 +895,15 @@ export default function CandidateOverview() {
                 Revisar y actualizar mi perfil
               </Link>
             </div>
-          ) : companyCvImportSummary.updatesCount > 0 ? (
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-900">
-                Importación pendiente de revisión
-              </span>
-              <Link href="/candidate/import-updates" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">
-                Ver propuesta de cambios
-              </Link>
-            </div>
-          ) : importedExperiences.length ? (
-            <div className="mt-4 flex flex-wrap gap-3">
-              <Link href="/candidate/experience" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">
-                Confirmar experiencias
-              </Link>
-              <Link href="/candidate/education" className="inline-flex rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100">
-                Revisar formación
-              </Link>
-              <Link href="/candidate/achievements" className="inline-flex rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100">
-                Revisar idiomas y logros
-              </Link>
-              <Link href="/candidate/experience?new=1#manual-experience" className="inline-flex rounded-xl border border-amber-300 bg-white px-4 py-2 text-sm font-semibold text-amber-900 hover:bg-amber-100">
-                Editar antes de continuar
-              </Link>
-            </div>
           ) : null}
         </section>
       ) : null}
 
-      <header className="relative overflow-hidden rounded-3xl border border-blue-100 bg-gradient-to-br from-white via-blue-50/70 to-white p-7 shadow-sm">
-        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-blue-100/60 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 left-0 h-44 w-72 rounded-full bg-blue-100/40 blur-3xl" />
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+      <section className="relative overflow-hidden rounded-[36px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(96,165,250,0.18),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(15,23,42,0.06),_transparent_30%),linear-gradient(135deg,_#ffffff,_#f8fbff)] p-6 shadow-sm sm:p-7 xl:p-8">
+        <div className="pointer-events-none absolute -left-16 top-0 h-40 w-40 rounded-full bg-blue-100/40 blur-3xl" />
+        <div className="pointer-events-none absolute -right-20 bottom-0 h-52 w-52 rounded-full bg-slate-200/50 blur-3xl" />
+
+        <div className="relative grid gap-6 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)_340px]">
           <div className="min-w-0">
             <div className="flex items-start gap-4">
               <AvatarView
@@ -590,17 +912,18 @@ export default function CandidateOverview() {
                 onAvatarSaved={(next) => setProfile((prev) => ({ ...(prev || {}), avatar_url: next }))}
               />
               <div className="min-w-0">
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-gray-500">Perfil profesional verificable</p>
-                <h1 className="mt-2 truncate text-4xl font-semibold text-gray-900">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Estado actual del perfil</p>
+                <h1 className="mt-2 truncate text-3xl font-semibold text-slate-900 sm:text-4xl">
                   {profile?.full_name || "Tu resumen profesional"}
                 </h1>
-                <p className="mt-2 text-base text-gray-600">{profile?.title || "Profesional verificable en Verijob"}</p>
-                <p className="mt-1 text-sm text-gray-500">{profile?.location || "Ubicación no definida"}</p>
+                <p className="mt-2 text-base text-slate-700">{profile?.title || "Profesional verificable en Verijob"}</p>
+                <p className="mt-1 text-sm text-slate-500">{profile?.location || "Ubicación no definida"}</p>
+
                 <div className="mt-4 flex flex-wrap gap-2">
                   <VerificationBadge tone={metrics.verified > 0 ? "company_verified" : metrics.inProcess > 0 ? "in_progress" : "trust_visible"}>
                     {trustState.title}
                   </VerificationBadge>
-                  <VerificationBadge tone={profileCompletionScore >= 55 ? "company_verified" : "in_progress"}>
+                  <VerificationBadge tone={profileCompletionScore >= 70 ? "company_verified" : "in_progress"}>
                     {profileStage}
                   </VerificationBadge>
                   <VerificationBadge tone="business">{availabilityText}</VerificationBadge>
@@ -608,209 +931,175 @@ export default function CandidateOverview() {
               </div>
             </div>
 
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <HeroMetric label="Estado visible" value={overviewStatus} />
+              <HeroMetric label="Perfil completado" value={`${profileCompletionScore}%`} />
+              <HeroMetric label="Experiencias cargadas" value={String(experienceCount)} />
+            </div>
+
             {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
-            {loading ? <p className="mt-4 text-sm text-gray-500">Cargando datos…</p> : null}
+            {loading ? <p className="mt-4 text-sm text-slate-500">Cargando tu panel…</p> : null}
           </div>
 
-          <div className="shrink-0 self-center">
-            <TrustSnapshot state={trustState} signals={trustSignals} score={metrics.score} />
+          <div className="rounded-[32px] border border-slate-200 bg-white/90 p-6 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Confianza del perfil</p>
+            <div className="mt-5 flex flex-col gap-5 lg:flex-row lg:items-center">
+              <TrustRing score={metrics.score} stateTitle={trustState.title} />
+              <div className="min-w-0">
+                <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${trustState.tone}`}>
+                  {metrics.verified > 0 ? "Perfil parcialmente verificado" : trustState.title}
+                </div>
+                <p className="mt-3 text-sm leading-6 text-slate-700">{trustState.summary}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {trustSignals.map((signal) => (
+                    <span key={signal} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
+                      {signal}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[32px] border border-slate-900 bg-slate-950 p-6 text-white shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Tu siguiente mejor paso</p>
+            <h2 className="mt-3 text-2xl font-semibold">{primaryAction.label}</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-300">{primaryAction.rationale}</p>
+            <Link
+              href={primaryAction.href}
+              className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 hover:bg-slate-100"
+            >
+              {primaryAction.label}
+            </Link>
+            <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Impacto esperado</p>
+              <p className="mt-2 text-sm text-slate-200">
+                {metrics.verified > 0
+                  ? "Seguir reforzando tu perfil mejora cómo te priorizan y cómo se interpreta tu historial."
+                  : "Este paso te acerca a un perfil más sólido, compartible y preparado para revisión empresarial."}
+              </p>
+            </div>
           </div>
         </div>
-      </header>
+      </section>
 
       <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Estado del perfil</p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-900">{overviewStatus}</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              {metrics.verified > 0
-                ? "Tu perfil ya tiene al menos una experiencia validada y debería poder mostrarse a empresas con acceso autorizado."
-                : metrics.inProcess > 0
-                  ? "Ya has enviado una solicitud y el estado del perfil ya refleja esa revision en curso."
-                  : metrics.rejected > 0
-                    ? "Una solicitud anterior no salio adelante. Revisa la experiencia y vuelve a intentarlo con mejor contexto o documentacion."
-                  : experienceCount > 0
-                    ? "Ya has arrancado tu perfil. El siguiente paso más útil es pedir una verificación."
-                    : "Empieza añadiendo una experiencia para activar tu perfil profesional."}
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Progreso del perfil</p>
+            <h2 className="mt-2 text-2xl font-semibold text-slate-900">Lo que ya has conseguido y lo que te falta</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              Este panel convierte tu perfil en un proceso visible: experiencia, verificaciones, documentación y presentación final.
             </p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {trustSignals.map((signal) => (
-                <span key={signal} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
-                  {signal}
-                </span>
-              ))}
-            </div>
           </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700">
+            {profileCompletion?.completed || 0}/{profileCompletion?.total || 0} hitos de perfil completados
+          </div>
+        </div>
 
-          <div className="min-w-[260px] rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-900">Siguientes acciones recomendadas</p>
-            <div className="mt-3 flex flex-col gap-2">
-              {overviewNextActions.length > 0 ? (
-                overviewNextActions.map((action) => (
-                  <Link
-                    key={action.href}
-                    href={action.href}
-                    className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-100"
-                  >
-                    {action.label}
-                  </Link>
-                ))
-              ) : (
-                <p className="text-sm text-slate-600">Tu perfil ya está bien encaminado. Mantén la información al día y añade otra verificación cuando puedas.</p>
-              )}
-            </div>
-          </div>
+        <div className="mt-5 grid gap-3 lg:grid-cols-4">
+          {profileMilestones.map((milestone) => (
+            <ProgressMilestone
+              key={milestone.id}
+              label={milestone.label}
+              description={milestone.description}
+              status={milestone.status as "done" | "progress" | "pending"}
+            />
+          ))}
         </div>
       </section>
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap gap-2">
-          <SectionTab href="/candidate/profile" label="Perfil" highlighted />
-          <SectionTab href="/candidate/experience" label="Experiencias" />
-          <SectionTab href="/candidate/settings" label="Ajustes" />
-          <SectionTab href="/candidate/education" label="Educación" />
-          <SectionTab href="/candidate/achievements" label="Logros" />
-          <SectionTab href="/candidate/evidence" label="Evidencias" />
-          <SectionTab href="/candidate/verifications" label="Verificaciones" />
+      <section className="space-y-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Qué te falta para destacar</p>
+          <h2 className="mt-2 text-2xl font-semibold text-slate-900">Acciones concretas con impacto real</h2>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-3">
+          {highlightCards.length ? (
+            highlightCards.map((card) => <InsightCard key={`${card.title}-${card.href}`} {...card} />)
+          ) : (
+            <InsightCard
+              title="Tu perfil va bien encaminado"
+              body="Ya tienes una base sólida. El siguiente paso es mantener tu perfil actualizado y reforzar una experiencia cuando te interese ganar más credibilidad."
+              cta="Ver verificaciones"
+              href="/candidate/verifications"
+              tone="border-slate-200 bg-white"
+            />
+          )}
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-5">
-        <Kpi label="Confianza actual" value={trustState.title} />
-        <Kpi label="Perfil completado" value={`${profileCompletionScore}%`} />
-        <Kpi label="Experiencias verificadas" value={metrics.verified} />
-        <Kpi label="Solicitudes activas" value={metrics.inProcess} />
-        <Kpi label="Documentación" value={metrics.evidences} />
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-3">
-        <QuickActionCard
-          title="Perfil público"
-          description="Revisa cómo te ven las empresas antes de compartir tu enlace verificable."
-          href="/candidate/share"
-          cta="Ver perfil público"
-        />
-        <QuickActionCard
-          title="Verificaciones"
-          description="Gestiona solicitudes y mejora la solidez de tu historial con validaciones reales."
-          href="/candidate/verifications"
-          cta="Gestionar verificaciones"
-        />
-        <QuickActionCard
-          title="Evidencias"
-          description="Añade documentos para reforzar experiencias y acelerar tu credibilidad."
-          href="/candidate/evidence"
-          cta="Revisar evidencias"
-        />
-      </section>
-
-      {experienceTimeline.length > 0 ? (
-        <section className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_340px]">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Tu trayectoria ya transmite estas señales</h2>
-              <p className="mt-1 text-sm text-gray-600">
-                Cada experiencia muestra si ya genera confianza, si está en proceso o si todavía necesita validación.
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Experiencias clave</p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-900">Resumen inteligente de tu trayectoria</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                No hace falta mostrarlo todo aquí. Estas son las experiencias que más ayudan a entender tu estado actual.
               </p>
             </div>
             <Link href="/candidate/experience" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
-              Ver experiencias
+              Ver todas las experiencias
             </Link>
           </div>
 
-          <div className="mt-5 space-y-3">
-            {experienceTimeline.map((item: any) => (
-              <article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <h3 className="text-sm font-semibold text-slate-900">{item.role_title || "Experiencia profesional"}</h3>
-                    <p className="mt-1 text-sm text-slate-600">{item.company_name || "Empresa no definida"}</p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {formatTimelineDate(item.start_date) || "Inicio no definido"} · {item.end_date ? formatTimelineDate(item.end_date) : "Actualidad"}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${item.status_tone}`}>
-                      {item.status_label}
-                    </span>
-                    {item.support_label ? (
-                      <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">
-                        {item.support_label}
-                      </span>
-                    ) : null}
-                  </div>
-                </div>
-
-                <p className="mt-3 text-sm text-slate-700">{item.explanation}</p>
-              </article>
-            ))}
+          <div className="mt-5 space-y-4">
+            {experienceTimeline.length ? (
+              experienceTimeline.map((item: any) => <ExperienceSummaryCard key={item.id} item={item} />)
+            ) : (
+              <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-6 text-sm text-slate-600">
+                Todavía no hay experiencias suficientes para mostrar un resumen. Añade una experiencia o revisa las importadas para empezar a construir tu señal profesional.
+              </div>
+            )}
           </div>
         </section>
-      ) : null}
 
-      <section className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-gray-900">Qué ya transmite confianza en tu perfil</h2>
-          <p className="text-xs text-gray-500">Señales visibles para empresa</p>
+        <div className="space-y-6">
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Navegación rápida</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link href="/candidate/profile" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Perfil</Link>
+              <Link href="/candidate/experience" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Experiencias</Link>
+              <Link href="/candidate/evidence" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Evidencias</Link>
+              <Link href="/candidate/verifications" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Verificaciones</Link>
+              <Link href="/candidate/education" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Formación</Link>
+              <Link href="/candidate/achievements" className="rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Idiomas y logros</Link>
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Resumen del CV</p>
+            <div className="mt-4 grid gap-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Experiencia</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">{experienceCount}</div>
+                <p className="mt-1 text-sm text-slate-600">Experiencias detectadas o añadidas manualmente.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Formación</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">{educationCount}</div>
+                <p className="mt-1 text-sm text-slate-600">Bloques académicos visibles en tu perfil.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Idiomas y logros</div>
+                <div className="mt-1 text-lg font-semibold text-slate-900">{achievementsCount}</div>
+                <p className="mt-1 text-sm text-slate-600">Señales adicionales que completan tu perfil.</p>
+              </div>
+            </div>
+          </section>
         </div>
-        <p className="mt-3 text-sm leading-6 text-gray-600">
-          Tu perfil gana credibilidad con experiencias verificadas, documentación útil y un historial bien completado. No necesitas entender el cálculo interno para saber qué reforzarlo.
-        </p>
-        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <Kpi label="Experiencias verificadas" value={metrics.verified} />
-          <Kpi label="Verificaciones en proceso" value={metrics.inProcess} />
-          <Kpi label="Documentos subidos" value={metrics.evidences} />
-          <Kpi label="Perfil completado" value={`${profileCompletionScore}%`} />
-        </div>
-        <ul className="mt-4 space-y-1 text-xs text-gray-500">
-          <li>• Una experiencia verificada es la señal más clara de confianza para una empresa.</li>
-          <li>• Si ya tienes una verificación en proceso, tu perfil muestra avance real.</li>
-          <li>• Añadir documentación puede reforzar tu perfil mientras esperas respuesta.</li>
-        </ul>
       </section>
 
-      <section className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-gray-900">CV estructurado</h2>
-          <p className="text-xs text-gray-500">Resumen de bloques</p>
-        </div>
+      <PublicProfileCard
+        publicLink={publicLink}
+        preview={publicPreview}
+        trustScore={metrics.score}
+        verified={metrics.verified}
+        visibilityLabel={publicVisibilityLabel}
+      />
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-3">
-          <SummaryCard
-            title="Datos personales"
-            summary={profile?.full_name ? "Información base completada. Puedes mantenerla actualizada en ajustes." : "Completa nombre, ubicación y datos básicos en ajustes."}
-            href="/candidate/settings"
-            cta="Editar"
-          />
-          <SummaryCard
-            title="Experiencia laboral"
-            summary={
-              experienceCount > 0
-                ? `${experienceCount} experiencias detectadas. Las importadas desde CV se muestran como “Sin verificar” hasta tener validación real.`
-                : "Aún no hay experiencias cargadas. Sube tu CV o añade experiencias manualmente."
-            }
-            href="/candidate/experience"
-            cta="Gestionar"
-          />
-          <SummaryCard
-            title="Datos académicos"
-            summary={educationCount > 0 ? `${educationCount} elementos académicos disponibles para tu perfil.` : "Todavía no hay formación académica registrada."}
-            href="/candidate/education"
-            cta="Editar"
-          />
-        </div>
-
-        <div className="mt-4 grid gap-4">
-          <SummaryCard
-            title="Idiomas, certificaciones y logros"
-            summary={achievementsCount > 0 ? `${achievementsCount} señales adicionales registradas.` : "Añade idiomas, certificaciones y logros para reforzar tu perfil profesional."}
-            href="/candidate/achievements"
-            cta="Gestionar"
-          />
-        </div>
-      </section>
+      {showUpgrade ? <UpgradeCard planLabel={planCapabilities.label} summary={planCapabilities.summary} /> : null}
     </div>
   );
 }

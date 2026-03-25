@@ -1,7 +1,10 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import ProfileUnlockAction from "@/components/company/ProfileUnlockAction";
+import { createClient as createBrowserSupabaseClient } from "@/utils/supabase/client";
 import { normalizePublicLanguages } from "@/lib/public/profile-languages";
+import { resolvePublicCompanyAccessCta, type PublicCompanyViewerAccess } from "@/lib/public/company-access-cta";
 import {
   EMPLOYMENT_RECORD_VERIFICATION_STATUS,
   normalizeEmploymentRecordVerificationStatus,
@@ -177,6 +180,7 @@ export function CandidatePublicProfileRenderer({
   internalPreview = false,
   renderMode = "screen",
   contact,
+  companyViewer,
 }: {
   payload: PublicCandidatePayload;
   mode?: PublicProfilePreviewMode;
@@ -184,6 +188,7 @@ export function CandidatePublicProfileRenderer({
   internalPreview?: boolean;
   renderMode?: "screen" | "print";
   contact?: PublicCandidateContact;
+  companyViewer?: PublicCompanyViewerAccess;
 }) {
   const [activeTab, setActiveTab] = useState<TabKey>("profile");
   const [shareMessage, setShareMessage] = useState<string | null>(null);
@@ -225,12 +230,87 @@ export function CandidatePublicProfileRenderer({
   const profileVisibility = getProfileVisibilityLabel(teaser?.profile_visibility);
 
   const token = payload?.token;
-  const nextPath = token ? `/company/candidate/${token}` : "/company/candidates";
-  const loginUrl = `/login?mode=company&next=${encodeURIComponent(nextPath)}`;
-  const signupUrl = `/signup?mode=company&next=${encodeURIComponent(nextPath)}`;
   const profileUrl = token
     ? `${typeof window !== "undefined" ? window.location.origin : "https://app.verijob.es"}/p/${token}`
     : null;
+  const [resolvedCompanyViewer, setResolvedCompanyViewer] = useState<PublicCompanyViewerAccess>(companyViewer ?? null);
+  const [resolvingCompanyViewer, setResolvingCompanyViewer] = useState(false);
+  const isPublicCompanyResolutionTarget = mode === "public" && !internalPreview;
+
+  useEffect(() => {
+    setResolvedCompanyViewer(companyViewer ?? null);
+  }, [companyViewer]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveAuthenticatedCompanyViewer() {
+      if (!isPublicCompanyResolutionTarget || !companyAccess || !token || companyViewer?.is_authenticated_company) {
+        setResolvingCompanyViewer(false);
+        return;
+      }
+
+      setResolvingCompanyViewer(true);
+
+      try {
+        const supabase = createBrowserSupabaseClient();
+        const {
+          data: { user },
+        } = await supabase.auth.getUser();
+
+        if (!user) {
+          if (!cancelled) {
+            setResolvedCompanyViewer(null);
+            setResolvingCompanyViewer(false);
+          }
+          return;
+        }
+
+        const response = await fetch(`/api/company/candidate/${encodeURIComponent(token)}`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+
+        if (!response.ok) {
+          if (!cancelled) {
+            setResolvedCompanyViewer(null);
+            setResolvingCompanyViewer(false);
+          }
+          return;
+        }
+
+        const accessPayload = await response.json().catch(() => ({}));
+        const accessStatus = String(accessPayload?.access?.access_status || "").toLowerCase();
+
+        if (!cancelled) {
+          setResolvedCompanyViewer({
+            is_authenticated_company: true,
+            available_accesses: Number(accessPayload?.gate?.credits_remaining ?? accessPayload?.credits_remaining ?? 0),
+            already_unlocked: accessStatus === "active",
+            unlocked_at: accessPayload?.access?.access_granted_at ?? null,
+            unlocked_until: accessPayload?.access?.access_expires_at ?? null,
+          });
+          setResolvingCompanyViewer(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setResolvedCompanyViewer(null);
+          setResolvingCompanyViewer(false);
+        }
+      }
+    }
+
+    void resolveAuthenticatedCompanyViewer();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [companyAccess, companyViewer?.is_authenticated_company, isPublicCompanyResolutionTarget, token]);
+
+  const companyAccessCta = resolvePublicCompanyAccessCta({ token, companyViewer: resolvedCompanyViewer });
+  const companyIsAuthenticated = companyAccessCta.companyIsAuthenticated;
+  const companyAlreadyUnlocked = Boolean(resolvedCompanyViewer?.already_unlocked);
+  const companyAvailableAccesses = Number(resolvedCompanyViewer?.available_accesses ?? 0);
   const qrEnabled = Boolean(teaser?.qr_enabled);
   const cvDownloadEnabled = Boolean(teaser?.cv_download_enabled);
   const qrImageUrl = token && qrEnabled ? `/api/public/candidate/${token}/qr.svg` : null;
@@ -309,7 +389,7 @@ export function CandidatePublicProfileRenderer({
 
   const isExternalCleanView = !internalPreview;
   const isPrintMode = renderMode === "print";
-  const isOpenPublicView = mode === "public" && !internalPreview;
+  const isOpenPublicView = isPublicCompanyResolutionTarget;
   const displayName = isOpenPublicView ? (teaser?.public_name || teaser?.full_name) : teaser?.full_name;
   const trustHeadline = `${Math.round(trust)} · ${trustStateLabel}`;
   const trustSubheadline =
@@ -400,19 +480,60 @@ export function CandidatePublicProfileRenderer({
             </p>
 
             <div className="mt-5 flex flex-wrap gap-3">
-              <a
-                href={signupUrl}
-                className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
-              >
-                Desbloquear perfil completo
-              </a>
-              <a
-                href={loginUrl}
-                className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-              >
-                Acceso empresa
-              </a>
+              {companyIsAuthenticated && token ? (
+                <>
+                  <ProfileUnlockAction
+                    candidateToken={token}
+                    href={companyAccessCta.companyFullHref}
+                    requestHref={companyAccessCta.companyUnlockHref}
+                    availableAccesses={companyAvailableAccesses}
+                    alreadyUnlocked={companyAlreadyUnlocked}
+                    unlockedAt={resolvedCompanyViewer?.unlocked_at ?? null}
+                    unlockedUntil={resolvedCompanyViewer?.unlocked_until ?? null}
+                    primaryLabel="Desbloquear perfil completo"
+                    upgradeHref="/company/subscription"
+                  />
+                  <a
+                    href={companyAccessCta.companyPreviewHref}
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Acceso empresa
+                  </a>
+                </>
+              ) : resolvingCompanyViewer ? (
+                <button
+                  type="button"
+                  disabled
+                  className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-500"
+                >
+                  Comprobando acceso empresa…
+                </button>
+              ) : (
+                <>
+                  <a
+                    href={companyAccessCta.signupUrl}
+                    className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+                  >
+                    Desbloquear perfil completo
+                  </a>
+                  <a
+                    href={companyAccessCta.loginUrl}
+                    className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    Acceso empresa
+                  </a>
+                </>
+              )}
             </div>
+            {companyIsAuthenticated ? (
+              <p className="mt-3 text-xs text-slate-500">
+                {companyAlreadyUnlocked
+                  ? "Tu empresa ya tiene este perfil desbloqueado y puedes abrir la vista completa sin consumir otro acceso dentro de la ventana activa."
+                  : companyAvailableAccesses > 0
+                    ? `Tu empresa tiene ${companyAvailableAccesses} acceso${companyAvailableAccesses === 1 ? "" : "s"} disponible${companyAvailableAccesses === 1 ? "" : "s"} para abrir perfiles completos.`
+                    : "Tu empresa no tiene accesos disponibles ahora mismo. Puedes seguir viendo este resumen parcial o comprar más accesos."}
+              </p>
+            ) : null}
           </header>
 
           <div className="grid gap-3 sm:grid-cols-3">
@@ -516,7 +637,7 @@ export function CandidatePublicProfileRenderer({
                 {isOpenPublicView && !isPrintMode ? (
                   <>
                     <a
-                      href={signupUrl}
+                      href={companyAccessCta.signupUrl}
                       className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
                     >
                       Registro
@@ -555,7 +676,7 @@ export function CandidatePublicProfileRenderer({
                       </a>
                     ) : null}
                     <a
-                      href={loginUrl}
+                      href={companyAccessCta.loginUrl}
                       className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                     >
                       Ver evaluación empresa
@@ -762,15 +883,47 @@ export function CandidatePublicProfileRenderer({
                         : "Para acceder a más contexto operativo, utiliza la vista de empresa."}
                     </p>
                     <div className="mt-4 space-y-2">
-                      <a className="inline-flex w-full justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800" href={signupUrl}>
-                        {isOpenPublicView ? "Registro" : "Crear cuenta empresa"}
-                      </a>
-                      <a
-                        className="inline-flex w-full justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
-                        href={isOpenPublicView ? "/para-empresas" : loginUrl}
-                      >
-                        {isOpenPublicView ? "Ventajas" : "Iniciar sesión empresa"}
-                      </a>
+                      {isOpenPublicView && companyIsAuthenticated && token ? (
+                        <>
+                          <ProfileUnlockAction
+                            candidateToken={token}
+                            href={companyAccessCta.companyFullHref}
+                            requestHref={companyAccessCta.companyUnlockHref}
+                            availableAccesses={companyAvailableAccesses}
+                            alreadyUnlocked={companyAlreadyUnlocked}
+                            unlockedAt={resolvedCompanyViewer?.unlocked_at ?? null}
+                            unlockedUntil={resolvedCompanyViewer?.unlocked_until ?? null}
+                            primaryLabel="Desbloquear perfil completo"
+                            upgradeHref="/company/subscription"
+                          />
+                          <a
+                            className="inline-flex w-full justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                            href={companyAccessCta.companyPreviewHref}
+                          >
+                            Acceso empresa
+                          </a>
+                        </>
+                      ) : resolvingCompanyViewer && isOpenPublicView ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="inline-flex w-full justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-500"
+                        >
+                          Comprobando acceso empresa…
+                        </button>
+                      ) : (
+                        <>
+                          <a className="inline-flex w-full justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800" href={companyAccessCta.signupUrl}>
+                            {isOpenPublicView ? "Registro" : "Crear cuenta empresa"}
+                          </a>
+                          <a
+                            className="inline-flex w-full justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                            href={isOpenPublicView ? "/para-empresas" : companyAccessCta.loginUrl}
+                          >
+                            {isOpenPublicView ? "Ventajas" : "Iniciar sesión empresa"}
+                          </a>
+                        </>
+                      )}
                     </div>
                   </section>
                 ) : null}
@@ -1226,13 +1379,13 @@ export function CandidatePublicProfileRenderer({
               >
                 <div className="flex flex-wrap gap-3">
                   <a
-                    href={loginUrl}
+                    href={companyAccessCta.loginUrl}
                     className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
                   >
                     Desbloquear perfil completo
                   </a>
                   <a
-                    href={signupUrl}
+                    href={companyAccessCta.signupUrl}
                     className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                   >
                     Registrarse
