@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+import CandidateOperationsLayout from "@/components/candidate-v2/layouts/CandidateOperationsLayout";
+import CandidatePageHeader from "@/components/candidate-v2/primitives/CandidatePageHeader";
+import CandidateEmptyState from "@/components/candidate-v2/primitives/CandidateEmptyState";
 import DeleteVerificationInlineButton from "./DeleteVerificationInlineButton";
-import CandidatePageHeader from "../_components/CandidatePageHeader";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -69,7 +71,7 @@ export default async function CandidateVerificationsPage() {
   const completedRows = visibleRows.filter((row: any) => !activeRows.includes(row));
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-16 px-8 py-12">
+    <CandidateOperationsLayout>
       <CandidatePageHeader
         eyebrow="Verificaciones"
         title="Qué está en curso y qué ya se ha resuelto"
@@ -84,13 +86,15 @@ export default async function CandidateVerificationsPage() {
       ) : null}
 
       {!error && (!visibleRows || visibleRows.length === 0) ? (
-        <div className="rounded-2xl bg-slate-50 px-6 py-6 text-sm text-slate-600">
-          Aún no tienes solicitudes. Crea la primera desde{" "}
-          <Link href="/candidate/experience" className="font-semibold text-blue-700 hover:underline">
-            Experiencias
-          </Link>
-          .
-        </div>
+        <CandidateEmptyState
+          title="Aún no tienes solicitudes"
+          description="Crea la primera verificación desde Experiencias para empezar a reforzar tu historial con señales reales."
+          action={
+            <Link href="/candidate/experience" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">
+              Ir a experiencias
+            </Link>
+          }
+        />
       ) : null}
 
       {!error && visibleRows && visibleRows.length > 0 ? (
@@ -107,7 +111,7 @@ export default async function CandidateVerificationsPage() {
           />
         </div>
       ) : null}
-    </div>
+    </CandidateOperationsLayout>
   );
 }
 

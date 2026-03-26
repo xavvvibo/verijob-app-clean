@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+import CandidateOperationsLayout from "@/components/candidate-v2/layouts/CandidateOperationsLayout";
+import CandidatePageHeader from "@/components/candidate-v2/primitives/CandidatePageHeader";
 import LanguagesClient from "./LanguagesClient";
-import CandidatePageHeader from "../_components/CandidatePageHeader";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -18,7 +19,7 @@ export default async function Page() {
     .order("created_at", { ascending: false });
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-16 px-8 py-12">
+    <CandidateOperationsLayout>
       <CandidatePageHeader
         eyebrow="Idiomas y logros"
         title="Refuerza tu perfil global"
@@ -27,6 +28,6 @@ export default async function Page() {
       />
 
       <LanguagesClient initialItems={items || []} />
-    </div>
+    </CandidateOperationsLayout>
   );
 }

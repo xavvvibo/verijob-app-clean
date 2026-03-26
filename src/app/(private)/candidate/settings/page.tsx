@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import CandidatePageHeader from "../_components/CandidatePageHeader";
+import CandidateFormLayout from "@/components/candidate-v2/layouts/CandidateFormLayout";
+import CandidatePageHeader from "@/components/candidate-v2/primitives/CandidatePageHeader";
+import CandidateSaveBar from "@/components/candidate-v2/forms/CandidateSaveBar";
 
 type Settings = {
   show_trust_score: boolean;
@@ -316,7 +318,7 @@ export default function CandidateSettings() {
   const isDeleted = String(account?.lifecycle_status || "active").toLowerCase() === "deleted";
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-16 px-8 py-12">
+    <CandidateFormLayout>
       <CandidatePageHeader
         eyebrow="Ajustes"
         title="Controla la visibilidad y el estado de tu perfil"
@@ -545,8 +547,7 @@ export default function CandidateSettings() {
       )}
 
       {settings ? (
-        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-3 px-8 py-3">
+        <CandidateSaveBar>
             <div className="min-w-0">
               {saving ? <div className="text-sm text-gray-600">Guardando cambios…</div> : null}
               {!saving && ok ? <div className="text-sm font-semibold text-green-700">{ok}</div> : null}
@@ -563,9 +564,8 @@ export default function CandidateSettings() {
             >
               {saving ? "Guardando…" : "Guardar cambios"}
             </button>
-          </div>
-        </div>
+        </CandidateSaveBar>
       ) : null}
-    </div>
+    </CandidateFormLayout>
   );
 }

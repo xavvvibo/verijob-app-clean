@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import CandidateFormLayout from "@/components/candidate-v2/layouts/CandidateFormLayout";
+import CandidatePageHeader from "@/components/candidate-v2/primitives/CandidatePageHeader";
 import { getCandidatePlanCapabilities, normalizeCandidateCommercialPlan } from "@/lib/billing/planCapabilities";
-import CandidatePageHeader from "../_components/CandidatePageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -302,7 +303,7 @@ export default function CandidateSubscriptionPage() {
   );
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-16 px-8 py-12">
+    <CandidateFormLayout>
       <CandidatePageHeader
         eyebrow="Suscripción"
         title="Gestiona tu plan y tu nivel de visibilidad"
@@ -453,6 +454,6 @@ export default function CandidateSubscriptionPage() {
           Pago recibido. Estamos sincronizando tu suscripción.
         </div>
       ) : null}
-    </div>
+    </CandidateFormLayout>
   );
 }

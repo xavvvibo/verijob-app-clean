@@ -2,6 +2,10 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import CvUploadAndParse from "@/components/candidate/profile/CvUploadAndParse";
+import CandidateOperationsLayout from "@/components/candidate-v2/layouts/CandidateOperationsLayout";
+import CandidatePageHeader from "@/components/candidate-v2/primitives/CandidatePageHeader";
+import CandidateToolbar from "@/components/candidate-v2/primitives/CandidateToolbar";
+import CandidateSurface from "@/components/candidate-v2/primitives/CandidateSurface";
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
 import { toExperienceVerificationBadgeLabels } from "@/lib/candidate/experience-verification-badges";
 import { getCandidatePlanCapabilities } from "@/lib/billing/planCapabilities";
@@ -12,7 +16,6 @@ import {
 } from "@/lib/candidate/profile-visibility";
 import ExperienceQuickAddClient from "./ExperienceQuickAddClient";
 import ExperienceListClient from "./ExperienceListClient";
-import CandidatePageHeader from "../_components/CandidatePageHeader";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -238,7 +241,7 @@ export default async function CandidateExperiencePage({
   const importSummary = summarizeCompanyCvImportUpdates((candidateProfile as any)?.raw_cv_json);
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-16 px-8 py-12">
+    <CandidateOperationsLayout>
       <CandidatePageHeader
         eyebrow="Experiencia profesional"
         title="Tus experiencias"
@@ -247,17 +250,18 @@ export default async function CandidateExperiencePage({
         ctaHref="/candidate/experience?new=1#manual-experience"
         badges={["Historial revisable", "Verificaciones por experiencia", "Visibilidad pública controlada"]}
       />
-      <div className="-mt-10 flex justify-end">
+      <CandidateToolbar className="-mt-4">
+        <div className="text-sm text-slate-600">Mantén tu trayectoria limpia, visible y preparada para verificaciones y documentación.</div>
         <Link
           href="#cv-upload"
           className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition duration-150 hover:bg-slate-50"
         >
           Extraer perfil desde CV
         </Link>
-      </div>
+      </CandidateToolbar>
 
       <section className="space-y-8">
-        <div id="cv-upload" className="rounded-2xl bg-slate-50 px-6 py-6">
+        <CandidateSurface id="cv-upload" tone="subtle" className="px-6 py-6">
           <div className="max-w-3xl space-y-2">
             <h2 className="text-lg font-semibold text-slate-950">Importa tu experiencia desde tu CV</h2>
             <p className="text-sm leading-6 text-slate-600">
@@ -267,7 +271,7 @@ export default async function CandidateExperiencePage({
           <div className="mt-4">
             <CvUploadAndParse />
           </div>
-        </div>
+        </CandidateSurface>
 
         <div id="manual-experience">
           <ExperienceQuickAddClient />
@@ -336,6 +340,6 @@ export default async function CandidateExperiencePage({
           }}
         />
       </section>
-    </div>
+    </CandidateOperationsLayout>
   );
 }

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import CandidatePageHeader from "../_components/CandidatePageHeader";
+import CandidateOperationsLayout from "@/components/candidate-v2/layouts/CandidateOperationsLayout";
+import CandidatePageHeader from "@/components/candidate-v2/primitives/CandidatePageHeader";
 
 type EducationItem = {
   title: string;
@@ -119,7 +120,7 @@ export default function CandidateEducationPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-16 px-8 py-12">
+    <CandidateOperationsLayout>
       <CandidatePageHeader
         eyebrow="Educación"
         title="Tu formación en una vista clara"
@@ -232,7 +233,7 @@ export default function CandidateEducationPage() {
           {message ? <p className="text-sm text-slate-600">{message}</p> : null}
         </div>
       </section>
-    </div>
+    </CandidateOperationsLayout>
   );
 }
 

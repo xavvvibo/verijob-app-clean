@@ -7,8 +7,13 @@ import {
   type PublicCandidatePayload,
   type PublicProfilePreviewMode,
 } from "@/components/public/CandidatePublicProfileRenderer";
+import CandidatePresentationLayout from "@/components/candidate-v2/layouts/CandidatePresentationLayout";
+import ShareHero from "@/components/candidate-v2/share/ShareHero";
+import SharePublicCard from "@/components/candidate-v2/share/SharePublicCard";
+import ShareQRCodePanel from "@/components/candidate-v2/share/ShareQRCodePanel";
+import ShareVisibilitySummary from "@/components/candidate-v2/share/ShareVisibilitySummary";
+import ShareActions from "@/components/candidate-v2/share/ShareActions";
 import { getCandidatePlanCapabilities } from "@/lib/billing/planCapabilities";
-import CandidatePageHero from "../_components/CandidatePageHero";
 
 type SettingsPayload = {
   allow_company_email_contact?: boolean;
@@ -145,16 +150,29 @@ export default function CandidatePublicProfilePage() {
   }, [mode, settings.allow_company_email_contact, settings.allow_company_phone_contact, profile.email, profile.phone]);
 
   return (
-    <div className="mx-auto max-w-[1480px] space-y-16 px-8 py-12">
+    <CandidatePresentationLayout>
       <section className="space-y-8">
-        <CandidatePageHero
-          eyebrow="Perfil público"
-        title="Comparte una versión clara y verificable de tu perfil"
-        description="Esta pantalla funciona como una mini landing: muestra exactamente lo que verá una empresa cuando abras tu perfil público."
-        badges={["Vista pública", "Enlace verificable", "Preview real"]}
-        showTrustScore={false}
-        aside={
-            <div className="flex w-full max-w-[320px] flex-col gap-3 lg:items-end">
+        <ShareHero
+          left={
+            <div className="space-y-5">
+              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Perfil público</p>
+              <div className="space-y-3">
+                <h1 className="text-4xl font-bold tracking-tight text-slate-950">Comparte una versión clara y verificable de tu perfil</h1>
+                <p className="max-w-[760px] text-base leading-7 text-slate-600">
+                  Convierte tu perfil en una pieza compartible: vista pública real, enlace verificable y QR listo para tu plan.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {["Vista pública", "Enlace verificable", "Preview real"].map((badge) => (
+                  <span key={badge} className="rounded-full border border-slate-200 bg-white/80 px-3 py-1 text-xs font-medium text-slate-700">
+                    {badge}
+                  </span>
+                ))}
+              </div>
+            </div>
+          }
+          right={
+            <div className="flex w-full max-w-[340px] flex-col gap-3 xl:ml-auto">
               <div className="w-full rounded-xl bg-white/80 p-3">
                 <label className="block text-sm font-semibold text-slate-900">Ver como</label>
                 <select
@@ -184,7 +202,7 @@ export default function CandidatePublicProfilePage() {
         <div className="grid gap-10 xl:grid-cols-[minmax(0,1.15fr)_360px]">
           <div className="space-y-4">
             <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Vista previa real</div>
-            <div className="rounded-2xl bg-slate-50/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+            <SharePublicCard>
               {previewPayload ? (
                 <CandidatePublicProfileRenderer
                   payload={previewPayload}
@@ -198,11 +216,11 @@ export default function CandidatePublicProfilePage() {
                   {previewError || "Generando enlace y cargando la vista pública real del perfil..."}
                 </section>
               )}
-            </div>
+            </SharePublicCard>
           </div>
 
           <aside className="space-y-4">
-            <div className="rounded-2xl bg-slate-50/80 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+            <ShareVisibilitySummary>
               <h3 className="text-lg font-semibold text-slate-900">Comparte tu perfil</h3>
               <p className="mt-1 text-sm leading-6 text-slate-600">
                 El enlace público está listo y el QR aparece automáticamente si tu plan lo incluye.
@@ -213,8 +231,10 @@ export default function CandidatePublicProfilePage() {
                 <p className="mt-2 break-all text-sm text-slate-700">{link || "https://app.verijob.es/p/[token]"}</p>
                 <p className="mt-1 text-xs text-slate-500">Caduca en 7 días</p>
               </div>
+            </ShareVisibilitySummary>
 
-              <div className="mt-4 rounded-xl bg-white px-4 py-4">
+            <ShareQRCodePanel>
+              <div className="rounded-xl bg-white px-4 py-4">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">QR del perfil</div>
                 <p className="mt-1 text-xs text-slate-600">
                   {planCapabilities.canShareByQr ? "Escanea para validar este perfil." : "Tu plan actual no incluye QR compartible."}
@@ -233,7 +253,8 @@ export default function CandidatePublicProfilePage() {
                 </div>
               </div>
 
-              <div className="mt-4 grid gap-2">
+              <div className="mt-4">
+                <ShareActions>
                 {planCapabilities.canShareByQr ? (
                   <button
                     type="button"
@@ -259,21 +280,22 @@ export default function CandidatePublicProfilePage() {
                 >
                   {loadingLink ? "Regenerando…" : "Regenerar enlace"}
                 </button>
+                </ShareActions>
               </div>
 
               {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
-            </div>
+            </ShareQRCodePanel>
 
-            <div className="rounded-2xl bg-white px-5 py-5 text-xs text-slate-600">
+            <ShareVisibilitySummary>
               <p className="font-semibold text-slate-900">Tu plan actual: {planCapabilities.label}</p>
               <p className="mt-2">Enlace público: {link ? "listo para compartir" : "pendiente de generar"}</p>
               <p className="mt-1">Compartir por link: sí</p>
               <p className="mt-1">Compartir por QR: {planCapabilities.canShareByQr ? "sí" : "no"}</p>
               <p className="mt-1">Descarga de CV verificado: {planCapabilities.canDownloadVerifiedCv ? "sí" : "no"}</p>
-            </div>
+            </ShareVisibilitySummary>
           </aside>
         </div>
       </section>
-    </div>
+    </CandidatePresentationLayout>
   );
 }

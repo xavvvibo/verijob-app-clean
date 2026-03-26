@@ -4,9 +4,12 @@ import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-s
 import { buildCandidateExperienceTrustTimeline } from "@/lib/candidate/experience-trust";
 import { readCandidateSkills } from "@/lib/candidate/profile-visibility";
 import { getTrustBreakdownDisplayEntries, normalizeTrustBreakdown } from "@/lib/trust/trust-model";
+import CandidateFormLayout from "@/components/candidate-v2/layouts/CandidateFormLayout";
+import CandidatePageHeader from "@/components/candidate-v2/primitives/CandidatePageHeader";
+import CandidateFormSection from "@/components/candidate-v2/forms/CandidateFormSection";
+import CandidateSurface from "@/components/candidate-v2/primitives/CandidateSurface";
 import CandidateProfileIdentityClient from "./CandidateProfileIdentityClient";
 import CandidateProfileSkillsClient from "./CandidateProfileSkillsClient";
-import CandidatePageHeader from "../_components/CandidatePageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -120,7 +123,7 @@ export default async function CandidateProfilePage() {
   });
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-16 px-8 py-12">
+    <CandidateFormLayout>
       <CandidatePageHeader
         eyebrow="Perfil candidato"
         title="Tu identidad profesional"
@@ -136,12 +139,12 @@ export default async function CandidateProfilePage() {
         variant="management"
       />
 
-      <section className="space-y-5">
-        <div className="rounded-2xl bg-slate-50/70 p-5">
+      <CandidateFormSection title="Confianza del perfil" description="Una lectura rápida del estado actual de tu credibilidad y del tipo de señales que ya ve una empresa.">
+        <CandidateSurface tone="subtle" className="p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Confianza del perfil</p>
           <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{trustTitle} · {trustScore}</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{trustSummary}</p>
-        </div>
+        </CandidateSurface>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           {trustEntries.map((entry) => (
             <div key={entry.key} className="rounded-xl border border-slate-200/80 bg-white/75 px-3 py-2">
@@ -151,7 +154,7 @@ export default async function CandidateProfilePage() {
           ))}
         </div>
         {trustBreakdown.meta.updated_at ? <p className="text-xs text-slate-500">Actualizado {formatMonthYear(trustBreakdown.meta.updated_at)}</p> : null}
-      </section>
+      </CandidateFormSection>
 
       {(importSummary.importedFromCompanyCv || importSummary.updatesCount > 0) ? (
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
@@ -248,6 +251,6 @@ export default async function CandidateProfilePage() {
       />
 
       <CandidateProfileSkillsClient initialSkills={manualSkills} />
-    </div>
+    </CandidateFormLayout>
   );
 }

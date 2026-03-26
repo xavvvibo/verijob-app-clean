@@ -5,6 +5,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/utils/supabase/browser";
 import { VerificationBadge } from "@/components/brand/VerificationBadge";
+import CandidatePresentationLayout from "@/components/candidate-v2/layouts/CandidatePresentationLayout";
+import OverviewHero from "@/components/candidate-v2/overview/OverviewHero";
+import OverviewHighlights from "@/components/candidate-v2/overview/OverviewHighlights";
+import OverviewProgressSection from "@/components/candidate-v2/overview/OverviewProgressSection";
+import OverviewExperiencesPreview from "@/components/candidate-v2/overview/OverviewExperiencesPreview";
+import OverviewProfilePublicCard from "@/components/candidate-v2/overview/OverviewProfilePublicCard";
+import OverviewUpgradeCard from "@/components/candidate-v2/overview/OverviewUpgradeCard";
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
 import { mapCandidateAvailability } from "@/lib/candidate/availability";
 import {
@@ -913,7 +920,7 @@ export default function CandidateOverview() {
   );
 
   return (
-    <div className="mx-auto max-w-[1480px] space-y-20 bg-white px-8 py-12">
+    <CandidatePresentationLayout>
       {importedFromCompanyCv ? (
         <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
           <p className="text-sm font-semibold text-amber-900">Perfil pre-rellenado desde un CV subido por empresa</p>
@@ -947,14 +954,8 @@ export default function CandidateOverview() {
         </section>
       ) : null}
 
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-100 via-indigo-100/70 to-blue-100/60 px-8 py-[4.5rem] sm:px-8 sm:py-[5rem] xl:px-9 xl:py-[5.25rem]">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(99,102,241,0.18),transparent_60%)]" />
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(14,165,233,0.08),transparent_60%)]" />
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/0 via-white/10 to-white/20" />
-        <div className="pointer-events-none absolute -left-16 top-0 h-40 w-40 rounded-full bg-blue-100/40 blur-3xl" />
-        <div className="pointer-events-none absolute -right-20 bottom-0 h-52 w-52 rounded-full bg-slate-200/50 blur-3xl" />
-
-        <div className="relative grid items-center gap-14 xl:grid-cols-[1.3fr_0.7fr]">
+      <OverviewHero
+        left={
           <div className="min-w-0">
             <div className="flex items-start gap-5">
               <AvatarView
@@ -1008,7 +1009,8 @@ export default function CandidateOverview() {
             {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
             {loading ? <p className="mt-4 text-sm text-slate-500">Cargando tu panel…</p> : null}
           </div>
-
+        }
+        right={
           <div className="rounded-2xl bg-black p-7 text-white">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Tu siguiente mejor paso</p>
             <h2 className="mt-3 text-2xl font-semibold leading-tight">Haz que las empresas confíen en ti desde hoy</h2>
@@ -1020,34 +1022,38 @@ export default function CandidateOverview() {
               {primaryAction.label}
             </Link>
           </div>
-        </div>
-      </section>
+        }
+      >
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(99,102,241,0.18),transparent_60%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(14,165,233,0.08),transparent_60%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/0 via-white/10 to-white/20" />
+        <div className="pointer-events-none absolute -left-16 top-0 h-40 w-40 rounded-full bg-blue-100/40 blur-3xl" />
+        <div className="pointer-events-none absolute -right-20 bottom-0 h-52 w-52 rounded-full bg-slate-200/50 blur-3xl" />
+      </OverviewHero>
 
-      <section className="space-y-5">
-        <div className="flex items-center justify-between text-sm text-slate-500">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Progreso del perfil</p>
-          <div className="text-sm font-medium text-slate-600">
-            {profileCompletion?.completed || 0}/{profileCompletion?.total || 0} hitos completados
-          </div>
-        </div>
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_380px]">
+        <div className="space-y-10">
+          <OverviewProgressSection>
+            <div className="flex items-center justify-between text-sm text-slate-500">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Progreso del perfil</p>
+              <div className="text-sm font-medium text-slate-600">
+                {profileCompletion?.completed || 0}/{profileCompletion?.total || 0} hitos completados
+              </div>
+            </div>
 
-        <div className="flex flex-wrap gap-2.5">
-          {profileMilestones.map((milestone) => (
-            <ProgressMilestone
-              key={milestone.id}
-              label={milestone.label}
-              status={milestone.status as "done" | "progress" | "pending"}
-            />
-          ))}
-        </div>
-      </section>
+            <div className="flex flex-wrap gap-2.5">
+              {profileMilestones.map((milestone) => (
+                <ProgressMilestone
+                  key={milestone.id}
+                  label={milestone.label}
+                  status={milestone.status as "done" | "progress" | "pending"}
+                />
+              ))}
+            </div>
+          </OverviewProgressSection>
 
-      <section className="space-y-5">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Qué te falta para destacar</p>
-          <h2 className="mt-2 text-2xl font-semibold text-slate-900">Qué hacer ahora</h2>
-        </div>
-        <div className="grid gap-4 lg:grid-cols-2">
+          <OverviewHighlights>
+            <div className="grid gap-4 lg:grid-cols-2">
           {highlightCards.length ? (
             highlightCards.slice(0, 2).map((card, index) => (
               <InsightCard
@@ -1067,42 +1073,46 @@ export default function CandidateOverview() {
               emphasis="primary"
             />
           )}
-        </div>
-      </section>
-
-      <section className="space-y-10">
-        <section className="space-y-7">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Experiencias clave</p>
-              <h2 className="mt-2 text-2xl font-semibold text-slate-900">Experiencias que más pesan en tu perfil</h2>
             </div>
-            <Link href="/candidate/experience" className="inline-flex rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
-              Ver todas las experiencias
-            </Link>
-          </div>
+          </OverviewHighlights>
 
-          <div className="space-y-0">
-            {experienceTimeline.length ? (
-              experienceTimeline.slice(0, 2).map((item: any) => <ExperienceSummaryCard key={item.id} item={item} />)
-            ) : (
-              <div className="rounded-3xl border border-dashed border-slate-300 p-6 text-sm text-slate-600">
-                Todavía no hay experiencias suficientes para mostrar un resumen. Añade una experiencia o revisa las importadas para empezar a construir tu señal profesional.
-              </div>
-            )}
-          </div>
-        </section>
-      </section>
+          <OverviewExperiencesPreview
+            action={
+              <Link href="/candidate/experience" className="inline-flex rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+                Ver todas las experiencias
+              </Link>
+            }
+          >
+            <div className="space-y-0">
+              {experienceTimeline.length ? (
+                experienceTimeline.slice(0, 2).map((item: any) => <ExperienceSummaryCard key={item.id} item={item} />)
+              ) : (
+                <div className="rounded-3xl border border-dashed border-slate-300 p-6 text-sm text-slate-600">
+                  Todavía no hay experiencias suficientes para mostrar un resumen. Añade una experiencia o revisa las importadas para empezar a construir tu señal profesional.
+                </div>
+              )}
+            </div>
+          </OverviewExperiencesPreview>
+        </div>
 
-      <PublicProfileCard
-        publicLink={publicLink}
-        preview={publicPreview}
-        trustScore={metrics.score}
-        verified={metrics.verified}
-        visibilityLabel={publicVisibilityLabel}
-      />
+        <div className="space-y-6">
+          <OverviewProfilePublicCard>
+            <PublicProfileCard
+              publicLink={publicLink}
+              preview={publicPreview}
+              trustScore={metrics.score}
+              verified={metrics.verified}
+              visibilityLabel={publicVisibilityLabel}
+            />
+          </OverviewProfilePublicCard>
 
-      {showUpgrade ? <UpgradeCard planLabel={planCapabilities.label} summary={planCapabilities.summary} /> : null}
-    </div>
+          {showUpgrade ? (
+            <OverviewUpgradeCard>
+              <UpgradeCard planLabel={planCapabilities.label} summary={planCapabilities.summary} />
+            </OverviewUpgradeCard>
+          ) : null}
+        </div>
+      </div>
+    </CandidatePresentationLayout>
   );
 }

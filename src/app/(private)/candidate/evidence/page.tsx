@@ -1,8 +1,9 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
+import CandidateOperationsLayout from "@/components/candidate-v2/layouts/CandidateOperationsLayout";
+import CandidatePageHeader from "@/components/candidate-v2/primitives/CandidatePageHeader";
 import EvidenceListClient from "./EvidenceListClient";
 import { buildEvidenceUiItem } from "@/lib/candidate/evidence-ui";
-import CandidatePageHeader from "../_components/CandidatePageHeader";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -155,7 +156,7 @@ export default async function CandidateEvidencePage(props: any) {
   const items = (evidences || []).map((r: any) => buildEvidenceUiItem(r));
 
   return (
-    <div className="mx-auto max-w-[1440px] space-y-16 px-8 py-12">
+    <CandidateOperationsLayout>
       <CandidatePageHeader
         eyebrow="Evidencias"
         title="Documentos que refuerzan tu perfil"
@@ -167,6 +168,6 @@ export default async function CandidateEvidencePage(props: any) {
         experienceOptions={experienceOptions}
         preselectedExperienceId={preselectedExperienceId}
       />
-    </div>
+    </CandidateOperationsLayout>
   );
 }
