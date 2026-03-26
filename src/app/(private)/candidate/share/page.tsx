@@ -8,6 +8,7 @@ import {
   type PublicProfilePreviewMode,
 } from "@/components/public/CandidatePublicProfileRenderer";
 import { getCandidatePlanCapabilities } from "@/lib/billing/planCapabilities";
+import CandidatePageHero from "../_components/CandidatePageHero";
 
 type SettingsPayload = {
   allow_company_email_contact?: boolean;
@@ -144,157 +145,131 @@ export default function CandidatePublicProfilePage() {
   }, [mode, settings.allow_company_email_contact, settings.allow_company_phone_contact, profile.email, profile.phone]);
 
   return (
-    <div className="space-y-6">
-      <section className="space-y-6">
-        <header className="rounded-2xl border border-gray-200 bg-white p-6">
-          <h1 className="text-2xl font-semibold text-gray-900">Perfil público</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            Así verán tu perfil las empresas cuando compartas tu enlace verificable, con la misma lectura de confianza por experiencia que ya ves en tu perfil.
-          </p>
-
-          <div className="mt-4 max-w-sm">
-            <label className="block text-sm font-semibold text-gray-900">Ver como</label>
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value as PublicProfilePreviewMode)}
-              className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
-            >
-              {previewModes.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-            <p className="font-semibold">Esta vista previa usa el mismo renderer real del perfil público.</p>
-            <p className="mt-1">
-              Verás exactamente la misma jerarquía de confianza por experiencia: verificadas primero, luego las reforzadas con documentación, después las que están en proceso y al final las que aún no están validadas.
-            </p>
-            <p className="mt-1">
-              La vista pública sigue siendo limitada: no enseña tu contacto completo ni el historial completo salvo que una empresa desbloquee el perfil dentro del producto.
-            </p>
-          </div>
-        </header>
-
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div>
-            {previewPayload ? (
-              <CandidatePublicProfileRenderer
-                payload={previewPayload}
-                mode={mode}
-                companyAccess={false}
-                internalPreview
-                contact={contact}
-              />
-            ) : (
-              <section className="rounded-2xl border border-gray-200 bg-white p-6 text-sm text-gray-600">
-                {previewError || "Generando enlace y cargando vista previa real del perfil público..."}
-              </section>
-            )}
-          </div>
-
-          <aside className="h-fit rounded-2xl border border-gray-200 bg-white p-6">
-          <h3 className="text-lg font-semibold text-gray-900">Comparte tu perfil</h3>
-          <p className="mt-1 text-sm text-gray-600">
-            Este es tu enlace público verificable. El QR está disponible con los planes Pro y Pro+.
-          </p>
-
-          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-            <p className="font-semibold text-slate-900">Qué se ve en cada vista</p>
-            <ul className="mt-2 space-y-1.5 text-xs leading-5 text-slate-600">
-              <li>Vista pública resumida: señales de confianza y trayectoria profesional sin parecer un CV completo.</li>
-              <li>Vista completa: más detalle por experiencia y datos visibles según permisos y plan.</li>
-              <li>Los estados por experiencia mantienen el mismo lenguaje: Alta confianza, Verificación en proceso, Confianza media y Sin validar todavía.</li>
-              <li>El trust score visible es orientativo para empresas y se apoya en verificaciones reales, no en promesas del candidato.</li>
-            </ul>
-          </div>
-
-          <div className="mt-5 rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Enlace público</div>
-            <p className="mt-2 break-all text-sm text-gray-700">{link || "https://app.verijob.es/p/[token]"}</p>
-            <p className="mt-1 text-xs text-gray-500">Caduca en 7 días</p>
-          </div>
-
-          <div className="mt-5 rounded-xl border border-gray-200 bg-slate-50 p-4">
-            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">QR del perfil</div>
-            <p className="mt-1 text-xs text-gray-600">
-              {planCapabilities.canShareByQr ? "Escanea para validar este perfil." : "Tu plan actual no incluye QR compartible."}
-            </p>
-            <div className="mt-3 flex min-h-[300px] items-center justify-center rounded-lg border border-gray-200 bg-white p-3">
-              {qrSvgUrl && planCapabilities.canShareByQr ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={qrSvgUrl} alt="QR de perfil público" className="h-auto w-full max-w-[220px] object-contain" />
-              ) : (
-                <span className="text-center text-xs text-gray-500">
-                  {planCapabilities.canShareByQr
-                    ? "Genera el enlace para ver el QR."
-                    : "Mejora a Pro para compartir tu perfil también por QR."}
-                </span>
-              )}
-            </div>
-            <p className="mt-2 text-[11px] text-gray-500">
-              {planCapabilities.canShareByQr
-                ? "Verificación segura mediante enlace único."
-                : "El enlace público sigue disponible con tu plan actual."}
-            </p>
-          </div>
-
-          <div className="mt-5 grid gap-2">
-            <button
-              type="button"
-              onClick={copyLink}
-              disabled={!link}
-              className="inline-flex w-full justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-50"
-            >
-              Copiar enlace
-            </button>
-            {link ? (
-              <a
-                href={link}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex w-full justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
-              >
-                Abrir enlace publico real
-              </a>
-            ) : null}
-            {planCapabilities.canShareByQr ? (
+    <div className="mx-auto max-w-6xl space-y-14 px-6 py-10">
+      <section className="space-y-8">
+        <CandidatePageHero
+          eyebrow="Perfil público"
+          title="Comparte una versión clara y verificable de tu perfil"
+          description="Esta pantalla funciona como una mini landing: muestra exactamente lo que verá una empresa cuando abras tu perfil público."
+          badges={["Vista pública", "Enlace verificable", "Preview real"]}
+          aside={
+            <div className="flex flex-col gap-3 xl:items-end">
+              <div className="min-w-[220px] rounded-xl bg-white/80 p-3">
+                <label className="block text-sm font-semibold text-slate-900">Ver como</label>
+                <select
+                  value={mode}
+                  onChange={(e) => setMode(e.target.value as PublicProfilePreviewMode)}
+                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                >
+                  {previewModes.map((item) => (
+                    <option key={item.value} value={item.value}>
+                      {item.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <button
                 type="button"
-                onClick={downloadQr}
-                disabled={!qrSvgUrl}
-                className="inline-flex w-full justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-100 disabled:opacity-50"
+                onClick={copyLink}
+                disabled={!link}
+                className="inline-flex justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition duration-150 hover:bg-black disabled:opacity-50"
               >
-                Descargar QR
+                Copiar enlace
               </button>
-            ) : (
-              <Link
-                href="/candidate/subscription"
-                className="inline-flex w-full justify-center rounded-xl border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-900 hover:bg-blue-100"
-              >
-                Mejorar a Pro
-              </Link>
-            )}
-            <button
-              type="button"
-              onClick={generateOrRefreshLink}
-              disabled={loadingLink}
-              className="inline-flex w-full justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
-            >
-              {loadingLink ? "Regenerando…" : "Regenerar enlace"}
-            </button>
+            </div>
+          }
+        />
+
+        <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-4">
+            <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Vista previa real</div>
+            <div className="rounded-2xl bg-slate-50/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+              {previewPayload ? (
+                <CandidatePublicProfileRenderer
+                  payload={previewPayload}
+                  mode={mode}
+                  companyAccess={false}
+                  internalPreview
+                  contact={contact}
+                />
+              ) : (
+                <section className="rounded-2xl bg-white px-6 py-6 text-sm text-slate-600">
+                  {previewError || "Generando enlace y cargando la vista pública real del perfil..."}
+                </section>
+              )}
+            </div>
           </div>
 
-          {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
-          <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
-            <p className="font-semibold text-slate-900">Tu plan actual: {planCapabilities.label}</p>
-            <p className="mt-1">Enlace canonico publico: {link ? "listo para compartir" : "pendiente de generar"}</p>
-            <p className="mt-1">Compartir por link: sí</p>
-            <p>Compartir por QR: {planCapabilities.canShareByQr ? "sí" : "no"}</p>
-            <p>Descarga de CV verificado: {planCapabilities.canDownloadVerifiedCv ? "sí" : "no"}</p>
-          </div>
+          <aside className="space-y-4">
+            <div className="rounded-2xl bg-slate-50/80 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
+              <h3 className="text-lg font-semibold text-slate-900">Comparte tu perfil</h3>
+              <p className="mt-1 text-sm leading-6 text-slate-600">
+                El enlace público está listo y el QR aparece automáticamente si tu plan lo incluye.
+              </p>
+
+              <div className="mt-4 rounded-xl bg-white px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Enlace público</div>
+                <p className="mt-2 break-all text-sm text-slate-700">{link || "https://app.verijob.es/p/[token]"}</p>
+                <p className="mt-1 text-xs text-slate-500">Caduca en 7 días</p>
+              </div>
+
+              <div className="mt-4 rounded-xl bg-white px-4 py-4">
+                <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">QR del perfil</div>
+                <p className="mt-1 text-xs text-slate-600">
+                  {planCapabilities.canShareByQr ? "Escanea para validar este perfil." : "Tu plan actual no incluye QR compartible."}
+                </p>
+                <div className="mt-3 flex min-h-[300px] items-center justify-center rounded-lg border border-slate-200 bg-slate-50 p-3">
+                  {qrSvgUrl && planCapabilities.canShareByQr ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={qrSvgUrl} alt="QR de perfil público" className="h-auto w-full max-w-[220px] object-contain" />
+                  ) : (
+                    <span className="text-center text-xs text-slate-500">
+                      {planCapabilities.canShareByQr
+                        ? "Genera el enlace para ver el QR."
+                        : "Mejora a Pro para compartir tu perfil también por QR."}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-2">
+                {planCapabilities.canShareByQr ? (
+                  <button
+                    type="button"
+                    onClick={downloadQr}
+                    disabled={!qrSvgUrl}
+                    className="inline-flex w-full justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Descargar QR
+                  </button>
+                ) : (
+                  <Link
+                    href="/candidate/subscription"
+                    className="inline-flex w-full justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+                  >
+                    Mejorar a Pro
+                  </Link>
+                )}
+                <button
+                  type="button"
+                  onClick={generateOrRefreshLink}
+                  disabled={loadingLink}
+                  className="inline-flex w-full justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
+                >
+                  {loadingLink ? "Regenerando…" : "Regenerar enlace"}
+                </button>
+              </div>
+
+              {error ? <p className="mt-4 text-sm text-red-600">{error}</p> : null}
+            </div>
+
+            <div className="rounded-2xl bg-white px-5 py-5 text-xs text-slate-600">
+              <p className="font-semibold text-slate-900">Tu plan actual: {planCapabilities.label}</p>
+              <p className="mt-2">Enlace público: {link ? "listo para compartir" : "pendiente de generar"}</p>
+              <p className="mt-1">Compartir por link: sí</p>
+              <p className="mt-1">Compartir por QR: {planCapabilities.canShareByQr ? "sí" : "no"}</p>
+              <p className="mt-1">Descarga de CV verificado: {planCapabilities.canDownloadVerifiedCv ? "sí" : "no"}</p>
+            </div>
           </aside>
         </div>
       </section>

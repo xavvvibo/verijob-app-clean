@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import CandidatePageHero from "../_components/CandidatePageHero";
 
 type EducationItem = {
   title: string;
@@ -118,21 +119,24 @@ export default function CandidateEducationPage() {
   }
 
   return (
-    <div className="space-y-4">
-      <header className="rounded-2xl border border-gray-200 bg-white p-5">
-        <h1 className="text-2xl font-semibold text-gray-900">Educación</h1>
-        <p className="mt-2 text-sm text-gray-600">
-          Gestiona tu formación desde esta sección sin salir de la página.
-        </p>
-      </header>
+    <div className="mx-auto max-w-6xl space-y-14 px-6 py-10">
+      <CandidatePageHero
+        eyebrow="Educación"
+        title="Tu formación en una vista clara"
+        description="Reúne tu formación en un solo lugar y deja lista la parte académica del perfil sin convertirla en ruido visual."
+        badges={["Formación visible", "Edición rápida", "Lectura limpia"]}
+      />
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-5">
+      <section className="space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-base font-semibold text-gray-900">Registros académicos</h2>
+          <div>
+            <h2 className="text-lg font-semibold text-slate-950">Registros académicos</h2>
+            <p className="mt-1 text-sm text-slate-500">Mantén una lista breve, ordenada y fácil de revisar.</p>
+          </div>
           <button
             type="button"
             onClick={add}
-            className="inline-flex rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+            className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
           >
             Añadir estudios
           </button>
@@ -144,23 +148,23 @@ export default function CandidateEducationPage() {
           <p className="mt-4 text-sm text-gray-600">Todavía no has añadido formación académica.</p>
         ) : null}
 
-        <div className="mt-4 space-y-3">
+        <div className="space-y-5 border-t border-slate-100 pt-4">
           {items.map((item, idx) => (
-            <article key={idx} className="rounded-xl border border-gray-200 p-4">
+            <article key={idx} className="border-b border-slate-100 pb-5 last:border-b-0 last:pb-0">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-gray-900">
+                  <div className="text-base font-semibold text-slate-950">
                     {item.title || item.institution ? `${item.title || "Estudio"}${item.institution ? ` — ${item.institution}` : ""}` : "Nuevo estudio"}
                   </div>
-                  <div className="mt-1 text-xs text-gray-600">
+                  <div className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
                     {[item.start_date || "Inicio pendiente", item.in_progress ? "En curso" : item.end_date || "Fin pendiente"].join(" · ")}
                   </div>
-                  {item.description ? <div className="mt-2 line-clamp-2 text-xs text-gray-500">{item.description}</div> : null}
+                  {item.description ? <div className="mt-2 line-clamp-2 text-sm text-slate-500">{item.description}</div> : null}
                 </div>
                 <button
                   type="button"
                   onClick={() => setExpandedIndex((prev) => (prev === idx ? null : idx))}
-                  className="inline-flex rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50"
+                  className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
                 >
                   {expandedIndex === idx ? "Ocultar" : "Editar"}
                 </button>
@@ -168,7 +172,7 @@ export default function CandidateEducationPage() {
 
               {expandedIndex === idx ? (
                 <>
-                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  <div className="mt-5 grid gap-4 md:grid-cols-2">
                     <Field label="Centro / institución" value={item.institution} onChange={(v) => update(idx, { institution: v })} />
                     <Field label="Título / estudio" value={item.title} onChange={(v) => update(idx, { title: v })} />
                     <Field label="Fecha inicio" value={item.start_date} onChange={(v) => update(idx, { start_date: v })} placeholder="YYYY-MM" />
@@ -189,21 +193,21 @@ export default function CandidateEducationPage() {
                     </label>
                   </div>
 
-                  <label className="mt-3 block">
-                    <div className="text-sm font-semibold text-gray-900">Descripción breve</div>
+                  <label className="mt-4 block">
+                    <div className="text-sm font-semibold text-slate-900">Descripción breve</div>
                     <textarea
                       value={item.description}
                       onChange={(e) => update(idx, { description: e.target.value })}
                       rows={3}
-                      className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"
+                      className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900"
                     />
                   </label>
 
-                  <div className="mt-3 flex justify-end">
+                  <div className="mt-4 flex justify-end">
                     <button
                       type="button"
                       onClick={() => remove(idx)}
-                      className="inline-flex rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                      className="inline-flex rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50"
                     >
                       Eliminar
                     </button>
@@ -214,16 +218,16 @@ export default function CandidateEducationPage() {
           ))}
         </div>
 
-        <div className="mt-4 flex items-center gap-3">
+        <div className="flex items-center gap-3 border-t border-slate-100 pt-2">
           <button
             type="button"
             onClick={save}
             disabled={saving}
-            className="inline-flex rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+            className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
           >
             {saving ? "Guardando…" : "Guardar cambios"}
           </button>
-          {message ? <p className="text-sm text-gray-600">{message}</p> : null}
+          {message ? <p className="text-sm text-slate-600">{message}</p> : null}
         </div>
       </section>
     </div>
@@ -245,13 +249,13 @@ function Field({
 }) {
   return (
     <label className="block">
-      <div className="text-sm font-semibold text-gray-900">{label}</div>
+      <div className="text-sm font-semibold text-slate-900">{label}</div>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
-        className="mt-2 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 disabled:bg-gray-50"
+        className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 disabled:bg-slate-50"
       />
     </label>
   );

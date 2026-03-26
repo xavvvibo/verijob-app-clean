@@ -6,6 +6,7 @@ import { readCandidateSkills } from "@/lib/candidate/profile-visibility";
 import { getTrustBreakdownDisplayEntries, normalizeTrustBreakdown } from "@/lib/trust/trust-model";
 import CandidateProfileIdentityClient from "./CandidateProfileIdentityClient";
 import CandidateProfileSkillsClient from "./CandidateProfileSkillsClient";
+import CandidatePageHero from "../_components/CandidatePageHero";
 
 export const dynamic = "force-dynamic";
 
@@ -119,57 +120,36 @@ export default async function CandidateProfilePage() {
   });
 
   return (
-    <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold">Perfil</h1>
-        <p className="text-sm text-slate-600">Gestiona tus datos personales y de cuenta.</p>
-      </div>
+    <div className="mx-auto max-w-6xl space-y-14 px-6 py-10">
+      <CandidatePageHero
+        eyebrow="Perfil candidato"
+        title="Tu identidad profesional"
+        description="Gestiona tus datos personales, revisa la confianza actual del perfil y deja preparada la información que verán las empresas."
+        ctaLabel={nextActionLabel}
+        ctaHref={nextActionHref}
+        badges={[
+          `${verifiedCount} ${verifiedCount === 1 ? "experiencia verificada" : "experiencias verificadas"}`,
+          `${inProcessCount} ${inProcessCount === 1 ? "verificación en proceso" : "verificaciones en proceso"}`,
+          `${evidenceCount} ${evidenceCount === 1 ? "documento subido" : "documentos subidos"}`,
+          profileReady ? "Perfil completado" : "Perfil por completar",
+        ]}
+      />
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Confianza del perfil</p>
-            <h2 className="mt-2 text-2xl font-semibold text-slate-900">{trustTitle} · {trustScore}</h2>
-            <p className="mt-2 max-w-2xl text-sm text-slate-600">{trustSummary}</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
-                {verifiedCount} {verifiedCount === 1 ? "experiencia verificada" : "experiencias verificadas"}
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
-                {inProcessCount} {inProcessCount === 1 ? "verificación en proceso" : "verificaciones en proceso"}
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
-                {evidenceCount} {evidenceCount === 1 ? "documento subido" : "documentos subidos"}
-              </span>
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-medium text-slate-700">
-                {profileReady ? "Perfil completado" : "Perfil por completar"}
-              </span>
-            </div>
-            <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-              {trustEntries.map((entry) => (
-                <div key={entry.key} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                  <div className="text-xs text-slate-500">{entry.label}</div>
-                  <div className="mt-1 text-sm font-semibold text-slate-900">{entry.value}%</div>
-                </div>
-              ))}
-            </div>
-            {trustBreakdown.meta.model ? (
-              <p className="mt-3 text-xs text-slate-500">
-                Modelo activo: {trustBreakdown.meta.model}{trustBreakdown.meta.updated_at ? ` · actualizado ${formatMonthYear(trustBreakdown.meta.updated_at)}` : ""}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-sm font-semibold text-slate-900">Siguiente mejor acción</p>
-            <p className="mt-2 text-sm text-slate-600">Haz crecer la credibilidad del perfil con una acción clara y útil.</p>
-            <div className="mt-4">
-              <Link href={nextActionHref} className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">
-                {nextActionLabel}
-              </Link>
-            </div>
-          </div>
+      <section className="space-y-5">
+        <div className="rounded-2xl bg-slate-50/70 p-5">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Confianza del perfil</p>
+          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{trustTitle} · {trustScore}</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{trustSummary}</p>
         </div>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          {trustEntries.map((entry) => (
+            <div key={entry.key} className="rounded-xl border border-slate-200/80 bg-white/75 px-3 py-2">
+              <div className="text-xs text-slate-500">{entry.label}</div>
+              <div className="mt-1 text-sm font-semibold text-slate-900">{entry.value}%</div>
+            </div>
+          ))}
+        </div>
+        {trustBreakdown.meta.updated_at ? <p className="text-xs text-slate-500">Actualizado {formatMonthYear(trustBreakdown.meta.updated_at)}</p> : null}
       </section>
 
       {(importSummary.importedFromCompanyCv || importSummary.updatesCount > 0) ? (
@@ -190,7 +170,7 @@ export default async function CandidateProfilePage() {
       ) : null}
 
       {experienceTimeline.length > 0 ? (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        <section className="space-y-5">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Confianza por experiencia</h2>
@@ -203,14 +183,14 @@ export default async function CandidateProfilePage() {
             </Link>
           </div>
 
-          <div className="mt-4 space-y-3">
+          <div className="space-y-5 border-t border-slate-100 pt-4">
             {experienceTimeline.map((item) => (
-              <article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <article key={item.id} className="border-b border-slate-100 pb-5 last:border-b-0 last:pb-0">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-900">{item.role_title || "Experiencia profesional"}</h3>
+                    <h3 className="text-base font-semibold text-slate-950">{item.role_title || "Experiencia profesional"}</h3>
                     <p className="mt-1 text-sm text-slate-600">{item.company_name || "Empresa no definida"}</p>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
                       {formatPeriod(item.start_date, item.end_date)}
                     </p>
                   </div>
@@ -227,7 +207,7 @@ export default async function CandidateProfilePage() {
                   </div>
                 </div>
 
-                <p className="mt-3 text-sm text-slate-700">{item.explanation}</p>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">{item.explanation}</p>
 
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   {item.next_action_label && item.next_action_href ? (

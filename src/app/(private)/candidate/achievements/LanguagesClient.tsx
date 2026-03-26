@@ -199,13 +199,13 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
   }
 
   return (
-    <div className="space-y-4">
-      <section className="rounded-2xl border border-slate-200 bg-white p-5">
+    <div className="space-y-8">
+      <section className="space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-2xl font-semibold text-slate-900">Idiomas</h2>
+            <h2 className="text-2xl font-semibold text-slate-950">Idiomas</h2>
             <p className="mt-1 text-sm text-slate-600">
-              Lista compacta para revisar idioma, nivel, certificado y estado.
+              Señales lingüísticas claras, sin ruido visual y con una lectura rápida para empresas.
             </p>
           </div>
 
@@ -215,14 +215,14 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
               setAdding((prev) => !prev);
               setMessage(null);
             }}
-            className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+            className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
           >
             {adding ? "Cerrar" : "Añadir idioma"}
           </button>
         </div>
 
         {adding ? (
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div className="rounded-2xl bg-slate-50 px-5 py-5">
             <div className="grid gap-3 md:grid-cols-[1.2fr_140px_1.4fr_auto]">
               <label className="block">
                 <div className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Idioma</div>
@@ -265,7 +265,7 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
                   type="button"
                   onClick={() => void addLanguage()}
                   disabled={saving}
-                  className="inline-flex h-[42px] items-center justify-center rounded-xl bg-blue-700 px-4 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+                  className="inline-flex h-[42px] items-center justify-center rounded-xl bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
                 >
                   {saving ? "Guardando…" : "Guardar"}
                 </button>
@@ -284,12 +284,12 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
         ) : null}
 
         {message ? (
-          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             {message}
           </div>
         ) : null}
 
-        <div className="mt-5 overflow-hidden rounded-2xl border border-slate-200">
+        <div className="border-t border-slate-100 pt-2">
           <div className="hidden grid-cols-[1.2fr_140px_1.5fr_220px_140px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 lg:grid">
             <div>Idioma</div>
             <div>Nivel</div>
@@ -303,14 +303,14 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
               Aún no has añadido idiomas.
             </div>
           ) : (
-            <div className="divide-y divide-slate-200">
+            <div className="divide-y divide-slate-100">
               {items.map((item) => {
                 const title = resolveTitle(item);
                 const status = resolveStatus(item);
                 const isEditing = editingId === item.id;
 
                 return (
-                  <div key={item.id} className="px-4 py-4">
+                  <div key={item.id} className="px-1 py-5 transition-colors duration-150 hover:bg-slate-50/50 lg:px-4">
                     {isEditing ? (
                       <div className="grid gap-3 lg:grid-cols-[1.2fr_140px_1.5fr_220px_140px] lg:items-center">
                         <input
@@ -358,7 +358,7 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
                             type="button"
                             onClick={() => void saveEdit(item.id)}
                             disabled={saving}
-                            className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+                          className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black disabled:opacity-60"
                           >
                             Guardar
                           </button>

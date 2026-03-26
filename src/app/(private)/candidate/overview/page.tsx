@@ -454,16 +454,16 @@ function AvatarView({
 function TrustRing({ score, stateTitle }: { score: number; stateTitle: string }) {
   const safeScore = clamp(score);
   const progressStyle = {
-    background: `conic-gradient(rgb(15 23 42) ${safeScore * 3.6}deg, rgb(191 219 254) 0deg)`,
+    background: `conic-gradient(rgb(15 23 42) ${safeScore * 3.6}deg, rgb(219 234 254) 0deg)`,
   };
   return (
     <div
-      className="relative flex h-44 w-44 scale-[1.08] items-center justify-center rounded-full p-[9px] shadow-[0_0_34px_rgba(99,102,241,0.14)] transition-transform duration-300 motion-safe:animate-[fade-in_350ms_ease-out] motion-safe:[animation-fill-mode:both]"
+      className="relative flex h-48 w-48 scale-[1.08] items-center justify-center rounded-full p-[10px] shadow-[0_0_40px_rgba(99,102,241,0.18),0_0_80px_rgba(99,102,241,0.08)] transition-transform duration-300 motion-safe:animate-[fade-in_350ms_ease-out] motion-safe:[animation-fill-mode:both]"
       style={progressStyle}
     >
       <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white text-center shadow-inner">
-        <span className="text-[2.95rem] font-semibold tabular-nums text-slate-900">{safeScore}</span>
-        <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Trust score</span>
+        <span className="text-[3rem] font-semibold tabular-nums text-slate-950">{safeScore}</span>
+        <span className="mt-1 text-[11px] font-semibold tracking-[0.01em] text-slate-700">Tu nivel de confianza</span>
         <span className="mt-2 max-w-[88px] text-[11px] font-medium leading-4 text-slate-600">{stateTitle}</span>
       </div>
     </div>
@@ -541,22 +541,22 @@ function ExperienceSummaryCard({ item }: { item: any }) {
         : "bg-slate-300";
 
   return (
-    <article className="border-b border-slate-100 pb-5 pt-5 transition-colors duration-150 hover:bg-slate-50/50 last:border-b-0">
+    <article className="border-b border-slate-100 pb-7 pt-7 transition-colors duration-150 hover:bg-slate-50/50 last:border-b-0">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
           <div className="flex items-start gap-3">
             <span className={`mt-2 h-2.5 w-2.5 shrink-0 rounded-full ${statusDot}`} />
             <div className="min-w-0">
-              <h3 className="text-[1.05rem] font-semibold text-slate-900">{item.role_title || "Experiencia profesional"}</h3>
-              <p className="mt-1 text-sm text-slate-500/90">{item.company_name || "Empresa no definida"}</p>
+              <h3 className="text-[15px] font-semibold text-slate-950">{item.role_title || "Experiencia profesional"}</h3>
+              <p className="mt-1 text-sm text-slate-500">{item.company_name || "Empresa no definida"}</p>
+              <p className="mt-2 text-xs uppercase tracking-[0.18em] text-slate-400">
+                {formatTimelineDate(item.start_date) || "Inicio no definido"} · {item.end_date ? formatTimelineDate(item.end_date) : "Actualidad"}
+              </p>
             </div>
           </div>
-          <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.14em] text-slate-400">
-            {formatTimelineDate(item.start_date) || "Inicio no definido"} · {item.end_date ? formatTimelineDate(item.end_date) : "Actualidad"}
-          </p>
         </div>
 
-        <div className="flex flex-wrap gap-2 lg:justify-end">
+        <div className="flex flex-wrap gap-2 lg:max-w-[320px] lg:justify-end">
           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${item.status_tone}`}>{item.status_label}</span>
           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${impact.tone}`}>{impact.label}</span>
           {item.support_label ? (
@@ -568,7 +568,7 @@ function ExperienceSummaryCard({ item }: { item: any }) {
       </div>
 
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-slate-600">{resolveExperienceValueCopy(item)}</p>
+        <p className="max-w-2xl truncate text-sm text-slate-500">{resolveExperienceValueCopy(item)}</p>
         <Link href={cta.href} className="inline-flex rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50">
           {cta.label}
         </Link>
@@ -913,7 +913,7 @@ export default function CandidateOverview() {
   );
 
   return (
-    <div className="mx-auto max-w-6xl space-y-18 bg-white px-6 py-10">
+    <div className="mx-auto max-w-6xl space-y-20 bg-white px-6 py-10">
       {importedFromCompanyCv ? (
         <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
           <p className="text-sm font-semibold text-amber-900">Perfil pre-rellenado desde un CV subido por empresa</p>
@@ -947,13 +947,14 @@ export default function CandidateOverview() {
         </section>
       ) : null}
 
-      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-100 via-blue-50/60 to-indigo-50/45 px-8 py-9 sm:px-8 sm:py-11 xl:px-9 xl:py-12">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(99,102,241,0.12),transparent_60%)]" />
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-100 via-indigo-100/70 to-blue-100/60 px-8 py-[4.5rem] sm:px-8 sm:py-[5rem] xl:px-9 xl:py-[5.25rem]">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_30%,rgba(99,102,241,0.18),transparent_60%)]" />
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_20%,rgba(14,165,233,0.08),transparent_60%)]" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/0 via-white/10 to-white/20" />
         <div className="pointer-events-none absolute -left-16 top-0 h-40 w-40 rounded-full bg-blue-100/40 blur-3xl" />
         <div className="pointer-events-none absolute -right-20 bottom-0 h-52 w-52 rounded-full bg-slate-200/50 blur-3xl" />
 
-        <div className="relative grid items-center gap-12 xl:grid-cols-[1fr_320px]">
+        <div className="relative grid items-center gap-14 xl:grid-cols-[1fr_320px]">
           <div className="min-w-0">
             <div className="flex items-start gap-5">
               <AvatarView
@@ -963,10 +964,10 @@ export default function CandidateOverview() {
               />
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Estado actual del perfil</p>
-                <h1 className="mt-3 whitespace-normal break-words text-3xl font-semibold leading-tight tracking-tight text-slate-900 sm:text-[3.25rem]">
+                <h1 className="mt-3 whitespace-normal break-words text-3xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-[3.25rem]">
                   {profile?.full_name || "Tu resumen profesional"}
                 </h1>
-                <p className="mt-3 text-base text-slate-700">{profile?.title || "Profesional verificable en Verijob"}</p>
+                <p className="mt-4 text-base text-slate-700">{profile?.title || "Profesional verificable en Verijob"}</p>
                 <p className="mt-1 text-sm text-slate-500">{profile?.location || "Ubicación no definida"}</p>
 
                 <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -977,11 +978,11 @@ export default function CandidateOverview() {
                     {profileStage}
                   </VerificationBadge>
                 </div>
-                <p className="mt-7 text-sm font-medium text-slate-700">
+                <p className="mt-8 text-sm font-medium text-slate-700">
                   {overviewStatus} · {availabilityText}
                 </p>
 
-                <div className="mt-7 flex items-center gap-7">
+                <div className="mt-9 flex items-center gap-8">
                   <TrustRing score={metrics.score} stateTitle={trustState.title} />
                   <div className="min-w-0">
                     <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${trustState.tone}`}>
@@ -1008,13 +1009,13 @@ export default function CandidateOverview() {
             {loading ? <p className="mt-4 text-sm text-slate-500">Cargando tu panel…</p> : null}
           </div>
 
-          <div className="rounded-2xl bg-slate-900 p-6 text-white">
+          <div className="rounded-2xl bg-black p-7 text-white">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Tu siguiente mejor paso</p>
-            <h2 className="mt-3 text-2xl font-semibold leading-tight">Haz tu perfil destacar en minutos</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-300">Una prueba real puede marcar la diferencia cuando una empresa te evalúe.</p>
+            <h2 className="mt-3 text-2xl font-semibold leading-tight">Haz que las empresas confíen en ti desde hoy</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-300">Una prueba real puede marcar la diferencia.</p>
             <Link
               href={primaryAction.href}
-              className="mt-7 inline-flex w-full items-center justify-center rounded-lg bg-white px-4 py-4 text-base font-semibold text-slate-950 transition hover:bg-slate-100"
+              className="mt-7 inline-flex w-full items-center justify-center rounded-lg bg-white px-5 py-[1.35rem] text-base font-semibold text-slate-950 transition hover:scale-[1.02] hover:bg-slate-100 active:scale-[0.98]"
             >
               {primaryAction.label}
             </Link>
@@ -1041,7 +1042,7 @@ export default function CandidateOverview() {
         </div>
       </section>
 
-      <section className="space-y-4">
+      <section className="space-y-5">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Qué te falta para destacar</p>
           <h2 className="mt-2 text-2xl font-semibold text-slate-900">Qué hacer ahora</h2>
@@ -1069,7 +1070,7 @@ export default function CandidateOverview() {
         </div>
       </section>
 
-      <section className="space-y-8">
+      <section className="space-y-10">
         <section className="space-y-7">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>

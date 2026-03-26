@@ -1,7 +1,5 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import DashboardShell from  "@/app/_components/DashboardShell";
-import { Card, CardTitle } from  "@/app/_components/ui";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import CvUploadAndParse from "@/components/candidate/profile/CvUploadAndParse";
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
@@ -14,6 +12,7 @@ import {
 } from "@/lib/candidate/profile-visibility";
 import ExperienceQuickAddClient from "./ExperienceQuickAddClient";
 import ExperienceListClient from "./ExperienceListClient";
+import CandidatePageHero from "../_components/CandidatePageHero";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -239,68 +238,71 @@ export default async function CandidateExperiencePage({
   const importSummary = summarizeCompanyCvImportUpdates((candidateProfile as any)?.raw_cv_json);
 
   return (
-    <DashboardShell title="Experiencia">
-      <div className="space-y-4">
-        <Card>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle>Mis experiencias</CardTitle>
-              <div className="mt-2 text-sm text-gray-600">
-                Revisa tu historial profesional una por una. Puedes editar, eliminar, solicitar verificación o vincular documentación desde cada experiencia.
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                href="#cv-upload"
-                className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
-              >
-                Extraer perfil desde CV
-              </Link>
-              <Link
-                href="/candidate/experience?new=1#manual-experience"
-                className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
-              >
-                Añadir experiencia manual
-              </Link>
-            </div>
-          </div>
+    <div className="mx-auto max-w-6xl space-y-14 px-6 py-10">
+      <CandidatePageHero
+        eyebrow="Experiencia profesional"
+        title="Tus experiencias"
+        description="Mantén tu trayectoria limpia, solicita verificaciones cuando toque y decide qué parte de tu historial quieres enseñar fuera de VERIJOB."
+        ctaLabel="Añadir experiencia manual"
+        ctaHref="/candidate/experience?new=1#manual-experience"
+        badges={["Historial revisable", "Verificaciones por experiencia", "Visibilidad pública controlada"]}
+        aside={
+          <Link
+            href="#cv-upload"
+            className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition duration-150 hover:bg-slate-50"
+          >
+            Extraer perfil desde CV
+          </Link>
+        }
+      />
 
-          <div id="cv-upload" className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
-            <div className="text-sm font-semibold text-gray-900">Importa tu experiencia desde tu CV</div>
-            <div className="mt-1 text-xs text-gray-600">
-              Sube tu CV y revisa después cada experiencia detectada. También importaremos la formación, los idiomas y los logros que se reconozcan correctamente.
-            </div>
-            <div className="mt-3">
-              <CvUploadAndParse />
-            </div>
+      <section className="space-y-8">
+        <div id="cv-upload" className="rounded-2xl bg-slate-50 px-6 py-6">
+          <div className="max-w-3xl space-y-2">
+            <h2 className="text-lg font-semibold text-slate-950">Importa tu experiencia desde tu CV</h2>
+            <p className="text-sm leading-6 text-slate-600">
+              Sube tu CV, revisa lo detectado y corrige lo necesario antes de solicitar verificaciones o vincular documentación.
+            </p>
           </div>
-
-          <div id="manual-experience">
-            <ExperienceQuickAddClient />
+          <div className="mt-4">
+            <CvUploadAndParse />
           </div>
+        </div>
 
+        <div id="manual-experience">
+          <ExperienceQuickAddClient />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
           {String(onboardingFlag || "") === "1" ? (
-            <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-              <p className="font-semibold">Paso 2 de 4 · Revisa tus experiencias antes de verificarlas.</p>
-              <p className="mt-1">
-                Edita o elimina cualquier experiencia antes de continuar. Si una experiencia está duplicada o es incorrecta, puedes borrarla sin fricción.
+            <div className="rounded-2xl bg-blue-50/80 px-5 py-5 text-sm text-blue-900">
+              <p className="font-semibold">Paso 2 de 4 · Revisa tus experiencias.</p>
+              <p className="mt-1 leading-6 text-blue-800">
+                Edita o elimina cualquier experiencia antes de avanzar. Si algo no encaja, puedes corregirlo sin afectar al resto.
               </p>
             </div>
           ) : null}
 
           {String(companyCvImportFlag || "") === "1" ? (
-            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-              Hemos cargado la información detectada en tu CV importado por empresa. Revisa ahora cada experiencia, corrige lo que haga falta y luego solicita verificación o vincula evidencia documental.
+            <div className="rounded-2xl bg-emerald-50/80 px-5 py-5 text-sm text-emerald-900">
+              <p className="font-semibold">CV importado desde empresa</p>
+              <p className="mt-1 leading-6 text-emerald-800">
+                Ya hemos precargado tu historial. Revísalo ahora y decide qué experiencias conviene validar o reforzar.
+              </p>
             </div>
           ) : null}
+        </div>
 
-          {(importSummary.importedFromCompanyCv || importSummary.updatesCount > 0) ? (
-            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-              <p className="font-semibold">Tienes una importación o actualización pendiente procedente de empresa.</p>
-              <p className="mt-1">
-                No se ha aplicado automáticamente. Revisa la propuesta antes de validar experiencias o pedir verificaciones nuevas.
-              </p>
-              <div className="mt-3 flex flex-wrap items-center gap-3">
+        {(importSummary.importedFromCompanyCv || importSummary.updatesCount > 0) ? (
+          <div className="rounded-2xl bg-amber-50/90 px-5 py-5 text-sm text-amber-900">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="max-w-2xl">
+                <p className="font-semibold">Tienes una actualización pendiente procedente de empresa.</p>
+                <p className="mt-1 leading-6 text-amber-800">
+                  No se ha aplicado automáticamente. Revísala antes de validar experiencias o solicitar nuevas verificaciones.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
                 <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-900">
                   Pendientes: {importSummary.totalPendingItems || importSummary.updatesCount}
                 </span>
@@ -309,37 +311,31 @@ export default async function CandidateExperiencePage({
                 </Link>
               </div>
             </div>
-          ) : null}
-
-          <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-            Estados visibles por experiencia: <span className="font-semibold">Sin verificar</span>, <span className="font-semibold">Verificación solicitada</span>, <span className="font-semibold">En revisión</span>, <span className="font-semibold">Verificada</span> o <span className="font-semibold">Revocada</span>.
-            La fe de vida laboral se gestiona como evidencia global y puede reforzar varias experiencias.
           </div>
+        ) : null}
 
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-            <p className="font-semibold text-slate-900">Visibilidad pública según tu plan</p>
-            <p className="mt-1">
-              Plan actual: <span className="font-semibold">{candidateCapabilities.label}</span>. Puedes mostrar{" "}
-              <span className="font-semibold">{publicLimits.label}</span> y destacar{" "}
-              <span className="font-semibold">
-                {publicLimits.featured == null ? "experiencias ilimitadas" : `${publicLimits.featured} experiencia${publicLimits.featured === 1 ? "" : "s"}`}
-              </span>.
-            </p>
-          </div>
+        <div className="flex flex-wrap items-center justify-between gap-4 border-y border-slate-100 py-4 text-sm text-slate-600">
+          <p>
+            Estados visibles por experiencia: <span className="font-semibold text-slate-900">Sin verificar</span>, <span className="font-semibold text-slate-900">Verificación solicitada</span>, <span className="font-semibold text-slate-900">En revisión</span>, <span className="font-semibold text-slate-900">Verificada</span> o <span className="font-semibold text-slate-900">Revocada</span>.
+          </p>
+          <p>
+            Plan actual: <span className="font-semibold text-slate-900">{candidateCapabilities.label}</span>. Puedes mostrar <span className="font-semibold text-slate-900">{publicLimits.label}</span> y destacar{" "}
+            <span className="font-semibold text-slate-900">
+              {publicLimits.featured == null ? "experiencias ilimitadas" : `${publicLimits.featured} experiencia${publicLimits.featured === 1 ? "" : "s"}`}
+            </span>.
+          </p>
+        </div>
 
-          <div className="mt-4">
-            <ExperienceListClient
-              initialRows={normalizedRows as any}
-              publicPlan={{
-                work: publicLimits.work,
-                featured: publicLimits.featured,
-                label: candidateCapabilities.label,
-                visibilityLabel: publicLimits.label,
-              }}
-            />
-          </div>
-        </Card>
-      </div>
-    </DashboardShell>
+        <ExperienceListClient
+          initialRows={normalizedRows as any}
+          publicPlan={{
+            work: publicLimits.work,
+            featured: publicLimits.featured,
+            label: candidateCapabilities.label,
+            visibilityLabel: publicLimits.label,
+          }}
+        />
+      </section>
+    </div>
   );
 }

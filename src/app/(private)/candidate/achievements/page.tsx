@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
-import DashboardShell from "@/app/_components/DashboardShell";
 import LanguagesClient from "./LanguagesClient";
+import CandidatePageHero from "../_components/CandidatePageHero";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -18,8 +18,15 @@ export default async function Page() {
     .order("created_at", { ascending: false });
 
   return (
-    <DashboardShell title="Idiomas y logros">
+    <div className="mx-auto max-w-6xl space-y-14 px-6 py-10">
+      <CandidatePageHero
+        eyebrow="Idiomas y logros"
+        title="Refuerza tu perfil global"
+        description="Añade idiomas y certificaciones para que las empresas entiendan mejor tu nivel y el tipo de señales que ya aportas."
+        badges={["Idiomas visibles", "Certificados", "Señales complementarias"]}
+      />
+
       <LanguagesClient initialItems={items || []} />
-    </DashboardShell>
+    </div>
   );
 }

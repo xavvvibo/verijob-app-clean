@@ -1,8 +1,8 @@
 import { redirect } from "next/navigation";
-import DashboardShell from "@/app/_components/DashboardShell";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import EvidenceListClient from "./EvidenceListClient";
 import { buildEvidenceUiItem } from "@/lib/candidate/evidence-ui";
+import CandidatePageHero from "../_components/CandidatePageHero";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -155,12 +155,18 @@ export default async function CandidateEvidencePage(props: any) {
   const items = (evidences || []).map((r: any) => buildEvidenceUiItem(r));
 
   return (
-    <DashboardShell title="Evidencias">
+    <div className="mx-auto max-w-6xl space-y-14 px-6 py-10">
+      <CandidatePageHero
+        eyebrow="Evidencias"
+        title="Documentos que refuerzan tu perfil"
+        description="Sube documentación clara, relaciónala con la experiencia correcta y sigue su estado sin ruido técnico."
+        badges={["Documentos vinculados", "Estado documental", "Refuerzo de confianza"]}
+      />
       <EvidenceListClient
         initialItems={items}
         experienceOptions={experienceOptions}
         preselectedExperienceId={preselectedExperienceId}
       />
-    </DashboardShell>
+    </div>
   );
 }

@@ -392,7 +392,7 @@ export default function ExperienceListClient({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-5">
       {message ? (
         <div
           className={`rounded-lg border p-3 text-sm ${
@@ -407,6 +407,7 @@ export default function ExperienceListClient({
         </div>
       ) : null}
 
+      <div className="space-y-5 border-t border-slate-100 pt-2">
       {rows.map((row) => {
         const isExpanded = expandedId === row.id;
         const isEditing = editingId === row.id;
@@ -423,7 +424,7 @@ export default function ExperienceListClient({
         const secondaryVerificationBadges = verificationBadges.slice(1, 3);
 
         return (
-          <article key={row.id} id={`exp-${row.id}`} className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <article key={row.id} id={`exp-${row.id}`} className="border-b border-slate-100 pb-5 last:border-b-0 last:pb-0">
             <button
               type="button"
               onClick={() => {
@@ -432,11 +433,11 @@ export default function ExperienceListClient({
                   setEditingCurrentById((prev) => ({ ...prev, [row.id]: !row.end_date }));
                 }
               }}
-              className="flex w-full flex-wrap items-start justify-between gap-3 px-4 py-4 text-left hover:bg-slate-50"
+              className="flex w-full flex-wrap items-start justify-between gap-3 py-4 text-left transition-colors duration-150 hover:bg-slate-50/50"
             >
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-sm font-semibold text-slate-900">{row.role_title || "Puesto no especificado"}</h3>
+                  <h3 className="text-base font-semibold text-slate-950">{row.role_title || "Puesto no especificado"}</h3>
                   {row.source_label ? (
                     <span className="inline-flex rounded-full border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-semibold text-violet-700">
                       {row.source_label}
@@ -461,8 +462,8 @@ export default function ExperienceListClient({
                     {row.status}
                   </span>
                 </div>
-                <p className="mt-1 text-sm text-slate-700">{row.company_name || "Empresa no especificada"}</p>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-sm text-slate-600">{row.company_name || "Empresa no especificada"}</p>
+                <p className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
                   {formatExperienceDate(row.start_date)} — {formatExperienceDate(row.end_date, { isEnd: true })}
                 </p>
               </div>
@@ -472,10 +473,10 @@ export default function ExperienceListClient({
             </button>
 
             {isExpanded ? (
-              <div className="border-t border-slate-200 bg-slate-50 px-4 py-4">
+              <div className="border-t border-slate-100 pt-5">
                 <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
                   <div className="space-y-3">
-                    <div className="rounded-xl border border-slate-200 bg-white p-4">
+                    <div className="rounded-2xl bg-slate-50/80 p-4">
                       {primaryVerificationBadge ? (
                         <div className="mb-3 flex flex-wrap gap-2">
                           <span
@@ -510,20 +511,20 @@ export default function ExperienceListClient({
                     </div>
 
                     {isEditing ? (
-                      <div className="rounded-xl border border-slate-200 bg-white p-4">
+                      <div className="rounded-2xl bg-slate-50/80 p-4">
                         <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Editar experiencia</div>
                         <div className="mt-3 grid gap-3 md:grid-cols-2">
                           <input
                             value={row.role_title || ""}
                             onChange={(e) => patchRow(row.id, { role_title: e.target.value })}
                             placeholder="Puesto"
-                            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
                           />
                           <input
                             value={row.company_name || ""}
                             onChange={(e) => patchRow(row.id, { company_name: e.target.value })}
                             placeholder="Empresa"
-                            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
                           />
                           <input
                             type="text"
@@ -531,7 +532,7 @@ export default function ExperienceListClient({
                             value={toExperienceInputValue(row.start_date || "")}
                             onChange={(e) => patchRow(row.id, { start_date: e.target.value })}
                             placeholder="AAAA-MM o MM/AAAA"
-                            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
                           />
                           <input
                             type="text"
@@ -540,10 +541,10 @@ export default function ExperienceListClient({
                             onChange={(e) => patchRow(row.id, { end_date: e.target.value })}
                             disabled={!!editingCurrentById[row.id]}
                             placeholder="AAAA-MM, MM/AAAA o Actualidad"
-                            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm disabled:bg-gray-100"
+                            className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm disabled:bg-slate-100"
                           />
                         </div>
-                        <label className="mt-3 flex items-center gap-2 text-xs font-medium text-gray-700">
+                        <label className="mt-3 flex items-center gap-2 text-xs font-medium text-slate-700">
                           <input
                             type="checkbox"
                             checked={!!editingCurrentById[row.id]}
@@ -560,21 +561,21 @@ export default function ExperienceListClient({
                           onChange={(e) => patchRow(row.id, { description: e.target.value })}
                           rows={4}
                           placeholder="Descripción"
-                          className="mt-3 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
+                          className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
                         />
                         <div className="mt-3 flex flex-wrap gap-2">
                           <button
                             type="button"
                             onClick={() => void saveRow(row.id)}
                             disabled={isSaving}
-                            className="inline-flex rounded-lg bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+                            className="inline-flex rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black disabled:opacity-60"
                           >
                             {isSaving ? "Guardando…" : "Guardar cambios"}
                           </button>
                           <button
                             type="button"
                             onClick={() => setEditingId(null)}
-                            className="inline-flex rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50"
+                            className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
                           >
                             Cerrar edición
                           </button>
@@ -585,8 +586,8 @@ export default function ExperienceListClient({
                   </div>
 
                   <div className="space-y-3">
-                    <div className="rounded-xl border border-slate-200 bg-white p-4">
-                      <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <div className="space-y-3 rounded-2xl bg-slate-50/80 p-4">
+                      <div className="rounded-xl bg-white p-3">
                         <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Perfil público</div>
                         <div className="mt-3 space-y-3">
                           <label className="flex items-start gap-3 text-sm text-slate-700">
@@ -653,14 +654,14 @@ export default function ExperienceListClient({
                           <button
                             type="button"
                             onClick={() => setEditingId((prev) => (prev === row.id ? null : row.id))}
-                            className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50"
+                            className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
                           >
                             {isEditing ? "Cerrar edición" : "Editar experiencia"}
                           </button>
                         ) : null}
                         <Link
                           href={`/candidate/evidence?experience_id=${encodeURIComponent(row.employment_record_id || `profile:${row.id}`)}&company=${encodeURIComponent(row.company_name || "")}&position=${encodeURIComponent(row.role_title || "")}`}
-                          className="inline-flex items-center justify-center rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-900 hover:bg-gray-50"
+                          className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
                         >
                           Vincular documentación
                         </Link>
@@ -668,7 +669,7 @@ export default function ExperienceListClient({
                           type="button"
                           onClick={() => void deleteRow(row)}
                           disabled={isDeleting}
-                          className="inline-flex items-center justify-center rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                          className="inline-flex items-center justify-center rounded-xl border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
                         >
                           {isDeleting ? "Eliminando…" : "Eliminar experiencia"}
                         </button>
@@ -679,7 +680,7 @@ export default function ExperienceListClient({
                     </div>
 
                     {!isVerified ? (
-                      <div className="rounded-xl border border-sky-200 bg-sky-50 p-4">
+                      <div className="rounded-2xl bg-sky-50/80 p-4">
                         <div className="text-sm font-semibold text-sky-900">Solicitar verificación</div>
                         <p className="mt-1 text-xs text-sky-800">
                           Indica el email de la empresa o de la persona que puede validar esta experiencia.
@@ -704,7 +705,7 @@ export default function ExperienceListClient({
                               }
                             }}
                             placeholder="rrhh@empresa.com"
-                            className="mt-1 w-full rounded-lg border border-sky-200 bg-white px-3 py-2 text-sm"
+                            className="mt-1 w-full rounded-xl border border-sky-200 bg-white px-3 py-2 text-sm"
                           />
                         </label>
                         <div className="mt-3 flex flex-wrap gap-2">
@@ -712,7 +713,7 @@ export default function ExperienceListClient({
                             type="button"
                             onClick={() => void requestVerification(row)}
                             disabled={verifyState === "loading"}
-                            className="inline-flex items-center justify-center rounded-lg bg-sky-700 px-3 py-2 text-xs font-semibold text-white hover:bg-sky-800 disabled:opacity-60"
+                            className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black disabled:opacity-60"
                           >
                             {verifyState === "loading" ? "Enviando…" : "Enviar solicitud"}
                           </button>
@@ -737,6 +738,7 @@ export default function ExperienceListClient({
           </article>
         );
       })}
+      </div>
     </div>
   );
 }

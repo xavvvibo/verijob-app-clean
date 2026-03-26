@@ -776,16 +776,14 @@ export default function EvidenceListClient({
           evidenceCardRefs.current[String(item.evidence_id || item.id || "")] = node
         }}
         style={{
-          marginBottom: 16,
-          border: "1px solid #e2e8f0",
-          borderRadius: 16,
-          padding: 16,
-          background: "#fff",
-          boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
+          marginBottom: 20,
+          padding: "0 0 20px",
+          borderBottom: "1px solid #e5e7eb",
+          background: "transparent",
         }}
       >
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-          <span style={{ fontWeight: 700, color: "#0f172a" }}>{item.document_name}</span>
+          <span style={{ fontWeight: 700, color: "#0f172a", fontSize: 15 }}>{item.document_name}</span>
           <span style={{ borderRadius: 999, background: "#e0f2fe", color: "#075985", padding: "4px 10px", fontSize: 12, fontWeight: 700 }}>
             {item.user_status_label || item.status}
           </span>
@@ -872,28 +870,26 @@ export default function EvidenceListClient({
   const visibleItems = selectedExperienceId ? focusedItems : items
 
   return (
-    <div style={{ padding: 20 }}>
+    <div style={{ display: "grid", gap: 32 }}>
       <div
         style={{
-          marginBottom: 18,
-          borderRadius: 16,
-          border: "1px solid #dbe4f0",
-          background: "linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%)",
-          padding: 16,
+          borderRadius: 28,
+          background: "linear-gradient(135deg, rgba(248,250,252,1) 0%, rgba(239,246,255,0.8) 55%, rgba(238,242,255,0.7) 100%)",
+          padding: 32,
         }}
       >
-        <h2 style={{ margin: 0, fontSize: 20 }}>
+        <h2 style={{ margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: "-0.03em", color: "#020617" }}>
           {selectedExperienceLabel ? "Documentación vinculada a esta experiencia" : "Evidencias"}
         </h2>
-        <p style={{ margin: "8px 0 0", color: "#475569" }}>
+        <p style={{ margin: "12px 0 0", color: "#475569", maxWidth: 760, lineHeight: 1.7, fontSize: 16 }}>
           Tus documentos refuerzan la credibilidad del perfil, pero no verifican nada por sí solos hasta que el sistema pueda analizarlos o revisarlos correctamente.
         </p>
         {selectedExperienceLabel ? (
-          <div style={{ marginTop: 10, fontSize: 13, color: "#0f172a", fontWeight: 600 }}>
+          <div style={{ marginTop: 14, fontSize: 13, color: "#0f172a", fontWeight: 600 }}>
             Experiencia activa: {selectedExperienceLabel}
           </div>
         ) : null}
-        <div style={{ marginTop: 12, display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ marginTop: 18, display: "flex", flexWrap: "wrap", gap: 8 }}>
           {[
             "Documento recibido",
             "En análisis",
@@ -922,7 +918,6 @@ export default function EvidenceListClient({
       {activityState ? (
         <div
           style={{
-            marginBottom: 16,
             borderRadius: 14,
             border: "1px solid #bfdbfe",
             background: "#eff6ff",
@@ -953,14 +948,12 @@ export default function EvidenceListClient({
 
       <div
         style={{
-          marginBottom: 20,
-          border: "1px solid #e2e8f0",
-          borderRadius: 16,
-          padding: 16,
-          background: "#fff",
+          borderRadius: 24,
+          padding: 24,
+          background: "#f8fafc",
         }}
       >
-        <div style={{ fontSize: 16, fontWeight: 700, color: "#0f172a", marginBottom: 12 }}>
+        <div style={{ fontSize: 18, fontWeight: 700, color: "#0f172a", marginBottom: 12 }}>
           Subir nueva documentación
         </div>
         <div style={{ display: "grid", gap: 12 }}>
@@ -1075,11 +1068,11 @@ export default function EvidenceListClient({
         </div>
       </div>
 
-      {visibleItems.length === 0 ? <p>No hay evidencias registradas todavía.</p> : null}
-      {visibleItems.map((item) => renderEvidenceCard(item))}
+      {visibleItems.length === 0 ? <p style={{ color: "#64748b" }}>No hay evidencias registradas todavía.</p> : null}
+      <div>{visibleItems.map((item) => renderEvidenceCard(item))}</div>
 
       {selectedExperienceId && otherItems.length > 0 ? (
-        <div style={{ marginTop: 24 }}>
+        <div style={{ marginTop: 8 }}>
           <div style={{ fontSize: 14, fontWeight: 700, color: "#334155", marginBottom: 12 }}>
             Otras evidencias del perfil
           </div>
