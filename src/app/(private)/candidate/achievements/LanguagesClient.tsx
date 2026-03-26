@@ -223,7 +223,7 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
 
         {adding ? (
           <div className="rounded-2xl bg-slate-50 px-5 py-5">
-            <div className="grid gap-3 md:grid-cols-[1.2fr_140px_1.4fr_auto]">
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1.1fr)_140px_minmax(0,1.2fr)_auto]">
               <label className="block">
                 <div className="mb-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Idioma</div>
                 <input
@@ -290,7 +290,7 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
         ) : null}
 
         <div className="border-t border-slate-100 pt-2">
-          <div className="hidden grid-cols-[1.2fr_140px_1.5fr_220px_140px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 lg:grid">
+          <div className="hidden grid-cols-[minmax(0,1.1fr)_140px_minmax(0,1.2fr)_220px_140px] gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 xl:grid">
             <div>Idioma</div>
             <div>Nivel</div>
             <div>Título</div>
@@ -312,7 +312,7 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
                 return (
                   <div key={item.id} className="px-1 py-5 transition-colors duration-150 hover:bg-slate-50/50 lg:px-4">
                     {isEditing ? (
-                      <div className="grid gap-3 lg:grid-cols-[1.2fr_140px_1.5fr_220px_140px] lg:items-center">
+                      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_140px_minmax(0,1.2fr)_220px_140px] xl:items-center">
                         <input
                           value={draft.language_name}
                           onChange={(e) => setDraft((prev) => ({ ...prev, language_name: e.target.value }))}
@@ -372,7 +372,7 @@ export default function LanguagesClient({ initialItems }: { initialItems: Langua
                         </div>
                       </div>
                     ) : (
-                      <div className="grid gap-3 lg:grid-cols-[1.2fr_140px_1.5fr_220px_140px] lg:items-center">
+                      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.1fr)_140px_minmax(0,1.2fr)_220px_140px] xl:items-center">
                         <div>
                           <div className="text-sm font-semibold text-slate-900">
                             {String(item.language_name || "Idioma sin indicar").trim()}

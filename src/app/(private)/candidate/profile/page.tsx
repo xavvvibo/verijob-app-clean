@@ -120,7 +120,7 @@ export default async function CandidateProfilePage() {
   });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-14 px-6 py-10">
+    <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
       <CandidatePageHero
         eyebrow="Perfil candidato"
         title="Tu identidad profesional"
@@ -133,6 +133,7 @@ export default async function CandidateProfilePage() {
           `${evidenceCount} ${evidenceCount === 1 ? "documento subido" : "documentos subidos"}`,
           profileReady ? "Perfil completado" : "Perfil por completar",
         ]}
+        showTrustScore={false}
       />
 
       <section className="space-y-5">

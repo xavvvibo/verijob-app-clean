@@ -18,12 +18,13 @@ export default async function Page() {
     .order("created_at", { ascending: false });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-14 px-6 py-10">
+    <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
       <CandidatePageHero
         eyebrow="Idiomas y logros"
         title="Refuerza tu perfil global"
         description="Añade idiomas y certificaciones para que las empresas entiendan mejor tu nivel y el tipo de señales que ya aportas."
         badges={["Idiomas visibles", "Certificados", "Señales complementarias"]}
+        showTrustScore={false}
       />
 
       <LanguagesClient initialItems={items || []} />

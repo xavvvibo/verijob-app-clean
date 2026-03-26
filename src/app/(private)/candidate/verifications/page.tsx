@@ -69,12 +69,13 @@ export default async function CandidateVerificationsPage() {
   const completedRows = visibleRows.filter((row: any) => !activeRows.includes(row));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-14 px-6 py-10">
+    <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
       <CandidatePageHero
         eyebrow="Verificaciones"
         title="Qué está en curso y qué ya se ha resuelto"
         description="Sigue tus solicitudes con una lectura clara: qué empresa la tiene, por qué canal se ha enviado y en qué estado real se encuentra."
         badges={["En curso", "Completadas", "Señal empresarial"]}
+        showTrustScore={false}
       />
 
       {error ? (

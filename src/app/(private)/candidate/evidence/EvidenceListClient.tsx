@@ -873,23 +873,23 @@ export default function EvidenceListClient({
     <div style={{ display: "grid", gap: 32 }}>
       <div
         style={{
-          borderRadius: 28,
-          background: "linear-gradient(135deg, rgba(248,250,252,1) 0%, rgba(239,246,255,0.8) 55%, rgba(238,242,255,0.7) 100%)",
-          padding: 32,
+          borderRadius: 24,
+          background: "#f8fafc",
+          padding: 24,
         }}
       >
-        <h2 style={{ margin: 0, fontSize: 30, fontWeight: 700, letterSpacing: "-0.03em", color: "#020617" }}>
+        <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em", color: "#020617" }}>
           {selectedExperienceLabel ? "Documentación vinculada a esta experiencia" : "Evidencias"}
         </h2>
-        <p style={{ margin: "12px 0 0", color: "#475569", maxWidth: 760, lineHeight: 1.7, fontSize: 16 }}>
+        <p style={{ margin: "10px 0 0", color: "#475569", maxWidth: 760, lineHeight: 1.7, fontSize: 14 }}>
           Tus documentos refuerzan la credibilidad del perfil, pero no verifican nada por sí solos hasta que el sistema pueda analizarlos o revisarlos correctamente.
         </p>
         {selectedExperienceLabel ? (
-          <div style={{ marginTop: 14, fontSize: 13, color: "#0f172a", fontWeight: 600 }}>
+          <div style={{ marginTop: 12, fontSize: 13, color: "#0f172a", fontWeight: 600 }}>
             Experiencia activa: {selectedExperienceLabel}
           </div>
         ) : null}
-        <div style={{ marginTop: 18, display: "flex", flexWrap: "wrap", gap: 8 }}>
+        <div style={{ marginTop: 14, display: "flex", flexWrap: "wrap", gap: 8 }}>
           {[
             "Documento recibido",
             "En análisis",

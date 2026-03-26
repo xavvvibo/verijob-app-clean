@@ -119,12 +119,13 @@ export default function CandidateEducationPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-14 px-6 py-10">
+    <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
       <CandidatePageHero
         eyebrow="Educación"
         title="Tu formación en una vista clara"
         description="Reúne tu formación en un solo lugar y deja lista la parte académica del perfil sin convertirla en ruido visual."
         badges={["Formación visible", "Edición rápida", "Lectura limpia"]}
+        showTrustScore={false}
       />
 
       <section className="space-y-6">
@@ -159,7 +160,7 @@ export default function CandidateEducationPage() {
                   <div className="mt-1 text-xs uppercase tracking-[0.16em] text-slate-400">
                     {[item.start_date || "Inicio pendiente", item.in_progress ? "En curso" : item.end_date || "Fin pendiente"].join(" · ")}
                   </div>
-                  {item.description ? <div className="mt-2 line-clamp-2 text-sm text-slate-500">{item.description}</div> : null}
+                  {item.description ? <div className="mt-2 text-sm text-slate-500">{item.description}</div> : null}
                 </div>
                 <button
                   type="button"

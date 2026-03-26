@@ -155,12 +155,13 @@ export default async function CandidateEvidencePage(props: any) {
   const items = (evidences || []).map((r: any) => buildEvidenceUiItem(r));
 
   return (
-    <div className="mx-auto max-w-6xl space-y-14 px-6 py-10">
+    <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
       <CandidatePageHero
         eyebrow="Evidencias"
         title="Documentos que refuerzan tu perfil"
         description="Sube documentación clara, relaciónala con la experiencia correcta y sigue su estado sin ruido técnico."
         badges={["Documentos vinculados", "Estado documental", "Refuerzo de confianza"]}
+        showTrustScore={false}
       />
       <EvidenceListClient
         initialItems={items}

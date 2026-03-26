@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import CandidatePageHero from "../_components/CandidatePageHero";
 
 type Settings = {
   show_trust_score: boolean;
@@ -315,20 +316,21 @@ export default function CandidateSettings() {
   const isDeleted = String(account?.lifecycle_status || "active").toLowerCase() === "deleted";
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-3xl border border-gray-200 bg-white p-7 shadow-sm">
-        <div className="text-2xl font-semibold text-gray-900">Ajustes</div>
-        <div className="mt-2 text-sm text-gray-600">
-          Aquí gestionas privacidad, visibilidad, contacto, disponibilidad profesional y el estado de tu perfil.
-        </div>
-        {err ? <div className="mt-3 text-sm text-red-600">{err}</div> : null}
-      </div>
+    <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
+      <CandidatePageHero
+        eyebrow="Ajustes"
+        title="Controla la visibilidad y el estado de tu perfil"
+        description="Gestiona privacidad, contacto, disponibilidad profesional y las acciones críticas de tu cuenta sin perder contexto."
+        badges={["Privacidad", "Contacto", "Disponibilidad"]}
+        showTrustScore={false}
+      />
+      {err ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{err}</div> : null}
 
       {settings ? (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[1.05fr_0.95fr]">
             <div className="space-y-4">
-              <div className="rounded-2xl border border-gray-200 bg-white p-5">
+              <div className="rounded-2xl bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                 <div className="text-base font-semibold text-gray-900">Visibilidad de credibilidad</div>
                 <div className="mt-3 space-y-3">
                   <Toggle
@@ -352,7 +354,7 @@ export default function CandidateSettings() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-gray-200 bg-white p-5">
+              <div className="rounded-2xl bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
                 <div className="text-base font-semibold text-gray-900">Configuración de contacto</div>
                 <div className="mt-2 text-sm text-gray-600">
                   Decide si las empresas registradas pueden ver tus métodos de contacto directo en el perfil ampliado.
@@ -373,7 +375,7 @@ export default function CandidateSettings() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-gray-200 bg-white p-5">
+            <div className="rounded-2xl bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
               <div className="text-base font-semibold text-gray-900">Disponibilidad profesional</div>
               <div className="mt-2 text-sm text-gray-600">
                 Completa esta información para ayudar a las empresas registradas a entender tu disponibilidad real.
@@ -424,7 +426,7 @@ export default function CandidateSettings() {
             </div>
           </div>
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="rounded-3xl bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Gestión de perfil / cuenta</h2>
@@ -544,7 +546,7 @@ export default function CandidateSettings() {
 
       {settings ? (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-3 px-6 py-3">
+          <div className="mx-auto flex w-full max-w-[1280px] items-center justify-between gap-3 px-8 py-3">
             <div className="min-w-0">
               {saving ? <div className="text-sm text-gray-600">Guardando cambios…</div> : null}
               {!saving && ok ? <div className="text-sm font-semibold text-green-700">{ok}</div> : null}
@@ -556,7 +558,7 @@ export default function CandidateSettings() {
               onClick={saveSettings}
               disabled={saving || !hasChanges}
               className={`inline-flex items-center justify-center rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition ${
-                saving || !hasChanges ? "cursor-not-allowed bg-gray-400" : "bg-blue-700 hover:bg-blue-800"
+                saving || !hasChanges ? "cursor-not-allowed bg-gray-400" : "bg-slate-900 hover:bg-black"
               }`}
             >
               {saving ? "Guardando…" : "Guardar cambios"}

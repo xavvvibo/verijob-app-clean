@@ -61,6 +61,7 @@ export default function CandidatePageHero({
   ctaHref,
   badges,
   aside,
+  showTrustScore = true,
 }: {
   eyebrow: string;
   title: string;
@@ -69,15 +70,16 @@ export default function CandidatePageHero({
   ctaHref?: string;
   badges?: string[];
   aside?: ReactNode;
+  showTrustScore?: boolean;
 }) {
   return (
-    <section className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-slate-50 via-blue-50/35 to-indigo-50/20 px-8 py-10 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-indigo-200/40 before:via-blue-200/50 before:to-cyan-200/40">
-      <div className="relative grid gap-8 xl:grid-cols-[1fr_auto] xl:items-end">
-        <div className="max-w-3xl space-y-4">
+    <section className="relative overflow-hidden rounded-[30px] bg-gradient-to-br from-slate-50 via-blue-50/35 to-indigo-50/20 px-8 py-12 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-indigo-200/40 before:via-blue-200/50 before:to-cyan-200/40">
+      <div className="relative grid gap-10 lg:grid-cols-[1.3fr_0.7fr] lg:items-end">
+        <div className="min-w-0 max-w-[780px] space-y-5">
           <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p>
           <div className="space-y-3">
-            <h1 className="text-3xl font-semibold tracking-tight text-slate-950">{title}</h1>
-            <p className="text-base leading-7 text-slate-600">{description}</p>
+            <h1 className="text-4xl font-bold tracking-tight text-slate-950">{title}</h1>
+            <p className="max-w-[680px] text-base leading-7 text-slate-600">{description}</p>
           </div>
           {badges?.length ? (
             <div className="flex flex-wrap gap-2">
@@ -90,8 +92,8 @@ export default function CandidatePageHero({
           ) : null}
         </div>
 
-        <div className="flex flex-col gap-3 xl:items-end">
-          <CompactTrustScoreBadge />
+        <div className="min-w-0 flex flex-col gap-3 lg:items-end">
+          {showTrustScore ? <CompactTrustScoreBadge /> : null}
           {aside}
           {ctaLabel && ctaHref ? (
             <Link

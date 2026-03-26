@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getCandidatePlanCapabilities, normalizeCandidateCommercialPlan } from "@/lib/billing/planCapabilities";
+import CandidatePageHero from "../_components/CandidatePageHero";
 
 export const dynamic = "force-dynamic";
 
@@ -301,12 +302,17 @@ export default function CandidateSubscriptionPage() {
   );
 
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold text-gray-900">Suscripción</h1>
-      <p className="text-sm text-gray-600">Gestiona tu plan, cambios de nivel y estado de facturación desde un único panel.</p>
+    <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
+      <CandidatePageHero
+        eyebrow="Suscripción"
+        title="Gestiona tu plan y tu nivel de visibilidad"
+        description="Revisa el estado de facturación, mejora de plan cuando convenga y mantén claro qué capacidades están activas en tu perfil."
+        badges={["Facturación", "Cambio de plan", "Capacidades activas"]}
+        showTrustScore={false}
+      />
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-2xl border border-gray-200 bg-white p-5">
+      <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="rounded-2xl bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
           <h2 className="text-sm font-semibold text-gray-900">Resumen de facturación</h2>
           <dl className="mt-3 space-y-2 text-sm text-gray-700">
             <div className="flex items-center justify-between gap-3">
@@ -346,7 +352,7 @@ export default function CandidateSubscriptionPage() {
           </div>
         </section>
 
-        <section className="rounded-2xl border border-gray-200 bg-white p-5">
+        <section className="rounded-2xl bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
           <h2 className="text-sm font-semibold text-gray-900">Cambiar plan</h2>
           <p className="mt-2 text-sm text-gray-600">
             Los upgrades se aplican al momento mediante checkout seguro. Los downgrades se programan para el próximo ciclo.
@@ -361,7 +367,7 @@ export default function CandidateSubscriptionPage() {
                   type="button"
                   onClick={() => startCheckout(plan.planKey)}
                   disabled={loadingPlan !== null || loadingDowngrade !== null}
-                  className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60"
+                  className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
                 >
                   {loadingPlan === plan.planKey ? "Procesando…" : plan.label}
                 </button>
@@ -407,14 +413,14 @@ export default function CandidateSubscriptionPage() {
           <div className="mt-4 flex flex-wrap gap-2">
             <a
               href="/precios"
-              className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50"
+              className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
             >
               Ver planes
             </a>
             <button
               onClick={openPortal}
               disabled={loadingPortal || subscription?.source === "override"}
-              className="inline-flex rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50 disabled:opacity-60"
+              className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
             >
               {loadingPortal ? "Abriendo…" : subscription?.source === "override" ? "Plan gestionado por VERIJOB" : "Gestionar facturación"}
             </button>

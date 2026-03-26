@@ -145,16 +145,17 @@ export default function CandidatePublicProfilePage() {
   }, [mode, settings.allow_company_email_contact, settings.allow_company_phone_contact, profile.email, profile.phone]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-14 px-6 py-10">
+    <div className="mx-auto max-w-[1320px] space-y-16 px-8 py-12">
       <section className="space-y-8">
         <CandidatePageHero
           eyebrow="Perfil público"
-          title="Comparte una versión clara y verificable de tu perfil"
-          description="Esta pantalla funciona como una mini landing: muestra exactamente lo que verá una empresa cuando abras tu perfil público."
-          badges={["Vista pública", "Enlace verificable", "Preview real"]}
-          aside={
-            <div className="flex flex-col gap-3 xl:items-end">
-              <div className="min-w-[220px] rounded-xl bg-white/80 p-3">
+        title="Comparte una versión clara y verificable de tu perfil"
+        description="Esta pantalla funciona como una mini landing: muestra exactamente lo que verá una empresa cuando abras tu perfil público."
+        badges={["Vista pública", "Enlace verificable", "Preview real"]}
+        showTrustScore={false}
+        aside={
+            <div className="flex w-full max-w-[320px] flex-col gap-3 lg:items-end">
+              <div className="w-full rounded-xl bg-white/80 p-3">
                 <label className="block text-sm font-semibold text-slate-900">Ver como</label>
                 <select
                   value={mode}
@@ -180,7 +181,7 @@ export default function CandidatePublicProfilePage() {
           }
         />
 
-        <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="grid gap-10 xl:grid-cols-[minmax(0,1.15fr)_360px]">
           <div className="space-y-4">
             <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Vista previa real</div>
             <div className="rounded-2xl bg-slate-50/80 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.5)]">
