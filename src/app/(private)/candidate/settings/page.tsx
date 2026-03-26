@@ -316,7 +316,7 @@ export default function CandidateSettings() {
   const isDeleted = String(account?.lifecycle_status || "active").toLowerCase() === "deleted";
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
+    <div className="mx-auto max-w-[1440px] space-y-16 px-8 py-12">
       <CandidatePageHeader
         eyebrow="Ajustes"
         title="Controla la visibilidad y el estado de tu perfil"
@@ -546,7 +546,7 @@ export default function CandidateSettings() {
 
       {settings ? (
         <div className="fixed inset-x-0 bottom-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur">
-          <div className="mx-auto flex w-full max-w-[1280px] items-center justify-between gap-3 px-8 py-3">
+          <div className="mx-auto flex w-full max-w-[1440px] items-center justify-between gap-3 px-8 py-3">
             <div className="min-w-0">
               {saving ? <div className="text-sm text-gray-600">Guardando cambios…</div> : null}
               {!saving && ok ? <div className="text-sm font-semibold text-green-700">{ok}</div> : null}

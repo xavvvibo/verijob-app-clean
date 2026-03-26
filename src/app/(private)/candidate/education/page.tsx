@@ -119,7 +119,7 @@ export default function CandidateEducationPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
+    <div className="mx-auto max-w-[1440px] space-y-16 px-8 py-12">
       <CandidatePageHeader
         eyebrow="Educación"
         title="Tu formación en una vista clara"

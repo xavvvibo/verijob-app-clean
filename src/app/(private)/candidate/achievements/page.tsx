@@ -18,7 +18,7 @@ export default async function Page() {
     .order("created_at", { ascending: false });
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
+    <div className="mx-auto max-w-[1440px] space-y-16 px-8 py-12">
       <CandidatePageHeader
         eyebrow="Idiomas y logros"
         title="Refuerza tu perfil global"

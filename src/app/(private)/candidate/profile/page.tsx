@@ -120,7 +120,7 @@ export default async function CandidateProfilePage() {
   });
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
+    <div className="mx-auto max-w-[1440px] space-y-16 px-8 py-12">
       <CandidatePageHeader
         eyebrow="Perfil candidato"
         title="Tu identidad profesional"

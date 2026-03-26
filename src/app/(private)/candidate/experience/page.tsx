@@ -238,7 +238,7 @@ export default async function CandidateExperiencePage({
   const importSummary = summarizeCompanyCvImportUpdates((candidateProfile as any)?.raw_cv_json);
 
   return (
-    <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
+    <div className="mx-auto max-w-[1440px] space-y-16 px-8 py-12">
       <CandidatePageHeader
         eyebrow="Experiencia profesional"
         title="Tus experiencias"

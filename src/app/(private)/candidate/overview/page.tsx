@@ -913,7 +913,7 @@ export default function CandidateOverview() {
   );
 
   return (
-    <div className="mx-auto max-w-[1320px] space-y-20 bg-white px-8 py-12">
+    <div className="mx-auto max-w-[1480px] space-y-20 bg-white px-8 py-12">
       {importedFromCompanyCv ? (
         <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
           <p className="text-sm font-semibold text-amber-900">Perfil pre-rellenado desde un CV subido por empresa</p>

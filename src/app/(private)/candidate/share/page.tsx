@@ -145,7 +145,7 @@ export default function CandidatePublicProfilePage() {
   }, [mode, settings.allow_company_email_contact, settings.allow_company_phone_contact, profile.email, profile.phone]);
 
   return (
-    <div className="mx-auto max-w-[1320px] space-y-16 px-8 py-12">
+    <div className="mx-auto max-w-[1480px] space-y-16 px-8 py-12">
       <section className="space-y-8">
         <CandidatePageHero
           eyebrow="Perfil público"
