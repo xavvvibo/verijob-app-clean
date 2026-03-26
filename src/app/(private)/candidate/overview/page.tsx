@@ -1011,13 +1011,13 @@ export default function CandidateOverview() {
           </div>
         }
         right={
-          <div className="rounded-2xl bg-black p-7 text-white">
+          <div className="rounded-[28px] bg-slate-950 p-8 text-white shadow-[0_22px_60px_rgba(15,23,42,0.24)] ring-1 ring-white/10">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Tu siguiente mejor paso</p>
-            <h2 className="mt-3 text-2xl font-semibold leading-tight">Haz que las empresas confíen en ti desde hoy</h2>
-            <p className="mt-3 text-sm leading-6 text-slate-300">Una prueba real puede marcar la diferencia.</p>
+            <h2 className="mt-4 text-[2rem] font-semibold leading-tight">Haz que las empresas confíen en ti desde hoy</h2>
+            <p className="mt-3 text-base leading-7 text-slate-300">Una prueba real puede marcar la diferencia.</p>
             <Link
               href={primaryAction.href}
-              className="mt-7 inline-flex w-full items-center justify-center rounded-lg bg-white px-5 py-[1.35rem] text-base font-semibold text-slate-950 transition hover:scale-[1.02] hover:bg-slate-100 active:scale-[0.98]"
+              className="mt-8 inline-flex w-full items-center justify-center rounded-xl bg-white px-5 py-[1.35rem] text-base font-semibold text-slate-950 transition hover:scale-[1.02] hover:bg-slate-100 active:scale-[0.98]"
             >
               {primaryAction.label}
             </Link>
@@ -1031,7 +1031,7 @@ export default function CandidateOverview() {
         <div className="pointer-events-none absolute -right-20 bottom-0 h-52 w-52 rounded-full bg-slate-200/50 blur-3xl" />
       </OverviewHero>
 
-      <div className="grid gap-8 xl:grid-cols-[minmax(0,1.2fr)_380px]">
+      <div className="grid gap-10 xl:grid-cols-[minmax(0,1.04fr)_460px]">
         <div className="space-y-10">
           <OverviewProgressSection>
             <div className="flex items-center justify-between text-sm text-slate-500">
@@ -1095,7 +1095,7 @@ export default function CandidateOverview() {
           </OverviewExperiencesPreview>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-7">
           <OverviewProfilePublicCard>
             <PublicProfileCard
               publicLink={publicLink}

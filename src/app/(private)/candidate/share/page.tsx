@@ -172,13 +172,13 @@ export default function CandidatePublicProfilePage() {
             </div>
           }
           right={
-            <div className="flex w-full max-w-[340px] flex-col gap-3 xl:ml-auto">
-              <div className="w-full rounded-xl bg-white/80 p-3">
+            <div className="flex w-full max-w-[380px] flex-col gap-4 xl:ml-auto">
+              <div className="w-full rounded-2xl bg-white/85 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.06)] ring-1 ring-white/70">
                 <label className="block text-sm font-semibold text-slate-900">Ver como</label>
                 <select
                   value={mode}
                   onChange={(e) => setMode(e.target.value as PublicProfilePreviewMode)}
-                  className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                  className="mt-3 w-full rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm"
                 >
                   {previewModes.map((item) => (
                     <option key={item.value} value={item.value}>
@@ -191,7 +191,7 @@ export default function CandidatePublicProfilePage() {
                 type="button"
                 onClick={copyLink}
                 disabled={!link}
-                className="inline-flex justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition duration-150 hover:bg-black disabled:opacity-50"
+                className="inline-flex justify-center rounded-xl bg-slate-900 px-4 py-3.5 text-sm font-semibold text-white transition duration-150 hover:bg-black disabled:opacity-50"
               >
                 Copiar enlace
               </button>
@@ -199,8 +199,8 @@ export default function CandidatePublicProfilePage() {
           }
         />
 
-        <div className="grid gap-10 xl:grid-cols-[minmax(0,1.15fr)_360px]">
-          <div className="space-y-4">
+        <div className="grid gap-12 xl:grid-cols-[minmax(0,1.03fr)_410px]">
+          <div className="space-y-5">
             <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">Vista previa real</div>
             <SharePublicCard>
               {previewPayload ? (
@@ -219,7 +219,7 @@ export default function CandidatePublicProfilePage() {
             </SharePublicCard>
           </div>
 
-          <aside className="space-y-4">
+          <aside className="space-y-5">
             <ShareVisibilitySummary>
               <h3 className="text-lg font-semibold text-slate-900">Comparte tu perfil</h3>
               <p className="mt-1 text-sm leading-6 text-slate-600">
