@@ -22,11 +22,11 @@ export default function PrivateShell({
   }
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", minHeight: "100vh", background: "#F8FAFC" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "260px minmax(0,1fr)", minHeight: "100vh", background: "#F8FAFC" }}>
       <Sidebar role={role} />
-      <div>
+      <div style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
         <Topbar role={role} />
-        <main style={{ padding: "32px" }}>{children}</main>
+        <main style={{ flex: 1, minWidth: 0, padding: "32px 40px 40px" }}>{children}</main>
       </div>
     </div>
   );
