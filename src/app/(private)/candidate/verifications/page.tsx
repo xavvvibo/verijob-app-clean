@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import DeleteVerificationInlineButton from "./DeleteVerificationInlineButton";
-import CandidatePageHero from "../_components/CandidatePageHero";
+import CandidatePageHeader from "../_components/CandidatePageHeader";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -70,12 +70,11 @@ export default async function CandidateVerificationsPage() {
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
-      <CandidatePageHero
+      <CandidatePageHeader
         eyebrow="Verificaciones"
         title="Qué está en curso y qué ya se ha resuelto"
         description="Sigue tus solicitudes con una lectura clara: qué empresa la tiene, por qué canal se ha enviado y en qué estado real se encuentra."
         badges={["En curso", "Completadas", "Señal empresarial"]}
-        showTrustScore={false}
       />
 
       {error ? (

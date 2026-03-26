@@ -6,7 +6,7 @@ import { readCandidateSkills } from "@/lib/candidate/profile-visibility";
 import { getTrustBreakdownDisplayEntries, normalizeTrustBreakdown } from "@/lib/trust/trust-model";
 import CandidateProfileIdentityClient from "./CandidateProfileIdentityClient";
 import CandidateProfileSkillsClient from "./CandidateProfileSkillsClient";
-import CandidatePageHero from "../_components/CandidatePageHero";
+import CandidatePageHeader from "../_components/CandidatePageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -121,7 +121,7 @@ export default async function CandidateProfilePage() {
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
-      <CandidatePageHero
+      <CandidatePageHeader
         eyebrow="Perfil candidato"
         title="Tu identidad profesional"
         description="Gestiona tus datos personales, revisa la confianza actual del perfil y deja preparada la información que verán las empresas."
@@ -133,7 +133,7 @@ export default async function CandidateProfilePage() {
           `${evidenceCount} ${evidenceCount === 1 ? "documento subido" : "documentos subidos"}`,
           profileReady ? "Perfil completado" : "Perfil por completar",
         ]}
-        showTrustScore={false}
+        variant="management"
       />
 
       <section className="space-y-5">

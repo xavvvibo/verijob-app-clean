@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getCandidatePlanCapabilities, normalizeCandidateCommercialPlan } from "@/lib/billing/planCapabilities";
-import CandidatePageHero from "../_components/CandidatePageHero";
+import CandidatePageHeader from "../_components/CandidatePageHeader";
 
 export const dynamic = "force-dynamic";
 
@@ -303,12 +303,12 @@ export default function CandidateSubscriptionPage() {
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
-      <CandidatePageHero
+      <CandidatePageHeader
         eyebrow="Suscripción"
         title="Gestiona tu plan y tu nivel de visibilidad"
         description="Revisa el estado de facturación, mejora de plan cuando convenga y mantén claro qué capacidades están activas en tu perfil."
         badges={["Facturación", "Cambio de plan", "Capacidades activas"]}
-        showTrustScore={false}
+        variant="management"
       />
 
       <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">

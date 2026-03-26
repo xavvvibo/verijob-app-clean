@@ -12,7 +12,7 @@ import {
 } from "@/lib/candidate/profile-visibility";
 import ExperienceQuickAddClient from "./ExperienceQuickAddClient";
 import ExperienceListClient from "./ExperienceListClient";
-import CandidatePageHero from "../_components/CandidatePageHero";
+import CandidatePageHeader from "../_components/CandidatePageHeader";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -239,22 +239,22 @@ export default async function CandidateExperiencePage({
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
-      <CandidatePageHero
+      <CandidatePageHeader
         eyebrow="Experiencia profesional"
         title="Tus experiencias"
         description="Mantén tu trayectoria limpia, solicita verificaciones cuando toque y decide qué parte de tu historial quieres enseñar fuera de VERIJOB."
         ctaLabel="Añadir experiencia manual"
         ctaHref="/candidate/experience?new=1#manual-experience"
         badges={["Historial revisable", "Verificaciones por experiencia", "Visibilidad pública controlada"]}
-        aside={
-          <Link
-            href="#cv-upload"
-            className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition duration-150 hover:bg-slate-50"
-          >
-            Extraer perfil desde CV
-          </Link>
-        }
       />
+      <div className="-mt-10 flex justify-end">
+        <Link
+          href="#cv-upload"
+          className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition duration-150 hover:bg-slate-50"
+        >
+          Extraer perfil desde CV
+        </Link>
+      </div>
 
       <section className="space-y-8">
         <div id="cv-upload" className="rounded-2xl bg-slate-50 px-6 py-6">

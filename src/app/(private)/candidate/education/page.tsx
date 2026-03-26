@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import CandidatePageHero from "../_components/CandidatePageHero";
+import CandidatePageHeader from "../_components/CandidatePageHeader";
 
 type EducationItem = {
   title: string;
@@ -120,16 +120,17 @@ export default function CandidateEducationPage() {
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
-      <CandidatePageHero
+      <CandidatePageHeader
         eyebrow="Educación"
         title="Tu formación en una vista clara"
         description="Reúne tu formación en un solo lugar y deja lista la parte académica del perfil sin convertirla en ruido visual."
         badges={["Formación visible", "Edición rápida", "Lectura limpia"]}
-        showTrustScore={false}
+        ctaLabel="Añadir estudios"
+        ctaHref="#top"
       />
 
       <section className="space-y-6">
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div id="top" className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-semibold text-slate-950">Registros académicos</h2>
             <p className="mt-1 text-sm text-slate-500">Mantén una lista breve, ordenada y fácil de revisar.</p>

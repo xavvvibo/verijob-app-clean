@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import CandidatePageHero from "../_components/CandidatePageHero";
+import CandidatePageHeader from "../_components/CandidatePageHeader";
 
 type Settings = {
   show_trust_score: boolean;
@@ -317,12 +317,12 @@ export default function CandidateSettings() {
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
-      <CandidatePageHero
+      <CandidatePageHeader
         eyebrow="Ajustes"
         title="Controla la visibilidad y el estado de tu perfil"
         description="Gestiona privacidad, contacto, disponibilidad profesional y las acciones críticas de tu cuenta sin perder contexto."
         badges={["Privacidad", "Contacto", "Disponibilidad"]}
-        showTrustScore={false}
+        variant="management"
       />
       {err ? <div className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{err}</div> : null}
 

@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import EvidenceListClient from "./EvidenceListClient";
 import { buildEvidenceUiItem } from "@/lib/candidate/evidence-ui";
-import CandidatePageHero from "../_components/CandidatePageHero";
+import CandidatePageHeader from "../_components/CandidatePageHeader";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -156,12 +156,11 @@ export default async function CandidateEvidencePage(props: any) {
 
   return (
     <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
-      <CandidatePageHero
+      <CandidatePageHeader
         eyebrow="Evidencias"
         title="Documentos que refuerzan tu perfil"
         description="Sube documentación clara, relaciónala con la experiencia correcta y sigue su estado sin ruido técnico."
         badges={["Documentos vinculados", "Estado documental", "Refuerzo de confianza"]}
-        showTrustScore={false}
       />
       <EvidenceListClient
         initialItems={items}

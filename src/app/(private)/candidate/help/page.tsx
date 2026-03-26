@@ -1,16 +1,15 @@
 export const dynamic = "force-dynamic";
 
-import CandidatePageHero from "../_components/CandidatePageHero";
+import CandidatePageHeader from "../_components/CandidatePageHeader";
 
 export default function CandidateHelpPage() {
   return (
     <div className="mx-auto max-w-[1280px] space-y-16 px-8 py-12">
-      <CandidatePageHero
+      <CandidatePageHeader
         eyebrow="Ayuda"
         title="Guía rápida para sacar más partido a tu perfil"
         description="Encuentra en segundos cómo construir un perfil verificable, reforzar tu credibilidad y compartir una trayectoria profesional clara."
         badges={["Perfil verificable", "Verificaciones", "Perfil público"]}
-        showTrustScore={false}
       />
 
       <section className="rounded-2xl bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
