@@ -457,9 +457,9 @@ function TrustRing({ score, stateTitle }: { score: number; stateTitle: string })
     background: `conic-gradient(rgb(15 23 42) ${safeScore * 3.6}deg, rgb(219 234 254) 0deg)`,
   };
   return (
-    <div className="relative flex h-36 w-36 items-center justify-center rounded-full p-2" style={progressStyle}>
+    <div className="relative flex h-40 w-40 items-center justify-center rounded-full p-2" style={progressStyle}>
       <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white text-center shadow-inner">
-        <span className="text-4xl font-semibold tabular-nums text-slate-900">{safeScore}</span>
+        <span className="text-[2.65rem] font-semibold tabular-nums text-slate-900">{safeScore}</span>
         <span className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Trust score</span>
         <span className="mt-2 max-w-[88px] text-[11px] font-medium leading-4 text-slate-600">{stateTitle}</span>
       </div>
@@ -515,10 +515,10 @@ function InsightCard({
   const buttonClass =
     emphasis === "primary"
       ? "mt-5 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
-      : "mt-4 inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50";
+      : "mt-4 inline-flex rounded-xl border border-slate-200 bg-white/80 px-3.5 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50";
   return (
-    <article className={`rounded-[28px] border p-5 ${tone}`}>
-      <h3 className="text-base font-semibold text-slate-900">{title}</h3>
+    <article className={`rounded-[24px] p-5 ${tone}`}>
+      <h3 className="text-[15px] font-semibold text-slate-900">{title}</h3>
       <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
       <Link href={href} className={buttonClass}>
         {cta}
@@ -577,7 +577,7 @@ function PublicProfileCard({
   visibilityLabel: string;
 }) {
   return (
-    <section className="rounded-[30px] border border-slate-200/80 bg-slate-50/60 p-5">
+    <section className="rounded-[26px] bg-slate-50/30 px-4 py-4 sm:px-4.5 sm:py-4.5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Esto es lo que verá una empresa</p>
@@ -591,13 +591,13 @@ function PublicProfileCard({
         </div>
       </div>
 
-      <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
-        <div className="rounded-[24px] border border-slate-200/80 bg-white/80 p-4">
+      <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <div className="rounded-[20px] bg-white/60 p-3.5">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
+            <span className="rounded-full border border-slate-200/80 px-3 py-1 text-xs font-semibold text-slate-700">
               Trust score {Math.round(trustScore)}
             </span>
-            <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-700">
+            <span className="rounded-full border border-slate-200/80 px-3 py-1 text-xs font-semibold text-slate-700">
               {preview?.teaser?.verified_experiences ?? verified} experiencias verificadas
             </span>
           </div>
@@ -612,7 +612,7 @@ function PublicProfileCard({
           </p>
         </div>
 
-        <div className="rounded-[24px] border border-slate-200/80 bg-white/80 p-4">
+        <div className="rounded-[20px] bg-white/60 p-3.5">
           <p className="text-sm font-semibold text-slate-900">Acciones rápidas</p>
           <div className="mt-4 flex flex-col gap-3">
             <Link href="/candidate/share" className="inline-flex justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
@@ -637,13 +637,13 @@ function UpgradeCard({
   summary: string;
 }) {
   return (
-    <section className="rounded-[30px] border border-violet-200/70 bg-violet-50/50 p-6">
+    <section className="rounded-[26px] bg-violet-50/30 px-4 py-4 sm:px-5 sm:py-5">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-2xl">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">Siguiente nivel</p>
-          <h2 className="mt-2 text-2xl font-semibold text-slate-900">Accede a una visibilidad profesional completa</h2>
+          <h2 className="mt-2 text-xl font-semibold text-slate-900">Accede a una visibilidad profesional completa</h2>
           <p className="mt-2 text-sm leading-6 text-slate-700">Presenta una versión más sólida ante empresas, con mejor visibilidad y una impresión más profesional.</p>
-          <ul className="mt-4 space-y-2 text-sm text-slate-700">
+          <ul className="mt-3 space-y-1.5 text-sm text-slate-700">
             <li>Más experiencias visibles en tu perfil público</li>
             <li>QR profesional para compartir mejor</li>
             <li>CV verificable y presentación más sólida</li>
@@ -652,7 +652,7 @@ function UpgradeCard({
         <div className="min-w-[260px]">
           <p className="text-sm font-semibold text-slate-900">Tu plan actual: {planLabel}</p>
           <p className="mt-2 text-sm leading-6 text-slate-600">{summary}</p>
-          <Link href="/candidate/subscription" className="mt-5 inline-flex w-full justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+          <Link href="/candidate/subscription" className="mt-4 inline-flex w-full justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
             Desbloquear perfil completo
           </Link>
         </div>
@@ -899,7 +899,7 @@ export default function CandidateOverview() {
   );
 
   return (
-    <div className="space-y-12">
+    <div className="space-y-14">
       {importedFromCompanyCv ? (
         <section className="rounded-3xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
           <p className="text-sm font-semibold text-amber-900">Perfil pre-rellenado desde un CV subido por empresa</p>
@@ -933,11 +933,11 @@ export default function CandidateOverview() {
         </section>
       ) : null}
 
-      <section className="relative overflow-hidden rounded-[40px] border border-slate-200/80 bg-[radial-gradient(circle_at_top_left,_rgba(96,165,250,0.14),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(15,23,42,0.04),_transparent_30%),linear-gradient(135deg,_#ffffff,_#f8fbff)] px-7 py-10 sm:px-9 sm:py-12 xl:px-10 xl:py-14">
+      <section className="relative overflow-hidden rounded-[40px] bg-[radial-gradient(circle_at_top_left,_rgba(96,165,250,0.12),_transparent_35%),radial-gradient(circle_at_bottom_right,_rgba(15,23,42,0.03),_transparent_30%),linear-gradient(135deg,_rgba(255,255,255,0.96),_rgba(248,251,255,0.88))] px-7 py-14 sm:px-9 sm:py-16 xl:px-10 xl:py-18">
         <div className="pointer-events-none absolute -left-16 top-0 h-40 w-40 rounded-full bg-blue-100/40 blur-3xl" />
         <div className="pointer-events-none absolute -right-20 bottom-0 h-52 w-52 rounded-full bg-slate-200/50 blur-3xl" />
 
-        <div className="relative grid gap-10 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)_320px]">
+        <div className="relative grid gap-12 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)_320px]">
           <div className="min-w-0">
             <div className="flex items-start gap-5">
               <AvatarView
@@ -947,13 +947,13 @@ export default function CandidateOverview() {
               />
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Estado actual del perfil</p>
-                <h1 className="mt-3 truncate text-3xl font-semibold tracking-tight text-slate-900 sm:text-5xl">
+                <h1 className="mt-3 truncate text-4xl font-semibold tracking-tight text-slate-900 sm:text-[3.45rem]">
                   {profile?.full_name || "Tu resumen profesional"}
                 </h1>
                 <p className="mt-3 text-base text-slate-700">{profile?.title || "Profesional verificable en Verijob"}</p>
                 <p className="mt-1 text-sm text-slate-500">{profile?.location || "Ubicación no definida"}</p>
 
-                <div className="mt-5 flex flex-wrap items-center gap-3">
+                <div className="mt-6 flex flex-wrap items-center gap-3">
                   <VerificationBadge tone={metrics.verified > 0 ? "company_verified" : metrics.inProcess > 0 ? "in_progress" : "trust_visible"}>
                     {trustState.title}
                   </VerificationBadge>
@@ -961,7 +961,7 @@ export default function CandidateOverview() {
                     {profileStage}
                   </VerificationBadge>
                 </div>
-                <p className="mt-5 text-sm font-medium text-slate-700">
+                <p className="mt-6 text-sm font-medium text-slate-700">
                   {overviewStatus} · {availabilityText}
                 </p>
               </div>
@@ -994,7 +994,7 @@ export default function CandidateOverview() {
             </div>
           </div>
 
-          <div className="rounded-[30px] bg-slate-950 p-7 text-white">
+          <div className="rounded-[26px] bg-slate-900 px-6 py-6 text-white">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Tu siguiente mejor paso</p>
             <h2 className="mt-3 text-2xl font-semibold leading-tight">{primaryAction.label}</h2>
             <p className="mt-3 text-sm leading-6 text-slate-300">{primaryAction.rationale}</p>
@@ -1040,7 +1040,12 @@ export default function CandidateOverview() {
         <div className="grid gap-4 lg:grid-cols-2">
           {highlightCards.length ? (
             highlightCards.slice(0, 2).map((card, index) => (
-              <InsightCard key={`${card.title}-${card.href}`} {...card} emphasis={index === 0 ? "primary" : "subtle"} />
+              <InsightCard
+                key={`${card.title}-${card.href}`}
+                {...card}
+                tone={index === 0 ? "bg-slate-50/50" : "bg-transparent"}
+                emphasis={index === 0 ? "primary" : "subtle"}
+              />
             ))
           ) : (
             <InsightCard
@@ -1048,15 +1053,15 @@ export default function CandidateOverview() {
               body="Ya tienes una base sólida. Mantener tu perfil al día y reforzar una experiencia cuando convenga te ayuda a seguir compitiendo con ventaja."
               cta="Ver verificaciones"
               href="/candidate/verifications"
-              tone="border-slate-200 bg-white"
+              tone="bg-slate-50/50"
               emphasis="primary"
             />
           )}
         </div>
       </section>
 
-      <section className="space-y-4">
-        <section className="space-y-5">
+      <section className="space-y-6">
+        <section className="space-y-6">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Experiencias clave</p>
@@ -1067,7 +1072,7 @@ export default function CandidateOverview() {
             </Link>
           </div>
 
-          <div className="space-y-1">
+          <div className="space-y-0">
             {experienceTimeline.length ? (
               experienceTimeline.slice(0, 2).map((item: any) => <ExperienceSummaryCard key={item.id} item={item} />)
             ) : (
