@@ -16,7 +16,6 @@ import CandidateSurface from "@/components/candidate-v2/primitives/CandidateSurf
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
 import { mapCandidateAvailability } from "@/lib/candidate/availability";
 import {
-  buildCandidateOverviewNextActions,
   computeCandidateOverviewMetrics,
   resolveCandidateOverviewStatus,
 } from "@/lib/candidate/overview-metrics";
@@ -109,15 +108,6 @@ function resolveTrustState(args: {
   };
 }
 
-function buildTrustSignals(args: { verified: number; inProcess: number; evidences: number; completed: boolean }) {
-  return [
-    `${args.verified} ${args.verified === 1 ? "experiencia verificada" : "experiencias verificadas"}`,
-    `${args.inProcess} ${args.inProcess === 1 ? "verificación en curso" : "verificaciones en curso"}`,
-    `${args.evidences} ${args.evidences === 1 ? "documento útil" : "documentos útiles"}`,
-    args.completed ? "Perfil listo para compartir" : "Perfil todavía mejorable",
-  ];
-}
-
 function signalToneClasses(tone: SignalTone) {
   if (tone === "green") return "border-emerald-200 bg-emerald-50 text-emerald-800";
   if (tone === "amber") return "border-amber-200 bg-amber-50 text-amber-800";
@@ -142,55 +132,6 @@ function formatPeriod(start?: string | null, end?: string | null) {
 
 function formatTimelineDate(value?: string | null) {
   return formatMonthYear(value) || (value ? String(value) : "");
-}
-
-function buildPrimaryAction(args: {
-  nextActions: { label: string; href: string }[];
-  metrics: ReturnType<typeof computeCandidateOverviewMetrics>;
-  profileCompletionScore: number;
-  experienceCount: number;
-}) {
-  if (args.nextActions[0]) {
-    const first = args.nextActions[0];
-    let label = first.label;
-    let rationale = "Es la forma más rápida de reforzar cómo te verán las empresas.";
-    if (first.href.includes("/candidate/evidence")) {
-      label = "Sube una evidencia y refuerza tu perfil hoy";
-      rationale = "Una prueba real puede reforzar claramente tu perfil y hacerte más competitivo frente a otros candidatos.";
-    } else if (first.href.includes("/candidate/verifications")) {
-      label = "Activa una verificación y gana credibilidad real";
-      rationale = "Cerrar una verificación pendiente mejora tu señal profesional y reduce dudas cuando una empresa revisa tu perfil.";
-    } else if (first.href.includes("/candidate/profile")) {
-      label = "Completa tu perfil y evita perder fuerza frente a otros candidatos";
-      rationale = "Los perfiles más completos resultan más claros, más serios y más creíbles desde la primera impresión.";
-    } else if (first.href.includes("/candidate/experience")) {
-      label = "Añade tu experiencia y activa tu señal profesional";
-      rationale = "Sin experiencia visible, tu perfil todavía no puede transmitir valor real a una empresa.";
-    }
-    return { label, href: first.href, rationale };
-  }
-
-  if (args.metrics.evidences === 0 && args.experienceCount > 0) {
-    return {
-      label: "Sube una evidencia y refuerza tu perfil hoy",
-      href: "/candidate/evidence",
-      rationale: "Un documento bien alineado puede reforzar claramente tu perfil sin rehacer todo lo demás.",
-    };
-  }
-
-  if (args.profileCompletionScore < 70) {
-    return {
-      label: "Completa tu perfil y evita perder fuerza frente a otros candidatos",
-      href: "/candidate/profile",
-      rationale: "Un perfil más completo transmite mejor tu valor incluso antes de una verificación.",
-    };
-  }
-
-  return {
-    label: "Revisa cómo te ven las empresas",
-    href: "/candidate/share",
-    rationale: "Revisa cómo te verán las empresas y comparte tu mejor versión.",
-  };
 }
 
 function buildPreparationSegments(args: {
@@ -454,12 +395,12 @@ function AvatarView({
 
   return (
     <div>
-      <div className="relative h-28 w-28">
+      <div className="relative h-32 w-32 sm:h-36 sm:w-36">
         {finalAvatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={finalAvatarUrl} alt={fullName || "Avatar"} className="h-28 w-28 rounded-[28px] border border-white/70 object-cover shadow-md" />
+          <img src={finalAvatarUrl} alt={fullName || "Avatar"} className="h-32 w-32 rounded-[30px] border border-white/70 object-cover shadow-md sm:h-36 sm:w-36" />
         ) : (
-          <div className="flex h-28 w-28 items-center justify-center rounded-[28px] border border-white/70 bg-white text-3xl font-semibold text-slate-700 shadow-md">
+          <div className="flex h-32 w-32 items-center justify-center rounded-[30px] border border-white/70 bg-white text-3xl font-semibold text-slate-700 shadow-md sm:h-36 sm:w-36 sm:text-[2.2rem]">
             {fallback}
           </div>
         )}
@@ -511,13 +452,13 @@ function TrustRing({ score, stateTitle }: { score: number; stateTitle: string })
   };
   return (
     <div
-      className="relative flex h-48 w-48 scale-[1.08] items-center justify-center rounded-full p-[10px] shadow-[0_0_40px_rgba(99,102,241,0.18),0_0_80px_rgba(99,102,241,0.08)] transition-transform duration-300 motion-safe:animate-[fade-in_350ms_ease-out] motion-safe:[animation-fill-mode:both]"
+      className="relative flex h-52 w-52 scale-[1.08] items-center justify-center rounded-full p-[10px] shadow-[0_0_40px_rgba(99,102,241,0.18),0_0_80px_rgba(99,102,241,0.08)] transition-transform duration-300 motion-safe:animate-[fade-in_350ms_ease-out] motion-safe:[animation-fill-mode:both]"
       style={progressStyle}
     >
       <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white text-center shadow-inner">
         <span className="text-[3rem] font-semibold tabular-nums text-slate-950">{safeScore}</span>
-        <span className="mt-1 text-[11px] font-semibold tracking-[0.01em] text-slate-700">Tu nivel de confianza</span>
-        <span className="mt-2 max-w-[88px] text-[11px] font-medium leading-4 text-slate-600">{stateTitle}</span>
+        <span className="mt-1 text-[11px] font-semibold tracking-[0.01em] text-slate-700">Nivel de confianza</span>
+        <span className="mt-2 max-w-[100px] text-[11px] font-medium leading-4 text-slate-600">{stateTitle}</span>
       </div>
     </div>
   );
@@ -658,13 +599,27 @@ function PublicProfileCard({
   trustScore,
   verified,
   visibilityLabel,
+  educationCount,
+  languages,
+  achievementsCount,
+  verifiedSkillsCount,
 }: {
   publicLink: string | null;
   preview: PublicProfilePreviewPayload;
   trustScore: number;
   verified: number;
   visibilityLabel: string;
+  educationCount: number;
+  languages: string[];
+  achievementsCount: number;
+  verifiedSkillsCount: number;
 }) {
+  const publicDisplayName = preview?.teaser?.full_name || preview?.teaser?.public_name || "Perfil verificable";
+  const publicLanguagesLabel = languages.length ? languages.slice(0, 2).join(", ") : "Idiomas pendientes";
+  const capabilityLabel =
+    achievementsCount > 0 || verifiedSkillsCount > 0
+      ? `${verifiedSkillsCount} habilidades · ${achievementsCount} logros`
+      : "Habilidades y logros pendientes";
   return (
     <section className="rounded-[28px] bg-slate-50/90 p-7 shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_12px_30px_rgba(15,23,42,0.05)] ring-1 ring-slate-200/70">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -691,14 +646,22 @@ function PublicProfileCard({
             </span>
           </div>
           <p className="mt-4 text-sm font-semibold text-slate-900">
-            {preview?.teaser?.public_name || "Perfil público activo"}
+            {publicDisplayName}
           </p>
           <p className="mt-1 text-sm text-slate-600">
             {[preview?.teaser?.title, preview?.teaser?.location].filter(Boolean).join(" · ") || "Resumen profesional visible para empresa"}
           </p>
-          <p className="mt-4 text-sm leading-6 text-slate-700">
-            {preview?.teaser?.summary || "Tu perfil público ya puede mostrar una muestra profesional, ordenada y verificable de tu trayectoria."}
-          </p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <span className="rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+              Formación: {educationCount > 0 ? `${educationCount} entradas` : "Pendiente"}
+            </span>
+            <span className="rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
+              Idiomas: {publicLanguagesLabel}
+            </span>
+            <span className="rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 sm:col-span-2">
+              {capabilityLabel}
+            </span>
+          </div>
         </div>
 
         <div className="rounded-2xl bg-white/80 p-5 ring-1 ring-slate-200/70">
@@ -711,7 +674,7 @@ function PublicProfileCard({
               Compartir perfil
             </Link>
           </div>
-          <p className="mt-4 break-all text-xs text-slate-500">{publicLink || `${PUBLIC_PROFILE_ORIGIN}/p/[token]`}</p>
+          <p className="mt-4 break-all text-xs text-slate-500">{publicLink || "Activa tu enlace público para compartir tu perfil verificable."}</p>
         </div>
       </div>
     </section>
@@ -905,22 +868,6 @@ export default function CandidateOverview() {
     [experienceCount, metrics]
   );
 
-  const overviewNextActions = useMemo(
-    () => buildCandidateOverviewNextActions({ experienceCount, metrics, profileCompletionScore }),
-    [experienceCount, metrics, profileCompletionScore]
-  );
-
-  const primaryAction = useMemo(
-    () =>
-      buildPrimaryAction({
-        nextActions: overviewNextActions,
-        metrics,
-        profileCompletionScore,
-        experienceCount,
-      }),
-    [experienceCount, metrics, overviewNextActions, profileCompletionScore]
-  );
-
   const trustState = useMemo(
     () =>
       resolveTrustState({
@@ -928,17 +875,6 @@ export default function CandidateOverview() {
         inProcess: metrics.inProcess,
         evidences: metrics.evidences,
         profileCompletionScore,
-      }),
-    [metrics.evidences, metrics.inProcess, metrics.verified, profileCompletionScore]
-  );
-
-  const trustSignals = useMemo(
-    () =>
-      buildTrustSignals({
-        verified: metrics.verified,
-        inProcess: metrics.inProcess,
-        evidences: metrics.evidences,
-        completed: profileCompletionScore >= 70,
       }),
     [metrics.evidences, metrics.inProcess, metrics.verified, profileCompletionScore]
   );
@@ -1039,25 +975,33 @@ export default function CandidateOverview() {
               />
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Estado actual del perfil</p>
-                <p className="mt-3 text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2.45rem]">{profile?.full_name || "Tu resumen profesional"}</p>
+                <p className="mt-3 text-[2rem] font-semibold tracking-tight text-slate-950 sm:text-[2.75rem]">{profile?.full_name || "Tu perfil verificable"}</p>
                 <p className="mt-2 text-base text-slate-700">{profile?.title || "Profesional verificable en Verijob"}</p>
                 <p className="mt-1 text-sm text-slate-500">{profile?.location || "Ubicación no definida"}</p>
 
-                <div className="mt-6 flex flex-wrap items-center gap-3">
+                <div className="mt-8 flex flex-col gap-5 md:flex-row md:items-center md:gap-8 xl:gap-10">
+                  <TrustRing score={metrics.score} stateTitle={trustState.title} />
+                  <div className="min-w-0 max-w-[30rem]">
+                    <p className="text-sm font-medium leading-6 text-slate-800">
+                      {metrics.score >= 60
+                        ? "Con este nivel de confianza, una empresa ya ve señales reales."
+                        : "Ahora mismo tu perfil puede pasar desapercibido frente a candidatos con señales verificadas."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-7 flex flex-wrap items-center gap-3">
                   <VerificationBadge tone={metrics.verified > 0 ? "company_verified" : metrics.inProcess > 0 ? "in_progress" : "trust_visible"}>
                     {trustState.title}
                   </VerificationBadge>
                   <VerificationBadge tone={profileCompletionScore >= 70 ? "company_verified" : "in_progress"}>
                     {profileStage}
                   </VerificationBadge>
-                  <VerificationBadge tone={metrics.evidences > 0 ? "company_verified" : "in_progress"}>
-                    {metrics.evidences > 0 ? "Con evidencias" : "Sin evidencias"}
-                  </VerificationBadge>
                   <VerificationBadge tone={publicProfileActive ? "trust_visible" : "in_progress"}>
                     {publicProfileActive ? "Perfil público activo" : "Perfil público mejorable"}
                   </VerificationBadge>
                 </div>
-                <div className="mt-6 flex flex-wrap gap-2">
+                <div className="mt-4 flex flex-wrap gap-2">
                   {[
                     { label: `${metrics.verified} verificadas`, tone: metrics.verified > 0 ? "green" : "rose" as SignalTone },
                     { label: metrics.inProcess > 0 ? `${metrics.inProcess} en curso` : "Sin validaciones en curso", tone: metrics.inProcess > 0 ? "amber" : "blue" as SignalTone },
@@ -1070,36 +1014,7 @@ export default function CandidateOverview() {
                     </span>
                   ))}
                 </div>
-                <p className="mt-6 text-sm font-medium text-slate-700">{overviewStatus} · {availabilityText}</p>
-
-                <div className="mt-10 flex flex-col gap-6 md:flex-row md:items-center md:gap-8 xl:gap-10 2xl:gap-12">
-                  <TrustRing score={metrics.score} stateTitle={trustState.title} />
-                  <div className="min-w-0 max-w-[42rem] space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.7fr)]">
-                      <div className="rounded-2xl bg-white/80 p-4 ring-1 ring-slate-200/70">
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Nivel de confianza</p>
-                        <p className="mt-2 text-sm leading-6 text-slate-700">Resume qué parte de tu trayectoria ya está respaldada por señales verificables.</p>
-                        <p className="mt-2 text-sm font-medium leading-6 text-slate-800">
-                          {metrics.score >= 60
-                            ? "Con este nivel de confianza, una empresa ya ve señales reales. Aún puedes hacer que te descarte menos y te abra más rápido."
-                            : "Ahora mismo tu perfil puede pasar desapercibido frente a candidatos con señales verificadas."}
-                        </p>
-                      </div>
-                      <div className={`rounded-2xl border p-4 ${trustState.tone}`}>
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em]">Interpretación</p>
-                        <p className="mt-2 text-sm font-semibold">{metrics.verified > 0 ? "Ya existe una base de confianza real" : trustState.title}</p>
-                        <p className="mt-2 text-xs leading-5 opacity-90">Cuantas más señales verificadas, menos dudas para quien evalúa.</p>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex flex-wrap gap-2">
-                      {trustSignals.slice(0, 2).map((signal) => (
-                        <span key={signal} className="rounded-full border border-slate-200 bg-white/50 px-3 py-1 text-xs font-medium text-slate-700">
-                          {signal}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                <p className="mt-5 text-sm font-medium text-slate-700">{overviewStatus} · {availabilityText}</p>
               </div>
             </div>
 
@@ -1108,20 +1023,16 @@ export default function CandidateOverview() {
           </div>
         }
         right={
-        <div className="mx-auto w-full max-w-[36rem] rounded-[30px] bg-slate-950 p-7 text-white shadow-[0_28px_70px_rgba(15,23,42,0.28)] ring-1 ring-white/10 sm:p-8 xl:mx-0 xl:max-w-none xl:p-8 2xl:p-9">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Palanca principal</p>
-          <h2 className="mt-4 text-[1.55rem] font-semibold leading-tight sm:text-[1.8rem]">{opportunityCard.title}</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-300">{opportunityCard.body}</p>
+        <div className={`mx-auto w-full max-w-[29rem] rounded-[28px] border p-5 shadow-[0_18px_42px_rgba(15,23,42,0.08)] backdrop-blur sm:p-6 xl:mx-0 xl:max-w-none ${opportunityCard.tone}`}>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Siguiente palanca</p>
+          <h2 className="mt-3 text-xl font-semibold leading-tight text-slate-950 sm:text-[1.35rem]">{opportunityCard.title}</h2>
+          <p className="mt-2 text-sm text-slate-600">{opportunityCard.body}</p>
           <Link
             href={opportunityCard.href}
-            className="mt-8 inline-flex w-full items-center justify-center rounded-xl bg-white px-5 py-[1.35rem] text-base font-semibold text-slate-950 transition hover:scale-[1.02] hover:bg-slate-100 active:scale-[0.98]"
+            className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black active:scale-[0.98]"
           >
             {opportunityCard.cta}
           </Link>
-          <div className="mt-6 rounded-2xl bg-white/5 p-4 ring-1 ring-white/10">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Qué ganas si actúas ahora</p>
-            <p className="mt-2 text-sm leading-6 text-slate-300">{primaryAction.rationale}</p>
-          </div>
         </div>
       }
       >
@@ -1260,6 +1171,10 @@ export default function CandidateOverview() {
               trustScore={metrics.score}
               verified={metrics.verified}
               visibilityLabel={publicVisibilityLabel}
+              educationCount={educationCount}
+              languages={publicLanguages}
+              achievementsCount={achievementsCount}
+              verifiedSkillsCount={verifiedSkillsCount}
             />
           </OverviewProfilePublicCard>
 

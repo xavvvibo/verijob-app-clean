@@ -390,12 +390,8 @@ export function CandidatePublicProfileRenderer({
   const isExternalCleanView = !internalPreview;
   const isPrintMode = renderMode === "print";
   const isOpenPublicView = isPublicCompanyResolutionTarget;
-  const displayName = isOpenPublicView ? (teaser?.public_name || teaser?.full_name) : teaser?.full_name;
+  const displayName = teaser?.full_name || teaser?.public_name || null;
   const trustHeadline = `${Math.round(trust)} · ${trustStateLabel}`;
-  const trustSubheadline =
-    verificationSummary.verified > 0
-      ? `${verificationSummary.verified} ${verificationSummary.verified === 1 ? "experiencia verificada" : "experiencias verificadas"}`
-      : trustStateExplanation;
   const hasSecondarySummary = Boolean((qrEnabled || internalPreview) || capabilities.showContact || companyAccess);
   const hasExperiences = experiences.length > 0;
   const hasEducation = education.length > 0;
@@ -457,7 +453,7 @@ export function CandidatePublicProfileRenderer({
                   <img src="/brand/verijob-logo-white-bg.png" alt="Verijob" className="h-6 w-auto object-contain" />
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Vista pública</span>
                 </div>
-                <h1 className="mt-2 text-3xl font-semibold text-slate-900">{displayName || "Candidato verificado"}</h1>
+                <h1 className="mt-2 text-3xl font-semibold text-slate-900">{displayName || "Perfil verificable"}</h1>
                 <p className="mt-1 text-sm font-medium text-blue-800">
                   {[teaser?.title, teaser?.sector].filter(Boolean).join(" · ") || "Credencial laboral verificable"}
                 </p>
@@ -465,6 +461,8 @@ export function CandidatePublicProfileRenderer({
                   {teaser?.location ? <Pill>{teaser.location}</Pill> : null}
                   <Pill>{verificationSummary.verified} verificaciones</Pill>
                   <Pill>Nivel de confianza {Math.round(trust)}</Pill>
+                  <Pill>{Number(teaser?.education_total ?? education.length)} formaciones</Pill>
+                  <Pill>{publicLanguages.length ? publicLanguages.slice(0, 2).join(", ") : "Idiomas pendientes"}</Pill>
                 </div>
               </div>
 
@@ -538,10 +536,26 @@ export function CandidatePublicProfileRenderer({
             )}
           </header>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <SignalCard label="Nivel de confianza" value={Math.round(trust)} hint="Resume qué parte de la trayectoria ya está respaldada por señales verificables." />
             <SignalCard label="Experiencias verificadas" value={verificationSummary.verified} hint="Trayectoria contrastada" />
             <SignalCard label="Experiencias visibles" value={experiences.length} hint="Vista pública resumida" />
+            <SignalCard
+              label="Formación"
+              value={Number(teaser?.education_total ?? education.length) || "Pendiente"}
+              hint="Base académica visible"
+            />
+            <SignalCard
+              label="Idiomas y logros"
+              value={
+                publicLanguages.length
+                  ? publicLanguages.slice(0, 2).join(", ")
+                  : skills.length || achievements.length
+                    ? `${skills.length} habilidades · ${achievements.length} logros`
+                    : "Pendiente"
+              }
+              hint="Señal complementaria del perfil"
+            />
           </div>
           <p className="text-sm text-slate-600">Cuantas más señales verificadas, menos dudas para quien evalúa.</p>
 
@@ -600,7 +614,7 @@ export function CandidatePublicProfileRenderer({
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex min-w-0 items-start gap-4">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 text-xl font-bold text-white shadow-sm">
-                  {getInitials(teaser?.full_name || "Candidato")}
+                  {getInitials(displayName || "Perfil")}
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -616,8 +630,8 @@ export function CandidatePublicProfileRenderer({
                       </div>
                     ) : null}
                   </div>
-                  <h1 className="mt-1 truncate text-2xl font-semibold text-slate-900 sm:text-3xl">
-                    {displayName || "Candidato verificado"}
+                  <h1 className="mt-1 whitespace-normal break-words text-2xl font-semibold text-slate-900 sm:text-3xl">
+                    {displayName || "Perfil verificable"}
                   </h1>
                   {teaser?.title || internalPreview ? (
                     <p className="mt-1 text-sm font-medium text-blue-800">{teaser?.title || "Añade tu titular profesional"}</p>
@@ -965,15 +979,28 @@ export function CandidatePublicProfileRenderer({
                             ? "Resumen profesional pensado para que una empresa entienda rápido la trayectoria y las señales de confianza, sin exponer el perfil completo."
                             : "Resumen profesional priorizado para compartir un perfil verificable claro, legible y centrado en la trayectoria real del candidato.")}
                       </p>
-                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div className={`grid gap-3 sm:grid-cols-2 ${isOpenPublicView ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
                       <SummaryInfo label="Experiencias visibles" value={String(verificationSummary.experiences)} />
-                      {!isOpenPublicView ? (
-                        <SummaryInfo label="Formación visible" value={String(Number(teaser?.education_total ?? education.length))} />
-                      ) : null}
-                      {!isOpenPublicView ? (
+                      <SummaryInfo
+                        label="Formación visible"
+                        value={
+                          Number(teaser?.education_total ?? education.length) > 0
+                            ? String(Number(teaser?.education_total ?? education.length))
+                            : "Pendiente"
+                        }
+                      />
+                      <SummaryInfo
+                        label="Idiomas"
+                        value={publicLanguages.length ? publicLanguages.slice(0, 2).join(", ") : "Pendientes"}
+                      />
+                      {isOpenPublicView ? (
                         <SummaryInfo
-                          label="Idiomas"
-                          value={publicLanguages.length ? publicLanguages.join(", ") : "Pendientes"}
+                          label="Habilidades y logros"
+                          value={
+                            skills.length > 0 || achievements.length > 0
+                              ? `${skills.length} habilidades · ${achievements.length} logros`
+                              : "Pendientes"
+                          }
                         />
                       ) : null}
                       <SummaryInfo label="Estado de confianza" value={isOpenPublicView ? "Perfil con validaciones reales" : trustStateLabel} />
