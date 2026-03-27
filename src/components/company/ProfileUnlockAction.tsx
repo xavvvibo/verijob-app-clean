@@ -13,7 +13,7 @@ export default function ProfileUnlockAction({
   alreadyUnlocked = false,
   unlockedAt = null,
   unlockedUntil = null,
-  primaryLabel = "Desbloquear perfil (consume 1 acceso)",
+  primaryLabel = "Ver perfil completo (-1 acceso)",
   upgradeHref,
 }: {
   candidateToken?: string;
@@ -48,16 +48,19 @@ export default function ProfileUnlockAction({
 
   if (isUnlocked) {
     return (
-      <div className="space-y-2">
+      <div className="space-y-3">
+        <div className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
+          Acceso activo
+        </div>
         <button
           type="button"
           onClick={() => router.push(href)}
           className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
         >
-          Perfil desbloqueado
+          Abrir perfil completo
         </button>
         <p className="text-xs text-emerald-700">
-          {unlockUntilLabel ? `No consume más accesos hasta ${unlockUntilLabel}.` : "No consume más accesos dentro de la ventana activa."}
+          {unlockUntilLabel ? `Ya está desbloqueado para tu empresa hasta ${unlockUntilLabel}.` : "Ya está desbloqueado para tu empresa dentro de la ventana activa."}
         </p>
       </div>
     );
@@ -67,7 +70,7 @@ export default function ProfileUnlockAction({
     if (submitting) return;
     setError(null);
     if (remainingAccesses <= 0) {
-      setError("No tienes accesos disponibles para ver perfiles completos.");
+      setError("No tienes accesos disponibles para abrir perfiles completos.");
       return;
     }
 
@@ -82,7 +85,7 @@ export default function ProfileUnlockAction({
 
       if (!response.ok) {
         if (response.status === 402) {
-          setError("No tienes accesos disponibles para ver perfiles completos.");
+          setError("No tienes accesos disponibles para abrir perfiles completos.");
           return;
         }
         const details = String(payload?.user_message || payload?.details || payload?.error || "").trim();
@@ -125,23 +128,24 @@ export default function ProfileUnlockAction({
           setError(null);
           setOpen(true);
         }}
-        className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+        className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-black"
       >
         {primaryLabel}
       </button>
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-          <div className="w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Confirmación de acceso</p>
-            <h2 className="mt-2 text-xl font-semibold text-slate-900">Desbloquear perfil completo</h2>
+          <div className="w-full max-w-lg rounded-[32px] border border-slate-200 bg-white p-6 shadow-2xl">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Acceso al perfil completo</p>
+            <h2 className="mt-2 text-xl font-semibold text-slate-900">Ver perfil completo</h2>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              El primer desbloqueo consume 1 acceso. Después no volverá a consumir accesos mientras siga dentro de la ventana activa.
+              Verás la versión completa del candidato. El primer acceso consume 1 crédito y no volverá a consumirse mientras siga dentro de la ventana activa.
             </p>
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              <p className="font-semibold text-slate-900">Accesos a perfiles disponibles: {remainingAccesses}</p>
+            <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              <p className="font-semibold text-slate-900">Accesos disponibles para abrir perfiles: {remainingAccesses}</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">La vista completa muestra más contexto profesional y evita decidir solo con el resumen público.</p>
               {remainingAccesses <= 0 ? (
-                <p className="mt-1 text-rose-700">No tienes accesos disponibles para ver perfiles completos.</p>
+                <p className="mt-1 text-rose-700">No tienes accesos disponibles para abrir perfiles completos.</p>
               ) : null}
             </div>
             {error ? (
@@ -149,14 +153,14 @@ export default function ProfileUnlockAction({
                 {error}
               </div>
             ) : null}
-            <div className="mt-5 flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={handleConfirmUnlock}
                 disabled={submitting}
-                className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
+                className="inline-flex min-w-[220px] justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
               >
-                {submitting ? "Desbloqueando…" : "Desbloquear perfil"}
+                {submitting ? "Abriendo perfil…" : "Ver perfil completo"}
               </button>
               <button
                 type="button"
@@ -174,7 +178,7 @@ export default function ProfileUnlockAction({
                   href={upgradeHref}
                   className="inline-flex rounded-xl border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-900 hover:bg-blue-100"
                 >
-                  Comprar accesos
+                  Ver planes y accesos
                 </a>
               ) : null}
             </div>

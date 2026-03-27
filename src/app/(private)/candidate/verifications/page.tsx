@@ -74,8 +74,8 @@ export default async function CandidateVerificationsPage() {
     <CandidateOperationsLayout>
       <CandidatePageHeader
         eyebrow="Verificaciones"
-        title="Qué está en curso y qué ya se ha resuelto"
-        description="Sigue tus solicitudes con una lectura clara: qué empresa la tiene, por qué canal se ha enviado y en qué estado real se encuentra."
+        title="Qué validaciones están en marcha y cuáles ya se han resuelto"
+        description="Sigue tus solicitudes con una lectura clara: quién valida tu experiencia, por qué canal se ha enviado y qué impacto tiene en tu perfil."
         badges={["En curso", "Completadas", "Señal empresarial"]}
       />
 
@@ -99,14 +99,31 @@ export default async function CandidateVerificationsPage() {
 
       {!error && visibleRows && visibleRows.length > 0 ? (
         <div className="space-y-10">
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-blue-200 bg-blue-50/80 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-800">En curso</p>
+              <p className="mt-2 text-3xl font-semibold text-slate-950">{activeRows.length}</p>
+              <p className="mt-2 text-sm text-slate-700">Solicitudes que todavía pueden reforzar tu perfil.</p>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-emerald-800">Resueltas</p>
+              <p className="mt-2 text-3xl font-semibold text-slate-950">{completedRows.length}</p>
+              <p className="mt-2 text-sm text-slate-700">Validaciones ya cerradas y visibles para consulta.</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Valor para tu perfil</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">Más señal, menos dudas</p>
+              <p className="mt-2 text-sm text-slate-600">Cada validación completada hace tu trayectoria más creíble cuando una empresa la revisa.</p>
+            </div>
+          </div>
           <VerificationSection
             title="En curso"
-            description="Solicitudes que todavía están esperando respuesta o revisión."
+            description="Solicitudes que todavía están esperando respuesta o revisión por parte de la empresa."
             rows={activeRows}
           />
           <VerificationSection
             title="Completadas y cerradas"
-            description="Solicitudes ya resueltas o archivadas para consulta."
+            description="Solicitudes ya resueltas para que puedas consultar qué experiencias ya están reforzadas."
             rows={completedRows}
           />
         </div>
@@ -133,9 +150,10 @@ function VerificationSection({
         <p className="text-sm text-slate-500">{description}</p>
       </div>
 
-      <div className="space-y-3 border-t border-slate-100 pt-2">
+      <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="space-y-3">
         {rows.map((row: any) => (
-          <article key={row.id} className="flex flex-col gap-4 border-b border-slate-100 pb-5 transition-colors duration-150 hover:bg-slate-50/50 sm:flex-row sm:items-center sm:justify-between">
+          <article key={row.id} className="flex flex-col gap-4 rounded-2xl border-b border-slate-100 px-2 py-4 transition-colors duration-150 hover:bg-slate-50/50 last:border-b-0 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0 space-y-2">
               <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-base font-semibold text-slate-950">{row.company_name_target || "Empresa"}</h3>
@@ -162,6 +180,7 @@ function VerificationSection({
             </div>
           </article>
         ))}
+        </div>
       </div>
     </section>
   );

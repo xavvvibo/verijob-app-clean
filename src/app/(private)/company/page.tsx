@@ -724,7 +724,7 @@ export default function CompanyDashboard() {
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Panel de control</p>
             <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">{companyName}</h1>
             <p className="mt-2 max-w-3xl text-sm text-slate-600">
-              Vista operativa para priorizar el trabajo de hoy, mover candidatos y tener claro qué limita o desbloquea tu operación.
+              Vista operativa para decidir rápido qué candidatos merece la pena revisar, desbloquear y mover dentro del proceso.
             </p>
             <div className="mt-4 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">Plan {planLabel}</span>
@@ -765,7 +765,7 @@ export default function CompanyDashboard() {
             <p className="mt-2 text-3xl font-semibold text-slate-900">{verifiedCandidateCount}</p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Accesos disponibles</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Accesos para perfiles completos</p>
             <p className="mt-2 text-3xl font-semibold text-slate-900">{availableProfileAccesses}</p>
           </div>
         </div>
@@ -852,12 +852,12 @@ export default function CompanyDashboard() {
         </article>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
+        <article className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Candidatos para decidir</h2>
-              <p className="mt-1 text-sm text-slate-600">Vista priorizada por confianza para decidir rápido a quién abrir, guardar o preseleccionar.</p>
+              <p className="mt-1 text-sm text-slate-600">Lectura rápida para decidir a quién revisar a fondo, guardar o preseleccionar sin perder contexto.</p>
             </div>
             <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir base completa</a>
           </div>
@@ -928,7 +928,7 @@ export default function CompanyDashboard() {
                 return (
                   <article
                     key={row.id}
-                    className="cursor-pointer rounded-2xl border border-slate-200 bg-slate-50 p-5 transition hover:border-slate-300 hover:bg-white"
+                    className="cursor-pointer rounded-[26px] border border-slate-200 bg-slate-50/90 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition hover:border-slate-300 hover:bg-white"
                     onClick={() => setQuickViewRow(row)}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-4">
@@ -959,7 +959,7 @@ export default function CompanyDashboard() {
                       </div>
                     </div>
 
-                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    <div className="mt-5 grid gap-3 md:grid-cols-3">
                       <div className="rounded-xl border border-slate-200 bg-white p-3">
                         <div className="text-xs uppercase tracking-wide text-slate-500">Experiencias verificadas</div>
                         <div className="mt-2 text-2xl font-semibold text-slate-900">{approved}</div>
@@ -974,16 +974,16 @@ export default function CompanyDashboard() {
                       </div>
                     </div>
 
-                    <div className="mt-4 flex flex-wrap gap-2">
+                    <div className="mt-5 flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
                           setQuickViewRow(row);
                         }}
-                        className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+                        className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
                       >
-                        Abrir ficha
+                        Ver resumen
                       </button>
                       <button
                         type="button"
@@ -991,9 +991,9 @@ export default function CompanyDashboard() {
                           event.stopPropagation();
                           setQuickViewRow(row);
                         }}
-                        className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                        className="inline-flex rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-900 hover:bg-indigo-100"
                       >
-                        Desbloquear
+                        Ver perfil completo
                       </button>
                       <button
                         type="button"
@@ -1057,7 +1057,7 @@ export default function CompanyDashboard() {
                 {activeAccessCount} perfiles completos activos · {expiredAccessCount} accesos caducados listos para renovar.
               </p>
               {availableProfileAccesses <= 0 ? (
-                <p className="mt-2 text-sm text-rose-700">No tienes accesos disponibles para ver perfiles completos.</p>
+              <p className="mt-2 text-sm text-rose-700">No tienes accesos disponibles para abrir perfiles completos.</p>
               ) : null}
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -1165,7 +1165,7 @@ export default function CompanyDashboard() {
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Base RRHH</h2>
               <p className="mt-1 text-sm text-slate-600">Tus candidatos importados como base interna ligera para seguimiento diario.</p>
-              <p className="mt-2 text-xs text-slate-500">El trust score resume la solidez del perfil con señales verificadas, evidencias y consistencia general.</p>
+              <p className="mt-2 text-xs text-slate-500">El nivel de confianza resume qué señales reales ya hacen ese perfil más sólido para una decisión de empresa.</p>
             </div>
             <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir base completa</a>
           </div>
@@ -1262,7 +1262,7 @@ export default function CompanyDashboard() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Perfiles ya desbloqueados</h2>
-              <p className="mt-1 text-sm text-slate-600">Historial rápido de aperturas completas para saber qué candidatos ya no consumen más accesos.</p>
+              <p className="mt-1 text-sm text-slate-600">Historial rápido para saber qué candidatos ya están abiertos y no consumirán otro acceso dentro de la ventana activa.</p>
             </div>
             <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir RRHH</a>
           </div>

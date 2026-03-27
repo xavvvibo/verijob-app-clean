@@ -68,10 +68,10 @@ function deriveInitialStep(args: {
 }
 
 function stepLabel(step: Step) {
-  if (step === "intro") return "Paso 1 de 3 · Importa o crea tu base"
-  if (step === "experience") return "Paso 2 de 3 · Revisa tus experiencias"
-  if (step === "verification") return "Paso 3 de 3 · Refuerza tu perfil"
-  return "Paso 3 de 3 · Perfil en marcha"
+  if (step === "intro") return "Paso 1 de 3 · Crea la base de tu perfil"
+  if (step === "experience") return "Paso 2 de 3 · Revisa tu historial"
+  if (step === "verification") return "Paso 3 de 3 · Refuerza tu credibilidad"
+  return "Paso 3 de 3 · Perfil activado"
 }
 
 function progressWidth(step: Step) {
@@ -163,14 +163,24 @@ export default function CandidateOnboardingFlow({
   const trustMessage =
     initialTrustScore >= 60 || verificationStatus === "Verificada" || initialEvidence.length > 0
       ? "Tu perfil ya transmite confianza"
-      : "Tu perfil ya está en marcha"
+      : "Tu perfil ya empieza a transmitir valor real"
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
-      <div className="mx-auto max-w-3xl">
-        <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="text-sm font-semibold text-slate-700">{stepLabel(step)}</div>
-          <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+      <div className="mx-auto max-w-4xl">
+        <section className="mb-8 rounded-[32px] border border-slate-200 bg-white p-7 shadow-sm">
+          <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="text-sm font-semibold text-slate-700">{stepLabel(step)}</div>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Activa tu perfil profesional paso a paso</h1>
+              <p className="mt-2 text-sm leading-6 text-slate-600">Cada paso añade contexto, claridad o confianza para que tu perfil resulte más útil cuando una empresa lo revise.</p>
+            </div>
+            <div className="min-w-[180px] rounded-2xl bg-slate-50 px-4 py-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Progreso</p>
+              <p className="mt-2 text-lg font-semibold text-slate-900">{progressWidth(step)}%</p>
+            </div>
+          </div>
+          <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
             <div className="h-full rounded-full bg-slate-900 transition-all" style={{ width: `${progressWidth(step)}%` }} />
           </div>
         </section>
@@ -182,31 +192,31 @@ export default function CandidateOnboardingFlow({
         ) : null}
 
         {step === "intro" ? (
-          <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+          <section className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">VERIJOB</div>
-            <h1 className="mt-3 text-3xl font-semibold text-slate-900">Construye tu perfil profesional desde una base real</h1>
+            <h1 className="mt-3 text-3xl font-semibold text-slate-900">Construye un perfil laboral creíble desde una base real</h1>
             <p className="mt-3 text-base text-slate-600">
-              Empieza importando tu CV o añadiendo tu primera experiencia. Después podrás revisar cada experiencia antes de verificarla.
+              Empieza importando tu CV o añadiendo tu primera experiencia. Después podrás revisar cada paso antes de verificarlo o reforzarlo con documentación.
             </p>
 
-            <div className="mt-8 grid gap-3 md:grid-cols-2">
+            <div className="mt-8 grid gap-4 md:grid-cols-2">
               <button
                 type="button"
                 onClick={() => void goToExperience("cv")}
                 className="inline-flex min-h-16 items-center justify-center rounded-2xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white hover:bg-black"
               >
-                Extraer perfil desde CV
+                Importar desde CV
               </button>
               <button
                 type="button"
                 onClick={() => void goToExperience("manual")}
                 className="inline-flex min-h-16 items-center justify-center rounded-2xl border border-slate-300 bg-white px-5 py-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
-                Añadir experiencia manualmente
+                Crear perfil manualmente
               </button>
             </div>
 
-            <p className="mt-4 text-sm text-slate-500">Revisa tus experiencias antes de verificarlas.</p>
+            <p className="mt-4 text-sm text-slate-500">Primero crea tu base. Luego podrás reforzarla con verificaciones y evidencias.</p>
 
             {initialExperience ? (
               <button
@@ -214,18 +224,18 @@ export default function CandidateOnboardingFlow({
                 onClick={() => setStep("experience")}
                 className="mt-6 inline-flex rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
-                Ya he empezado mi historial
+                Continuar con mi historial
               </button>
             ) : null}
           </section>
         ) : null}
 
         {step === "experience" ? (
-          <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+          <section className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
             <div>
-              <h2 className="text-2xl font-semibold text-slate-900">Revisa tus experiencias antes de continuar</h2>
+              <h2 className="text-2xl font-semibold text-slate-900">Revisa tu historial antes de seguir</h2>
               <p className="mt-2 text-sm text-slate-600">
-                Edita o elimina cualquier experiencia antes de continuar. Si una experiencia está duplicada o es incorrecta, puedes borrarla.
+                Corrige, completa o elimina lo que no encaje. Cuanto más limpio esté tu historial, más fácil será reforzarlo después.
               </p>
             </div>
 
@@ -237,29 +247,29 @@ export default function CandidateOnboardingFlow({
                   {formatMonth(initialExperience.start_date)} — {initialExperience.end_date ? formatMonth(initialExperience.end_date) : "Actualidad"}
                 </div>
                 <div className="mt-3 text-xs text-slate-600">
-                  Puedes revisarla una por una desde tu bandeja de experiencias antes de verificarla o vincular documentación.
+                  Puedes revisarla desde tu bandeja de experiencias antes de solicitar una verificación o vincular documentación.
                 </div>
               </div>
             ) : (
               <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-                Todavía no hay experiencias creadas. Empieza importando tu CV o añadiendo una experiencia manual.
+                Todavía no hay experiencias creadas. Empieza importando tu CV o añadiendo tu primera experiencia manualmente.
               </div>
             )}
 
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={() => void goToExperience("cv")}
                 className="inline-flex rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
-                Revisar importación CV
+                Revisar CV importado
               </button>
               <button
                 type="button"
                 onClick={() => void goToExperience("manual")}
                 className="inline-flex rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
-                Añadir o editar manualmente
+                Editar historial manualmente
               </button>
               {initialExperience ? (
                 <button
@@ -267,7 +277,7 @@ export default function CandidateOnboardingFlow({
                   onClick={() => void continueToReview()}
                   className="inline-flex rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-black"
                 >
-                  He revisado mis experiencias
+                  Continuar y reforzar perfil
                 </button>
               ) : null}
             </div>
@@ -275,15 +285,15 @@ export default function CandidateOnboardingFlow({
         ) : null}
 
         {step === "verification" ? (
-          <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
+          <section className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
             <div>
-              <h2 className="text-2xl font-semibold text-slate-900">Refuerza tu perfil desde tu historial</h2>
+              <h2 className="text-2xl font-semibold text-slate-900">Refuerza tu perfil con señales reales</h2>
               <p className="mt-2 text-sm text-slate-600">
-                Desde la bandeja de experiencias puedes editar, eliminar, solicitar verificación o vincular documentación cuando lo necesites.
+                Desde tu historial puedes solicitar verificaciones y añadir documentación para que tu perfil resulte más creíble cuando una empresa lo revise.
               </p>
             </div>
 
-            <div className="mt-6 grid gap-4 md:grid-cols-3">
+            <div className="mt-7 grid gap-4 md:grid-cols-3">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Experiencia</div>
                 <div className="mt-2 text-sm font-semibold text-slate-900">
@@ -297,17 +307,17 @@ export default function CandidateOnboardingFlow({
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Verificación</div>
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Validación</div>
                 <div className="mt-2 text-sm font-semibold text-slate-900">{verificationStatus}</div>
                 <p className="mt-1 text-xs text-slate-600">
                   {initialVerification?.external_email_target
                     ? `Solicitud enviada a ${initialVerification.external_email_target}.`
-                    : "Aún puedes solicitar verificación más adelante desde tu perfil."}
+                    : "Todavía puedes solicitar una validación más adelante desde tu historial."}
                 </p>
               </div>
 
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Documentación</div>
+                <div className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Evidencias</div>
                 <div className="mt-2 text-sm font-semibold text-slate-900">
                   {initialEvidence.length > 0 ? "Con documentación aportada" : "Todavía opcional"}
                 </div>
@@ -319,13 +329,13 @@ export default function CandidateOnboardingFlow({
               </div>
             </div>
 
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={() => router.push("/candidate/experience?onboarding=1")}
                 className="inline-flex rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
-                Abrir bandeja de experiencias
+                Abrir historial de experiencias
               </button>
               <button
                 type="button"
@@ -333,16 +343,16 @@ export default function CandidateOnboardingFlow({
                 disabled={completing}
                 className="inline-flex rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
               >
-                {completing ? "Guardando…" : "Continuar con mi perfil"}
+                {completing ? "Guardando…" : "Ir a mi dashboard"}
               </button>
             </div>
           </section>
         ) : null}
 
         {step === "done" ? (
-          <section className="rounded-3xl border border-slate-200 bg-white p-8 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Perfil iniciado</div>
-            <h1 className="mt-3 text-3xl font-semibold text-slate-900">Tu perfil ya está en marcha</h1>
+          <section className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Perfil activado</div>
+            <h1 className="mt-3 text-3xl font-semibold text-slate-900">Tu perfil ya está listo para seguir creciendo</h1>
             <p className="mt-3 text-base text-slate-600">{trustMessage}</p>
 
             <div className="mt-8 grid gap-4 md:grid-cols-3">
@@ -377,7 +387,7 @@ export default function CandidateOnboardingFlow({
                 onClick={() => router.push("/candidate/overview")}
                 className="inline-flex rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
-                Ver mi perfil
+                Ver mi dashboard
               </button>
             </div>
           </section>

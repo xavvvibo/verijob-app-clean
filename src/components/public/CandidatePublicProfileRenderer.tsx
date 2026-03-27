@@ -464,7 +464,7 @@ export function CandidatePublicProfileRenderer({
                 <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
                   {teaser?.location ? <Pill>{teaser.location}</Pill> : null}
                   <Pill>{verificationSummary.verified} verificaciones</Pill>
-                  <Pill>Trust score del perfil {Math.round(trust)}</Pill>
+                  <Pill>Nivel de confianza {Math.round(trust)}</Pill>
                 </div>
               </div>
 
@@ -476,7 +476,7 @@ export function CandidatePublicProfileRenderer({
             </div>
 
             <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-700">
-              Resumen público con señales verificables y una muestra limitada de trayectoria. Para ver el perfil completo hay que desbloquearlo.
+              Credencial laboral verificable con señales reales y una muestra limitada de trayectoria. Para revisar el perfil completo hay que abrir el acceso empresa.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-3">
@@ -490,14 +490,14 @@ export function CandidatePublicProfileRenderer({
                     alreadyUnlocked={companyAlreadyUnlocked}
                     unlockedAt={resolvedCompanyViewer?.unlocked_at ?? null}
                     unlockedUntil={resolvedCompanyViewer?.unlocked_until ?? null}
-                    primaryLabel="Desbloquear perfil completo"
+                    primaryLabel="Ver perfil completo (-1 acceso)"
                     upgradeHref="/company/subscription"
                   />
                   <a
                     href={companyAccessCta.companyPreviewHref}
                     className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                   >
-                    Acceso empresa
+                    Ver resumen empresa
                   </a>
                 </>
               ) : resolvingCompanyViewer ? (
@@ -514,13 +514,13 @@ export function CandidatePublicProfileRenderer({
                     href={companyAccessCta.signupUrl}
                     className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
                   >
-                    Desbloquear perfil completo
+                    Acceso empresa
                   </a>
                   <a
                     href={companyAccessCta.loginUrl}
                     className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                   >
-                    Acceso empresa
+                    Ya tengo cuenta empresa
                   </a>
                 </>
               )}
@@ -528,25 +528,25 @@ export function CandidatePublicProfileRenderer({
             {companyIsAuthenticated ? (
               <p className="mt-3 text-xs text-slate-500">
                 {companyAlreadyUnlocked
-                  ? "Tu empresa ya tiene este perfil desbloqueado y puedes abrir la vista completa sin consumir otro acceso dentro de la ventana activa."
+                  ? "Tu empresa ya tiene este perfil desbloqueado y puede abrir la vista completa sin consumir otro acceso dentro de la ventana activa."
                   : companyAvailableAccesses > 0
                     ? `Tu empresa tiene ${companyAvailableAccesses} acceso${companyAvailableAccesses === 1 ? "" : "s"} disponible${companyAvailableAccesses === 1 ? "" : "s"} para abrir perfiles completos.`
-                    : "Tu empresa no tiene accesos disponibles ahora mismo. Puedes seguir viendo este resumen parcial o comprar más accesos."}
+                    : "Tu empresa no tiene accesos disponibles ahora mismo. Puedes seguir viendo este resumen o activar más accesos cuando lo necesites."}
               </p>
             ) : null}
           </header>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <SignalCard label="Trust score del perfil" value={Math.round(trust)} hint="Confianza visible para empresa" />
-            <SignalCard label="Verificaciones" value={verificationSummary.verified} hint="Experiencias contrastadas" />
-            <SignalCard label="Experiencias visibles" value={experiences.length} hint="Muestra pública limitada" />
+            <SignalCard label="Nivel de confianza" value={Math.round(trust)} hint="Señal visible para empresa" />
+            <SignalCard label="Experiencias verificadas" value={verificationSummary.verified} hint="Trayectoria contrastada" />
+            <SignalCard label="Experiencias visibles" value={experiences.length} hint="Vista pública resumida" />
           </div>
 
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">Experiencia destacada</h2>
-                <p className="mt-1 text-sm text-slate-600">Solo se muestran 1-2 experiencias resumidas según el plan del candidato.</p>
+                <h2 className="text-lg font-semibold text-slate-900">Trayectoria visible</h2>
+                <p className="mt-1 text-sm text-slate-600">Aquí solo se muestra una selección resumida del historial profesional compartible.</p>
               </div>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
                 Sin datos de contacto
@@ -620,7 +620,7 @@ export function CandidatePublicProfileRenderer({
                     <p className="mt-1 text-sm font-medium text-blue-800">{teaser?.title || "Añade tu titular profesional"}</p>
                   ) : null}
                   <p className="mt-1 text-xs text-slate-600">
-                    Perfil profesional con señales verificables para evaluación empresarial.
+                    Perfil profesional verificable pensado para generar confianza desde la primera revisión.
                   </p>
                   <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-600">
                     {teaser?.location ? <Pill>{teaser.location}</Pill> : null}
@@ -665,7 +665,7 @@ export function CandidatePublicProfileRenderer({
                       }}
                       className="inline-flex items-center justify-center rounded-xl bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
                     >
-                      Compartir perfil verificado
+                      Compartir perfil verificable
                     </button>
                     {token && cvDownloadEnabled ? (
                       <a
@@ -679,7 +679,7 @@ export function CandidatePublicProfileRenderer({
                       href={companyAccessCta.loginUrl}
                       className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                     >
-                      Ver evaluación empresa
+                      Vista empresa
                     </a>
                   </>
                 ) : null}
@@ -706,7 +706,7 @@ export function CandidatePublicProfileRenderer({
               {isOpenPublicView ? (
                 <div className="space-y-3">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-900">Confianza del perfil</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-900">Nivel de confianza</p>
                     <p className="mt-2 text-2xl font-semibold text-slate-900">{trustHeadline}</p>
                     <p className="mt-1 text-sm text-slate-700">{trustSubheadline}</p>
                   </div>
@@ -745,7 +745,7 @@ export function CandidatePublicProfileRenderer({
                     hint="Actividad empresarial registrada"
                   />
                   <SignalCard
-                    label="Confianza del perfil"
+                    label="Nivel de confianza"
                     value={trustStateLabel}
                     hint={trustStateExplanation}
                   />
@@ -774,8 +774,8 @@ export function CandidatePublicProfileRenderer({
         </header>
 
         {!isPrintMode && !isOpenPublicView ? (
-          <div className={`grid gap-4 ${hasSecondarySummary ? "xl:grid-cols-[minmax(0,1fr)_300px]" : "grid-cols-1"}`}>
-            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+          <div className={`grid gap-5 ${hasSecondarySummary ? "xl:grid-cols-[minmax(0,1fr)_320px]" : "grid-cols-1"}`}>
+            <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900">Resumen ejecutivo</h3>
@@ -788,8 +788,8 @@ export function CandidatePublicProfileRenderer({
                 </span>
               </div>
 
-              <div className="mt-5 grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
-                <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <div className="mt-5 grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
+                <div className="rounded-3xl border border-blue-100 bg-blue-50/75 p-5">
                   <div className="flex items-center justify-center">
                     <div className="relative h-28 w-28 rounded-full p-1.5" style={trustRingStyle}>
                       <div className="flex h-full w-full items-center justify-center rounded-full bg-white px-3 text-center text-sm font-semibold text-slate-900">
@@ -814,7 +814,7 @@ export function CandidatePublicProfileRenderer({
                   </div>
                   {!isOpenPublicView ? (
                     <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Qué compone el trust score</div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Qué refuerza este perfil</div>
                       <div className="mt-3 space-y-2">
                         <TrustBreakdownBar label="Documental" value={trustComponents.documentary} />
                         <TrustBreakdownBar label="Empresa" value={trustComponents.company} />
@@ -823,7 +823,7 @@ export function CandidatePublicProfileRenderer({
                         <TrustBreakdownBar label="Consistencia CV" value={trustComponents.cvConsistency} />
                       </div>
                       <p className="mt-3 text-xs leading-5 text-slate-500">
-                        El trust score resume señales públicas y verificables. Ayuda a priorizar, pero no sustituye la revisión humana del perfil.
+                        Este nivel de confianza resume señales verificables del perfil. Ayuda a decidir más rápido, pero no sustituye la revisión humana.
                       </p>
                     </div>
                   ) : (
@@ -893,14 +893,14 @@ export function CandidatePublicProfileRenderer({
                             alreadyUnlocked={companyAlreadyUnlocked}
                             unlockedAt={resolvedCompanyViewer?.unlocked_at ?? null}
                             unlockedUntil={resolvedCompanyViewer?.unlocked_until ?? null}
-                            primaryLabel="Desbloquear perfil completo"
+                            primaryLabel="Ver perfil completo (-1 acceso)"
                             upgradeHref="/company/subscription"
                           />
                           <a
                             className="inline-flex w-full justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100"
                             href={companyAccessCta.companyPreviewHref}
                           >
-                            Acceso empresa
+                            Ver resumen empresa
                           </a>
                         </>
                       ) : resolvingCompanyViewer && isOpenPublicView ? (
@@ -936,7 +936,7 @@ export function CandidatePublicProfileRenderer({
             {isPrintMode ? (
                 <Card title="Confianza y verificación" subtitle="Resumen público de credibilidad y verificación del perfil.">
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <SummaryInfo label="Confianza del perfil" value={trustStateLabel} />
+                  <SummaryInfo label="Nivel de confianza" value={trustStateLabel} />
                   <Stat label="Experiencias verificadas" value={verificationSummary.verified} />
                   <Stat label="En proceso" value={verificationSummary.inProcess} />
                   <Stat label="Evidencias validadas" value={verificationSummary.evidences} />
@@ -947,11 +947,11 @@ export function CandidatePublicProfileRenderer({
             {showProfileTab ? (
               <>
                 <Card
-                  title={isOpenPublicView ? "Señales públicas de verificación" : "Resumen profesional"}
+                  title={isOpenPublicView ? "Señales públicas de verificación" : "Identidad y señales de confianza"}
                   subtitle={
                     isOpenPublicView
                       ? "Vista pública resumida con señales de confianza y trayectoria profesional protegida."
-                      : "Información principal del perfil verificable, priorizada para lectura rápida."
+                      : "Lectura inicial del perfil para entender rápido quién es la persona y por qué transmite más o menos confianza."
                   }
                 >
                     <div className="space-y-4">
@@ -1015,8 +1015,8 @@ export function CandidatePublicProfileRenderer({
 
                 {isOpenPublicView ? (
                   <Card
-                    title="Trayectoria verificada"
-                    subtitle="Muestra resumida de la experiencia más sólida del perfil."
+                    title="Trayectoria visible y validada"
+                    subtitle="Muestra resumida de la experiencia más sólida del perfil y de las señales que ya la respaldan."
                   >
                     {experiences.length ? (
                       <div className="space-y-3">
@@ -1081,7 +1081,7 @@ export function CandidatePublicProfileRenderer({
                 {(!isOpenPublicView && (experiences.length > 0 || internalPreview)) ? (
                   <Card
                     title="Historial verificable"
-                    subtitle="Línea temporal profesional con verificación visible y sin exponer documentación sensible."
+                    subtitle="Separación clara entre trayectoria declarada y señales verificables, sin exponer documentación sensible."
                   >
                     {experiences.length ? (
                       <ol className="relative ml-2 border-l border-slate-200 pl-4">
@@ -1382,7 +1382,7 @@ export function CandidatePublicProfileRenderer({
                     href={companyAccessCta.loginUrl}
                     className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
                   >
-                    Desbloquear perfil completo
+                    Ver perfil completo (-1 acceso)
                   </a>
                   <a
                     href={companyAccessCta.signupUrl}

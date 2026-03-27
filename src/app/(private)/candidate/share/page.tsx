@@ -190,23 +190,22 @@ export default function CandidatePublicProfilePage() {
       <section className="space-y-8">
         <ShareHero
           left={
-            <div className="space-y-5">
+            <div className="space-y-6">
               <p className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
                 Perfil público
               </p>
 
               <div className="space-y-3">
                 <h1 className="text-4xl font-bold tracking-tight text-slate-950">
-                  Comparte una versión clara y verificable de tu perfil
+                  Comparte tu perfil verificable como una credencial profesional real
                 </h1>
                 <p className="max-w-[760px] text-base leading-7 text-slate-600">
-                  Convierte tu perfil en una pieza compartible: vista pública real,
-                  enlace verificable y QR listo para tu plan.
+                  Haz que empresas y contactos vean una versión clara, verificable y compartible de tu trayectoria con un solo enlace.
                 </p>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {["Vista pública", "Enlace verificable", "Preview real"].map(
+                {["Vista pública", "Enlace verificable", "QR compartible"].map(
                   (badge) => (
                     <span
                       key={badge}
@@ -220,7 +219,27 @@ export default function CandidatePublicProfilePage() {
             </div>
           }
           right={
-            <div className="flex w-full max-w-[380px] flex-col gap-4 xl:ml-auto">
+            <div className="flex w-full max-w-[410px] flex-col gap-4 xl:ml-auto">
+              <div className="rounded-[26px] bg-slate-950 p-6 text-white shadow-[0_20px_50px_rgba(15,23,42,0.25)] ring-1 ring-white/10">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  Acción principal
+                </p>
+                <h2 className="mt-3 text-2xl font-semibold leading-tight">
+                  Haz que tu perfil sea fácil de compartir y fácil de creer
+                </h2>
+                <p className="mt-3 text-sm leading-6 text-slate-300">
+                  Copia el enlace y úsalo como tu versión profesional verificable.
+                </p>
+                <button
+                  type="button"
+                  onClick={copyLink}
+                  disabled={!link || loadingLink}
+                  className="mt-5 inline-flex w-full justify-center rounded-xl bg-white px-4 py-3.5 text-sm font-semibold text-slate-950 transition duration-150 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  {loadingLink ? "Generando..." : "Copiar enlace público"}
+                </button>
+              </div>
+
               <div className="w-full rounded-2xl bg-white/85 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.06)] ring-1 ring-white/70">
                 <label className="block text-sm font-semibold text-slate-900">
                   Ver como
@@ -239,23 +258,14 @@ export default function CandidatePublicProfilePage() {
                   ))}
                 </select>
               </div>
-
-              <button
-                type="button"
-                onClick={copyLink}
-                disabled={!link || loadingLink}
-                className="inline-flex justify-center rounded-xl bg-slate-900 px-4 py-3.5 text-sm font-semibold text-white transition duration-150 hover:bg-black disabled:opacity-50"
-              >
-                {loadingLink ? "Generando..." : "Copiar enlace"}
-              </button>
             </div>
           }
         />
 
-        <div className="grid gap-12 xl:grid-cols-[minmax(0,1.03fr)_410px]">
+        <div className="grid gap-12 xl:grid-cols-[minmax(0,1.08fr)_430px]">
           <div className="space-y-5">
             <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
-              Vista previa real
+              Así verán tu perfil
             </div>
 
             <SharePublicCard mode={mode} data={normalizedPreviewData}>
@@ -271,26 +281,25 @@ export default function CandidatePublicProfilePage() {
           <aside className="space-y-5">
             <ShareVisibilitySummary>
               <h3 className="text-lg font-semibold text-slate-900">
-                Comparte tu perfil
+                Comparte tu perfil verificable
               </h3>
               <p className="mt-1 text-sm leading-6 text-slate-600">
-                El enlace público está listo y el QR aparece automáticamente si tu
-                plan lo incluye.
+                Tu enlace público ya está listo para compartir. Si tu plan lo permite, también puedes usar QR para llevarlo fuera de VERIJOB.
               </p>
 
-              <div className="mt-4 rounded-xl bg-white px-4 py-4">
+              <div className="mt-4 rounded-2xl bg-white px-4 py-4 ring-1 ring-slate-200/70">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  Enlace público
+                  Enlace compartible
                 </div>
                 <p className="mt-2 break-all text-sm text-slate-700">
                   {link || "https://app.verijob.es/p/[token]"}
                 </p>
-                <p className="mt-1 text-xs text-slate-500">Caduca en 7 días</p>
+                <p className="mt-1 text-xs text-slate-500">Caduca en 7 días para mantener el control sobre tu perfil compartido.</p>
               </div>
             </ShareVisibilitySummary>
 
             <ShareQRCodePanel>
-              <div className="rounded-xl bg-white px-4 py-4">
+              <div className="rounded-2xl bg-white px-4 py-4 ring-1 ring-slate-200/70">
                 <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                   QR del perfil
                 </div>
@@ -300,7 +309,7 @@ export default function CandidatePublicProfilePage() {
                     : "Tu plan actual no incluye QR compartible."}
                 </p>
 
-                <div className="mt-3 flex min-h-[300px] items-center justify-center rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <div className="mt-3 flex min-h-[320px] items-center justify-center rounded-xl border border-slate-200 bg-slate-50 p-4">
                   {qrSvgUrl && planCapabilities.canShareByQr ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -321,14 +330,14 @@ export default function CandidatePublicProfilePage() {
               <div className="mt-4">
                 <ShareActions>
                   {planCapabilities.canShareByQr ? (
-                    <button
-                      type="button"
-                      onClick={downloadQr}
-                      disabled={!qrSvgUrl}
-                      className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-50"
-                    >
-                      Descargar QR
-                    </button>
+                  <button
+                    type="button"
+                    onClick={downloadQr}
+                    disabled={!qrSvgUrl}
+                    className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-50"
+                  >
+                    Descargar QR
+                  </button>
                   ) : (
                     <button
                       type="button"
