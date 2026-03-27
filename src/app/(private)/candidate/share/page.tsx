@@ -365,7 +365,7 @@ export default function CandidatePublicProfilePage() {
                   Compartir por QR: {planCapabilities.canShareByQr ? "sí" : "no"}
                 </p>
                 <p className="text-sm text-slate-700">
-                  Descarga de CV verificado: {planCapabilities.canDownloadCv ? "sí" : "no"}
+                  Descarga de CV verificado: {((planCapabilities as any)?.canDownloadCv ?? false) ? "sí" : "no"}
                 </p>
               </div>
             </ShareVisibilitySummary>
