@@ -16,6 +16,17 @@ function getSource(props: AnyData): AnyData {
   );
 }
 
+function pickFirstString(...values: any[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function getNested(source: AnyData, path: string): any {
+  return path.split(".").reduce((acc: any, key) => acc?.[key], source);
+}
+
 function getExperiences(source: AnyData): any[] {
   const candidates = [
     source?.experiences,
@@ -24,6 +35,10 @@ function getExperiences(source: AnyData): any[] {
     source?.employment_records,
     source?.items,
     source?.timeline,
+    getNested(source, "candidate_profile.experiences"),
+    getNested(source, "candidate_profile.profile_experiences"),
+    getNested(source, "profile.experiences"),
+    getNested(source, "profile.profile_experiences"),
   ];
   const arr = candidates.find((v) => Array.isArray(v));
   return Array.isArray(arr) ? arr : [];
@@ -36,6 +51,7 @@ function getTrustScore(source: AnyData): number | null {
     source?.candidate_profile?.trust_score ??
     source?.profile?.trust_score ??
     source?.score ??
+    getNested(source, "candidateProfile.trust_score") ??
     null;
 
   if (raw === null || raw === undefined || raw === "") return null;
@@ -45,50 +61,74 @@ function getTrustScore(source: AnyData): number | null {
 
 function getTitle(source: AnyData): string {
   return (
-    source?.title ??
-    source?.headline ??
-    source?.job_title ??
-    source?.professional_title ??
-    source?.candidate_title ??
-    source?.role ??
-    "Perfil verificable"
+    pickFirstString(
+      source?.title,
+      source?.headline,
+      source?.job_title,
+      source?.professional_title,
+      source?.candidate_title,
+      source?.role,
+      getNested(source, "candidate_profile.title"),
+      getNested(source, "candidate_profile.professional_title"),
+      getNested(source, "profile.title"),
+      getNested(source, "profile.professional_title")
+    ) ?? "Perfil verificable"
   );
 }
 
 function getLocation(source: AnyData): string | null {
-  return source?.location ?? source?.city ?? source?.candidate_location ?? null;
+  return pickFirstString(
+    source?.location,
+    source?.city,
+    source?.candidate_location,
+    getNested(source, "candidate_profile.location"),
+    getNested(source, "profile.location")
+  );
 }
 
-function getFirstName(source: AnyData): string {
-  if (source?.first_name) return String(source.first_name).trim();
-  const full =
-    source?.full_name ??
-    source?.name ??
-    source?.candidate_name ??
-    source?.display_name ??
-    "";
-  const parts = String(full).trim().split(/\s+/).filter(Boolean);
-  return parts[0] ?? "Candidato";
-}
+function splitName(source: AnyData): { first: string; lastInitial: string } {
+  const firstName =
+    pickFirstString(
+      source?.first_name,
+      getNested(source, "candidate_profile.first_name"),
+      getNested(source, "profile.first_name")
+    ) ?? "";
 
-function getLastInitial(source: AnyData): string {
-  if (source?.last_name) {
-    return `${String(source.last_name).trim().charAt(0).toUpperCase()}.`;
+  const lastName =
+    pickFirstString(
+      source?.last_name,
+      getNested(source, "candidate_profile.last_name"),
+      getNested(source, "profile.last_name")
+    ) ?? "";
+
+  if (firstName) {
+    return {
+      first: firstName,
+      lastInitial: lastName ? `${lastName.charAt(0).toUpperCase()}.` : "",
+    };
   }
+
   const full =
-    source?.full_name ??
-    source?.name ??
-    source?.candidate_name ??
-    source?.display_name ??
-    "";
-  const parts = String(full).trim().split(/\s+/).filter(Boolean);
-  if (parts.length <= 1) return "";
-  return `${parts[1].charAt(0).toUpperCase()}.`;
+    pickFirstString(
+      source?.full_name,
+      source?.name,
+      source?.candidate_name,
+      source?.display_name,
+      getNested(source, "candidate_profile.full_name"),
+      getNested(source, "candidate_profile.name"),
+      getNested(source, "profile.full_name"),
+      getNested(source, "profile.name")
+    ) ?? "Candidato";
+
+  const parts = full.split(/\s+/).filter(Boolean);
+  return {
+    first: parts[0] ?? "Candidato",
+    lastInitial: parts.length > 1 ? `${parts[1].charAt(0).toUpperCase()}.` : "",
+  };
 }
 
 function getDisplayName(source: AnyData): string {
-  const first = getFirstName(source);
-  const lastInitial = getLastInitial(source);
+  const { first, lastInitial } = splitName(source);
   return lastInitial ? `${first} ${lastInitial}` : first;
 }
 
@@ -117,12 +157,13 @@ function getAvailability(source: AnyData): string | null {
     source?.candidate_availability ??
     source?.open_to_work ??
     source?.status_availability ??
+    getNested(source, "candidate_profile.availability") ??
+    getNested(source, "profile.availability") ??
     null;
 
   if (!raw) return null;
   const text = String(raw).trim();
-  if (!text) return null;
-  return text;
+  return text || null;
 }
 
 export default function SharePublicCompactCard(props: AnyData) {

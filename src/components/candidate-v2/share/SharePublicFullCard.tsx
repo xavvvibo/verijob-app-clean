@@ -16,6 +16,17 @@ function getSource(props: AnyData): AnyData {
   );
 }
 
+function pickFirstString(...values: any[]): string | null {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return null;
+}
+
+function getNested(source: AnyData, path: string): any {
+  return path.split(".").reduce((acc: any, key) => acc?.[key], source);
+}
+
 function getExperiences(source: AnyData): any[] {
   const candidates = [
     source?.experiences,
@@ -24,6 +35,10 @@ function getExperiences(source: AnyData): any[] {
     source?.employment_records,
     source?.items,
     source?.timeline,
+    getNested(source, "candidate_profile.experiences"),
+    getNested(source, "candidate_profile.profile_experiences"),
+    getNested(source, "profile.experiences"),
+    getNested(source, "profile.profile_experiences"),
   ];
   const arr = candidates.find((v) => Array.isArray(v));
   return Array.isArray(arr) ? arr : [];
@@ -36,6 +51,7 @@ function getTrustScore(source: AnyData): number | null {
     source?.candidate_profile?.trust_score ??
     source?.profile?.trust_score ??
     source?.score ??
+    getNested(source, "candidateProfile.trust_score") ??
     null;
 
   if (raw === null || raw === undefined || raw === "") return null;
@@ -44,44 +60,74 @@ function getTrustScore(source: AnyData): number | null {
 }
 
 function getDisplayName(source: AnyData): string {
+  const firstName =
+    pickFirstString(
+      source?.first_name,
+      getNested(source, "candidate_profile.first_name"),
+      getNested(source, "profile.first_name")
+    ) ?? "";
+
+  const lastName =
+    pickFirstString(
+      source?.last_name,
+      getNested(source, "candidate_profile.last_name"),
+      getNested(source, "profile.last_name")
+    ) ?? "";
+
+  if (firstName || lastName) {
+    return [firstName, lastName].filter(Boolean).join(" ").trim();
+  }
+
   return (
-    source?.full_name ??
-    source?.name ??
-    source?.candidate_name ??
-    source?.display_name ??
-    `${source?.first_name ?? ""} ${source?.last_name ?? ""}`.trim() ??
-    "Candidato"
+    pickFirstString(
+      source?.full_name,
+      source?.name,
+      source?.candidate_name,
+      source?.display_name,
+      getNested(source, "candidate_profile.full_name"),
+      getNested(source, "candidate_profile.name"),
+      getNested(source, "profile.full_name"),
+      getNested(source, "profile.name")
+    ) ?? "Candidato"
   );
 }
 
 function getTitle(source: AnyData): string {
   return (
-    source?.title ??
-    source?.headline ??
-    source?.job_title ??
-    source?.professional_title ??
-    source?.candidate_title ??
-    source?.role ??
-    "Perfil verificable"
+    pickFirstString(
+      source?.title,
+      source?.headline,
+      source?.job_title,
+      source?.professional_title,
+      source?.candidate_title,
+      source?.role,
+      getNested(source, "candidate_profile.title"),
+      getNested(source, "candidate_profile.professional_title"),
+      getNested(source, "profile.title"),
+      getNested(source, "profile.professional_title")
+    ) ?? "Perfil verificable"
   );
 }
 
 function getLocation(source: AnyData): string | null {
-  return source?.location ?? source?.city ?? source?.candidate_location ?? null;
+  return pickFirstString(
+    source?.location,
+    source?.city,
+    source?.candidate_location,
+    getNested(source, "candidate_profile.location"),
+    getNested(source, "profile.location")
+  );
 }
 
 function getAvailability(source: AnyData): string | null {
-  const raw =
-    source?.availability ??
-    source?.candidate_availability ??
-    source?.open_to_work ??
-    source?.status_availability ??
-    null;
-
-  if (!raw) return null;
-  const text = String(raw).trim();
-  if (!text) return null;
-  return text;
+  return pickFirstString(
+    source?.availability,
+    source?.candidate_availability,
+    source?.open_to_work,
+    source?.status_availability,
+    getNested(source, "candidate_profile.availability"),
+    getNested(source, "profile.availability")
+  );
 }
 
 function formatDate(raw: any): string | null {
@@ -140,6 +186,16 @@ export default function SharePublicFullCard(props: AnyData) {
   const location = getLocation(source);
   const availability = getAvailability(source);
 
+  const verifiedCount = experiences.filter((exp) => {
+    const text = String(exp.status).toLowerCase();
+    return text.includes("verified") || text.includes("verificada");
+  }).length;
+
+  const inProgressCount = experiences.filter((exp) => {
+    const text = String(exp.status).toLowerCase();
+    return text.includes("process") || text.includes("curso") || text.includes("pending");
+  }).length;
+
   return (
     <div className="rounded-[28px] border border-slate-200 bg-white p-8 shadow-sm">
       <div className="flex flex-col gap-8">
@@ -185,24 +241,19 @@ export default function SharePublicFullCard(props: AnyData) {
               Verificaciones
             </div>
             <div className="mt-2 text-[28px] font-semibold tracking-[-0.02em] text-slate-950">
-              {experiences.filter((exp) =>
-                String(exp.status).toLowerCase().includes("verified") ||
-                String(exp.status).toLowerCase().includes("verificada")
-              ).length}
+              {verifiedCount}
             </div>
           </div>
+
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
               En proceso
             </div>
             <div className="mt-2 text-[28px] font-semibold tracking-[-0.02em] text-slate-950">
-              {experiences.filter((exp) =>
-                String(exp.status).toLowerCase().includes("process") ||
-                String(exp.status).toLowerCase().includes("curso") ||
-                String(exp.status).toLowerCase().includes("pending")
-              ).length}
+              {inProgressCount}
             </div>
           </div>
+
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
               Evidencias
@@ -211,6 +262,7 @@ export default function SharePublicFullCard(props: AnyData) {
               {source?.evidences_count ?? source?.evidence_count ?? 0}
             </div>
           </div>
+
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
             <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
               Trust score
