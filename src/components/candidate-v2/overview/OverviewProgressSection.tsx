@@ -5,8 +5,8 @@ import CandidateSection from "../primitives/CandidateSection";
 export default function OverviewProgressSection({ children }: { children: ReactNode }) {
   return (
     <CandidateSection
-      title="Progreso del perfil"
-      description="Qué parte de tu perfil ya transmite confianza y cuál es el siguiente paso más útil para reforzarlo."
+      title="Palancas de mejora"
+      description="Estado de preparación del perfil y margen real para hacerlo más fuerte frente a una empresa."
       className="h-full"
     >
       {children}

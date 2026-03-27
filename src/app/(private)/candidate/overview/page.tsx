@@ -12,6 +12,7 @@ import OverviewProgressSection from "@/components/candidate-v2/overview/Overview
 import OverviewExperiencesPreview from "@/components/candidate-v2/overview/OverviewExperiencesPreview";
 import OverviewProfilePublicCard from "@/components/candidate-v2/overview/OverviewProfilePublicCard";
 import OverviewUpgradeCard from "@/components/candidate-v2/overview/OverviewUpgradeCard";
+import CandidateSurface from "@/components/candidate-v2/primitives/CandidateSurface";
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
 import { mapCandidateAvailability } from "@/lib/candidate/availability";
 import {
@@ -65,6 +66,8 @@ type ExperienceImpact = {
   tone: string;
 };
 
+type SignalTone = "blue" | "green" | "amber" | "rose" | "violet";
+
 type SubscriptionStatePayload = {
   subscription?: {
     plan?: string | null;
@@ -113,6 +116,14 @@ function buildTrustSignals(args: { verified: number; inProcess: number; evidence
     `${args.evidences} ${args.evidences === 1 ? "documento útil" : "documentos útiles"}`,
     args.completed ? "Perfil listo para compartir" : "Perfil todavía mejorable",
   ];
+}
+
+function signalToneClasses(tone: SignalTone) {
+  if (tone === "green") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (tone === "amber") return "border-amber-200 bg-amber-50 text-amber-800";
+  if (tone === "rose") return "border-rose-200 bg-rose-50 text-rose-800";
+  if (tone === "violet") return "border-violet-200 bg-violet-50 text-violet-800";
+  return "border-blue-200 bg-blue-50 text-blue-800";
 }
 
 function formatMonthYear(value?: string | null) {
@@ -182,60 +193,41 @@ function buildPrimaryAction(args: {
   };
 }
 
-function buildEmployerLensCopy(args: {
+function buildPreparationSegments(args: {
+  profileCompletionScore: number;
+  experienceCount: number;
   verified: number;
   inProcess: number;
   evidences: number;
-  profileCompletionScore: number;
-}) {
-  if (args.verified >= 2 || (args.verified >= 1 && args.evidences >= 1)) {
-    return "Tu perfil compite con ventaja frente a perfiles sin verificar y ya transmite una señal profesional sólida.";
-  }
-  if (args.verified >= 1 || args.inProcess >= 1 || args.evidences >= 1) {
-    return "Perfil con credibilidad media. Ya transmites señales reales, pero aún puedes destacar más.";
-  }
-  if (args.profileCompletionScore >= 60) {
-    return "Tu base es buena, pero sigues por debajo de un perfil reforzado con evidencias o verificaciones reales.";
-  }
-  return "Todavía estás lejos de tu mejor versión profesional. Un solo paso útil puede cambiar cómo te perciben.";
-}
-
-function buildProfileMilestones(args: {
-  experienceCount: number;
-  profileCompletionScore: number;
-  metrics: ReturnType<typeof computeCandidateOverviewMetrics>;
+  publicProfileActive: boolean;
 }) {
   return [
     {
-      id: "profile",
-      label: "Perfil base completo",
-      description: "Foto, titular, ubicación y datos clave listos.",
+      id: "base",
+      label: "Base",
       status: args.profileCompletionScore >= 70 ? "done" : args.profileCompletionScore >= 35 ? "progress" : "pending",
     },
     {
       id: "experience",
-      label: "Experiencias cargadas",
-      description: args.experienceCount > 0 ? `${args.experienceCount} registradas` : "Añade experiencia laboral",
+      label: "Experiencias",
       status: args.experienceCount > 0 ? "done" : "pending",
     },
     {
       id: "verification",
-      label: "Verificación activa",
-      description:
-        args.metrics.verified > 0
-          ? `${args.metrics.verified} verificada${args.metrics.verified === 1 ? "" : "s"}`
-          : args.metrics.inProcess > 0
-            ? `${args.metrics.inProcess} en curso`
-            : "Todavía sin verificar",
-      status: args.metrics.verified > 0 ? "done" : args.metrics.inProcess > 0 ? "progress" : "pending",
+      label: "Verificaciones",
+      status: args.verified > 0 ? "done" : args.inProcess > 0 ? "progress" : "pending",
     },
     {
-      id: "documents",
-      label: "Documentación útil",
-      description: args.metrics.evidences > 0 ? `${args.metrics.evidences} subida${args.metrics.evidences === 1 ? "" : "s"}` : "Sin soporte documental todavía",
-      status: args.metrics.evidences > 0 ? "done" : "pending",
+      id: "evidence",
+      label: "Evidencias",
+      status: args.evidences > 0 ? "done" : "pending",
     },
-  ];
+    {
+      id: "visibility",
+      label: "Visibilidad",
+      status: args.publicProfileActive ? "done" : "pending",
+    },
+  ] as const;
 }
 
 function buildHighlightCards(args: {
@@ -286,6 +278,60 @@ function buildHighlightCards(args: {
   }
 
   return cards.slice(0, 3);
+}
+
+function buildOpportunityCard(args: {
+  metrics: ReturnType<typeof computeCandidateOverviewMetrics>;
+  profileCompletionScore: number;
+  publicProfileActive: boolean;
+}) {
+  if (args.metrics.evidences === 0 && (args.metrics.verified > 0 || args.metrics.inProcess > 0)) {
+    return {
+      title: "Te faltan evidencias para destacar frente a otros candidatos",
+      body: "Sin soporte documental, parte de tu valor sigue dependiendo solo de lo declarado.",
+      href: "/candidate/evidence",
+      cta: "Sube una evidencia",
+      tone: "border-rose-200 bg-rose-50/90",
+    };
+  }
+
+  if (args.metrics.inProcess > 0) {
+    return {
+      title: "Tienes una verificación en curso que puede subir tu credibilidad",
+      body: "Cerrar este paso puede convertir señal parcial en confianza real para empresa.",
+      href: "/candidate/verifications",
+      cta: "Revisa tu verificación",
+      tone: "border-amber-200 bg-amber-50/90",
+    };
+  }
+
+  if (args.profileCompletionScore < 70) {
+    return {
+      title: "Tu perfil aún depende demasiado de información declarada",
+      body: "Completar mejor tu base reduce dudas antes incluso de verificar nada.",
+      href: "/candidate/profile",
+      cta: "Completa tu perfil",
+      tone: "border-blue-200 bg-blue-50/90",
+    };
+  }
+
+  if (!args.publicProfileActive) {
+    return {
+      title: "Tu perfil público aún no muestra toda tu fuerza",
+      body: "Convertir tu perfil en una pieza compartible mejora cómo te ven fuera de VERIJOB.",
+      href: "/candidate/share",
+      cta: "Revisa tu perfil público",
+      tone: "border-violet-200 bg-violet-50/90",
+    };
+  }
+
+  return {
+    title: "Tu perfil ya transmite confianza, pero aún puedes empujarlo más",
+    body: "Una mejora visible más puede ayudarte a destacar mejor frente a perfiles menos reforzados.",
+    href: "/candidate/verifications",
+    cta: "Refuerza tu perfil hoy",
+    tone: "border-emerald-200 bg-emerald-50/90",
+  };
 }
 
 function resolveExperienceValueCopy(item: any) {
@@ -477,36 +523,6 @@ function TrustRing({ score, stateTitle }: { score: number; stateTitle: string })
   );
 }
 
-function ProgressMilestone({
-  label,
-  status,
-}: {
-  label: string;
-  status: "done" | "progress" | "pending";
-}) {
-  const tone =
-    status === "done"
-      ? "border-emerald-200/90 text-emerald-800"
-      : status === "progress"
-        ? "border-amber-200/90 text-amber-800"
-        : "border-slate-200 text-slate-600";
-  const dot =
-    status === "done"
-      ? "bg-emerald-500"
-      : status === "progress"
-        ? "bg-amber-500"
-        : "bg-slate-300";
-
-  return (
-    <div className={`rounded-full border bg-transparent px-3.5 py-2 ${tone}`}>
-      <div className="flex items-center gap-2.5">
-        <span className={`h-2.5 w-2.5 rounded-full ${dot}`} />
-        <p className="text-xs font-semibold sm:text-sm">{label}</p>
-      </div>
-    </div>
-  );
-}
-
 function InsightCard({
   title,
   body,
@@ -527,13 +543,65 @@ function InsightCard({
       ? "mt-5 inline-flex rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition-all duration-150 hover:-translate-y-[1px] hover:bg-black hover:shadow-sm"
       : "mt-4 inline-flex rounded-lg border border-slate-200 bg-white/80 px-3.5 py-2 text-xs font-semibold text-slate-900 transition-all duration-150 hover:-translate-y-[1px] hover:bg-slate-50 hover:shadow-sm";
   return (
-    <article className={`rounded-xl p-5 transition-all duration-150 hover:-translate-y-[1px] hover:shadow-sm ${tone}`}>
+    <article className={`rounded-2xl p-5 transition-all duration-150 hover:-translate-y-[1px] hover:shadow-sm ${tone}`}>
       <h3 className="text-[15px] font-semibold text-slate-900">{title}</h3>
       <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
       <Link href={href} className={buttonClass}>
         {cta}
       </Link>
     </article>
+  );
+}
+
+function SemanticProgressBar({
+  segments,
+}: {
+  segments: ReadonlyArray<{ id: string; label: string; status: "done" | "progress" | "pending" }>;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-5 gap-2">
+        {segments.map((segment) => {
+          const tone =
+            segment.status === "done"
+              ? "bg-emerald-500"
+              : segment.status === "progress"
+                ? "bg-amber-400"
+                : "bg-slate-200";
+          return <div key={segment.id} className={`h-3 rounded-full ${tone}`} />;
+        })}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-5">
+        {segments.map((segment) => (
+          <div key={segment.id} className="rounded-xl bg-white/75 px-3 py-2 ring-1 ring-slate-200/70">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-500">{segment.label}</p>
+            <p className="mt-1 text-xs font-medium text-slate-700">
+              {segment.status === "done" ? "Listo" : segment.status === "progress" ? "En curso" : "Pendiente"}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SnapshotItem({
+  label,
+  value,
+  hint,
+  tone = "blue",
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  tone?: SignalTone;
+}) {
+  return (
+    <div className="rounded-2xl bg-white/80 p-4 ring-1 ring-slate-200/70">
+      <div className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${signalToneClasses(tone)}`}>{label}</div>
+      <p className="mt-3 text-sm font-semibold text-slate-950">{value}</p>
+      <p className="mt-1 text-xs leading-5 text-slate-500">{hint}</p>
+    </div>
   );
 }
 
@@ -875,16 +943,6 @@ export default function CandidateOverview() {
     [metrics.evidences, metrics.inProcess, metrics.verified, profileCompletionScore]
   );
 
-  const profileMilestones = useMemo(
-    () =>
-      buildProfileMilestones({
-        experienceCount,
-        profileCompletionScore,
-        metrics,
-      }),
-    [experienceCount, metrics, profileCompletionScore]
-  );
-
   const highlightCards = useMemo(
     () =>
       buildHighlightCards({
@@ -903,20 +961,36 @@ export default function CandidateOverview() {
   const planCapabilities = useMemo(() => getCandidatePlanCapabilities(subscriptionPlan), [subscriptionPlan]);
   const showUpgrade = planCapabilities.plan === "free" || planCapabilities.plan === "starter";
   const publicLink = publicToken ? `${PUBLIC_PROFILE_ORIGIN}/p/${publicToken}` : null;
+  const publicLanguages = Array.isArray(publicPreview?.teaser?.languages) ? publicPreview?.teaser?.languages : [];
+  const educationCount = Number(publicPreview?.teaser?.education_total ?? 0);
+  const achievementsCount = Number(publicPreview?.teaser?.achievements_total ?? 0);
+  const verifiedSkillsCount = Array.isArray(publicPreview?.verified_skills) ? publicPreview?.verified_skills.length : 0;
+  const publicProfileActive = Boolean(publicToken);
   const publicVisibilityLabel =
     publicPreview?.teaser?.profile_visibility ||
     candidateProfile?.public_profile_settings?.experienceVisibility?.length
       ? "Perfil compartible"
       : "Vista pública limitada";
-  const employerLensCopy = useMemo(
+  const preparationSegments = useMemo(
     () =>
-      buildEmployerLensCopy({
+      buildPreparationSegments({
+        profileCompletionScore,
+        experienceCount,
         verified: metrics.verified,
         inProcess: metrics.inProcess,
         evidences: metrics.evidences,
-        profileCompletionScore,
+        publicProfileActive,
       }),
-    [metrics.evidences, metrics.inProcess, metrics.verified, profileCompletionScore]
+    [experienceCount, metrics.evidences, metrics.inProcess, metrics.verified, profileCompletionScore, publicProfileActive]
+  );
+  const opportunityCard = useMemo(
+    () =>
+      buildOpportunityCard({
+        metrics,
+        profileCompletionScore,
+        publicProfileActive,
+      }),
+    [metrics, profileCompletionScore, publicProfileActive]
   );
 
   return (
@@ -965,42 +1039,58 @@ export default function CandidateOverview() {
               />
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Estado actual del perfil</p>
-                <h1 className="mt-3 max-w-[16ch] whitespace-normal break-words text-3xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-[3.25rem] 2xl:max-w-[18ch] 2xl:text-[3.45rem]">
-                  Tu perfil aún no está jugando en su nivel más alto
-                </h1>
-                <p className="mt-4 max-w-[64ch] text-base leading-7 text-slate-700">Cada verificación o evidencia reduce dudas y hace tu perfil más competitivo cuando una empresa lo revisa.</p>
-                <p className="mt-5 text-lg font-semibold text-slate-950">{profile?.full_name || "Tu resumen profesional"}</p>
+                <p className="mt-3 text-2xl font-semibold tracking-tight text-slate-950 sm:text-[2.45rem]">{profile?.full_name || "Tu resumen profesional"}</p>
                 <p className="mt-2 text-base text-slate-700">{profile?.title || "Profesional verificable en Verijob"}</p>
                 <p className="mt-1 text-sm text-slate-500">{profile?.location || "Ubicación no definida"}</p>
 
-                <div className="mt-7 flex flex-wrap items-center gap-3">
+                <div className="mt-6 flex flex-wrap items-center gap-3">
                   <VerificationBadge tone={metrics.verified > 0 ? "company_verified" : metrics.inProcess > 0 ? "in_progress" : "trust_visible"}>
                     {trustState.title}
                   </VerificationBadge>
                   <VerificationBadge tone={profileCompletionScore >= 70 ? "company_verified" : "in_progress"}>
                     {profileStage}
                   </VerificationBadge>
+                  <VerificationBadge tone={metrics.evidences > 0 ? "company_verified" : "in_progress"}>
+                    {metrics.evidences > 0 ? "Con evidencias" : "Sin evidencias"}
+                  </VerificationBadge>
+                  <VerificationBadge tone={publicProfileActive ? "trust_visible" : "in_progress"}>
+                    {publicProfileActive ? "Perfil público activo" : "Perfil público mejorable"}
+                  </VerificationBadge>
                 </div>
-                <p className="mt-8 text-sm font-medium text-slate-700">
-                  {overviewStatus} · {availabilityText}
-                </p>
+                <div className="mt-6 flex flex-wrap gap-2">
+                  {[
+                    { label: `${metrics.verified} verificadas`, tone: metrics.verified > 0 ? "green" : "rose" as SignalTone },
+                    { label: metrics.inProcess > 0 ? `${metrics.inProcess} en curso` : "Sin validaciones en curso", tone: metrics.inProcess > 0 ? "amber" : "blue" as SignalTone },
+                    { label: metrics.evidences > 0 ? `${metrics.evidences} evidencias` : "Sin evidencias", tone: metrics.evidences > 0 ? "violet" : "rose" as SignalTone },
+                    { label: educationCount > 0 ? `${educationCount} formaciones` : "Formación pendiente", tone: educationCount > 0 ? "blue" : "amber" as SignalTone },
+                    { label: publicLanguages.length > 0 ? `${publicLanguages.length} idiomas` : "Idiomas pendientes", tone: publicLanguages.length > 0 ? "green" : "amber" as SignalTone },
+                  ].map((signal) => (
+                    <span key={signal.label} className={`rounded-full border px-3 py-1 text-xs font-semibold ${signalToneClasses(signal.tone)}`}>
+                      {signal.label}
+                    </span>
+                  ))}
+                </div>
+                <p className="mt-6 text-sm font-medium text-slate-700">{overviewStatus} · {availabilityText}</p>
 
                 <div className="mt-10 flex flex-col gap-6 md:flex-row md:items-center md:gap-8 xl:gap-10 2xl:gap-12">
                   <TrustRing score={metrics.score} stateTitle={trustState.title} />
-                  <div className="min-w-0 max-w-[38rem]">
-                    <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${trustState.tone}`}>
-                      {metrics.verified > 0 ? "Perfil parcialmente verificado" : trustState.title}
+                  <div className="min-w-0 max-w-[42rem] space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(220px,0.7fr)]">
+                      <div className="rounded-2xl bg-white/80 p-4 ring-1 ring-slate-200/70">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Nivel de confianza</p>
+                        <p className="mt-2 text-sm leading-6 text-slate-700">Resume qué parte de tu trayectoria ya está respaldada por señales verificables.</p>
+                        <p className="mt-2 text-sm font-medium leading-6 text-slate-800">
+                          {metrics.score >= 60
+                            ? "Con este nivel de confianza, una empresa ya ve señales reales. Aún puedes hacer que te descarte menos y te abra más rápido."
+                            : "Ahora mismo tu perfil puede pasar desapercibido frente a candidatos con señales verificadas."}
+                        </p>
+                      </div>
+                      <div className={`rounded-2xl border p-4 ${trustState.tone}`}>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em]">Interpretación</p>
+                        <p className="mt-2 text-sm font-semibold">{metrics.verified > 0 ? "Ya existe una base de confianza real" : trustState.title}</p>
+                        <p className="mt-2 text-xs leading-5 opacity-90">Cuantas más señales verificadas, menos dudas para quien evalúa.</p>
+                      </div>
                     </div>
-                    <p className="mt-3 text-base font-medium leading-7 text-slate-800">
-                      {metrics.verified > 0
-                        ? "Credibilidad media. Ya transmites señales reales, pero aún puedes destacar más."
-                        : employerLensCopy}
-                    </p>
-                    <p className="mt-3 text-sm leading-6 text-slate-600">
-                      {metrics.score >= 60
-                        ? "Con este nivel de confianza, una empresa ya ve señales reales. Aún puedes hacer que te descarte menos y te abra más rápido."
-                        : "Ahora mismo tu perfil puede pasar desapercibido frente a candidatos con señales verificadas."}
-                    </p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {trustSignals.slice(0, 2).map((signal) => (
                         <span key={signal} className="rounded-full border border-slate-200 bg-white/50 px-3 py-1 text-xs font-medium text-slate-700">
@@ -1019,16 +1109,19 @@ export default function CandidateOverview() {
         }
         right={
         <div className="mx-auto w-full max-w-[36rem] rounded-[30px] bg-slate-950 p-7 text-white shadow-[0_28px_70px_rgba(15,23,42,0.28)] ring-1 ring-white/10 sm:p-8 xl:mx-0 xl:max-w-none xl:p-8 2xl:p-9">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Tu siguiente mejor paso</p>
-          <h2 className="mt-4 max-w-[14ch] text-[1.9rem] font-semibold leading-tight sm:text-[2rem] 2xl:text-[2.15rem]">Haz que las empresas confíen en ti desde hoy</h2>
-          <p className="mt-3 text-base leading-7 text-slate-300">Una prueba real puede marcar la diferencia.</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Palanca principal</p>
+          <h2 className="mt-4 text-[1.55rem] font-semibold leading-tight sm:text-[1.8rem]">{opportunityCard.title}</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-300">{opportunityCard.body}</p>
           <Link
-            href={primaryAction.href}
+            href={opportunityCard.href}
             className="mt-8 inline-flex w-full items-center justify-center rounded-xl bg-white px-5 py-[1.35rem] text-base font-semibold text-slate-950 transition hover:scale-[1.02] hover:bg-slate-100 active:scale-[0.98]"
           >
-            {primaryAction.label}
+            {opportunityCard.cta}
           </Link>
-          <p className="mt-4 text-sm leading-6 text-slate-400">{primaryAction.rationale}</p>
+          <div className="mt-6 rounded-2xl bg-white/5 p-4 ring-1 ring-white/10">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Qué ganas si actúas ahora</p>
+            <p className="mt-2 text-sm leading-6 text-slate-300">{primaryAction.rationale}</p>
+          </div>
         </div>
       }
       >
@@ -1039,7 +1132,7 @@ export default function CandidateOverview() {
         <div className="pointer-events-none absolute -right-20 bottom-0 h-52 w-52 rounded-full bg-slate-200/50 blur-3xl" />
       </OverviewHero>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(320px,0.88fr)_minmax(420px,1.12fr)] xl:gap-8 2xl:grid-cols-[minmax(340px,0.84fr)_minmax(480px,1.16fr)] 2xl:gap-10">
+      <div className="grid gap-6 xl:grid-cols-[minmax(340px,0.96fr)_minmax(440px,1.04fr)] xl:gap-8 2xl:grid-cols-[minmax(360px,0.92fr)_minmax(520px,1.08fr)] 2xl:gap-10">
         <OverviewProgressSection>
           <div className="flex flex-col gap-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Progreso del perfil</p>
@@ -1048,29 +1141,27 @@ export default function CandidateOverview() {
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2.5">
-            {profileMilestones.map((milestone) => (
-              <ProgressMilestone
-                key={milestone.id}
-                label={milestone.label}
-                status={milestone.status as "done" | "progress" | "pending"}
-              />
-            ))}
-          </div>
+          <SemanticProgressBar segments={preparationSegments} />
           <p className="text-sm leading-6 text-slate-600">
-            Lo que falta aquí es justo lo que más dudas genera cuando una empresa compara perfiles.
+            Tu perfil ya transmite una base clara, pero todavía hay margen para destacar más.
           </p>
           <p className="text-sm font-medium text-slate-700">Tu siguiente mejora visible puede cambiar cómo te perciben.</p>
         </OverviewProgressSection>
 
         <OverviewHighlights>
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-3">
             {highlightCards.length ? (
-              highlightCards.slice(0, 2).map((card, index) => (
+              highlightCards.slice(0, 3).map((card, index) => (
                 <InsightCard
                   key={`${card.title}-${card.href}`}
                   {...card}
-                  tone={index === 0 ? "rounded-xl border border-slate-200/70 bg-blue-50/55" : "rounded-xl border border-slate-200/70 bg-emerald-50/45"}
+                  tone={
+                    index === 0
+                      ? "rounded-xl border border-blue-200/70 bg-blue-50/60"
+                      : index === 1
+                        ? "rounded-xl border border-amber-200/70 bg-amber-50/60"
+                        : "rounded-xl border border-violet-200/70 bg-violet-50/60"
+                  }
                   emphasis={index === 0 ? "primary" : "subtle"}
                 />
               ))
@@ -1087,6 +1178,58 @@ export default function CandidateOverview() {
           </div>
         </OverviewHighlights>
       </div>
+
+      <CandidateSurface tone="default" className="p-6 xl:p-7">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Resumen del perfil completo</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Qué partes de tu perfil ya están fuertes y cuáles siguen pidiendo refuerzo</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Lectura compacta de formación, idiomas, logros, evidencias, verificaciones y visibilidad pública usando solo datos reales ya disponibles.</p>
+          </div>
+          <Link href="/candidate/profile" className="inline-flex rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+            Revisar perfil completo
+          </Link>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <SnapshotItem
+            label="Formación"
+            value={educationCount > 0 ? `${educationCount} entrada${educationCount === 1 ? "" : "s"}` : "Pendiente"}
+            hint={educationCount > 0 ? "Ya suma contexto real a tu perfil." : "Todavía no añade señal visible a tu perfil."}
+            tone={educationCount > 0 ? "green" : "amber"}
+          />
+          <SnapshotItem
+            label="Idiomas"
+            value={publicLanguages.length > 0 ? `${publicLanguages.length} añadido${publicLanguages.length === 1 ? "" : "s"}` : "Pendiente"}
+            hint={publicLanguages.length > 0 ? "Refuerzan tu lectura profesional y pública." : "Aún no ayudan a diferenciar mejor tu perfil."}
+            tone={publicLanguages.length > 0 ? "blue" : "amber"}
+          />
+          <SnapshotItem
+            label="Habilidades y logros"
+            value={verifiedSkillsCount + achievementsCount > 0 ? `${verifiedSkillsCount + achievementsCount} señal${verifiedSkillsCount + achievementsCount === 1 ? "" : "es"}` : "Pendiente"}
+            hint={verifiedSkillsCount + achievementsCount > 0 ? "Añaden detalle útil a cómo te verán las empresas." : "Todavía no están reforzando tu presentación."}
+            tone={verifiedSkillsCount + achievementsCount > 0 ? "violet" : "amber"}
+          />
+          <SnapshotItem
+            label="Evidencias"
+            value={metrics.evidences > 0 ? `${metrics.evidences} subida${metrics.evidences === 1 ? "" : "s"}` : "Sin soporte"}
+            hint={metrics.evidences > 0 ? "Ya reducen parte de la duda sobre tu trayectoria." : "Sin soporte documental, parte de tu valor sigue siendo declarativo."}
+            tone={metrics.evidences > 0 ? "green" : "rose"}
+          />
+          <SnapshotItem
+            label="Verificaciones"
+            value={metrics.verified > 0 ? `${metrics.verified} completada${metrics.verified === 1 ? "" : "s"}` : metrics.inProcess > 0 ? `${metrics.inProcess} en curso` : "Sin validar"}
+            hint={metrics.verified > 0 ? "Es la señal más fuerte para reducir incertidumbre." : metrics.inProcess > 0 ? "Puede subir tu credibilidad pronto." : "Todavía no hay validación que pese de verdad."}
+            tone={metrics.verified > 0 ? "green" : metrics.inProcess > 0 ? "amber" : "rose"}
+          />
+          <SnapshotItem
+            label="Visibilidad pública"
+            value={publicProfileActive ? "Activa" : "Mejorable"}
+            hint={publicProfileActive ? "Tu perfil ya puede compartirse como activo profesional." : "Todavía no está jugando como activo comercial de tu candidatura."}
+            tone={publicProfileActive ? "violet" : "amber"}
+          />
+        </div>
+      </CandidateSurface>
 
       <div className="grid gap-8 xl:grid-cols-[minmax(0,1.06fr)_minmax(380px,0.94fr)] xl:gap-10 2xl:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)]">
         <div className="space-y-10">
