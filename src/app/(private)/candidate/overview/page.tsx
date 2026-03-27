@@ -176,49 +176,32 @@ function buildHighlightCards(args: {
   profileCompletionScore: number;
   experienceCount: number;
 }) {
-  const cards: Array<{ title: string; body: string; cta: string; href: string; tone: string }> = [];
-
-  if (args.metrics.evidences === 0 && args.experienceCount > 0) {
-    cards.push({
+  return [
+    {
       title: "Haz que tu experiencia pese más",
-      body: "Sin una prueba real, parte de tu trayectoria sigue siendo solo declarativa.",
+      body: "Sin evidencia, parte de tu valor sigue siendo declarativo.",
       cta: "Subir evidencia",
       href: "/candidate/evidence",
       tone: "border-blue-200 bg-blue-50/70",
-    });
-  }
-
-  if (args.profileCompletionScore < 70) {
-    cards.push({
-      title: "Evita un perfil a medias",
-      body: "Los perfiles incompletos generan menos confianza desde el primer vistazo.",
-      cta: "Completa tu perfil",
-      href: "/candidate/profile",
-      tone: "border-amber-200 bg-amber-50/70",
-    });
-  }
-
-  if (args.metrics.inProcess > 0) {
-    cards.push({
+      status: args.metrics.evidences > 0 ? `${args.metrics.evidences} evidencia${args.metrics.evidences === 1 ? "" : "s"} subida${args.metrics.evidences === 1 ? "" : "s"}` : "Sin evidencias",
+    },
+    {
       title: "Convierte experiencia en señal verificable",
-      body: "Una verificación cerrada puede marcar la diferencia entre revisión y descarte.",
-      cta: "Solicitar verificación",
+      body: "Una verificación puede marcar la diferencia.",
+      cta: args.metrics.inProcess > 0 ? "Revisar verificación" : "Solicitar verificación",
       href: "/candidate/verifications",
       tone: "border-emerald-200 bg-emerald-50/70",
-    });
-  }
-
-  if (args.metrics.verified === 0 && args.metrics.inProcess === 0 && args.experienceCount > 0) {
-    cards.push({
-      title: "Activa tu primera verificación",
-      body: "Una experiencia validada es la señal más potente para destacar frente a una empresa y elevar tu nivel de confianza.",
-      cta: "Solicita verificación",
-      href: "/candidate/verifications/new",
-      tone: "border-slate-200 bg-slate-50",
-    });
-  }
-
-  return cards.slice(0, 3);
+      status: args.metrics.verified > 0 ? `${args.metrics.verified} verificada${args.metrics.verified === 1 ? "" : "s"}` : args.metrics.inProcess > 0 ? `${args.metrics.inProcess} en curso` : "Sin validar",
+    },
+    {
+      title: "Evita un perfil a medias",
+      body: "Los perfiles incompletos pierden fuerza.",
+      cta: "Completar perfil",
+      href: "/candidate/profile",
+      tone: "border-amber-200 bg-amber-50/70",
+      status: args.profileCompletionScore >= 70 ? "Base sólida" : `${Math.round(args.profileCompletionScore)}% completado`,
+    },
+  ] as const;
 }
 
 function buildOpportunityCard(args: {
@@ -470,6 +453,7 @@ function InsightCard({
   cta,
   href,
   tone,
+  status,
   emphasis = "subtle",
 }: {
   title: string;
@@ -477,6 +461,7 @@ function InsightCard({
   cta: string;
   href: string;
   tone: string;
+  status?: string;
   emphasis?: "primary" | "subtle";
 }) {
   const buttonClass =
@@ -485,6 +470,7 @@ function InsightCard({
       : "mt-4 inline-flex rounded-lg border border-slate-200 bg-white/80 px-3.5 py-2 text-xs font-semibold text-slate-900 transition-all duration-150 hover:-translate-y-[1px] hover:bg-slate-50 hover:shadow-sm";
   return (
     <article className={`rounded-2xl p-5 transition-all duration-150 hover:-translate-y-[1px] hover:shadow-sm ${tone}`}>
+      {status ? <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">{status}</p> : null}
       <h3 className="text-[15px] font-semibold text-slate-900">{title}</h3>
       <p className="mt-2 text-sm leading-6 text-slate-600">{body}</p>
       <Link href={href} className={buttonClass}>
@@ -538,10 +524,19 @@ function SnapshotItem({
   tone?: SignalTone;
 }) {
   return (
-    <div className="rounded-2xl bg-white/80 p-4 ring-1 ring-slate-200/70">
-      <div className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${signalToneClasses(tone)}`}>{label}</div>
-      <p className="mt-3 text-sm font-semibold text-slate-950">{value}</p>
-      <p className="mt-1 text-xs leading-5 text-slate-500">{hint}</p>
+    <div className="rounded-2xl bg-white/80 px-4 py-3 ring-1 ring-slate-200/70">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-950">{label}</p>
+          <p className="mt-1 text-xs leading-5 text-slate-500">{hint}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <p className="text-sm font-semibold text-slate-950">{value}</p>
+          <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-semibold ${signalToneClasses(tone)}`}>
+            {tone === "green" ? "Fuerte" : tone === "amber" ? "Mejorable" : tone === "rose" ? "Pendiente" : tone === "violet" ? "Visible" : "Activo"}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -624,7 +619,7 @@ function PublicProfileCard({
     <section className="rounded-[28px] bg-slate-50/90 p-7 shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_12px_30px_rgba(15,23,42,0.05)] ring-1 ring-slate-200/70">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Esto es lo que verá una empresa</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Cómo te verá una empresa</p>
           <h2 className="mt-2 text-xl font-semibold text-slate-900">Perfil público verificable</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">Tu versión pública y compartible, preparada para generar confianza sin exponer datos sensibles.</p>
         </div>
@@ -692,20 +687,15 @@ function UpgradeCard({
     <section className="rounded-[28px] bg-gradient-to-r from-indigo-50/70 to-purple-50/60 p-7 shadow-[0_14px_36px_rgba(99,102,241,0.08)] ring-1 ring-indigo-100/70">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">Siguiente nivel</p>
-          <h2 className="mt-2 text-xl font-semibold text-slate-900">Accede a una visibilidad profesional completa</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-700">Presenta una versión más sólida ante empresas, con mejor visibilidad y una impresión más profesional.</p>
-          <ul className="mt-3 space-y-1.5 text-sm text-slate-700">
-            <li>Más visibilidad frente a empresas</li>
-            <li>Mejor presentación al compartir</li>
-            <li>Un perfil más sólido y competitivo</li>
-          </ul>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-700">Multiplica tu impacto</p>
+          <h2 className="mt-2 text-xl font-semibold text-slate-900">Más visibilidad, mejor presentación y un perfil más sólido</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-700">Convierte tu trayectoria en una versión más visible y más convincente cuando la compartes.</p>
         </div>
         <div className="min-w-[260px]">
           <p className="text-sm font-semibold text-slate-900">Tu plan actual: {planLabel}</p>
           <p className="mt-2 text-sm leading-6 text-slate-600">{summary}</p>
           <Link href="/candidate/subscription" className="mt-4 inline-flex w-full justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-black">
-            Desbloquear perfil completo
+            Mejorar plan
           </Link>
         </div>
       </div>
@@ -1043,59 +1033,43 @@ export default function CandidateOverview() {
         <div className="pointer-events-none absolute -right-20 bottom-0 h-52 w-52 rounded-full bg-slate-200/50 blur-3xl" />
       </OverviewHero>
 
-      <div className="grid gap-6 xl:grid-cols-[minmax(340px,0.96fr)_minmax(440px,1.04fr)] xl:gap-8 2xl:grid-cols-[minmax(360px,0.92fr)_minmax(520px,1.08fr)] 2xl:gap-10">
-        <OverviewProgressSection>
-          <div className="flex flex-col gap-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Progreso del perfil</p>
-            <div className="text-sm font-medium text-slate-600">
-              {profileCompletion?.completed || 0}/{profileCompletion?.total || 0} hitos completados
-            </div>
+      <OverviewProgressSection>
+        <div className="flex flex-col gap-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Preparación actual</p>
+          <div className="text-sm font-medium text-slate-600">
+            {profileCompletion?.completed || 0}/{profileCompletion?.total || 0} hitos completados
           </div>
+        </div>
 
-          <SemanticProgressBar segments={preparationSegments} />
-          <p className="text-sm leading-6 text-slate-600">
-            Tu perfil ya transmite una base clara, pero todavía hay margen para destacar más.
-          </p>
-          <p className="text-sm font-medium text-slate-700">Tu siguiente mejora visible puede cambiar cómo te perciben.</p>
-        </OverviewProgressSection>
+        <SemanticProgressBar segments={preparationSegments} />
+        <p className="text-sm font-medium text-slate-700">Lo que falta aquí es justo lo que más dudas genera cuando comparan perfiles.</p>
+      </OverviewProgressSection>
 
-        <OverviewHighlights>
-          <div className="grid gap-4 lg:grid-cols-3">
-            {highlightCards.length ? (
-              highlightCards.slice(0, 3).map((card, index) => (
-                <InsightCard
-                  key={`${card.title}-${card.href}`}
-                  {...card}
-                  tone={
-                    index === 0
-                      ? "rounded-xl border border-blue-200/70 bg-blue-50/60"
-                      : index === 1
-                        ? "rounded-xl border border-amber-200/70 bg-amber-50/60"
-                        : "rounded-xl border border-violet-200/70 bg-violet-50/60"
-                  }
-                  emphasis={index === 0 ? "primary" : "subtle"}
-                />
-              ))
-            ) : (
-              <InsightCard
-                title="Tu perfil va bien encaminado"
-                body="Ya tienes una base sólida. Mantener tu perfil al día y reforzar una experiencia cuando convenga te ayuda a seguir compitiendo con ventaja."
-                cta="Ver verificaciones"
-                href="/candidate/verifications"
-                tone="rounded-xl border border-slate-200/70 bg-blue-50/55"
-                emphasis="primary"
-              />
-            )}
-          </div>
-        </OverviewHighlights>
-      </div>
+      <OverviewHighlights>
+        <div className="grid gap-4 xl:grid-cols-3">
+          {highlightCards.map((card, index) => (
+            <InsightCard
+              key={`${card.title}-${card.href}`}
+              {...card}
+              tone={
+                index === 0
+                  ? "rounded-xl border border-blue-200/70 bg-white"
+                  : index === 1
+                    ? "rounded-xl border border-emerald-200/70 bg-white"
+                    : "rounded-xl border border-amber-200/70 bg-white"
+              }
+              emphasis={index === 0 ? "primary" : "subtle"}
+            />
+          ))}
+        </div>
+      </OverviewHighlights>
 
       <CandidateSurface tone="default" className="p-6 xl:p-7">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Resumen del perfil completo</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Qué partes de tu perfil ya están fuertes y cuáles siguen pidiendo refuerzo</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Lectura compacta de formación, idiomas, logros, evidencias, verificaciones y visibilidad pública usando solo datos reales ya disponibles.</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Tu perfil en una mirada</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Qué partes ya sostienen tu perfil y cuáles aún no están ayudando suficiente</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Esto es lo que verá una empresa en segundos.</p>
           </div>
           <Link href="/candidate/profile" className="inline-flex rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
             Revisar perfil completo
@@ -1142,49 +1116,43 @@ export default function CandidateOverview() {
         </div>
       </CandidateSurface>
 
-      <div className="grid gap-8 xl:grid-cols-[minmax(0,1.06fr)_minmax(380px,0.94fr)] xl:gap-10 2xl:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)]">
-        <div className="space-y-10">
-          <OverviewExperiencesPreview
-            action={
-              <Link href="/candidate/experience" className="inline-flex rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
-                Ver todas las experiencias
-              </Link>
-            }
-          >
-            <div className="space-y-0">
-              {experienceTimeline.length ? (
-                experienceTimeline.slice(0, 2).map((item: any) => <ExperienceSummaryCard key={item.id} item={item} />)
-              ) : (
-                <div className="rounded-3xl border border-dashed border-slate-300 p-6 text-sm text-slate-600">
-                  Todavía no hay experiencias suficientes para mostrar un resumen. Añade una experiencia o revisa las importadas para empezar a construir tu señal profesional.
-                </div>
-              )}
+      <OverviewExperiencesPreview
+        action={
+          <Link href="/candidate/experience" className="inline-flex rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+            Gestionar experiencias
+          </Link>
+        }
+      >
+        <div className="space-y-0">
+          {experienceTimeline.length ? (
+            experienceTimeline.slice(0, 3).map((item: any) => <ExperienceSummaryCard key={item.id} item={item} />)
+          ) : (
+            <div className="rounded-3xl border border-dashed border-slate-300 p-6 text-sm text-slate-600">
+              Todavía no hay experiencias suficientes para mostrar un resumen. Añade una experiencia o revisa las importadas para empezar a construir tu señal profesional.
             </div>
-          </OverviewExperiencesPreview>
+          )}
         </div>
+      </OverviewExperiencesPreview>
 
-        <div className="space-y-7">
-          <OverviewProfilePublicCard>
-            <PublicProfileCard
-              publicLink={publicLink}
-              preview={publicPreview}
-              trustScore={metrics.score}
-              verified={metrics.verified}
-              visibilityLabel={publicVisibilityLabel}
-              educationCount={educationCount}
-              languages={publicLanguages}
-              achievementsCount={achievementsCount}
-              verifiedSkillsCount={verifiedSkillsCount}
-            />
-          </OverviewProfilePublicCard>
+      <OverviewProfilePublicCard>
+        <PublicProfileCard
+          publicLink={publicLink}
+          preview={publicPreview}
+          trustScore={metrics.score}
+          verified={metrics.verified}
+          visibilityLabel={publicVisibilityLabel}
+          educationCount={educationCount}
+          languages={publicLanguages}
+          achievementsCount={achievementsCount}
+          verifiedSkillsCount={verifiedSkillsCount}
+        />
+      </OverviewProfilePublicCard>
 
-          {showUpgrade ? (
-            <OverviewUpgradeCard>
-              <UpgradeCard planLabel={planCapabilities.label} summary={planCapabilities.summary} />
-            </OverviewUpgradeCard>
-          ) : null}
-        </div>
-      </div>
+      {showUpgrade ? (
+        <OverviewUpgradeCard>
+          <UpgradeCard planLabel={planCapabilities.label} summary={planCapabilities.summary} />
+        </OverviewUpgradeCard>
+      ) : null}
     </CandidatePresentationLayout>
   );
 }

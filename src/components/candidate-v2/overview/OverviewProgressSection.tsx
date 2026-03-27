@@ -1,15 +1,18 @@
 import type { ReactNode } from "react";
 
 import CandidateSection from "../primitives/CandidateSection";
+import CandidateSurface from "../primitives/CandidateSurface";
 
 export default function OverviewProgressSection({ children }: { children: ReactNode }) {
   return (
     <CandidateSection
-      title="Palancas de mejora"
-      description="Estado de preparación del perfil y margen real para hacerlo más fuerte frente a una empresa."
+      title="Fuerza del perfil"
+      description="Base, experiencia, verificaciones, evidencias y visibilidad en una sola lectura."
       className="h-full"
     >
-      {children}
+      <CandidateSurface tone="default" className="p-6 xl:p-7">
+        {children}
+      </CandidateSurface>
     </CandidateSection>
   );
 }
