@@ -172,8 +172,8 @@ export default function CandidateOnboardingFlow({
           <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
               <div className="text-sm font-semibold text-slate-700">{stepLabel(step)}</div>
-              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Activa tu perfil profesional paso a paso</h1>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Cada paso añade contexto, claridad o confianza para que tu perfil resulte más útil cuando una empresa lo revise.</p>
+              <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Activa un perfil que una empresa pueda creer</h1>
+              <p className="mt-2 text-sm leading-6 text-slate-600">No se trata solo de rellenar datos. Se trata de convertir tu trayectoria en una señal más fuerte.</p>
             </div>
             <div className="min-w-[180px] rounded-2xl bg-slate-50 px-4 py-3">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Progreso</p>
@@ -183,6 +183,7 @@ export default function CandidateOnboardingFlow({
           <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
             <div className="h-full rounded-full bg-slate-900 transition-all" style={{ width: `${progressWidth(step)}%` }} />
           </div>
+          <p className="mt-4 text-sm text-slate-600">Cada paso reduce fricción y mejora cómo te verán.</p>
         </section>
 
         {message ? (
@@ -194,9 +195,9 @@ export default function CandidateOnboardingFlow({
         {step === "intro" ? (
           <section className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">VERIJOB</div>
-            <h1 className="mt-3 text-3xl font-semibold text-slate-900">Construye un perfil laboral creíble desde una base real</h1>
+            <h1 className="mt-3 text-3xl font-semibold text-slate-900">Crea la base de tu perfil</h1>
             <p className="mt-3 text-base text-slate-600">
-              Empieza importando tu CV o añadiendo tu primera experiencia. Después podrás revisar cada paso antes de verificarlo o reforzarlo con documentación.
+              Sin base profesional clara, no puedes construir una señal fuerte después.
             </p>
 
             <div className="mt-8 grid gap-4 md:grid-cols-2">
@@ -205,7 +206,7 @@ export default function CandidateOnboardingFlow({
                 onClick={() => void goToExperience("cv")}
                 className="inline-flex min-h-16 items-center justify-center rounded-2xl bg-slate-900 px-5 py-4 text-sm font-semibold text-white hover:bg-black"
               >
-                Importar desde CV
+                Importar mi CV
               </button>
               <button
                 type="button"
@@ -233,9 +234,9 @@ export default function CandidateOnboardingFlow({
         {step === "experience" ? (
           <section className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
             <div>
-              <h2 className="text-2xl font-semibold text-slate-900">Revisa tu historial antes de seguir</h2>
+              <h2 className="text-2xl font-semibold text-slate-900">Limpia y confirma tu historial</h2>
               <p className="mt-2 text-sm text-slate-600">
-                Corrige, completa o elimina lo que no encaje. Cuanto más limpio esté tu historial, más fácil será reforzarlo después.
+                Un historial confuso o incompleto resta credibilidad antes incluso de verificar nada.
               </p>
             </div>
 
@@ -287,9 +288,9 @@ export default function CandidateOnboardingFlow({
         {step === "verification" ? (
           <section className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
             <div>
-              <h2 className="text-2xl font-semibold text-slate-900">Refuerza tu perfil con señales reales</h2>
+              <h2 className="text-2xl font-semibold text-slate-900">Añade señales que te diferencien</h2>
               <p className="mt-2 text-sm text-slate-600">
-                Desde tu historial puedes solicitar verificaciones y añadir documentación para que tu perfil resulte más creíble cuando una empresa lo revise.
+                Las verificaciones y evidencias son lo que convierte tu perfil en una ventaja real.
               </p>
             </div>
 
@@ -352,8 +353,8 @@ export default function CandidateOnboardingFlow({
         {step === "done" ? (
           <section className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-sm">
             <div className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Perfil activado</div>
-            <h1 className="mt-3 text-3xl font-semibold text-slate-900">Tu perfil ya está listo para seguir creciendo</h1>
-            <p className="mt-3 text-base text-slate-600">{trustMessage}</p>
+            <h1 className="mt-3 text-3xl font-semibold text-slate-900">Ya tienes una base. Ahora toca hacerla destacar.</h1>
+            <p className="mt-3 text-base text-slate-600">Tu perfil ya está activo, pero todavía puede ganar mucha más fuerza si verificas experiencia o subes evidencias.</p>
 
             <div className="mt-8 grid gap-4 md:grid-cols-3">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">

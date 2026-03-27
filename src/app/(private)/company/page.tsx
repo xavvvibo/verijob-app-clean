@@ -857,10 +857,14 @@ export default function CompanyDashboard() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Candidatos para decidir</h2>
-              <p className="mt-1 text-sm text-slate-600">Lectura rápida para decidir a quién revisar a fondo, guardar o preseleccionar sin perder contexto.</p>
+              <p className="mt-1 text-sm text-slate-600">Aquí decides rápido quién merece revisión a fondo y quién todavía no tiene suficiente señal.</p>
             </div>
             <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir base completa</a>
           </div>
+
+          <p className="mt-4 text-sm text-slate-500">
+            Prioriza primero los perfiles con señales verificadas. Abrir sin contexto cuesta más decisiones y más tiempo.
+          </p>
 
           <div className="mt-5 flex flex-wrap gap-2">
             {[
@@ -951,6 +955,10 @@ export default function CompanyDashboard() {
                         <p className="mt-2 text-sm font-medium text-slate-800">{row.target_role || "Puesto no definido"}</p>
                         <p className="mt-1 text-sm text-slate-600">{row.candidate_email || "Email no disponible"}</p>
                         <p className="mt-2 text-sm text-slate-700">{confidenceSummary}</p>
+                        <p className="mt-1 text-xs font-medium text-slate-500">Más confianza = menos incertidumbre de contratación</p>
+                        <p className="mt-1 text-xs font-medium text-slate-500">
+                          {approved > 0 ? "Este perfil ya aporta señal real para tomar una decisión con menos riesgo." : "Evalúa este perfil según la señal real que ya aporta."}
+                        </p>
                         <p className="mt-1 text-xs font-medium text-slate-500">{progressLabel}</p>
                       </div>
                       <div className="text-right text-xs text-slate-500">
@@ -975,26 +983,32 @@ export default function CompanyDashboard() {
                     </div>
 
                     <div className="mt-5 flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setQuickViewRow(row);
-                        }}
-                        className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
-                      >
-                        Ver resumen
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setQuickViewRow(row);
-                        }}
-                        className="inline-flex rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-900 hover:bg-indigo-100"
-                      >
-                        Ver perfil completo
-                      </button>
+                      <div className="space-y-1">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setQuickViewRow(row);
+                          }}
+                          className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+                        >
+                          Ver resumen
+                        </button>
+                        <p className="text-[11px] font-medium text-slate-500">Vista parcial sin consumo</p>
+                      </div>
+                      <div className="space-y-1">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setQuickViewRow(row);
+                          }}
+                          className="inline-flex rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-900 hover:bg-indigo-100"
+                        >
+                          {availableProfileAccesses > 0 ? "Ver perfil completo (-1 acceso)" : "Sin accesos disponibles"}
+                        </button>
+                        <p className="text-[11px] font-medium text-slate-500">Desbloquea contexto completo</p>
+                      </div>
                       <button
                         type="button"
                         onClick={(event) => {
@@ -1053,11 +1067,12 @@ export default function CompanyDashboard() {
               <p className="mt-1 text-sm text-slate-600">
                 {availableProfileAccesses} disponibles ahora mismo.
               </p>
+              <p className="mt-2 text-sm text-slate-700">Tus accesos no compran perfiles: compran contexto para decidir mejor.</p>
               <p className="mt-1 text-xs text-slate-500">
                 {activeAccessCount} perfiles completos activos · {expiredAccessCount} accesos caducados listos para renovar.
               </p>
               {availableProfileAccesses <= 0 ? (
-              <p className="mt-2 text-sm text-rose-700">No tienes accesos disponibles para abrir perfiles completos.</p>
+              <p className="mt-2 text-sm text-rose-700">Ahora mismo puedes seguir revisando resúmenes, pero no acceder a la versión completa cuando un perfil realmente promete.</p>
               ) : null}
             </div>
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -1106,7 +1121,7 @@ export default function CompanyDashboard() {
                 Más capacidad de equipo, más ritmo operativo y un panel empresa que puede crecer contigo sin fricciones.
               </p>
               <a href="/company/subscription" className="mt-3 inline-flex rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800">
-                Comprar accesos
+                Activar más accesos
               </a>
             </div>
           </div>
@@ -1262,7 +1277,7 @@ export default function CompanyDashboard() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Perfiles ya desbloqueados</h2>
-              <p className="mt-1 text-sm text-slate-600">Historial rápido para saber qué candidatos ya están abiertos y no consumirán otro acceso dentro de la ventana activa.</p>
+              <p className="mt-1 text-sm text-slate-600">Estos perfiles ya pueden revisarse sin volver a consumir acceso dentro de la ventana activa.</p>
             </div>
             <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir RRHH</a>
           </div>

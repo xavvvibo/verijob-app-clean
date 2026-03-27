@@ -50,7 +50,7 @@ export default function ProfileUnlockAction({
     return (
       <div className="space-y-3">
         <div className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
-          Acceso activo
+          Perfil completo disponible
         </div>
         <button
           type="button"
@@ -60,7 +60,7 @@ export default function ProfileUnlockAction({
           Abrir perfil completo
         </button>
         <p className="text-xs text-emerald-700">
-          {unlockUntilLabel ? `Ya está desbloqueado para tu empresa hasta ${unlockUntilLabel}.` : "Ya está desbloqueado para tu empresa dentro de la ventana activa."}
+          {unlockUntilLabel ? `Ya puedes volver a abrirlo sin consumir otro acceso dentro de la ventana activa hasta ${unlockUntilLabel}.` : "Ya puedes volver a abrirlo sin consumir otro acceso dentro de la ventana activa."}
         </p>
       </div>
     );
@@ -137,15 +137,23 @@ export default function ProfileUnlockAction({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
           <div className="w-full max-w-lg rounded-[32px] border border-slate-200 bg-white p-6 shadow-2xl">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Acceso al perfil completo</p>
-            <h2 className="mt-2 text-xl font-semibold text-slate-900">Ver perfil completo</h2>
+            <h2 className="mt-2 text-xl font-semibold text-slate-900">Abre el perfil completo</h2>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              Verás la versión completa del candidato. El primer acceso consume 1 crédito y no volverá a consumirse mientras siga dentro de la ventana activa.
+              Vas a ver más contexto profesional, más detalle de trayectoria y más señal para decidir con menos incertidumbre.
             </p>
             <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              <p className="font-semibold text-slate-900">Qué desbloqueas</p>
+              <ul className="mt-2 space-y-1.5 text-sm text-slate-700">
+                <li>Más contexto sobre la trayectoria</li>
+                <li>Más detalle útil para evaluar</li>
+                <li>Menos decisión a ciegas</li>
+              </ul>
+            </div>
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
               <p className="font-semibold text-slate-900">Accesos disponibles para abrir perfiles: {remainingAccesses}</p>
-              <p className="mt-1 text-xs leading-5 text-slate-500">La vista completa muestra más contexto profesional y evita decidir solo con el resumen público.</p>
+              <p className="mt-1 text-xs leading-5 text-slate-500">Este acceso consume 1 crédito solo la primera vez dentro de la ventana activa.</p>
               {remainingAccesses <= 0 ? (
-                <p className="mt-1 text-rose-700">No tienes accesos disponibles para abrir perfiles completos.</p>
+                <p className="mt-1 text-rose-700">Ahora mismo puedes seguir viendo el resumen, pero no la versión completa del perfil cuando realmente la necesitas.</p>
               ) : null}
             </div>
             {error ? (

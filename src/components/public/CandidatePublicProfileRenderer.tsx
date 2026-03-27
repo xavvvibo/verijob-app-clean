@@ -459,7 +459,7 @@ export function CandidatePublicProfileRenderer({
                 </div>
                 <h1 className="mt-2 text-3xl font-semibold text-slate-900">{displayName || "Candidato verificado"}</h1>
                 <p className="mt-1 text-sm font-medium text-blue-800">
-                  {[teaser?.title, teaser?.sector].filter(Boolean).join(" · ") || "Perfil profesional verificable"}
+                  {[teaser?.title, teaser?.sector].filter(Boolean).join(" · ") || "Credencial laboral verificable"}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-600">
                   {teaser?.location ? <Pill>{teaser.location}</Pill> : null}
@@ -476,7 +476,7 @@ export function CandidatePublicProfileRenderer({
             </div>
 
             <p className="mt-4 max-w-3xl text-sm leading-6 text-slate-700">
-              Credencial laboral verificable con señales reales y una muestra limitada de trayectoria. Para revisar el perfil completo hay que abrir el acceso empresa.
+              No es solo un CV visible: es un perfil con señales reales para generar confianza más rápido.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-3">
@@ -533,20 +533,23 @@ export function CandidatePublicProfileRenderer({
                     ? `Tu empresa tiene ${companyAvailableAccesses} acceso${companyAvailableAccesses === 1 ? "" : "s"} disponible${companyAvailableAccesses === 1 ? "" : "s"} para abrir perfiles completos.`
                     : "Tu empresa no tiene accesos disponibles ahora mismo. Puedes seguir viendo este resumen o activar más accesos cuando lo necesites."}
               </p>
-            ) : null}
+            ) : (
+              <p className="mt-3 text-xs text-slate-500">Regístrate para evaluar perfiles con más contexto y señal verificable.</p>
+            )}
           </header>
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <SignalCard label="Nivel de confianza" value={Math.round(trust)} hint="Señal visible para empresa" />
+            <SignalCard label="Nivel de confianza" value={Math.round(trust)} hint="Resume qué parte de la trayectoria ya está respaldada por señales verificables." />
             <SignalCard label="Experiencias verificadas" value={verificationSummary.verified} hint="Trayectoria contrastada" />
             <SignalCard label="Experiencias visibles" value={experiences.length} hint="Vista pública resumida" />
           </div>
+          <p className="text-sm text-slate-600">Cuantas más señales verificadas, menos dudas para quien evalúa.</p>
 
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Trayectoria visible</h2>
-                <p className="mt-1 text-sm text-slate-600">Aquí solo se muestra una selección resumida del historial profesional compartible.</p>
+                <p className="mt-1 text-sm text-slate-600">Lo que el candidato declara y decide compartir.</p>
               </div>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
                 Sin datos de contacto
@@ -708,7 +711,8 @@ export function CandidatePublicProfileRenderer({
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-900">Nivel de confianza</p>
                     <p className="mt-2 text-2xl font-semibold text-slate-900">{trustHeadline}</p>
-                    <p className="mt-1 text-sm text-slate-700">{trustSubheadline}</p>
+                    <p className="mt-1 text-sm text-slate-700">Resume qué parte de la trayectoria ya está respaldada por señales verificables.</p>
+                    <p className="mt-2 text-xs leading-5 text-slate-600">Cuantas más señales verificadas, menos dudas para quien evalúa.</p>
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <span className="rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
@@ -828,7 +832,7 @@ export function CandidatePublicProfileRenderer({
                     </div>
                   ) : (
                     <div className="rounded-2xl border border-blue-100 bg-blue-50/60 p-4 text-sm text-slate-700">
-                      <p className="font-semibold text-slate-900">Qué transmite confianza en esta vista</p>
+                      <p className="font-semibold text-slate-900">Señales verificadas</p>
                       <ul className="mt-2 space-y-1.5 text-xs leading-5">
                         <li>{trustStateExplanation}</li>
                         <li>Verificaciones empresariales: {Number(teaser?.confirmed_experiences ?? 0)}</li>
@@ -879,7 +883,7 @@ export function CandidatePublicProfileRenderer({
                     <h3 className="text-sm font-semibold text-slate-900">{isOpenPublicView ? "Acceso para empresas" : "Acceso empresa"}</h3>
                     <p className="mt-2 text-xs leading-5 text-slate-600">
                       {isOpenPublicView
-                        ? "Regístrate para ver más contexto verificable y evaluar mejor este perfil."
+                        ? "Accede a más contexto profesional y señales completas para decidir mejor."
                         : "Para acceder a más contexto operativo, utiliza la vista de empresa."}
                     </p>
                     <div className="mt-4 space-y-2">
@@ -947,7 +951,7 @@ export function CandidatePublicProfileRenderer({
             {showProfileTab ? (
               <>
                 <Card
-                  title={isOpenPublicView ? "Señales públicas de verificación" : "Identidad y señales de confianza"}
+                    title={isOpenPublicView ? "Señales públicas de verificación" : "Identidad y señales de confianza"}
                   subtitle={
                     isOpenPublicView
                       ? "Vista pública resumida con señales de confianza y trayectoria profesional protegida."
@@ -1015,8 +1019,8 @@ export function CandidatePublicProfileRenderer({
 
                 {isOpenPublicView ? (
                   <Card
-                    title="Trayectoria visible y validada"
-                    subtitle="Muestra resumida de la experiencia más sólida del perfil y de las señales que ya la respaldan."
+                    title="Trayectoria visible"
+                    subtitle="Lo que el candidato declara y decide compartir."
                   >
                     {experiences.length ? (
                       <div className="space-y-3">
@@ -1080,8 +1084,8 @@ export function CandidatePublicProfileRenderer({
 
                 {(!isOpenPublicView && (experiences.length > 0 || internalPreview)) ? (
                   <Card
-                    title="Historial verificable"
-                    subtitle="Separación clara entre trayectoria declarada y señales verificables, sin exponer documentación sensible."
+                    title="Señales verificadas"
+                    subtitle="Lo que ya cuenta con validación o soporte real, sin exponer documentación sensible."
                   >
                     {experiences.length ? (
                       <ol className="relative ml-2 border-l border-slate-200 pl-4">
@@ -1561,15 +1565,15 @@ function getStatusBadge(statusText?: string | null) {
   const status = normalizeEmploymentRecordVerificationStatus(statusText);
 
   if (status === EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFIED) {
-    return { label: "Alta confianza", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+    return { label: "Verificada", className: "border-emerald-200 bg-emerald-50 text-emerald-700" };
   }
   if (status === EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFICATION_REQUESTED) {
-    return { label: "Verificación en proceso", className: "border-amber-200 bg-amber-50 text-amber-700" };
+    return { label: "Validación en curso", className: "border-amber-200 bg-amber-50 text-amber-700" };
   }
   if (status === EMPLOYMENT_RECORD_VERIFICATION_STATUS.REJECTED) {
-    return { label: "Sin validar todavía", className: "border-slate-300 bg-slate-100 text-slate-700" };
+    return { label: "Declarada", className: "border-slate-300 bg-slate-100 text-slate-700" };
   }
-  return { label: "Sin validar todavía", className: "border-slate-300 bg-slate-100 text-slate-700" };
+  return { label: "Declarada", className: "border-slate-300 bg-slate-100 text-slate-700" };
 }
 
 function getCompanyStatusBadge(statusText?: string | null) {

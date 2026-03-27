@@ -144,13 +144,13 @@ function buildPrimaryAction(args: {
     let label = first.label;
     let rationale = "Es la forma más rápida de reforzar cómo te verán las empresas.";
     if (first.href.includes("/candidate/evidence")) {
-      label = "Sube una prueba y aumenta tu credibilidad";
+      label = "Sube una evidencia y refuerza tu perfil hoy";
       rationale = "Una prueba real puede reforzar claramente tu perfil y hacerte más competitivo frente a otros candidatos.";
     } else if (first.href.includes("/candidate/verifications")) {
-      label = "Mueve una verificación y gana solidez";
+      label = "Activa una verificación y gana credibilidad real";
       rationale = "Cerrar una verificación pendiente mejora tu señal profesional y reduce dudas cuando una empresa revisa tu perfil.";
     } else if (first.href.includes("/candidate/profile")) {
-      label = "Completa tu perfil y transmite más confianza";
+      label = "Completa tu perfil y evita perder fuerza frente a otros candidatos";
       rationale = "Los perfiles más completos resultan más claros, más serios y más creíbles desde la primera impresión.";
     } else if (first.href.includes("/candidate/experience")) {
       label = "Añade tu experiencia y activa tu señal profesional";
@@ -161,7 +161,7 @@ function buildPrimaryAction(args: {
 
   if (args.metrics.evidences === 0 && args.experienceCount > 0) {
     return {
-      label: "Sube una prueba y aumenta tu credibilidad",
+      label: "Sube una evidencia y refuerza tu perfil hoy",
       href: "/candidate/evidence",
       rationale: "Un documento bien alineado puede reforzar claramente tu perfil sin rehacer todo lo demás.",
     };
@@ -169,7 +169,7 @@ function buildPrimaryAction(args: {
 
   if (args.profileCompletionScore < 70) {
     return {
-      label: "Completa tu perfil y transmite más confianza",
+      label: "Completa tu perfil y evita perder fuerza frente a otros candidatos",
       href: "/candidate/profile",
       rationale: "Un perfil más completo transmite mejor tu valor incluso antes de una verificación.",
     };
@@ -247,9 +247,9 @@ function buildHighlightCards(args: {
 
   if (args.metrics.evidences === 0 && args.experienceCount > 0) {
     cards.push({
-      title: "Aumenta tu nivel de confianza",
-      body: "Una evidencia válida puede reforzar claramente tu perfil y hacer que tu experiencia pese más cuando una empresa la revise.",
-      cta: "Sube una evidencia",
+      title: "Haz que tu experiencia pese más",
+      body: "Sin una prueba real, parte de tu trayectoria sigue siendo solo declarativa.",
+      cta: "Subir evidencia",
       href: "/candidate/evidence",
       tone: "border-blue-200 bg-blue-50/70",
     });
@@ -257,8 +257,8 @@ function buildHighlightCards(args: {
 
   if (args.profileCompletionScore < 70) {
     cards.push({
-      title: "Completa tu perfil",
-      body: "Los perfiles más completos generan más confianza y facilitan que una empresa entienda tu valor desde el primer vistazo.",
+      title: "Evita un perfil a medias",
+      body: "Los perfiles incompletos generan menos confianza desde el primer vistazo.",
       cta: "Completa tu perfil",
       href: "/candidate/profile",
       tone: "border-amber-200 bg-amber-50/70",
@@ -267,9 +267,9 @@ function buildHighlightCards(args: {
 
   if (args.metrics.inProcess > 0) {
     cards.push({
-      title: "Refuerza una experiencia en curso",
-      body: "Cerrar verificaciones pendientes mejora tu señal profesional y hace tu perfil más competitivo sin añadir ruido.",
-      cta: "Revisa verificaciones",
+      title: "Convierte experiencia en señal verificable",
+      body: "Una verificación cerrada puede marcar la diferencia entre revisión y descarte.",
+      cta: "Solicitar verificación",
       href: "/candidate/verifications",
       tone: "border-emerald-200 bg-emerald-50/70",
     });
@@ -957,7 +957,7 @@ export default function CandidateOverview() {
       <OverviewHero
         left={
           <div className="min-w-0">
-            <div className="flex items-start gap-5">
+            <div className="flex items-start gap-4 sm:gap-5 xl:gap-6 2xl:gap-7">
               <AvatarView
                 fullName={profile?.full_name}
                 avatarUrl={profile?.avatar_url}
@@ -965,10 +965,12 @@ export default function CandidateOverview() {
               />
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Estado actual del perfil</p>
-                <h1 className="mt-3 whitespace-normal break-words text-3xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-[3.25rem]">
-                  {profile?.full_name || "Tu resumen profesional"}
+                <h1 className="mt-3 max-w-[16ch] whitespace-normal break-words text-3xl font-semibold leading-tight tracking-tight text-slate-950 sm:text-[3.25rem] 2xl:max-w-[18ch] 2xl:text-[3.45rem]">
+                  Tu perfil aún no está jugando en su nivel más alto
                 </h1>
-                <p className="mt-4 text-base text-slate-700">{profile?.title || "Profesional verificable en Verijob"}</p>
+                <p className="mt-4 max-w-[64ch] text-base leading-7 text-slate-700">Cada verificación o evidencia reduce dudas y hace tu perfil más competitivo cuando una empresa lo revisa.</p>
+                <p className="mt-5 text-lg font-semibold text-slate-950">{profile?.full_name || "Tu resumen profesional"}</p>
+                <p className="mt-2 text-base text-slate-700">{profile?.title || "Profesional verificable en Verijob"}</p>
                 <p className="mt-1 text-sm text-slate-500">{profile?.location || "Ubicación no definida"}</p>
 
                 <div className="mt-7 flex flex-wrap items-center gap-3">
@@ -983,16 +985,21 @@ export default function CandidateOverview() {
                   {overviewStatus} · {availabilityText}
                 </p>
 
-                <div className="mt-10 flex items-center gap-10">
+                <div className="mt-10 flex flex-col gap-6 md:flex-row md:items-center md:gap-8 xl:gap-10 2xl:gap-12">
                   <TrustRing score={metrics.score} stateTitle={trustState.title} />
-                  <div className="min-w-0">
+                  <div className="min-w-0 max-w-[38rem]">
                     <div className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${trustState.tone}`}>
                       {metrics.verified > 0 ? "Perfil parcialmente verificado" : trustState.title}
                     </div>
-                    <p className="mt-3 max-w-md text-base font-medium leading-7 text-slate-800">
+                    <p className="mt-3 text-base font-medium leading-7 text-slate-800">
                       {metrics.verified > 0
                         ? "Credibilidad media. Ya transmites señales reales, pero aún puedes destacar más."
                         : employerLensCopy}
+                    </p>
+                    <p className="mt-3 text-sm leading-6 text-slate-600">
+                      {metrics.score >= 60
+                        ? "Con este nivel de confianza, una empresa ya ve señales reales. Aún puedes hacer que te descarte menos y te abra más rápido."
+                        : "Ahora mismo tu perfil puede pasar desapercibido frente a candidatos con señales verificadas."}
                     </p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       {trustSignals.slice(0, 2).map((signal) => (
@@ -1011,9 +1018,9 @@ export default function CandidateOverview() {
           </div>
         }
         right={
-        <div className="rounded-[30px] bg-slate-950 p-8 text-white shadow-[0_28px_70px_rgba(15,23,42,0.28)] ring-1 ring-white/10 xl:p-9">
+        <div className="mx-auto w-full max-w-[36rem] rounded-[30px] bg-slate-950 p-7 text-white shadow-[0_28px_70px_rgba(15,23,42,0.28)] ring-1 ring-white/10 sm:p-8 xl:mx-0 xl:max-w-none xl:p-8 2xl:p-9">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">Tu siguiente mejor paso</p>
-          <h2 className="mt-4 text-[2rem] font-semibold leading-tight">Haz que las empresas confíen en ti desde hoy</h2>
+          <h2 className="mt-4 max-w-[14ch] text-[1.9rem] font-semibold leading-tight sm:text-[2rem] 2xl:text-[2.15rem]">Haz que las empresas confíen en ti desde hoy</h2>
           <p className="mt-3 text-base leading-7 text-slate-300">Una prueba real puede marcar la diferencia.</p>
           <Link
             href={primaryAction.href}
@@ -1032,9 +1039,9 @@ export default function CandidateOverview() {
         <div className="pointer-events-none absolute -right-20 bottom-0 h-52 w-52 rounded-full bg-slate-200/50 blur-3xl" />
       </OverviewHero>
 
-      <div className="grid gap-8 xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
+      <div className="grid gap-6 xl:grid-cols-[minmax(320px,0.88fr)_minmax(420px,1.12fr)] xl:gap-8 2xl:grid-cols-[minmax(340px,0.84fr)_minmax(480px,1.16fr)] 2xl:gap-10">
         <OverviewProgressSection>
-          <div className="flex items-center justify-between text-sm text-slate-500">
+          <div className="flex flex-col gap-3 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Progreso del perfil</p>
             <div className="text-sm font-medium text-slate-600">
               {profileCompletion?.completed || 0}/{profileCompletion?.total || 0} hitos completados
@@ -1050,6 +1057,10 @@ export default function CandidateOverview() {
               />
             ))}
           </div>
+          <p className="text-sm leading-6 text-slate-600">
+            Lo que falta aquí es justo lo que más dudas genera cuando una empresa compara perfiles.
+          </p>
+          <p className="text-sm font-medium text-slate-700">Tu siguiente mejora visible puede cambiar cómo te perciben.</p>
         </OverviewProgressSection>
 
         <OverviewHighlights>
@@ -1077,7 +1088,7 @@ export default function CandidateOverview() {
         </OverviewHighlights>
       </div>
 
-      <div className="grid gap-10 xl:grid-cols-[minmax(0,1fr)_490px]">
+      <div className="grid gap-8 xl:grid-cols-[minmax(0,1.06fr)_minmax(380px,0.94fr)] xl:gap-10 2xl:grid-cols-[minmax(0,1.08fr)_minmax(420px,0.92fr)]">
         <div className="space-y-10">
           <OverviewExperiencesPreview
             action={
