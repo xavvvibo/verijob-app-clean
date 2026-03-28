@@ -1,4 +1,9 @@
 import React from "react";
+import {
+  getInitialsFromDisplayName,
+  resolvePublicCandidateDisplayName,
+  resolvePublicProfileDisplaySummary,
+} from "@/lib/public/candidate-profile-display";
 
 type AnyData = Record<string, any>;
 
@@ -57,39 +62,6 @@ function getTrustScore(source: AnyData): number | null {
   if (raw === null || raw === undefined || raw === "") return null;
   const n = Number(raw);
   return Number.isFinite(n) ? n : null;
-}
-
-function getDisplayName(source: AnyData): string {
-  const firstName =
-    pickFirstString(
-      source?.first_name,
-      getNested(source, "candidate_profile.first_name"),
-      getNested(source, "profile.first_name")
-    ) ?? "";
-
-  const lastName =
-    pickFirstString(
-      source?.last_name,
-      getNested(source, "candidate_profile.last_name"),
-      getNested(source, "profile.last_name")
-    ) ?? "";
-
-  if (firstName || lastName) {
-    return [firstName, lastName].filter(Boolean).join(" ").trim();
-  }
-
-  return (
-    pickFirstString(
-      source?.full_name,
-      source?.name,
-      source?.candidate_name,
-      source?.display_name,
-      getNested(source, "candidate_profile.full_name"),
-      getNested(source, "candidate_profile.name"),
-      getNested(source, "profile.full_name"),
-      getNested(source, "profile.name")
-    ) ?? "Candidato"
-  );
 }
 
 function getTitle(source: AnyData): string {
@@ -181,7 +153,8 @@ export default function SharePublicFullCard(props: AnyData) {
   const source = getSource(props);
   const experiences = getExperiences(source).map(normalizeExperience);
   const trustScore = getTrustScore(source);
-  const displayName = getDisplayName(source);
+  const displayName = resolvePublicCandidateDisplayName(source);
+  const displaySummary = resolvePublicProfileDisplaySummary(source);
   const title = getTitle(source);
   const location = getLocation(source);
   const availability = getAvailability(source);
@@ -201,11 +174,7 @@ export default function SharePublicFullCard(props: AnyData) {
       <div className="flex flex-col gap-8">
         <div className="flex items-start gap-4">
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-500 text-xl font-semibold text-white">
-            {displayName
-              .split(" ")
-              .map((chunk) => chunk[0])
-              .join("")
-              .slice(0, 2)}
+            {getInitialsFromDisplayName(displayName)}
           </div>
 
           <div className="min-w-0 flex-1">
@@ -269,6 +238,35 @@ export default function SharePublicFullCard(props: AnyData) {
             </div>
             <div className="mt-2 text-[28px] font-semibold tracking-[-0.02em] text-slate-950">
               {trustScore ?? "—"}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Formacion
+            </div>
+            <div className="mt-2 text-[16px] font-semibold text-slate-950">
+              {displaySummary.educationLabel}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Idiomas
+            </div>
+            <div className="mt-2 text-[16px] font-semibold text-slate-950">
+              {displaySummary.languagesLabel}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+              Habilidades y logros
+            </div>
+            <div className="mt-2 text-[16px] font-semibold text-slate-950">
+              {displaySummary.capabilitiesLabel}
             </div>
           </div>
         </div>

@@ -3,6 +3,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ProfileUnlockAction from "@/components/company/ProfileUnlockAction";
 import { createClient as createBrowserSupabaseClient } from "@/utils/supabase/client";
+import {
+  getInitialsFromDisplayName,
+  resolvePublicCandidateDisplayName,
+  resolvePublicProfileDisplaySummary,
+} from "@/lib/public/candidate-profile-display";
 import { normalizePublicLanguages } from "@/lib/public/profile-languages";
 import { resolvePublicCompanyAccessCta, type PublicCompanyViewerAccess } from "@/lib/public/company-access-cta";
 import {
@@ -203,7 +208,7 @@ export function CandidatePublicProfileRenderer({
     ? payload.recommendations
     : [];
   const achievements = Array.isArray(payload?.achievements) ? payload.achievements : [];
-  const skills = Array.isArray(payload?.verified_skills) ? payload.verified_skills : [];
+  const displaySummary = useMemo(() => resolvePublicProfileDisplaySummary(payload), [payload]);
 
   const capabilities = getModeCapabilities(mode);
   const experiences = useMemo(() => {
@@ -224,7 +229,7 @@ export function CandidatePublicProfileRenderer({
       })
       .slice(0, capabilities.maxExperiences);
   }, [allExperiences, capabilities.maxExperiences]);
-  const publicLanguages = normalizePublicLanguages(teaser?.languages);
+  const publicLanguages = normalizePublicLanguages(displaySummary.languages);
 
   const trust = Number(teaser?.trust_score ?? 0);
   const profileVisibility = getProfileVisibilityLabel(teaser?.profile_visibility);
@@ -390,15 +395,15 @@ export function CandidatePublicProfileRenderer({
   const isExternalCleanView = !internalPreview;
   const isPrintMode = renderMode === "print";
   const isOpenPublicView = isPublicCompanyResolutionTarget;
-  const displayName = teaser?.full_name || teaser?.public_name || null;
+  const displayName = resolvePublicCandidateDisplayName(payload);
   const trustHeadline = `${Math.round(trust)} · ${trustStateLabel}`;
   const hasSecondarySummary = Boolean((qrEnabled || internalPreview) || capabilities.showContact || companyAccess);
   const hasExperiences = experiences.length > 0;
-  const hasEducation = education.length > 0;
+  const hasEducation = displaySummary.educationCount > 0;
   const hasRecommendations = recommendations.length > 0;
   const hasLanguages = publicLanguages.length > 0;
-  const hasAchievements = achievements.length > 0;
-  const hasSkills = skills.length > 0;
+  const hasAchievements = displaySummary.achievementsCount > 0;
+  const hasSkills = displaySummary.skills.length > 0;
   const featuredVerifiedExperiences = Array.isArray(teaser?.featured_verified_experiences)
     ? teaser.featured_verified_experiences
     : [];
@@ -453,7 +458,7 @@ export function CandidatePublicProfileRenderer({
                   <img src="/brand/verijob-logo-white-bg.png" alt="Verijob" className="h-6 w-auto object-contain" />
                   <span className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Vista pública</span>
                 </div>
-                <h1 className="mt-2 text-3xl font-semibold text-slate-900">{displayName || "Perfil verificable"}</h1>
+                <h1 className="mt-2 text-3xl font-semibold text-slate-900">{displayName}</h1>
                 <p className="mt-1 text-sm font-medium text-blue-800">
                   {[teaser?.title, teaser?.sector].filter(Boolean).join(" · ") || "Credencial laboral verificable"}
                 </p>
@@ -461,8 +466,9 @@ export function CandidatePublicProfileRenderer({
                   {teaser?.location ? <Pill>{teaser.location}</Pill> : null}
                   <Pill>{verificationSummary.verified} verificaciones</Pill>
                   <Pill>Nivel de confianza {Math.round(trust)}</Pill>
-                  <Pill>{Number(teaser?.education_total ?? education.length)} formaciones</Pill>
-                  <Pill>{publicLanguages.length ? publicLanguages.slice(0, 2).join(", ") : "Idiomas pendientes"}</Pill>
+                  <Pill>{displaySummary.educationLabel}</Pill>
+                  <Pill>{displaySummary.languagesLabel}</Pill>
+                  <Pill>{displaySummary.capabilitiesLabel}</Pill>
                 </div>
               </div>
 
@@ -542,18 +548,12 @@ export function CandidatePublicProfileRenderer({
             <SignalCard label="Experiencias visibles" value={experiences.length} hint="Vista pública resumida" />
             <SignalCard
               label="Formación"
-              value={Number(teaser?.education_total ?? education.length) || "Pendiente"}
+              value={displaySummary.educationCount || "Formacion pendiente"}
               hint="Base académica visible"
             />
             <SignalCard
               label="Idiomas y logros"
-              value={
-                publicLanguages.length
-                  ? publicLanguages.slice(0, 2).join(", ")
-                  : skills.length || achievements.length
-                    ? `${skills.length} habilidades · ${achievements.length} logros`
-                    : "Pendiente"
-              }
+              value={publicLanguages.length ? displaySummary.languagesLabel : displaySummary.capabilitiesLabel}
               hint="Señal complementaria del perfil"
             />
           </div>
@@ -614,7 +614,7 @@ export function CandidatePublicProfileRenderer({
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex min-w-0 items-start gap-4">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-600 text-xl font-bold text-white shadow-sm">
-                  {getInitials(displayName || "Perfil")}
+                  {getInitialsFromDisplayName(displayName)}
                 </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
@@ -631,7 +631,7 @@ export function CandidatePublicProfileRenderer({
                     ) : null}
                   </div>
                   <h1 className="mt-1 whitespace-normal break-words text-2xl font-semibold text-slate-900 sm:text-3xl">
-                    {displayName || "Perfil verificable"}
+                    {displayName}
                   </h1>
                   {teaser?.title || internalPreview ? (
                     <p className="mt-1 text-sm font-medium text-blue-800">{teaser?.title || "Añade tu titular profesional"}</p>
@@ -984,23 +984,19 @@ export function CandidatePublicProfileRenderer({
                       <SummaryInfo
                         label="Formación visible"
                         value={
-                          Number(teaser?.education_total ?? education.length) > 0
-                            ? String(Number(teaser?.education_total ?? education.length))
-                            : "Pendiente"
+                          displaySummary.educationCount > 0
+                            ? String(displaySummary.educationCount)
+                            : "Formacion pendiente"
                         }
                       />
                       <SummaryInfo
                         label="Idiomas"
-                        value={publicLanguages.length ? publicLanguages.slice(0, 2).join(", ") : "Pendientes"}
+                        value={displaySummary.languagesLabel}
                       />
                       {isOpenPublicView ? (
                         <SummaryInfo
                           label="Habilidades y logros"
-                          value={
-                            skills.length > 0 || achievements.length > 0
-                              ? `${skills.length} habilidades · ${achievements.length} logros`
-                              : "Pendientes"
-                          }
+                          value={displaySummary.capabilitiesLabel}
                         />
                       ) : null}
                       <SummaryInfo label="Estado de confianza" value={isOpenPublicView ? "Perfil con validaciones reales" : trustStateLabel} />
@@ -1185,18 +1181,18 @@ export function CandidatePublicProfileRenderer({
                   </Card>
                 ) : null}
 
-                {(skills.length > 0 || internalPreview) ? (
+                {(displaySummary.skills.length > 0 || internalPreview) ? (
                   <Card title="Habilidades clave" subtitle="Competencias destacadas que refuerzan la lectura laboral del perfil.">
-                    {skills.length ? (
+                    {displaySummary.skills.length ? (
                       <div className="flex flex-wrap gap-2">
-                        {skills.map((skill) => (
+                        {displaySummary.skills.map((skill) => (
                           <span key={skill} className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-800">
                             {skill}
                           </span>
                         ))}
                       </div>
                     ) : (
-                      <Empty text="Sin habilidades verificadas visibles por ahora." />
+                      <Empty text="Habilidades aun no visibles." />
                     )}
                   </Card>
                 ) : null}
@@ -1211,7 +1207,7 @@ export function CandidatePublicProfileRenderer({
                       <Item label="Título profesional" value={teaser?.title || "Añade titular"} />
                     ) : null}
                     {!isOpenPublicView && (publicLanguages.length || internalPreview) ? (
-                      <Item label="Idiomas" value={publicLanguages.length ? publicLanguages.join(", ") : "Añade idiomas"} />
+                      <Item label="Idiomas" value={publicLanguages.length ? publicLanguages.join(", ") : "Idiomas no añadidos"} />
                     ) : null}
                     {teaser?.availability ? <Item label="Disponibilidad" value={String(teaser.availability)} /> : null}
                     <Item label="Estado de perfil" value={profileStatus} />
@@ -1332,7 +1328,7 @@ export function CandidatePublicProfileRenderer({
                     ))}
                   </div>
                 ) : internalPreview ? (
-                  <Empty text="No hay formación pública visible todavía." />
+                  <Empty text="Formacion pendiente." />
                 ) : null}
               </Card>
             ) : null}
@@ -1380,7 +1376,7 @@ export function CandidatePublicProfileRenderer({
                         ))}
                       </div>
                     ) : internalPreview ? (
-                      <Empty text="No hay idiomas visibles." />
+                      <Empty text="Idiomas no añadidos." />
                     ) : null}
                   </div>
 
@@ -1395,8 +1391,12 @@ export function CandidatePublicProfileRenderer({
                           </li>
                         ))}
                       </ul>
+                    ) : displaySummary.achievementsCount > 0 ? (
+                      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                        {displaySummary.achievementsCount} {displaySummary.achievementsCount === 1 ? "logro visible" : "logros visibles"}
+                      </div>
                     ) : internalPreview ? (
-                      <Empty text="No hay logros públicos visibles." />
+                      <Empty text="Habilidades aun no visibles." />
                     ) : null}
                   </div>
                 </div>
@@ -1519,12 +1519,6 @@ function Empty({ text, compact = false }: { text: string; compact?: boolean }) {
       {text}
     </p>
   );
-}
-
-function getInitials(name: string) {
-  const parts = String(name || "").trim().split(/\s+/).filter(Boolean).slice(0, 2);
-  if (!parts.length) return "VJ";
-  return parts.map((part) => part.charAt(0).toUpperCase()).join("");
 }
 
 export function getTrustLabel(score: number) {

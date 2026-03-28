@@ -20,6 +20,10 @@ import {
   resolveCandidateOverviewStatus,
 } from "@/lib/candidate/overview-metrics";
 import { getCandidatePlanCapabilities } from "@/lib/billing/planCapabilities";
+import {
+  resolvePublicCandidateDisplayName,
+  resolvePublicProfileDisplaySummary,
+} from "@/lib/public/candidate-profile-display";
 
 type ProfileLite = {
   full_name?: string | null;
@@ -594,27 +598,17 @@ function PublicProfileCard({
   trustScore,
   verified,
   visibilityLabel,
-  educationCount,
-  languages,
-  achievementsCount,
-  verifiedSkillsCount,
 }: {
   publicLink: string | null;
   preview: PublicProfilePreviewPayload;
   trustScore: number;
   verified: number;
   visibilityLabel: string;
-  educationCount: number;
-  languages: string[];
-  achievementsCount: number;
-  verifiedSkillsCount: number;
 }) {
-  const publicDisplayName = preview?.teaser?.full_name || preview?.teaser?.public_name || "Perfil verificable";
-  const publicLanguagesLabel = languages.length ? languages.slice(0, 2).join(", ") : "Idiomas pendientes";
-  const capabilityLabel =
-    achievementsCount > 0 || verifiedSkillsCount > 0
-      ? `${verifiedSkillsCount} habilidades · ${achievementsCount} logros`
-      : "Habilidades y logros pendientes";
+  const publicDisplayName = resolvePublicCandidateDisplayName(preview);
+  const displaySummary = resolvePublicProfileDisplaySummary(preview);
+  const publicLanguagesLabel = displaySummary.languagesLabel;
+  const capabilityLabel = displaySummary.capabilitiesLabel;
   return (
     <section className="rounded-[28px] bg-slate-50/90 p-7 shadow-[inset_0_1px_0_rgba(255,255,255,0.55),0_12px_30px_rgba(15,23,42,0.05)] ring-1 ring-slate-200/70">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -648,7 +642,7 @@ function PublicProfileCard({
           </p>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <span className="rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
-              Formación: {educationCount > 0 ? `${educationCount} entradas` : "Pendiente"}
+              Formación: {displaySummary.educationCount > 0 ? `${displaySummary.educationCount} entradas` : "Formacion pendiente"}
             </span>
             <span className="rounded-xl border border-slate-200/80 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700">
               Idiomas: {publicLanguagesLabel}
@@ -1141,10 +1135,6 @@ export default function CandidateOverview() {
           trustScore={metrics.score}
           verified={metrics.verified}
           visibilityLabel={publicVisibilityLabel}
-          educationCount={educationCount}
-          languages={publicLanguages}
-          achievementsCount={achievementsCount}
-          verifiedSkillsCount={verifiedSkillsCount}
         />
       </OverviewProfilePublicCard>
 
