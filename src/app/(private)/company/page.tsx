@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import CandidateQuickView from "@/components/company/CandidateQuickView";
 import { COMPANY_PROFILE_UNLOCKED_EVENT } from "@/components/company/ProfileUnlockAction";
@@ -10,10 +10,8 @@ import {
   computeCandidateQuickFit,
   resolveCandidateDisplayName,
   resolveCandidateOperationalStateMeta,
-  resolveCandidatePipelineBucket,
   type CompanyCandidateWorkspaceRow,
 } from "@/lib/company/candidate-fit";
-import { companyVerificationMethodTone } from "@/lib/company/verification-method";
 import { normalizeCandidatePublicToken } from "@/lib/public/candidate-public-link";
 
 type Kpis = {
@@ -108,17 +106,6 @@ type CandidatesPayload = {
   available_profile_accesses?: number;
 };
 
-type PriorityItem = {
-  id: string;
-  title: string;
-  detail: string;
-  href: string;
-  cta: string;
-  tone: string;
-  priority: number;
-  meta: string;
-};
-
 type NotificationItem = {
   id: string;
   tone: string;
@@ -152,14 +139,6 @@ function verificationStatusLabel(statusRaw: unknown) {
   return "Sin documento";
 }
 
-function verificationStatusClass(statusRaw: unknown) {
-  const status = String(statusRaw || "").toLowerCase();
-  if (status === "verified") return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  if (status === "uploaded" || status === "under_review") return "border-indigo-200 bg-indigo-50 text-indigo-800";
-  if (status === "rejected") return "border-rose-200 bg-rose-50 text-rose-800";
-  return "border-amber-200 bg-amber-50 text-amber-800";
-}
-
 function purchaseLabel(productKeyRaw: unknown) {
   const key = String(productKeyRaw || "").toLowerCase();
   if (key === "company_single_cv") return "Compra de 1 acceso";
@@ -177,22 +156,6 @@ function eurFromCents(amountRaw: unknown, currencyRaw: unknown) {
   }).format(Number.isFinite(amount) ? amount : 0);
 }
 
-function checklistDot(status: ProfileCompletionItem["status"]) {
-  if (status === "completed") return "bg-emerald-500";
-  if (status === "recommended") return "bg-blue-500";
-  if (status === "optional") return "bg-slate-400";
-  return "bg-amber-500";
-}
-
-function importBadge(raw: string | null | undefined) {
-  const value = String(raw || "").toLowerCase();
-  if (value === "verified") return { label: "Listo para decisión", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" };
-  if (value === "profile_created" || value === "existing_candidate") return { label: "Listo para revisar", tone: "border-indigo-200 bg-indigo-50 text-indigo-700" };
-  if (value === "verifying") return { label: "En validación", tone: "border-blue-200 bg-blue-50 text-blue-700" };
-  if (value === "acceptance_pending") return { label: "Pendiente de aceptación", tone: "border-amber-200 bg-amber-50 text-amber-800" };
-  return { label: "Importado", tone: "border-slate-200 bg-slate-100 text-slate-700" };
-}
-
 function ProgressBar({ value, tone }: { value: number; tone: string }) {
   return (
     <div className="h-2 rounded-full bg-slate-200">
@@ -201,14 +164,148 @@ function ProgressBar({ value, tone }: { value: number; tone: string }) {
   );
 }
 
-function MetricCard({ title, value, helper }: { title: string; value: string; helper: string }) {
+function StatPill({
+  label,
+  value,
+  tone = "slate",
+}: {
+  label: string;
+  value: string;
+  tone?: "slate" | "blue" | "green" | "amber" | "rose" | "violet";
+}) {
+  const toneClass =
+    tone === "blue"
+      ? "border-blue-200 bg-blue-50 text-blue-900"
+      : tone === "green"
+        ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+        : tone === "amber"
+          ? "border-amber-200 bg-amber-50 text-amber-900"
+          : tone === "rose"
+            ? "border-rose-200 bg-rose-50 text-rose-900"
+            : tone === "violet"
+              ? "border-violet-200 bg-violet-50 text-violet-900"
+              : "border-slate-200 bg-white/80 text-slate-700";
+
   return (
-    <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">{title}</p>
-      <p className="mt-2 text-3xl font-semibold text-slate-900 tabular-nums">{value}</p>
-      <p className="mt-2 text-sm text-slate-600">{helper}</p>
+    <div className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${toneClass}`}>
+      <span className="opacity-75">{label}</span>{" "}
+      <span>{value}</span>
+    </div>
+  );
+}
+
+function DashboardSectionTitle({
+  eyebrow,
+  title,
+  description,
+  action,
+}: {
+  eyebrow?: string;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <div className="max-w-3xl">
+        {eyebrow ? <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">{eyebrow}</p> : null}
+        <h2 className="mt-1 text-xl font-semibold tracking-tight text-slate-950">{title}</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+      </div>
+      {action ? <div className="shrink-0">{action}</div> : null}
+    </div>
+  );
+}
+
+function TacticalActionCard({
+  title,
+  detail,
+  cta,
+  href,
+  tone = "slate",
+}: {
+  title: string;
+  detail: string;
+  cta: string;
+  href: string;
+  tone?: "slate" | "blue" | "green" | "amber" | "rose" | "violet";
+}) {
+  const toneClass =
+    tone === "blue"
+      ? "border-blue-200 bg-blue-50/80"
+      : tone === "green"
+        ? "border-emerald-200 bg-emerald-50/80"
+        : tone === "amber"
+          ? "border-amber-200 bg-amber-50/90"
+          : tone === "rose"
+            ? "border-rose-200 bg-rose-50/90"
+            : tone === "violet"
+              ? "border-violet-200 bg-violet-50/90"
+              : "border-slate-200 bg-white";
+
+  return (
+    <a href={href} className={`rounded-2xl border p-4 transition hover:-translate-y-0.5 hover:shadow-sm ${toneClass}`}>
+      <p className="text-sm font-semibold text-slate-950">{title}</p>
+      <p className="mt-2 text-sm leading-6 text-slate-600">{detail}</p>
+      <div className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-slate-700">{cta}</div>
+    </a>
+  );
+}
+
+function QueueItem({
+  tone,
+  title,
+  detail,
+  meta,
+  action,
+}: {
+  tone: string;
+  title: string;
+  detail: string;
+  meta: string;
+  action: ReactNode;
+}) {
+  return (
+    <article className={`rounded-2xl border p-4 ${tone}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold">{title}</p>
+          <p className="mt-1 text-sm opacity-90">{detail}</p>
+          <p className="mt-2 text-xs opacity-75">{meta}</p>
+        </div>
+        <div className="shrink-0">{action}</div>
+      </div>
     </article>
   );
+}
+
+function accessStateMeta(row: CandidateImportRow, availableProfileAccesses: number) {
+  const accessStatus = String(row.access_status || "").toLowerCase();
+  if (accessStatus === "active") {
+    return {
+      label: "Desbloqueado",
+      helper: "Ya disponible sin nuevo consumo dentro de la ventana",
+      tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
+      buttonTone: "border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100",
+      cta: "Abrir perfil completo",
+    };
+  }
+  if (availableProfileAccesses > 0) {
+    return {
+      label: "Disponible para abrir",
+      helper: "Desbloquea contexto completo",
+      tone: "border-amber-200 bg-amber-50 text-amber-900",
+      buttonTone: "border-slate-900 bg-slate-900 text-white hover:bg-black",
+      cta: "Ver perfil completo (-1 acceso)",
+    };
+  }
+  return {
+    label: "Sin accesos",
+    helper: "Ahora mismo solo puedes revisar el resumen",
+    tone: "border-rose-200 bg-rose-50 text-rose-900",
+    buttonTone: "border-rose-200 bg-rose-50 text-rose-900 cursor-not-allowed",
+    cta: "Sin accesos disponibles",
+  };
 }
 
 function humanConfidenceSummary(approved: number, inProcess: number) {
@@ -438,9 +535,6 @@ export default function CompanyDashboard() {
   const verificationMethod = dashboard?.company_verification_method || "none";
   const verificationMethodLabel = dashboard?.company_verification_method_label || "Sin señal adicional confirmada";
   const profileCompletion = Number(profileData?.profile_completion?.score ?? dashboard?.profile_completeness_score ?? 0);
-  const checklist = Array.isArray(profileData?.profile_completion?.checklist)
-    ? profileData?.profile_completion?.checklist?.slice(0, 4)
-    : [];
   const kpis = dashboard?.kpis || null;
   const recentRequests = useMemo(
     () => (Array.isArray(dashboard?.recent_requests) ? dashboard.recent_requests : []),
@@ -457,75 +551,6 @@ export default function CompanyDashboard() {
   const pendingInvitations = Number(teamData?.plan?.pending_invitations || 0);
   const seatUsagePct = seatsLimit > 0 ? Math.round(((seatsUsed + pendingInvitations) / seatsLimit) * 100) : 0;
 
-  const priorities = useMemo<PriorityItem[]>(() => {
-    const items: PriorityItem[] = [];
-
-    recentRequests
-      .filter((item) => item.status === "pending")
-      .slice(0, 4)
-      .forEach((item, index) => {
-        items.push({
-          id: `req-${item.id}`,
-          title: item.candidate_name || "Solicitud pendiente",
-          detail: `${item.position || "Experiencia sin puesto"} · ${item.company_name || "Empresa"}`,
-          href: `/company/verification/${item.id}`,
-          cta: "Resolver ahora",
-          tone: "border-amber-200 bg-amber-50 text-amber-900",
-          priority: 100 - index,
-          meta: `Pendiente desde ${formatDate(item.requested_at)}`,
-        });
-      });
-
-    imports
-      .filter((item) => item.display_status === "new" || item.display_status === "in_review" || item.display_status === "ready")
-      .slice(0, 4)
-      .forEach((item, index) => {
-        const fit = computeCandidateQuickFit(item);
-        items.push({
-          id: `imp-${item.id}`,
-          title: resolveCandidateDisplayName(item),
-          detail:
-            item.display_status === "new"
-              ? "CV recibido y pendiente de revisión inicial."
-              : item.display_status === "in_review"
-                ? "Importación en revisión con propuesta de cambios disponible."
-                : "Candidato listo para decisión en la base RRHH.",
-          href: item.candidate_public_token ? `/company/candidate/${item.candidate_public_token}` : "/company/candidates",
-          cta: item.candidate_public_token ? "Abrir perfil" : "Abrir base RRHH",
-          tone:
-            item.display_status === "new"
-              ? "border-blue-200 bg-blue-50 text-blue-900"
-              : item.display_status === "in_review"
-                ? "border-amber-200 bg-amber-50 text-amber-900"
-                : "border-violet-200 bg-violet-50 text-violet-900",
-          priority: 80 - index,
-          meta: `${fit.label} · Última actividad ${formatDate(item.last_activity_at || item.created_at)}`,
-        });
-      });
-
-    const expiredAccessCount = imports.filter((item) => item.access_status === "expired").length;
-    if (expiredAccessCount > 0) {
-      items.push({
-        id: "expired-access",
-        title: "Accesos a renovar",
-        detail: "Algunos candidatos de tu base RRHH ya no tienen acceso activo al perfil completo.",
-        href: "/company/candidates",
-        cta: "Revisar accesos",
-        tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
-        priority: 50,
-        meta: `${expiredAccessCount} accesos expirados en tu base`,
-      });
-    }
-
-    return items.sort((a, b) => b.priority - a.priority).slice(0, 6);
-  }, [imports, recentRequests]);
-
-  const rrhhRows = useMemo(() => {
-    return imports
-      .slice()
-      .sort((a, b) => Date.parse(String(b.last_activity_at || b.created_at || 0)) - Date.parse(String(a.last_activity_at || a.created_at || 0)))
-      .slice(0, 5);
-  }, [imports]);
   const candidateDecisionRows = useMemo(() => {
     return imports
       .map((item) => {
@@ -645,20 +670,22 @@ export default function CompanyDashboard() {
     () => imports.filter((item) => String(item.access_status || "").toLowerCase() === "expired").length,
     [imports]
   );
-  const unlockedHistory = useMemo(() => {
-    return imports
-      .filter((item) => item.access_granted_at)
-      .slice()
-      .sort(
-        (a, b) =>
-          Date.parse(String(b.access_granted_at || b.last_activity_at || b.created_at || 0)) -
-          Date.parse(String(a.access_granted_at || a.last_activity_at || a.created_at || 0))
-      )
-      .slice(0, 5);
-  }, [imports]);
   const recentAccessPurchases = Array.isArray(dashboard?.recent_access_purchases) ? dashboard.recent_access_purchases : [];
-  const activeCandidateCount = imports.length;
-  const verifiedCandidateCount = imports.filter((item) => Number(item.approved_verifications || 0) > 0).length;
+  const pendingRequestCount = Number(kpis?.pending_requests ?? recentRequests.filter((item) => item.status === "pending").length);
+  const recentVerifiedCount = Number(dashboard?.verification_activity?.verified ?? kpis?.verified_30d ?? 0);
+  const pendingVerificationCount = Number(dashboard?.verification_activity?.pending ?? 0);
+  const readyToReviewCount = imports.filter((item) => String(item.display_status || "").toLowerCase() === "ready").length;
+  const newCandidateCount = imports.filter((item) => String(item.display_status || "").toLowerCase() === "new").length;
+  const highSignalCandidateCount = imports.filter((item) => {
+    const fit = computeCandidateQuickFit(item);
+    return fit.level === "high" || Number(item.approved_verifications || 0) > 0;
+  }).length;
+  const focusMetricLabel =
+    availableProfileAccesses > 0
+      ? "accesos listos para abrir contexto"
+      : pendingRequestCount > 0
+        ? "solicitudes listas para resolver"
+        : `${highSignalCandidateCount} perfiles con señal`;
 
   function markNotificationRead(id: string) {
     setReadNotificationIds((prev) => {
@@ -712,159 +739,214 @@ export default function CompanyDashboard() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-6">
       {checkoutMessage ? (
         <section className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
           {checkoutMessage}
         </section>
       ) : null}
-      <section className="rounded-[28px] border border-slate-200 bg-white p-7 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-5">
+
+      <section className="overflow-hidden rounded-[34px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(191,219,254,0.45),_transparent_42%),linear-gradient(135deg,_#0f172a_0%,_#172554_48%,_#eef2ff_100%)] shadow-[0_24px_80px_rgba(15,23,42,0.16)]">
+        <div className="grid gap-6 p-6 md:p-7 xl:grid-cols-[minmax(0,1.25fr)_320px] xl:items-start">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Panel de control</p>
-            <h1 className="mt-1 text-3xl font-semibold tracking-tight text-slate-900">{companyName}</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-600">
-              Vista operativa para decidir rápido qué candidatos merece la pena revisar, desbloquear y mover dentro del proceso.
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-100/80">Workspace empresa</p>
+            <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-[2.25rem]">{companyName}</h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-blue-100/85">
+              Decide más rápido qué candidatos merecen revisión a fondo, qué perfiles ya aportan señal real y dónde conviene consumir accesos.
             </p>
-            <div className="mt-4 flex flex-wrap gap-2 text-xs">
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">Plan {planLabel}</span>
-              <span className={`rounded-full border px-3 py-1 font-semibold ${verificationStatusClass(verificationStatus)}`}>{verificationStatusLabelText}</span>
-              <span className={`rounded-full border px-3 py-1 font-semibold ${companyVerificationMethodTone(verificationMethod)}`}>{verificationMethodLabel}</span>
-              {dashboard?.current_period_end ? (
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">
-                  {dashboard?.subscription_status === "trialing" ? "Trial activo hasta" : "Próxima renovación"} {formatDate(dashboard.current_period_end)}
-                </span>
-              ) : null}
-              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-slate-700">Perfil {profileCompletion}% listo</span>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <StatPill label="Plan" value={planLabel} tone="violet" />
+              <StatPill label="Accesos" value={String(availableProfileAccesses)} tone={availableProfileAccesses > 0 ? "green" : "rose"} />
+              <StatPill label="Nuevos" value={String(newCandidateCount)} tone={newCandidateCount > 0 ? "blue" : "slate"} />
+              <StatPill label="Desbloqueados" value={String(activeAccessCount)} tone={activeAccessCount > 0 ? "green" : "slate"} />
+              <StatPill label="Solicitudes" value={String(pendingRequestCount)} tone={pendingRequestCount > 0 ? "amber" : "slate"} />
+              <StatPill label="Verificaciones" value={String(recentVerifiedCount)} tone={recentVerifiedCount > 0 ? "green" : "slate"} />
             </div>
-            {verificationStatusDetail ? <p className="mt-2 text-sm text-slate-600">{verificationStatusDetail}</p> : null}
-            {dashboard?.company_document_review_eta_label && (verificationStatus === "uploaded" || verificationStatus === "under_review") ? (
-              <p className="mt-1 text-sm text-slate-600">
-                Tiempo estimado de revisión: {dashboard.company_document_review_eta_label}
-                {dashboard.company_document_review_priority_label ? ` · ${dashboard.company_document_review_priority_label}` : ""}
-              </p>
-            ) : null}
-            {dashboard?.company_verification_method_detail ? (
-              <p className="mt-1 text-sm text-slate-500">Señales adicionales: {dashboard.company_verification_method_detail}</p>
-            ) : null}
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/company/candidates" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black transition">Importar candidato</Link>
-            <a href="/company/requests" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">Revisar solicitudes</a>
-            <a href="/company/subscription" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 transition">Plan, capacidad y accesos</a>
-          </div>
-        </div>
-        {errorMessage ? <p className="mt-4 text-sm text-rose-600">{errorMessage}</p> : null}
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Candidatos activos</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-900">{activeCandidateCount}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Perfiles verificados</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-900">{verifiedCandidateCount}</p>
-          </div>
-          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Accesos para perfiles completos</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-900">{availableProfileAccesses}</p>
-          </div>
-        </div>
-      </section>
 
-      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="Pendientes hoy" value={kpis ? String(kpis.pending_requests) : "—"} helper="Solicitudes listas para resolver." />
-        <MetricCard title="Confirmadas 30 días" value={kpis ? String(kpis.verified_30d) : "—"} helper="Experiencias confirmadas recientemente." />
-        <MetricCard title="Tiempo medio" value={kpis?.avg_resolution_hours != null ? `${kpis.avg_resolution_hours} h` : "—"} helper="Desde petición hasta resolución." />
-        <MetricCard title="Perfiles útiles" value={kpis ? String(Number(kpis.verified_candidates || 0)) : "—"} helper="Candidatos con historial ya validado." />
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[1.12fr_0.88fr]">
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Hoy / prioridades</h2>
-              <p className="mt-1 text-sm text-slate-600">Lo más accionable ahora mismo: solicitudes, candidatos importados y accesos a perfiles.</p>
-            </div>
-            <a href="/company/requests" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir inbox</a>
-          </div>
-
-          <div className="mt-4 space-y-3">
-            {priorities.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
-                No hay pendientes críticos ahora. Buen momento para completar perfil, ampliar equipo o cargar nuevos candidatos.
-              </div>
-            ) : (
-              priorities.map((item) => (
-                <article key={item.id} className={`rounded-2xl border p-4 ${item.tone}`}>
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold">{item.title}</p>
-                      <p className="mt-1 text-sm opacity-90">{item.detail}</p>
-                      <p className="mt-2 text-xs opacity-75">{item.meta}</p>
-                    </div>
-                    <a href={item.href} className="inline-flex rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100">
-                      {item.cta}
-                    </a>
-                  </div>
-                </article>
-              ))
-            )}
-          </div>
-        </article>
-
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Estado del perfil empresa</h2>
-              <p className="mt-1 text-sm text-slate-600">Checklist corta para que tu operación tenga más contexto y credibilidad.</p>
-            </div>
-            <a href="/company/profile" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Editar perfil</a>
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">{profileCompletion}% completado</p>
-                <p className="mt-1 text-xs text-slate-600">
-                  Obligatorio {Number(profileData?.profile_completion?.required?.completed || 0)}/{Number(profileData?.profile_completion?.required?.total || 0)} ·
-                  Recomendado {Number(profileData?.profile_completion?.recommended?.completed || 0)}/{Number(profileData?.profile_completion?.recommended?.total || 0)}
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="rounded-3xl border border-white/15 bg-white/10 p-4 text-white backdrop-blur">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-100/75">Estado del panel</p>
+                <p className="mt-2 text-base font-semibold">Listo para decisión</p>
+                <p className="mt-2 text-sm leading-6 text-blue-100/80">
+                  {verificationStatusDetail || "Tienes la base lista para revisar resúmenes, priorizar señal y desbloquear cuando de verdad compense."}
                 </p>
               </div>
-            </div>
-            <div className="mt-3">
-              <ProgressBar value={profileCompletion} tone="bg-slate-900" />
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            {checklist.map((item) => (
-              <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-slate-900">{item.title}</p>
-                  <span className={`h-2.5 w-2.5 rounded-full ${checklistDot(item.status)}`} />
+              <div className="rounded-3xl border border-white/15 bg-white/10 p-4 text-white backdrop-blur">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-100/75">Workspace y señal</p>
+                <p className="mt-2 text-base font-semibold">{verificationStatusLabelText}</p>
+                <p className="mt-2 text-sm leading-6 text-blue-100/80">
+                  {dashboard?.company_verification_method_detail || verificationMethodLabel}
+                </p>
+              </div>
+              <div className="rounded-3xl border border-white/15 bg-white/10 p-4 text-white backdrop-blur sm:col-span-2 xl:col-span-1">
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-100/75">Perfil empresa</p>
+                <p className="mt-2 text-base font-semibold">{profileCompletion}% completado</p>
+                <div className="mt-3">
+                  <ProgressBar value={profileCompletion} tone="bg-white" />
                 </div>
-                <p className="mt-2 text-xs text-slate-500">
-                  {item.priority === "required" ? "Obligatorio" : item.priority === "recommended" ? "Recomendado" : "Opcional"}
+                <p className="mt-2 text-sm text-blue-100/80">
+                  Obligatorio {Number(profileData?.profile_completion?.required?.completed || 0)}/{Number(profileData?.profile_completion?.required?.total || 0)} · Recomendado {Number(profileData?.profile_completion?.recommended?.completed || 0)}/{Number(profileData?.profile_completion?.recommended?.total || 0)}
                 </p>
               </div>
-            ))}
+            </div>
+
+            {errorMessage ? <p className="mt-4 text-sm text-rose-200">{errorMessage}</p> : null}
+          </div>
+
+          <aside className="rounded-[28px] border border-white/15 bg-white/95 p-5 shadow-[0_18px_60px_rgba(15,23,42,0.18)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Capacidad actual</p>
+            <div className="mt-3 text-5xl font-semibold tracking-tight text-slate-950">{availableProfileAccesses}</div>
+            <p className="mt-2 text-sm font-medium text-slate-700">{focusMetricLabel}</p>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              {availableProfileAccesses > 0
+                ? "Ahora mismo puedes abrir perfiles completos cuando la señal lo justifique."
+                : "Ahora mismo conviene priorizar resúmenes y detectar primero qué perfiles merecen contexto completo."}
+            </p>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Listos para revisar</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">{readyToReviewCount}</p>
+                <p className="mt-1 text-xs text-slate-500">Perfiles ya maduros para una revisión rápida.</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Señal alta</p>
+                <p className="mt-2 text-2xl font-semibold text-slate-950">{highSignalCandidateCount}</p>
+                <p className="mt-1 text-xs text-slate-500">Perfiles que ya aportan contexto útil.</p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-2">
+              <Link href="/company/candidates" className="inline-flex justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-black">
+                Revisar candidatos
+              </Link>
+              <a href="/company/requests" className="inline-flex justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+                Revisar solicitudes
+              </a>
+            </div>
+          </aside>
+        </div>
+      </section>
+
+      <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <article className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+          <DashboardSectionTitle
+            eyebrow="Accesos y capacidad"
+            title="Tus accesos no compran perfiles: compran contexto para decidir mejor."
+            description="Haz visible cuánta capacidad real tienes hoy, qué perfiles ya están desbloqueados y dónde conviene usar el siguiente acceso."
+            action={
+              <a href="/company/subscription" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+                Ver planes y accesos
+              </a>
+            }
+          />
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+            <div className="rounded-[28px] border border-blue-200 bg-blue-50/80 p-5">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-900">Capacidad disponible</p>
+                  <div className="mt-2 text-4xl font-semibold tracking-tight text-slate-950">{availableProfileAccesses}</div>
+                  <p className="mt-2 text-sm text-slate-700">
+                    {availableProfileAccesses > 0
+                      ? "Puedes abrir perfiles completos cuando el resumen ya demuestre suficiente señal."
+                      : "Ahora mismo puedes seguir revisando resúmenes, pero no abrir la versión completa cuando un perfil realmente promete."}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/80 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
+                  <div className="font-semibold text-slate-950">{activeAccessCount} perfiles desbloqueados</div>
+                  <div className="mt-1 text-xs text-slate-500">{expiredAccessCount} accesos caducados listos para renovar</div>
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <div className="rounded-2xl border border-white/80 bg-white p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Accesos activos</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-950">{activeAccessCount}</p>
+                </div>
+                <div className="rounded-2xl border border-white/80 bg-white p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Solicitudes pendientes</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-950">{pendingRequestCount}</p>
+                </div>
+                <div className="rounded-2xl border border-white/80 bg-white p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Señal alta</p>
+                  <p className="mt-2 text-2xl font-semibold text-slate-950">{highSignalCandidateCount}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">Qué ocurre cuando se consumen</p>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  Cada acceso abre contexto completo para decidir mejor. Si el perfil sigue dentro de la ventana activa, puedes volver a entrar sin consumir otro.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">Plan actual y equipo</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Plan {planLabel} · {seatsUsed} plazas activas · {pendingInvitations} invitaciones pendientes.
+                </p>
+                <div className="mt-3">
+                  <ProgressBar value={seatUsagePct} tone={seatUsagePct >= 85 ? "bg-amber-500" : "bg-violet-600"} />
+                </div>
+              </div>
+              <div className={`rounded-2xl border p-4 ${availableProfileAccesses > 0 ? "border-emerald-200 bg-emerald-50/80" : "border-rose-200 bg-rose-50/90"}`}>
+                <p className="text-sm font-semibold text-slate-900">{availableProfileAccesses > 0 ? "Capacidad lista para decidir" : "Coste de oportunidad visible"}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-700">
+                  {availableProfileAccesses > 0
+                    ? "Usa primero los resúmenes con señal alta y reserva el unlock para los perfiles que ya reducen incertidumbre."
+                    : "Seguir navegando resúmenes sirve para priorizar, pero te falta el contexto completo justo cuando un candidato ya empieza a prometer."}
+                </p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+          <DashboardSectionTitle
+            eyebrow="Qué hacer ahora"
+            title="Tres movimientos útiles para hoy"
+            description="Acciones cortas, sin rodeos, para avanzar la decisión y no solo navegar el panel."
+          />
+          <div className="mt-5 grid gap-3">
+            <TacticalActionCard
+              title={highSignalCandidateCount > 0 ? "Revisar perfiles con más señal" : "Abrir la base y buscar señal"}
+              detail={highSignalCandidateCount > 0 ? `${highSignalCandidateCount} candidatos ya aportan contexto útil para priorizar revisión a fondo.` : "Todavía no hay perfiles con señal fuerte. Empieza por la base y detecta resúmenes prometedores."}
+              cta="Ir a candidatos"
+              href="/company/candidates"
+              tone={highSignalCandidateCount > 0 ? "green" : "blue"}
+            />
+            <TacticalActionCard
+              title={pendingRequestCount > 0 ? "Resolver solicitudes pendientes" : "Mantener la cola vacía"}
+              detail={pendingRequestCount > 0 ? `Tienes ${pendingRequestCount} solicitudes esperando resolución o seguimiento.` : "No hay solicitudes urgentes. Buen momento para revisar candidatos listos para decisión."}
+              cta="Abrir solicitudes"
+              href="/company/requests"
+              tone={pendingRequestCount > 0 ? "amber" : "slate"}
+            />
+            <TacticalActionCard
+              title={profileCompletion < 100 ? "Completar perfil empresa" : "Refinar capacidad del workspace"}
+              detail={profileCompletion < 100 ? `Tu perfil empresa va por ${profileCompletion}%. Más contexto mejora credibilidad y operativa.` : "Tu perfil empresa ya está cubierto. El siguiente salto útil es ampliar equipo o accesos."}
+              cta={profileCompletion < 100 ? "Ir al perfil empresa" : "Gestionar plan"}
+              href={profileCompletion < 100 ? "/company/profile" : "/company/subscription"}
+              tone={profileCompletion < 100 ? "blue" : "violet"}
+            />
           </div>
         </article>
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[1.08fr_0.92fr]">
-        <article className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Candidatos para decidir</h2>
-              <p className="mt-1 text-sm text-slate-600">Aquí decides rápido quién merece revisión a fondo y quién todavía no tiene suficiente señal.</p>
-            </div>
-            <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir base completa</a>
-          </div>
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_360px] xl:items-start">
+        <article className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-sm xl:p-7">
+          <DashboardSectionTitle
+            eyebrow="Candidatos para decidir"
+            title="Candidatos para decidir"
+            description="Aquí decides rápido quién merece revisión a fondo y quién todavía no tiene suficiente señal."
+            action={<a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir base completa</a>}
+          />
 
-          <p className="mt-4 text-sm text-slate-500">
+          <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50/80 px-4 py-3 text-sm text-amber-900">
             Prioriza primero los perfiles con señales verificadas. Abrir sin contexto cuesta más decisiones y más tiempo.
-          </p>
+          </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
             {[
@@ -879,7 +961,7 @@ export default function CompanyDashboard() {
                 onClick={() => setCandidateTab(tab.key as CandidateFocusTab)}
                 className={`rounded-full border px-4 py-2 text-sm font-semibold transition ${
                   candidateTab === tab.key
-                    ? "border-slate-900 bg-slate-900 text-white"
+                    ? "border-slate-950 bg-slate-950 text-white"
                     : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
                 }`}
               >
@@ -890,147 +972,131 @@ export default function CompanyDashboard() {
 
           {candidateTab === "priority" ? (
             <div className="mt-4 flex flex-wrap gap-2">
-              <span className="rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-800">
-                Prioridad de negocio: guardado o preselección
-              </span>
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
-                Prioridad por confianza: verificaciones aprobadas o alta confianza
-              </span>
+              <StatPill label="Negocio" value="guardado o preselección" tone="blue" />
+              <StatPill label="Confianza" value="validaciones o trust alto" tone="green" />
             </div>
           ) : null}
 
-          <div className="mt-5 space-y-4">
+          <div className="mt-6 space-y-4">
             {!importsAvailable ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
-                La base RRHH aún no está activada en esta base. El panel queda preparado para operar en cuanto la importación esté disponible.
+                La base RRHH aún no está activada en esta empresa. El dashboard queda preparado para decidir en cuanto haya importaciones disponibles.
               </div>
             ) : candidateDecisionRows.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5">
                 <p className="text-sm font-semibold text-slate-900">{candidateEmptyState(candidateTab).title}</p>
                 <p className="mt-2 text-sm text-slate-600">{candidateEmptyState(candidateTab).detail}</p>
-                <Link
-                  href={candidateEmptyState(candidateTab).href}
-                  className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
-                >
+                <Link href={candidateEmptyState(candidateTab).href} className="mt-4 inline-flex rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
                   {candidateEmptyState(candidateTab).cta}
                 </Link>
               </div>
             ) : (
-              candidateDecisionRows.slice(0, 8).map(({ row, fit, approved, inProcess, unverified, confidenceLabel }) => {
+              candidateDecisionRows.slice(0, 8).map(({ row, fit, approved, inProcess, unverified }) => {
                 const operational = resolveCandidateOperationalStateMeta(row);
                 const displayName = resolveCandidateDisplayName(row);
                 const stage = String(row.company_stage || "none").toLowerCase();
+                const access = accessStateMeta(row, availableProfileAccesses);
+                const trustScore = Number(row.trust_score ?? 0);
                 const confidenceSummary = humanConfidenceSummary(approved, inProcess);
-                const priorityReason = candidateTab === "priority" ? resolvePriorityReason(row, approved, confidenceLabel) : null;
+                const priorityReason = candidateTab === "priority" ? resolvePriorityReason(row, approved, fit.label === "Encaje alto" ? "Alta confianza" : fit.label) : null;
                 const priorityFamily = candidateTab === "priority" ? resolvePriorityFamily(row, approved) : null;
-                const progressLabel =
-                  approved > 0
-                    ? "Alta confianza"
-                    : inProcess > 0
-                      ? "Verificación en proceso"
-                      : "Perfil sin validar todavía";
+
                 return (
                   <article
                     key={row.id}
-                    className="cursor-pointer rounded-[26px] border border-slate-200 bg-slate-50/90 p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] transition hover:border-slate-300 hover:bg-white"
-                    onClick={() => setQuickViewRow(row)}
+                    className="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,_rgba(248,250,252,0.96)_0%,_#ffffff_100%)] p-5 shadow-[0_10px_35px_rgba(15,23,42,0.05)] transition hover:border-slate-300 hover:shadow-[0_16px_45px_rgba(15,23,42,0.08)]"
                   >
                     <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h3 className="text-lg font-semibold text-slate-900">{displayName}</h3>
-                          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${fit.tone}`}>{confidenceLabel}</span>
+                          <button type="button" onClick={() => setQuickViewRow(row)} className="text-left text-lg font-semibold text-slate-950 hover:text-slate-700">
+                            {displayName}
+                          </button>
+                          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${fit.tone}`}>{fit.label}</span>
                           <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${operational.tone}`}>{operational.label}</span>
-                          {priorityReason ? (
-                            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                              {priorityReason}
-                            </span>
-                          ) : null}
-                          {priorityFamily ? (
-                            <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${priorityFamily.tone}`}>
-                              {priorityFamily.label}
-                            </span>
-                          ) : null}
+                          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${access.tone}`}>{access.label}</span>
+                          {priorityFamily ? <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${priorityFamily.tone}`}>{priorityFamily.label}</span> : null}
                         </div>
                         <p className="mt-2 text-sm font-medium text-slate-800">{row.target_role || "Puesto no definido"}</p>
                         <p className="mt-1 text-sm text-slate-600">{row.candidate_email || "Email no disponible"}</p>
-                        <p className="mt-2 text-sm text-slate-700">{confidenceSummary}</p>
-                        <p className="mt-1 text-xs font-medium text-slate-500">Más confianza = menos incertidumbre de contratación</p>
-                        <p className="mt-1 text-xs font-medium text-slate-500">
-                          {approved > 0 ? "Este perfil ya aporta señal real para tomar una decisión con menos riesgo." : "Evalúa este perfil según la señal real que ya aporta."}
-                        </p>
-                        <p className="mt-1 text-xs font-medium text-slate-500">{progressLabel}</p>
+                        <p className="mt-3 text-sm text-slate-700">{approved > 0 ? "Perfil con señal real" : inProcess > 0 ? "Señal parcial" : "Poca señal verificable"}</p>
+                        <p className="mt-1 text-xs text-slate-500">{confidenceSummary}</p>
+                        {priorityReason ? <p className="mt-1 text-xs font-medium text-slate-500">{priorityReason}</p> : null}
                       </div>
-                      <div className="text-right text-xs text-slate-500">
-                        Última actividad
-                        <div className="mt-1 font-semibold text-slate-700">{formatDate(row.last_activity_at || row.created_at)}</div>
+
+                      <div className="grid gap-3 sm:min-w-[280px] sm:grid-cols-3 xl:min-w-[320px]">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Trust score</p>
+                          <p className="mt-2 text-2xl font-semibold text-slate-950">{trustScore > 0 ? trustScore : "—"}</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Verificaciones</p>
+                          <p className="mt-2 text-2xl font-semibold text-slate-950">{approved}</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">En curso</p>
+                          <p className="mt-2 text-2xl font-semibold text-slate-950">{inProcess}</p>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="mt-5 grid gap-3 md:grid-cols-3">
-                      <div className="rounded-xl border border-slate-200 bg-white p-3">
-                        <div className="text-xs uppercase tracking-wide text-slate-500">Experiencias verificadas</div>
-                        <div className="mt-2 text-2xl font-semibold text-slate-900">{approved}</div>
+                    <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                          <p className="text-xs font-semibold text-slate-500">Estado acceso</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-950">{access.label}</p>
+                          <p className="mt-1 text-xs text-slate-500">{access.helper}</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                          <p className="text-xs font-semibold text-slate-500">Última actividad</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-950">{formatDate(row.last_activity_at || row.created_at)}</p>
+                          <p className="mt-1 text-xs text-slate-500">{unverified} sin validar</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white p-3">
+                          <p className="text-xs font-semibold text-slate-500">Siguiente lectura</p>
+                          <p className="mt-1 text-sm font-semibold text-slate-950">{approved > 0 ? "Abrir con menos riesgo" : "Validar antes de abrir"}</p>
+                          <p className="mt-1 text-xs text-slate-500">{fit.summary}</p>
+                        </div>
                       </div>
-                      <div className="rounded-xl border border-slate-200 bg-white p-3">
-                        <div className="text-xs uppercase tracking-wide text-slate-500">En proceso</div>
-                        <div className="mt-2 text-2xl font-semibold text-slate-900">{inProcess}</div>
-                      </div>
-                      <div className="rounded-xl border border-slate-200 bg-white p-3">
-                        <div className="text-xs uppercase tracking-wide text-slate-500">Sin validar</div>
-                        <div className="mt-2 text-2xl font-semibold text-slate-900">{unverified}</div>
-                      </div>
-                    </div>
 
-                    <div className="mt-5 flex flex-wrap gap-2">
-                      <div className="space-y-1">
+                      <div className="flex flex-wrap gap-2 xl:justify-end">
+                        <div className="space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => setQuickViewRow(row)}
+                            className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                          >
+                            Ver resumen
+                          </button>
+                          <p className="text-[11px] font-medium text-slate-500">Vista parcial sin consumo</p>
+                        </div>
+                        <div className="space-y-1">
+                          <button
+                            type="button"
+                            onClick={() => setQuickViewRow(row)}
+                            className={`inline-flex rounded-xl border px-4 py-2.5 text-sm font-semibold ${access.buttonTone}`}
+                          >
+                            {access.cta}
+                          </button>
+                          <p className="text-[11px] font-medium text-slate-500">{access.helper}</p>
+                        </div>
                         <button
                           type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setQuickViewRow(row);
-                          }}
-                          className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+                          onClick={() => void handleSetCandidateStage(row.id, stage === "saved" ? "none" : "saved")}
+                          disabled={actionLoading === row.id}
+                          className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
                         >
-                          Ver resumen
+                          {stage === "saved" ? "Quitar guardado" : "Guardar"}
                         </button>
-                        <p className="text-[11px] font-medium text-slate-500">Vista parcial sin consumo</p>
-                      </div>
-                      <div className="space-y-1">
                         <button
                           type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            setQuickViewRow(row);
-                          }}
-                          className="inline-flex rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-semibold text-indigo-900 hover:bg-indigo-100"
+                          onClick={() => void handleSetCandidateStage(row.id, stage === "preselected" ? "none" : "preselected")}
+                          disabled={actionLoading === row.id}
+                          className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
                         >
-                          {availableProfileAccesses > 0 ? "Ver perfil completo (-1 acceso)" : "Sin accesos disponibles"}
+                          {stage === "preselected" ? "Quitar preselección" : "Preseleccionar"}
                         </button>
-                        <p className="text-[11px] font-medium text-slate-500">Desbloquea contexto completo</p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleSetCandidateStage(row.id, stage === "saved" ? "none" : "saved");
-                        }}
-                        disabled={actionLoading === row.id}
-                        className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
-                      >
-                        {stage === "saved" ? "Quitar guardado" : "Guardar"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void handleSetCandidateStage(row.id, stage === "preselected" ? "none" : "preselected");
-                        }}
-                        disabled={actionLoading === row.id}
-                        className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
-                      >
-                        {stage === "preselected" ? "Quitar preselección" : "Preseleccionar"}
-                      </button>
                     </div>
                   </article>
                 );
@@ -1039,317 +1105,120 @@ export default function CompanyDashboard() {
           </div>
         </article>
 
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Plan y capacidad</h2>
-              <p className="mt-1 text-sm text-slate-600">Qué tienes ahora, qué te limita hoy y cuál es el siguiente salto útil.</p>
-            </div>
-            <a href="/company/subscription" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Gestionar plan</a>
-          </div>
+        <div className="space-y-5">
+          <article className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+            <DashboardSectionTitle
+              eyebrow="Actividad reciente"
+              title="Solicitudes, verificaciones y cambios recientes"
+              description="Una cola ligera para operar sin saltar de inmediato a otra pantalla."
+              action={<a href="/company/requests" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir solicitudes</a>}
+            />
+            <div className="mt-5 space-y-3">
+              {recentRequests.filter((item) => item.status === "pending").slice(0, 3).map((item) => (
+                <QueueItem
+                  key={`recent-request-${item.id}`}
+                  tone="border-amber-200 bg-amber-50/90 text-amber-900"
+                  title={item.candidate_name || "Solicitud pendiente"}
+                  detail={`${item.position || "Experiencia sin puesto"} · ${item.company_name || "Empresa"}`}
+                  meta={`Pendiente desde ${formatDate(item.requested_at)}`}
+                  action={
+                    <a href={`/company/verification/${item.id}`} className="inline-flex rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100">
+                      Resolver
+                    </a>
+                  }
+                />
+              ))}
 
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-slate-900">{seatsUsed + pendingInvitations}/{seatsLimit || 1} plazas en uso</p>
-                <p className="mt-1 text-xs text-slate-600">{seatsUsed} activas · {pendingInvitations} invitaciones pendientes</p>
-              </div>
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">Plan {planLabel}</span>
-            </div>
-            <div className="mt-3">
-              <ProgressBar value={seatUsagePct} tone={seatUsagePct >= 85 ? "bg-amber-500" : "bg-blue-600"} />
-            </div>
-          </div>
+              {visibleNotifications.slice(0, 3).map((item) => (
+                <QueueItem
+                  key={item.id}
+                  tone={item.tone}
+                  title={item.title}
+                  detail={item.detail}
+                  meta={`Última actividad ${formatDate(item.timestamp)}`}
+                  action={
+                    <div className="flex flex-wrap gap-2">
+                      <a href={item.href} className="inline-flex rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100">
+                        {item.cta}
+                      </a>
+                      <button type="button" onClick={() => markNotificationRead(item.id)} className="inline-flex rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-white">
+                        Leída
+                      </button>
+                    </div>
+                  }
+                />
+              ))}
 
-          <div className="mt-4 space-y-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-semibold text-slate-900">Accesos a perfiles disponibles</p>
-              <p className="mt-1 text-sm text-slate-600">
-                {availableProfileAccesses} disponibles ahora mismo.
-              </p>
-              <p className="mt-2 text-sm text-slate-700">Tus accesos no compran perfiles: compran contexto para decidir mejor.</p>
-              <p className="mt-1 text-xs text-slate-500">
-                {activeAccessCount} perfiles completos activos · {expiredAccessCount} accesos caducados listos para renovar.
-              </p>
-              {availableProfileAccesses <= 0 ? (
-              <p className="mt-2 text-sm text-rose-700">Ahora mismo puedes seguir revisando resúmenes, pero no acceder a la versión completa cuando un perfil realmente promete.</p>
+              {recentRequests.filter((item) => item.status === "pending").length === 0 && visibleNotifications.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
+                  No hay actividad urgente visible ahora mismo. Buen momento para revisar candidatos con más señal o activar más accesos.
+                </div>
               ) : null}
             </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <p className="text-sm font-semibold text-slate-900">Qué te está limitando hoy</p>
-              <p className="mt-1 text-sm text-slate-600">
-                {seatsLimit <= 1
-                  ? "La colaboración de equipo es mínima y conviene ampliar plazas."
-                  : seatUsagePct >= 85
-                    ? "Estás cerca del límite de plazas y pronto vas a necesitar más capacidad."
-                    : "Tu plan actual cubre la operación de hoy con margen razonable."}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-slate-900">Compras recientes de accesos</p>
-                  <p className="mt-1 text-xs text-slate-500">Histórico breve de compras puntuales registradas para esta empresa.</p>
+          </article>
+
+          <article className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+            <DashboardSectionTitle
+              eyebrow="Plan y capacidad"
+              title="Multiplica tu capacidad de revisión"
+              description="Más accesos y más margen operativo cuando realmente valga la pena abrir perfiles completos."
+              action={<a href="/company/subscription" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Gestionar plan</a>}
+            />
+
+            <div className="mt-5 space-y-3">
+              <div className="rounded-2xl border border-violet-200 bg-violet-50/80 p-4">
+                <p className="text-sm font-semibold text-slate-950">Plan {planLabel}</p>
+                <p className="mt-2 text-sm leading-6 text-slate-700">
+                  {seatsLimit <= 1
+                    ? "La colaboración del workspace sigue siendo mínima. Más plazas y más accesos hacen la revisión más fluida."
+                    : seatUsagePct >= 85
+                      ? "Estás cerca del límite de plazas. El siguiente paso útil es ampliar capacidad para no frenar la revisión."
+                      : "Tu plan actual sostiene la operativa de hoy, pero puedes abrir más contexto cuando la cola crezca."}
+                </p>
+                <div className="mt-3">
+                  <ProgressBar value={seatUsagePct} tone={seatUsagePct >= 85 ? "bg-amber-500" : "bg-violet-600"} />
                 </div>
-                <a href="/company/subscription" className="text-xs font-semibold text-slate-900 underline underline-offset-2">
-                  Ver detalle
-                </a>
               </div>
-              <div className="mt-3 space-y-2">
-                {recentAccessPurchases.length === 0 ? (
-                  <p className="text-sm text-slate-600">Todavía no hay compras recientes visibles en este historial.</p>
-                ) : (
-                  recentAccessPurchases.map((item) => (
-                    <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-900">{purchaseLabel(item.product_key)}</p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            +{Number(item.credits_granted || 0)} acceso{Number(item.credits_granted || 0) === 1 ? "" : "s"} · {formatDate(item.created_at)}
-                          </p>
+
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-sm font-semibold text-slate-900">Capacidad comercial visible</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  {availableProfileAccesses} accesos disponibles · {activeAccessCount} perfiles completos ya abiertos · {pendingVerificationCount} verificaciones pendientes.
+                </p>
+                {dashboard?.current_period_end ? (
+                  <p className="mt-2 text-xs text-slate-500">
+                    {dashboard?.subscription_status === "trialing" ? "Trial activo hasta" : "Renovación"} {formatDate(dashboard.current_period_end)}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                <p className="text-sm font-semibold text-slate-900">Compras recientes</p>
+                <div className="mt-3 space-y-2">
+                  {recentAccessPurchases.length === 0 ? (
+                    <p className="text-sm text-slate-600">Todavía no hay compras recientes visibles.</p>
+                  ) : (
+                    recentAccessPurchases.slice(0, 2).map((item) => (
+                      <div key={item.id} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-900">{purchaseLabel(item.product_key)}</p>
+                            <p className="mt-1 text-xs text-slate-500">+{Number(item.credits_granted || 0)} accesos · {formatDate(item.created_at)}</p>
+                          </div>
+                          <span className="text-sm font-semibold text-slate-900">{eurFromCents(item.amount, item.currency)}</span>
                         </div>
-                        <span className="text-sm font-semibold text-slate-900">{eurFromCents(item.amount, item.currency)}</span>
                       </div>
-                    </div>
-                  ))
-                )}
+                    ))
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-900">
-              <p className="text-sm font-semibold">Qué desbloquea el upgrade</p>
-              <p className="mt-1 text-sm">
-                Más capacidad de equipo, más ritmo operativo y un panel empresa que puede crecer contigo sin fricciones.
-              </p>
-              <a href="/company/subscription" className="mt-3 inline-flex rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-800">
+
+              <a href="/company/subscription" className="inline-flex w-full justify-center rounded-xl bg-violet-700 px-4 py-3 text-sm font-semibold text-white hover:bg-violet-800">
                 Activar más accesos
               </a>
             </div>
-          </div>
-        </article>
-      </section>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Notificaciones de candidatos guardados</h2>
-            <p className="mt-1 text-sm text-slate-600">Alertas internas para no perder cambios útiles en candidatos que ya estás siguiendo.</p>
-          </div>
-          <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir candidatos</a>
+          </article>
         </div>
-        <div className="mt-4 space-y-3">
-          {visibleNotifications.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
-              Todavía no hay notificaciones internas. Guarda o preselecciona candidatos para recibir avisos cuando completen onboarding o avancen en verificaciones.
-            </div>
-          ) : (
-            visibleNotifications.map((item) => (
-              <article key={item.id} className={`rounded-2xl border p-4 ${item.tone}`}>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="text-sm font-semibold">{item.title}</p>
-                      <span className="rounded-full border border-white/70 bg-white/70 px-2 py-0.5 text-[11px] font-semibold">
-                        {item.type === "onboarding" ? "Onboarding" : item.type === "experiences" ? "Experiencias" : item.type === "verification" ? "Verificación" : "Evidencias"}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-sm opacity-90">{item.detail}</p>
-                    <p className="mt-2 text-xs opacity-75">Última actividad {formatDate(item.timestamp)}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <a href={item.href} className="inline-flex rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-100">
-                      {item.cta}
-                    </a>
-                    <button
-                      type="button"
-                      onClick={() => markNotificationRead(item.id)}
-                      className="inline-flex rounded-xl border border-white/70 bg-white/70 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-white"
-                    >
-                      Marcar leída
-                    </button>
-                  </div>
-                </div>
-              </article>
-            ))
-          )}
-        </div>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Base RRHH</h2>
-              <p className="mt-1 text-sm text-slate-600">Tus candidatos importados como base interna ligera para seguimiento diario.</p>
-              <p className="mt-2 text-xs text-slate-500">El nivel de confianza resume qué señales reales ya hacen ese perfil más sólido para una decisión de empresa.</p>
-            </div>
-            <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir base completa</a>
-          </div>
-
-          {!importsAvailable ? (
-            <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
-              La base RRHH aún no está activada en esta base. El espacio queda preparado para usar importaciones y seguimiento en cuanto esté disponible.
-            </div>
-          ) : (
-            <div className="mt-4 space-y-3">
-              {rrhhRows.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
-                  No tienes candidatos en la base interna todavía. El mejor siguiente paso es importar un CV o revisar candidatos ya compartidos.
-                </div>
-              ) : (
-                rrhhRows.map((item) => {
-                  const badge = importBadge(item.display_status);
-                  const fit = computeCandidateQuickFit(item);
-                  const pipeline = resolveCandidatePipelineBucket(item);
-                  return (
-                    <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <button
-                            type="button"
-                            onClick={() => setQuickViewRow(item)}
-                            className="text-left text-sm font-semibold text-slate-900 underline-offset-2 hover:underline"
-                          >
-                            {resolveCandidateDisplayName(item)}
-                          </button>
-                          <p className="mt-1 text-sm text-slate-600">{item.target_role || "Sin puesto definido"}</p>
-                          <p className="mt-1 text-xs text-slate-500">Última actividad {formatDate(item.last_activity_at || item.created_at)}</p>
-                          <p className="mt-1 text-xs text-slate-500">{fit.summary}</p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${fit.tone}`} title={fit.reasons.join(" · ")}>
-                            {fit.label}
-                          </span>
-                          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${badge.tone}`}>{badge.label}</span>
-                          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${resolveCandidateOperationalStateMeta(item).tone}`}>
-                            {resolveCandidateOperationalStateMeta(item).label}
-                          </span>
-                          <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                            {pipeline === "decision" ? "Decisión" : pipeline === "validation" ? "Validación" : "Revisión"}
-                          </span>
-                          {item.company_stage && item.company_stage !== "none" ? (
-                            <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                              item.company_stage === "preselected"
-                                ? "border-slate-900 bg-slate-900 text-white"
-                                : "border-slate-200 bg-slate-100 text-slate-700"
-                            }`}>
-                              {item.company_stage === "preselected" ? "Preseleccionado" : "Guardado"}
-                            </span>
-                          ) : null}
-                          <button
-                            type="button"
-                            onClick={() => setQuickViewRow(item)}
-                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
-                          >
-                            Vista rápida
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          )}
-        </article>
-
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-slate-900">Acciones rápidas</h2>
-          <p className="mt-1 text-sm text-slate-600">Atajos a las zonas que más mueven el trabajo diario.</p>
-          <div className="mt-4 grid gap-3">
-            <a href="/company/profile" className="rounded-2xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100">
-              <p className="text-sm font-semibold text-slate-900">Completar perfil empresa</p>
-              <p className="mt-1 text-sm text-slate-600">Refuerza credibilidad, segmentación y cobertura operativa.</p>
-            </a>
-            <a href="/company/team" className="rounded-2xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100">
-              <p className="text-sm font-semibold text-slate-900">Gestionar equipo y permisos</p>
-              <p className="mt-1 text-sm text-slate-600">Controla plazas activas e invitaciones.</p>
-            </a>
-            <a href="/company/settings" className="rounded-2xl border border-slate-200 bg-slate-50 p-4 hover:bg-slate-100">
-              <p className="text-sm font-semibold text-slate-900">Ajustes operativos</p>
-              <p className="mt-1 text-sm text-slate-600">Configura el área empresa y mantén contexto operativo a mano.</p>
-            </a>
-          </div>
-        </article>
-      </section>
-
-      <section className="grid gap-4 xl:grid-cols-[1.05fr_0.95fr]">
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Perfiles ya desbloqueados</h2>
-              <p className="mt-1 text-sm text-slate-600">Estos perfiles ya pueden revisarse sin volver a consumir acceso dentro de la ventana activa.</p>
-            </div>
-            <a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir RRHH</a>
-          </div>
-          <div className="mt-4 space-y-3">
-            {unlockedHistory.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-5 text-sm text-slate-600">
-                Todavía no has desbloqueado perfiles completos desde este panel.
-              </div>
-            ) : (
-              unlockedHistory.map((item) => (
-                <div key={`${item.id}-unlock`} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{resolveCandidateDisplayName(item)}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        Desbloqueado el {formatDate(item.access_granted_at || item.last_activity_at || item.created_at)}
-                      </p>
-                      <p className="mt-1 text-xs text-slate-500">Consumo registrado: 1 acceso.</p>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${String(item.access_status || "").toLowerCase() === "active" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
-                        {String(item.access_status || "").toLowerCase() === "active" ? "Acceso vigente" : "Acceso caducado"}
-                      </span>
-                      {item.candidate_public_token ? (
-                        <a
-                          href={`/company/candidate/${encodeURIComponent(String(item.candidate_public_token))}?view=full`}
-                          className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
-                        >
-                          Ver perfil completo
-                        </a>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </article>
-
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900">Verificación documental empresa</h2>
-              <p className="mt-1 text-sm text-slate-600">Lectura breve del estado actual, última entrega y prioridad de revisión aplicada.</p>
-            </div>
-            <a href="/company/profile" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir perfil</a>
-          </div>
-          <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${verificationStatusClass(verificationStatus)}`}>
-                {verificationStatusLabelText}
-              </span>
-              {dashboard?.company_document_review_priority_label ? (
-                <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700">
-                  {dashboard.company_document_review_priority_label}
-                </span>
-              ) : null}
-            </div>
-            <div className="mt-3 space-y-2 text-sm text-slate-600">
-              <p>{verificationStatusDetail || "Sube un documento oficial para iniciar la revisión documental."}</p>
-              {dashboard?.company_document_last_submitted_at ? (
-                <p>Documento recibido el {formatDate(dashboard.company_document_last_submitted_at)}</p>
-              ) : null}
-              {dashboard?.company_document_review_eta_label && (verificationStatus === "uploaded" || verificationStatus === "under_review") ? (
-                <p>Tiempo estimado según plan: {dashboard.company_document_review_eta_label}</p>
-              ) : null}
-              {dashboard?.company_document_last_reviewed_at ? (
-                <p>Última resolución registrada el {formatDate(dashboard.company_document_last_reviewed_at)}</p>
-              ) : null}
-            </div>
-          </div>
-        </article>
       </section>
       <CandidateQuickView
         row={quickViewRow}
