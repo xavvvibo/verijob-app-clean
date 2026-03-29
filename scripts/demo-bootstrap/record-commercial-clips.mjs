@@ -1,27 +1,57 @@
 import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { chromium } from "@playwright/test";
-import { APP_URL, AUTH_DIR, VIEWPORT, resolveCurrentUrl } from "./_shared.mjs";
+import { APP_URL, AUTH_DIR } from "./_shared.mjs";
 
-const OUT_DIR = process.env.OUT_DIR || path.join(process.cwd(), "demo-clips");
+const OUT_DIR = process.env.OUT_DIR || path.join(process.cwd(), "demo-clips-v2");
+const RAW_DIR = path.join(os.tmpdir(), "verijob-demo-clips-v2-raw");
 const CANDIDATE_STATE = process.env.CANDIDATE_STATE || path.join(AUTH_DIR, "candidate-demo.json");
 const COMPANY_STATE = process.env.COMPANY_STATE || path.join(AUTH_DIR, "company-demo.json");
-const RECORD_SIZE = { width: 1600, height: 1000 };
-const SLOW_MS = Number(process.env.SLOW_MS || 120);
+const PUBLIC_TOKEN =
+  process.env.PUBLIC_TOKEN ||
+  process.env.CANDIDATE_PUBLIC_TOKEN ||
+  "104f2a7249004b1b223d5a1189b866a20a2e9f316ced1147";
+
+const VIEWPORT = { width: 1440, height: 900 };
+const RECORD_SIZE = { width: 1440, height: 900 };
+const PAGE_ZOOM = Number(process.env.PAGE_ZOOM || 1.1);
+const SLOW_MS = Number(process.env.SLOW_MS || 90);
 
 async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
 }
 
-async function stepPause(page, ms = 1200) {
+async function cleanupDir(dir) {
+  await fs.rm(dir, { recursive: true, force: true }).catch(() => null);
+}
+
+async function pause(page, ms) {
   await page.waitForTimeout(ms);
 }
 
-async function hoverIfVisible(page, selector) {
-  const locator = page.locator(selector).first();
-  if ((await locator.count()) > 0) {
-    await locator.hover({ timeout: 5_000 }).catch(() => null);
-    await page.waitForTimeout(400);
+async function applyFraming(page) {
+  await page.addStyleTag({
+    content: `
+      html { zoom: ${PAGE_ZOOM}; }
+      body { overflow-x: hidden !important; }
+      ::-webkit-scrollbar { width: 0 !important; height: 0 !important; }
+    `,
+  }).catch(() => null);
+
+  await page.evaluate((zoom) => {
+    document.documentElement.style.zoom = String(zoom);
+    document.body.style.overflowX = "hidden";
+  }, PAGE_ZOOM).catch(() => null);
+}
+
+async function hoverFirst(page, selectors) {
+  for (const selector of selectors) {
+    const locator = page.locator(selector).first();
+    if ((await locator.count()) === 0) continue;
+    const visible = await locator.isVisible().catch(() => false);
+    if (!visible) continue;
+    await locator.hover({ timeout: 4_000 }).catch(() => null);
     return true;
   }
   return false;
@@ -31,123 +61,186 @@ async function clickFirst(page, selectors) {
   for (const selector of selectors) {
     const locator = page.locator(selector).first();
     if ((await locator.count()) === 0) continue;
-    try {
-      await locator.click({ timeout: 5_000 });
-      return true;
-    } catch {}
+    const visible = await locator.isVisible().catch(() => false);
+    if (!visible) continue;
+    await locator.click({ timeout: 4_000 }).catch(() => null);
+    return true;
   }
   return false;
 }
 
-async function newRecordedContext(browser, storageState, clipName) {
-  const rawDir = path.join(OUT_DIR, "_raw", clipName);
-  await ensureDir(rawDir);
+async function shortScroll(page, amount = 260) {
+  await page.mouse.wheel(0, amount).catch(() => null);
+}
+
+async function newRecordedContext(browser, storageStatePath, clipKey) {
+  const clipRawDir = path.join(RAW_DIR, clipKey);
+  await ensureDir(clipRawDir);
+
   return browser.newContext({
-    storageState,
+    storageState: storageStatePath,
     viewport: VIEWPORT,
     recordVideo: {
-      dir: rawDir,
+      dir: clipRawDir,
       size: RECORD_SIZE,
     },
   });
 }
 
-async function closeAndPersist(context, targetFile) {
+async function finalizeClip(context, clipName) {
   const page = context.pages()[0];
   const video = page?.video?.();
   await context.close();
   if (!video) return;
-  const source = await video.path();
-  await ensureDir(path.dirname(targetFile));
-  await fs.copyFile(source, targetFile);
+
+  const sourcePath = await video.path();
+  await ensureDir(OUT_DIR);
+  await fs.copyFile(sourcePath, path.join(OUT_DIR, clipName));
 }
 
-async function resolveCandidateToken(browser) {
-  const context = await browser.newContext({ storageState: CANDIDATE_STATE, viewport: VIEWPORT });
+async function runClip(browser, config) {
+  const context = await newRecordedContext(browser, config.storageStatePath, config.key);
   const page = await context.newPage();
+  const startedAt = Date.now();
+
   try {
-    await page.goto(`${APP_URL}/candidate/share`, { waitUntil: "networkidle" });
-    const response = await page.evaluate(async () => {
-      const res = await fetch("/api/candidate/public-link", {
-        method: "POST",
-        credentials: "include",
-      });
-      return res.json().catch(() => ({}));
-    });
-    return String(response?.token || "");
+    await page.goto(`${APP_URL}${config.route}`, { waitUntil: "domcontentloaded" });
+    await applyFraming(page);
+    await pause(page, config.initialPauseMs ?? 1500);
+    if (typeof config.perform === "function") {
+      await config.perform(page);
+    }
+
+    const elapsed = Date.now() - startedAt;
+    const remaining = Math.max(0, config.durationMs - elapsed);
+    if (remaining > 0) {
+      await pause(page, remaining);
+    }
   } finally {
-    await context.close();
+    await finalizeClip(context, config.fileName);
   }
 }
 
-async function recordCandidateOverview(browser) {
-  const context = await newRecordedContext(browser, CANDIDATE_STATE, "candidate-overview");
-  const page = await context.newPage();
-  await page.goto(`${APP_URL}/candidate/overview`, { waitUntil: "networkidle" });
-  await stepPause(page, 1800);
-  await hoverIfVisible(page, "text=Nivel de confianza");
-  await stepPause(page, 1100);
-  await closeAndPersist(context, path.join(OUT_DIR, "01-candidate-overview.webm"));
+async function recordProblemCandidateOverview(browser) {
+  await runClip(browser, {
+    key: "problem-candidate-overview",
+    fileName: "01-problem-candidate-overview.webm",
+    storageStatePath: CANDIDATE_STATE,
+    route: "/candidate/overview",
+    durationMs: 7_500,
+    initialPauseMs: 1_700,
+    perform: async (page) => {
+      await hoverFirst(page, ["text=Nivel de confianza", "text=Trust score", "text=Tu perfil en una mirada"]);
+      await pause(page, 1_700);
+      await hoverFirst(page, ["text=Tus experiencias", "text=Experiencia", "text=Subir evidencia"]);
+      await pause(page, 1_300);
+    },
+  });
 }
 
-async function recordCandidateShare(browser) {
-  const context = await newRecordedContext(browser, CANDIDATE_STATE, "candidate-share");
-  const page = await context.newPage();
-  await page.goto(`${APP_URL}/candidate/share`, { waitUntil: "networkidle" });
-  await stepPause(page, 1800);
-  await hoverIfVisible(page, "text=Copiar enlace publico");
-  await hoverIfVisible(page, "text=Vista completa");
-  await stepPause(page, 1000);
-  await closeAndPersist(context, path.join(OUT_DIR, "02-candidate-share.webm"));
+async function recordProblemCompanyRequests(browser) {
+  await runClip(browser, {
+    key: "problem-company-requests",
+    fileName: "02-problem-company-requests.webm",
+    storageStatePath: COMPANY_STATE,
+    route: "/company/requests",
+    durationMs: 6_500,
+    initialPauseMs: 1_500,
+    perform: async (page) => {
+      await hoverFirst(page, ["text=Pendientes", "text=Solicitudes", "text=Resolver pendientes"]);
+      await pause(page, 1_200);
+      await shortScroll(page, 180);
+      await pause(page, 900);
+      await hoverFirst(page, ["text=Recientes", "text=Evidencias", "text=Resueltas"]);
+      await pause(page, 1_000);
+    },
+  });
 }
 
-async function recordCompanyDashboard(browser) {
-  const context = await newRecordedContext(browser, COMPANY_STATE, "company-dashboard");
-  const page = await context.newPage();
-  await page.goto(`${APP_URL}/company`, { waitUntil: "networkidle" });
-  await stepPause(page, 1800);
-  await hoverIfVisible(page, "text=Candidatos para decidir");
-  await stepPause(page, 1100);
-  await closeAndPersist(context, path.join(OUT_DIR, "03-company-dashboard.webm"));
+async function recordValidationCandidateEvidence(browser) {
+  await runClip(browser, {
+    key: "validation-candidate-evidence",
+    fileName: "03-validation-candidate-evidence.webm",
+    storageStatePath: CANDIDATE_STATE,
+    route: "/candidate/evidence",
+    durationMs: 8_000,
+    initialPauseMs: 1_600,
+    perform: async (page) => {
+      await hoverFirst(page, ["text=Tipo documental", "text=Subir documentación", "text=Archivo"]);
+      await pause(page, 1_300);
+      await hoverFirst(page, ["text=Experiencia objetivo", "text=Documento recibido", "text=No hay evidencias registradas"]);
+      await pause(page, 1_500);
+      await shortScroll(page, 140);
+      await pause(page, 900);
+    },
+  });
 }
 
-async function recordCompanyCandidates(browser) {
-  const context = await newRecordedContext(browser, COMPANY_STATE, "company-candidates");
-  const page = await context.newPage();
-  await page.goto(`${APP_URL}/company/candidates`, { waitUntil: "networkidle" });
-  await stepPause(page, 1800);
-  await hoverIfVisible(page, "text=Ver resumen");
-  await stepPause(page, 900);
-  await clickFirst(page, [
-    "text=Ver perfil completo (-1 acceso)",
-    "text=Abrir perfil completo",
-    "text=Ver perfil completo",
-  ]);
-  await stepPause(page, 1500);
-  await closeAndPersist(context, path.join(OUT_DIR, "04-company-candidates.webm"));
+async function recordDecisionCompanyCandidates(browser) {
+  await runClip(browser, {
+    key: "decision-company-candidates",
+    fileName: "04-decision-company-candidates.webm",
+    storageStatePath: COMPANY_STATE,
+    route: "/company/candidates",
+    durationMs: 10_000,
+    initialPauseMs: 1_700,
+    perform: async (page) => {
+      await hoverFirst(page, ["text=Candidatos para decidir", "text=Ver resumen", "text=Trust"]);
+      await pause(page, 1_500);
+      await hoverFirst(page, ["text=Ver perfil completo (-1 acceso)", "text=Abrir perfil completo", "text=Ver perfil completo"]);
+      await pause(page, 1_400);
+      await shortScroll(page, 180);
+      await pause(page, 900);
+      await hoverFirst(page, ["text=Más acciones", "text=Ver resumen", "text=Sin accesos disponibles"]);
+      await pause(page, 1_300);
+    },
+  });
 }
 
-async function recordCompanyPublicAccess(browser, token) {
-  if (!token) return;
+async function recordWowCompanyPublicAccess(browser) {
+  if (!PUBLIC_TOKEN) {
+    console.warn("[demo-clips-v2] No hay PUBLIC_TOKEN. Se omite 05-wow-company-public-access.webm.");
+    return;
+  }
 
-  const context = await newRecordedContext(browser, COMPANY_STATE, "company-public-access");
-  const page = await context.newPage();
-  await page.goto(`${APP_URL}/p/${token}`, { waitUntil: "networkidle" });
-  await stepPause(page, 1800);
-  await hoverIfVisible(page, "text=Ver perfil completo (-1 acceso)");
-  await clickFirst(page, [
-    "text=Ver perfil completo (-1 acceso)",
-    "text=Abrir perfil completo",
-    "text=Ver perfil completo",
-  ]);
-  await stepPause(page, 1800);
-  const finalPath = await resolveCurrentUrl(page);
-  await closeAndPersist(context, path.join(OUT_DIR, "05-company-public-access.webm"));
-  console.log(`COMPANY_PUBLIC_ACCESS_FINAL=${finalPath}`);
+  await runClip(browser, {
+    key: "wow-company-public-access",
+    fileName: "05-wow-company-public-access.webm",
+    storageStatePath: COMPANY_STATE,
+    route: `/p/${PUBLIC_TOKEN}`,
+    durationMs: 9_000,
+    initialPauseMs: 1_700,
+    perform: async (page) => {
+      await hoverFirst(page, ["text=Perfil verificable", "text=Ver perfil completo (-1 acceso)", "text=Nivel de confianza"]);
+      await pause(page, 1_300);
+      await clickFirst(page, ["text=Ver perfil completo (-1 acceso)", "text=Abrir perfil completo", "text=Ver perfil completo"]);
+      await pause(page, 2_100);
+      await hoverFirst(page, ["text=Habilidades", "text=Experiencia", "text=Trust"]);
+      await pause(page, 1_000);
+    },
+  });
+}
+
+async function recordClosingCandidateShare(browser) {
+  await runClip(browser, {
+    key: "closing-candidate-share",
+    fileName: "06-closing-candidate-share.webm",
+    storageStatePath: CANDIDATE_STATE,
+    route: "/candidate/share",
+    durationMs: 7_000,
+    initialPauseMs: 1_600,
+    perform: async (page) => {
+      await hoverFirst(page, ["text=Copiar enlace público", "text=Copiar enlace publico", "text=Perfil público"]);
+      await pause(page, 1_400);
+      await hoverFirst(page, ["text=Vista completa", "text=Vista pública resumida", "text=QR"]);
+      await pause(page, 1_100);
+    },
+  });
 }
 
 async function main() {
   await ensureDir(OUT_DIR);
+  await cleanupDir(RAW_DIR);
   await fs.access(CANDIDATE_STATE);
   await fs.access(COMPANY_STATE);
 
@@ -157,16 +250,16 @@ async function main() {
   });
 
   try {
-    const token = await resolveCandidateToken(browser);
-    await recordCandidateOverview(browser);
-    await recordCandidateShare(browser);
-    await recordCompanyDashboard(browser);
-    await recordCompanyCandidates(browser);
-    await recordCompanyPublicAccess(browser, token);
+    await recordProblemCandidateOverview(browser);
+    await recordProblemCompanyRequests(browser);
+    await recordValidationCandidateEvidence(browser);
+    await recordDecisionCompanyCandidates(browser);
+    await recordWowCompanyPublicAccess(browser);
+    await recordClosingCandidateShare(browser);
     console.log(`OK_CLIPS=${OUT_DIR}`);
-    console.log(`CANDIDATE_PUBLIC_TOKEN=${token || "unavailable"}`);
   } finally {
     await browser.close();
+    await cleanupDir(RAW_DIR);
   }
 }
 
