@@ -1630,9 +1630,11 @@ function formatMonthYear(value?: string | null) {
 
 function formatPeriod(start?: string | null, end?: string | null) {
   const startText = formatMonthYear(start);
-  const endText = end ? formatMonthYear(end) : "Actualidad";
+  const rawEnd = String(end || "").trim().toLowerCase();
+  const isCurrent = !rawEnd || rawEnd === "actualidad" || rawEnd === "actual" || rawEnd === "present" || rawEnd === "current";
+  const endText = isCurrent ? "Actualidad" : formatMonthYear(end);
   if (!startText && !end) return "Periodo no especificado";
-  return `${startText || "Inicio no definido"} · ${endText}`;
+  return `${startText || "Inicio no definido"} · ${endText || "Fin no definido"}`;
 }
 
 function clampPercent(value: number) {

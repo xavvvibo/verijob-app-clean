@@ -124,6 +124,46 @@ function getRoleSkills(experiences: any[]) {
     .map(([word]) => word.charAt(0).toUpperCase() + word.slice(1));
 }
 
+function normalizeExperienceText(value: unknown) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeExperienceDateToken(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const lower = raw.toLowerCase();
+  if (lower === "actualidad" || lower === "actual" || lower === "present" || lower === "current") return "";
+  return raw;
+}
+
+function toExperienceCanonicalKey(input: any) {
+  return [
+    normalizeExperienceText(input?.role_title ?? input?.position),
+    normalizeExperienceText(input?.company_name ?? input?.company_name_freeform),
+    normalizeExperienceDateToken(input?.start_date),
+    normalizeExperienceDateToken(input?.end_date),
+  ].join("|");
+}
+
+function getExperienceSortTimestamp(input: any) {
+  const candidates = [input?.start_date, input?.created_at, input?.updated_at];
+  for (const value of candidates) {
+    const ts = Date.parse(String(value || ""));
+    if (Number.isFinite(ts)) return ts;
+  }
+  return 0;
+}
+
+function isCanonicalProfileExperienceVisible(row: any) {
+  const lifecycle = String(row?.lifecycle_status || "").trim().toLowerCase();
+  if (lifecycle && ["deleted", "archived", "hidden"].includes(lifecycle)) return false;
+  if (row?.deleted_at) return false;
+  if (row?.archived_at) return false;
+  if (row?.is_deleted === true) return false;
+  if (row?.is_archived === true) return false;
+  return true;
+}
+
 export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const { token: tokenParam } = await ctx.params;
   const reqUrl = new URL(_req.url);
@@ -203,6 +243,35 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     .limit(1)
     .maybeSingle();
 
+  const { data: profileExperienceColumnsRes } = await admin
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", "profile_experiences");
+  const profileExperienceColumns = new Set((profileExperienceColumnsRes || []).map((row: any) => String(row?.column_name || "")));
+  const profileExperienceSelect = [
+    "id",
+    "role_title",
+    "company_name",
+    "start_date",
+    "end_date",
+    "description",
+    "matched_verification_id",
+    "created_at",
+    profileExperienceColumns.has("updated_at") ? "updated_at" : null,
+    profileExperienceColumns.has("deleted_at") ? "deleted_at" : null,
+    profileExperienceColumns.has("archived_at") ? "archived_at" : null,
+    profileExperienceColumns.has("lifecycle_status") ? "lifecycle_status" : null,
+    profileExperienceColumns.has("is_deleted") ? "is_deleted" : null,
+    profileExperienceColumns.has("is_archived") ? "is_archived" : null,
+  ]
+    .filter(Boolean)
+    .join(",");
+  const { data: profileExperiences } = await admin
+    .from("profile_experiences")
+    .select(profileExperienceSelect)
+    .eq("user_id", candidateId);
+
   const { data: verifications } = await admin
     .from("verification_summary")
     .select("*")
@@ -261,7 +330,6 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const verifiedEmploymentFromRecords = employmentRows.filter((record: any) =>
     isVerifiedEmploymentRecordStatus(record?.verification_status),
   ).length;
-  const publicVerifiedExperienceCount = Math.max(verifiedRows.length, verifiedEmploymentFromRecords);
   const totalVerifications = Math.max(verifiedWork + verifiedEducation, verifiedEmploymentFromRecords);
 
   const confirmed = rows.filter((r: any) => !!r?.company_confirmed).length;
@@ -283,56 +351,71 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     trustScore,
   });
 
-  const experiencesFromEmployment = employmentRows.map((record: any) => {
-    const linkedVerificationId = String(record?.last_verification_request_id || "");
+  const employmentBySignature = new Map<string, any>();
+  const employmentBySourceExperienceId = new Map<string, any>();
+  for (const row of employmentRows) {
+    const key = toExperienceCanonicalKey(row);
+    if (key && !employmentBySignature.has(key)) employmentBySignature.set(key, row);
+    const sourceExperienceId = String((row as any)?.source_experience_id || "").trim();
+    if (sourceExperienceId && !employmentBySourceExperienceId.has(sourceExperienceId)) {
+      employmentBySourceExperienceId.set(sourceExperienceId, row);
+    }
+  }
+
+  const canonicalProfileExperiences = asArray(profileExperiences)
+    .filter(isCanonicalProfileExperienceVisible)
+    .sort((a: any, b: any) => getExperienceSortTimestamp(b) - getExperienceSortTimestamp(a))
+    .filter((item: any, index: number, collection: any[]) => {
+      const key = toExperienceCanonicalKey(item);
+      if (!key) return true;
+      return collection.findIndex((candidate: any) => toExperienceCanonicalKey(candidate) === key) === index;
+    });
+
+  const experiences = canonicalProfileExperiences.map((record: any) => {
+    const linkedEmploymentRecord =
+      employmentBySourceExperienceId.get(String(record?.id || "").trim()) ||
+      employmentBySignature.get(toExperienceCanonicalKey(record)) ||
+      null;
+    const linkedVerificationId = String(
+      record?.matched_verification_id || linkedEmploymentRecord?.last_verification_request_id || "",
+    ).trim();
     const linkedVerification =
-      verificationRequestById.get(linkedVerificationId) || verificationById.get(linkedVerificationId);
-    const recordStatus = normalizeEmploymentRecordVerificationStatus(record?.verification_status || null);
-    const summaryStatusRaw = String(linkedVerification?.status_effective || linkedVerification?.status || "").trim();
+      verificationRequestById.get(linkedVerificationId) || verificationById.get(linkedVerificationId) || null;
+    const recordStatus = normalizeEmploymentRecordVerificationStatus(linkedEmploymentRecord?.verification_status || null);
+    const summaryStatusRaw = String(
+      linkedVerification?.status_effective || linkedVerification?.status || "",
+    ).trim();
     const statusText =
       recordStatus === EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFIED
         ? EMPLOYMENT_RECORD_VERIFICATION_STATUS.VERIFIED
         : recordStatus === EMPLOYMENT_RECORD_VERIFICATION_STATUS.REJECTED
           ? EMPLOYMENT_RECORD_VERIFICATION_STATUS.REJECTED
-          : summaryStatusRaw || recordStatus;
-    const score = Number(linkedVerification?.score ?? 0);
+          : summaryStatusRaw || recordStatus || null;
     const evidenceCount = Number(
-      linkedVerification?.evidence_count ?? linkedVerification?.evidences_count ?? 0
+      linkedVerification?.evidence_count ??
+      linkedVerification?.evidences_count ??
+      evidenceByVerification.get(linkedVerificationId)?.length ??
+      0,
     );
-    const reuseCount = Number(linkedVerification?.reuse_count ?? 0);
     return {
-      experience_id: String(record?.id || ""),
+      experience_id: String(linkedEmploymentRecord?.id || record?.id || ""),
+      profile_experience_id: String(record?.id || ""),
       linked_verification_id: linkedVerificationId || null,
-      position: record?.position || null,
-      company_name: record?.company_name_freeform || null,
-      start_date: record?.start_date || null,
-      end_date: record?.end_date || null,
+      position: record?.role_title || linkedEmploymentRecord?.position || null,
+      company_name: record?.company_name || linkedEmploymentRecord?.company_name_freeform || null,
+      start_date: record?.start_date || linkedEmploymentRecord?.start_date || null,
+      end_date: record?.end_date || linkedEmploymentRecord?.end_date || null,
+      description: record?.description || null,
       status_text: statusText,
-      score,
+      score: Number(linkedVerification?.score ?? 0),
       evidence_count: evidenceCount,
-      reuse_count: reuseCount,
+      reuse_count: Number(linkedVerification?.reuse_count ?? 0),
       company_verification_status_snapshot:
         linkedVerification?.company_verification_status_snapshot ||
-        record?.company_verification_status_snapshot ||
+        linkedEmploymentRecord?.company_verification_status_snapshot ||
         null,
     };
   });
-
-  const experiencesFallback = rows.slice(0, 24).map((row: any, index: number) => ({
-    experience_id: String(row?.verification_id || `fallback-${index}`),
-    linked_verification_id: String(row?.verification_id || `fallback-${index}`),
-    position: row?.position || null,
-    company_name: row?.company_name || row?.company_name_target || null,
-    start_date: row?.start_date || null,
-    end_date: row?.end_date || null,
-    status_text: String(row?.status_effective || row?.status || "unknown"),
-    score: Number(row?.score ?? 0),
-    evidence_count: Number(row?.evidence_count ?? row?.evidences_count ?? 0),
-    reuse_count: Number(row?.reuse_count ?? 0),
-    company_verification_status_snapshot: row?.company_verification_status_snapshot || null,
-  }));
-
-  const experiences = experiencesFromEmployment.length ? experiencesFromEmployment : experiencesFallback;
 
   const verificationEntries: Array<[string, any]> = [
     ...(rows || []).map((x: any) => [String(x?.verification_id || ""), x] as [string, any]),
@@ -392,6 +475,11 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     })),
   ]
     .filter(Boolean);
+  const canonicalVerifiedExperienceCount = experiencesEnriched.filter((item: any) => Boolean(item?.is_verified)).length;
+  const canonicalEvidencesTotal = experiencesEnriched.reduce(
+    (acc: number, item: any) => acc + Number(item?.evidence_count ?? 0),
+    0,
+  );
   const publicLanguages = normalizePublicLanguages(candidateCollections.language_labels);
 
   const derivedRecommendations = rows
@@ -434,6 +522,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     .filter((item: any) => {
       const setting = getExperienceVisibilitySetting(publicProfileSettings, {
         employmentRecordId: item?.experience_id,
+        profileExperienceId: item?.profile_experience_id,
         fallbackId: item?.linked_verification_id || item?.experience_id,
       });
       return setting?.visible !== false;
@@ -441,10 +530,12 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     .sort((a: any, b: any) => {
       const aSetting = getExperienceVisibilitySetting(publicProfileSettings, {
         employmentRecordId: a?.experience_id,
+        profileExperienceId: a?.profile_experience_id,
         fallbackId: a?.linked_verification_id || a?.experience_id,
       });
       const bSetting = getExperienceVisibilitySetting(publicProfileSettings, {
         employmentRecordId: b?.experience_id,
+        profileExperienceId: b?.profile_experience_id,
         fallbackId: b?.linked_verification_id || b?.experience_id,
       });
       if (!!aSetting?.featured !== !!bSetting?.featured) return aSetting?.featured ? -1 : 1;
@@ -457,6 +548,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       Boolean(
         getExperienceVisibilitySetting(publicProfileSettings, {
           employmentRecordId: item?.experience_id,
+          profileExperienceId: item?.profile_experience_id,
           fallbackId: item?.linked_verification_id || item?.experience_id,
         })?.featured,
       ),
@@ -472,18 +564,18 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     trust_score: trustScore,
     trust_score_breakdown: normalizedTrustBreakdown.display,
     trust_score_components: normalizedTrustBreakdown.display,
-    experiences_total: rows.length,
-    verified_experiences: publicVerifiedExperienceCount,
+    experiences_total: canonicalProfileExperiences.length,
+    verified_experiences: canonicalVerifiedExperienceCount,
     confirmed_experiences: confirmed,
-    evidences_total: evidences,
-    evidences_count: evidences,
+    evidences_total: canonicalEvidencesTotal,
+    evidences_count: canonicalEvidencesTotal,
     reuse_total: Number(legacyTrustBreakdown.reuseEvents ?? 0),
     reuse_companies: Number(legacyTrustBreakdown.reuseCompanies ?? 0),
     education_total: internalPreviewAllowed ? educationTotal : publicEducation.length,
     achievements_total: internalPreviewAllowed ? candidateCollections.achievements_catalog.all.length : 0,
-    verified_work_count: verifiedWork,
+    verified_work_count: canonicalVerifiedExperienceCount,
     verified_education_count: internalPreviewAllowed ? verifiedEducation : 0,
-    total_verifications: totalVerifications,
+    total_verifications: Math.max(totalVerifications, canonicalVerifiedExperienceCount),
     profile_status: profileStatus,
     profile_visibility: "public_link",
     lifecycle_status: lifecycleStatus,
@@ -529,11 +621,11 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       education: internalPreviewAllowed ? educationItems : [],
       experiences: internalPreviewAllowed ? experiencesEnriched : [],
       verifications: {
-        total: totalVerifications,
-        verified_work_count: Math.max(verifiedWork, verifiedEmploymentFromRecords),
+        total: Math.max(totalVerifications, canonicalVerifiedExperienceCount),
+        verified_work_count: canonicalVerifiedExperienceCount,
         verified_education_count: internalPreviewAllowed ? verifiedEducation : 0,
         confirmed_experiences: confirmed,
-        evidences_total: evidences,
+        evidences_total: canonicalEvidencesTotal,
       },
       trust_score: {
         value: trustScore,
