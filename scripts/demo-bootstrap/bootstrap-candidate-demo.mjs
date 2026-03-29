@@ -46,6 +46,14 @@ const CV_ALREADY_PRESENT_PATTERNS = [
   /formaci[oó]n acad[eé]mica detectada/i,
 ];
 const CV_SUBMIT_PATTERNS = [/extraer perfil desde cv/i, /subiendo/i, /procesando/i, /analizar cv/i];
+const PUBLIC_PROFILE_PATTERNS = [
+  new RegExp(CANDIDATE_DEMO.fullName, "i"),
+  /perfil verificable/i,
+  /trust score/i,
+  /nivel de confianza/i,
+  /experiencia/i,
+  /habilidades/i,
+];
 
 async function isCandidateSessionValid(page) {
   const pathname = new URL(page.url()).pathname;
@@ -406,13 +414,40 @@ async function uploadCandidateEvidenceIfPresent(page, assetMap) {
 }
 
 async function ensureCandidateShareReady(page) {
-  await page.goto(`${APP_URL}/candidate/share`, { waitUntil: "networkidle" });
-  const token = await resolveCandidatePublicToken(page);
-  if (!token) {
-    throw new Error("No se pudo obtener el token publico del candidato demo.");
+  try {
+    await page.goto(`${APP_URL}/candidate/share`, { waitUntil: "domcontentloaded" });
+    const token = await resolveCandidatePublicToken(page).catch(() => "");
+    if (!token) {
+      console.warn("[demo-bootstrap] No hay token publico listo para validar el perfil demo.");
+      return null;
+    }
+
+    await page.goto(`${APP_URL}/p/${token}`, { waitUntil: "domcontentloaded" });
+
+    let validated = false;
+    for (const pattern of PUBLIC_PROFILE_PATTERNS) {
+      const visible = await page.getByText(pattern, { exact: false }).first().isVisible().catch(() => false);
+      if (visible) {
+        validated = true;
+        break;
+      }
+    }
+
+    if (!validated) {
+      const headingVisible = await page.locator("h1, h2").first().isVisible().catch(() => false);
+      validated = headingVisible;
+    }
+
+    if (!validated) {
+      console.warn("[demo-bootstrap] No pude validar completamente el perfil público demo en la UI actual.");
+    }
+
+    return token;
+  } catch (error) {
+    console.warn("[demo-bootstrap] No pude validar completamente el perfil público demo en la UI actual.");
+    console.warn(`[demo-bootstrap] Continúo sin bloquear el bootstrap: ${String(error?.message || error)}`);
+    return null;
   }
-  await page.goto(`${APP_URL}/p/${token}`, { waitUntil: "networkidle" });
-  return token;
 }
 
 async function main() {
