@@ -82,10 +82,10 @@ function accessMeta(status: string | null | undefined) {
 
 function trustHelper(raw: unknown) {
   const score = Number(raw || 0);
-  if (!Number.isFinite(score) || score <= 0) return "Todavía faltan señales suficientes para evaluar mejor el perfil.";
-  if (score >= 70) return "Perfil con señales sólidas y buen nivel de validación.";
-  if (score >= 40) return "Perfil con base razonable, pero aún puede reforzarse.";
-  return "Perfil inicial; conviene revisar más señales antes de decidir.";
+  if (!Number.isFinite(score) || score <= 0) return "No abras todavía: faltan verificaciones o evidencias para decidir con criterio.";
+  if (score >= 70) return "Señal alta: puedes abrir con menos riesgo y menos tiempo perdido.";
+  if (score >= 40) return "Señal parcial: revisa el resumen antes de consumir un acceso.";
+  return "Señal baja: pide más contexto antes de desbloquear el perfil completo.";
 }
 
 function actionButtonClass({
@@ -468,13 +468,11 @@ export default function CompanyCandidatesClient() {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <h2 className="text-base font-semibold text-slate-900">Base de candidatos importados e invitados</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Base RRHH ligera para detectar encaje rápido, mover pipeline y decidir cuándo merece la pena acceder al perfil completo.
-            </p>
+            <h2 className="text-base font-semibold text-slate-900">Candidatos para decidir</h2>
+            <p className="mt-1 text-sm text-slate-600">Prioriza identidad, señal y acceso antes de abrir el perfil completo.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <a
@@ -590,199 +588,210 @@ export default function CompanyCandidatesClient() {
           </div>
         </div>
 
-        <div className="mt-5 overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-[0.12em] text-slate-500">
-                <th className="py-3 pr-4">Candidato</th>
-                <th className="py-3 pr-4">Sector</th>
-                <th className="py-3 pr-4">Experiencia</th>
-                <th className="py-3 pr-4">Ubicación</th>
-                <th className="py-3 pr-4">Trust</th>
-                <th className="py-3 pr-4">Verificaciones</th>
-                <th className="py-3 pr-4">Acceso</th>
-                <th className="py-3 pr-4">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-500">
-                    Cargando candidatos…
-                  </td>
-                </tr>
-              ) : filteredImports.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-500">
-                    {imports.length === 0
-                      ? "Todavía no hay candidatos importados desde CV externo."
-                      : "No hay candidatos que encajen con estos filtros ahora mismo."}
-                  </td>
-                </tr>
+        <div className="mt-5 space-y-4">
+          {loading ? (
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-8 text-center text-slate-500">Cargando candidatos…</div>
+          ) : filteredImports.length === 0 ? (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
+              {imports.length === 0 ? (
+                <div>
+                  <p className="font-semibold text-slate-900">Todavía no hay candidatos importados.</p>
+                  <p className="mt-2">Subir un CV te da una base real para empezar a decidir y priorizar unlocks con criterio.</p>
+                  <a href="#importar-cv" className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+                    Importar primer CV
+                  </a>
+                </div>
               ) : (
-                filteredImports.map((row) => {
-                  const status = statusMeta(row.display_status);
-                  const access = accessMeta(row.access_status);
-                  const operational = resolveCandidateOperationalStateMeta(row);
-                  const fit = computeCandidateQuickFit(row);
-                  const canOpenSnapshot = Boolean(row.linked_user_id && row.candidate_public_token);
-                  const canOpenInvitation = Boolean(row.invite_token);
-                  return (
-                    <tr key={row.id}>
-                      <td className="py-4 pr-4 align-top">
+                <div>
+                  <p className="font-semibold text-slate-900">No hay candidatos para estos filtros.</p>
+                  <p className="mt-2">Amplía la búsqueda para volver a encontrar perfiles con señal útil para decidir.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPipelineFilter("all");
+                      setSavedFilter("all");
+                      setTrustFilter("all");
+                      setVerificationFilter("all");
+                      setProfileFilter("all");
+                      setArchivedFilter("hide");
+                      setSearch("");
+                      setSort("recent");
+                    }}
+                    className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+                  >
+                    Ver toda la base
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            filteredImports.map((row) => {
+              const status = statusMeta(row.display_status);
+              const access = accessMeta(row.access_status);
+              const operational = resolveCandidateOperationalStateMeta(row);
+              const fit = computeCandidateQuickFit(row);
+              const canOpenSnapshot = Boolean(row.linked_user_id && row.candidate_public_token);
+              const canOpenInvitation = Boolean(row.invite_token);
+              const stage = String(row.company_stage || "none").toLowerCase();
+              return (
+                <article key={row.id} className="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,#ffffff_100%)] p-5 shadow-sm">
+                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
                           onClick={() => setQuickViewRow(row)}
-                          className="font-semibold text-slate-900 underline-offset-2 hover:underline"
+                          className="text-left text-lg font-semibold text-slate-900 underline-offset-2 hover:underline"
                         >
                           {resolveCandidatePartialName(row)}
                         </button>
-                        <div className="mt-1">
-                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${fit.tone}`} title={fit.reasons.join(" · ")}>
-                            {fit.label}
-                          </span>
-                        </div>
-                        <div className="mt-1 text-xs text-slate-500">{fit.summary}</div>
-                        <div className="mt-1 text-xs text-slate-500">{operational.detail}</div>
-                        {row.candidate_already_exists ? (
-                          <div className="mt-1 text-xs text-violet-700">Candidato existente detectado por email único. La importación se ha dejado en staging.</div>
-                        ) : null}
-                        {Number((row as any).import_attempts || 0) > 1 ? (
-                          <div className="mt-1 text-xs text-slate-500">{Number((row as any).import_attempts)} importaciones agrupadas en esta misma identidad.</div>
-                        ) : null}
-                      </td>
-                      <td className="py-4 pr-4 align-top text-slate-700">{resolveCandidateSector(row)}</td>
-                      <td className="py-4 pr-4 align-top text-slate-700">{resolveCandidateYearsExperience(row)}</td>
-                      <td className="py-4 pr-4 align-top text-slate-700">{resolveCandidateApproxLocation(row)}</td>
-                      <td className="py-4 pr-4 align-top text-slate-700">
-                        <div className="font-semibold text-slate-900">{row.trust_score ?? "—"}</div>
-                        <div className="mt-1 text-xs text-slate-500">{trustHelper(row.trust_score)}</div>
-                      </td>
-                      <td className="py-4 pr-4 align-top text-slate-700">{resolveCandidateAvailableVerifications(row)}</td>
-                      <td className="py-4 pr-4 align-top">
-                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${access.tone}`}>
-                          {access.label}
+                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${fit.tone}`} title={fit.reasons.join(" · ")}>
+                          {fit.label}
                         </span>
-                        <div className="mt-2">
-                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${operational.tone}`}>
-                            {operational.label}
-                          </span>
-                        </div>
-                        <div className="mt-2">
-                          <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${status.tone}`}>
-                            {status.label}
-                          </span>
-                        </div>
-                        {row.company_stage && row.company_stage !== "none" ? (
-                          <div className="mt-2">
-                            <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
-                              row.company_stage === "preselected"
-                                ? "border-slate-900 bg-slate-900 text-white"
-                                : "border-slate-200 bg-slate-100 text-slate-700"
-                            }`}>
-                              {row.company_stage === "preselected" ? "Preseleccionado" : "Guardado"}
-                            </span>
+                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${status.tone}`}>{status.label}</span>
+                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${operational.tone}`}>{operational.label}</span>
+                      </div>
+                      <p className="mt-2 text-sm font-medium text-slate-800">{row.target_role || "Puesto pendiente de completar"}</p>
+                      <p className="mt-1 text-sm text-slate-600">
+                        {resolveCandidateSector(row)} · {resolveCandidateYearsExperience(row)} · {resolveCandidateApproxLocation(row)}
+                      </p>
+                      <p className="mt-2 text-sm text-slate-700">{fit.summary}</p>
+                      <p className="mt-1 text-xs text-slate-500">{operational.detail}</p>
+                      {row.candidate_already_exists ? (
+                        <div className="mt-2 text-xs text-violet-700">Candidato existente detectado por email único. La importación se ha dejado en staging.</div>
+                      ) : null}
+                      {Number((row as any).import_attempts || 0) > 1 ? (
+                        <div className="mt-1 text-xs text-slate-500">{Number((row as any).import_attempts)} importaciones agrupadas en esta misma identidad.</div>
+                      ) : null}
+                    </div>
+
+                    <div className="grid gap-2 sm:min-w-[300px] sm:grid-cols-3 xl:min-w-[340px]">
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Trust score</p>
+                        <p className="mt-2 text-2xl font-semibold text-slate-950">{row.trust_score ?? "—"}</p>
+                        <p className="mt-1 text-xs text-slate-500">{trustHelper(row.trust_score)}</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Verificaciones</p>
+                        <p className="mt-2 text-2xl font-semibold text-slate-950">{resolveCandidateAvailableVerifications(row)}</p>
+                        <p className="mt-1 text-xs text-slate-500">Señal disponible para decisión.</p>
+                      </div>
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Acceso</p>
+                        <p className="mt-2 text-sm font-semibold text-slate-950">{access.label}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {row.access_status === "active" && row.access_expires_at
+                            ? `Disponible hasta ${formatDate(row.access_expires_at)}`
+                            : row.access_status === "expired" && row.access_expires_at
+                              ? `Caducó el ${formatDate(row.access_expires_at)}`
+                              : "Resumen disponible sin consumo."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+                    <div className="flex flex-wrap gap-2">
+                      <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${access.tone}`}>{access.label}</span>
+                      {stage !== "none" ? (
+                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${
+                          stage === "preselected" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-slate-100 text-slate-700"
+                        }`}>
+                          {stage === "preselected" ? "Preseleccionado" : stage === "saved" ? "Guardado" : "Archivado"}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 xl:justify-end">
+                      {canOpenSnapshot ? (
+                        <a href={`/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}`} className={actionButtonClass({})}>
+                          Ver resumen
+                        </a>
+                      ) : (
+                        <span className={actionButtonClass({ disabled: true })}>Ver resumen</span>
+                      )}
+                      {canOpenSnapshot ? (
+                        <ProfileUnlockAction
+                          candidateToken={String(row.candidate_public_token || "")}
+                          href={`/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}?view=full`}
+                          requestHref={`/api/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}/unlock`}
+                          availableAccesses={availableProfileAccesses}
+                          alreadyUnlocked={row.access_status === "active"}
+                          unlockedAt={row.access_granted_at || null}
+                          unlockedUntil={row.access_expires_at || null}
+                          primaryLabel={row.access_status === "active" ? "Abrir perfil completo" : "Ver perfil completo (-1 acceso)"}
+                        />
+                      ) : (
+                        <span className={actionButtonClass({ primary: true, disabled: true })}>Sin accesos disponibles</span>
+                      )}
+                      <details className="group relative">
+                        <summary className={actionButtonClass({}) + " list-none cursor-pointer"}>
+                          Más acciones
+                        </summary>
+                        <div className="absolute right-0 z-10 mt-2 min-w-[220px] rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_16px_36px_rgba(15,23,42,0.12)]">
+                          <div className="grid gap-1">
+                            {canOpenInvitation ? (
+                              <a href={`/company-candidate-import/${encodeURIComponent(String(row.invite_token))}`} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                                Ver invitación
+                              </a>
+                            ) : null}
+                            <button
+                              type="button"
+                              onClick={() => updateCompanyStage(row.id, row.company_stage === "saved" ? "none" : "saved")}
+                              disabled={actionId === row.id}
+                              className="rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                            >
+                              {actionId === row.id && row.company_stage !== "saved"
+                                ? "Guardando…"
+                                : row.company_stage === "saved"
+                                  ? "Quitar guardado"
+                                  : "Guardar"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => updateCompanyStage(row.id, row.company_stage === "preselected" ? "none" : "preselected")}
+                              disabled={actionId === row.id}
+                              className="rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                            >
+                              {actionId === row.id && row.company_stage !== "preselected"
+                                ? "Actualizando…"
+                                : row.company_stage === "preselected"
+                                  ? "Quitar preselección"
+                                  : "Preseleccionar"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                void (row.company_stage === "archived" ? updateCompanyStage(row.id, "none") : archiveImport(row.id))
+                              }
+                              disabled={actionId === row.id}
+                              className="rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                            >
+                              {actionId === row.id
+                                ? row.company_stage === "archived"
+                                  ? "Restaurando…"
+                                  : "Archivando…"
+                                : row.company_stage === "archived"
+                                  ? "Restaurar"
+                                  : "Archivar"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => void deleteImport(row.id)}
+                              disabled={actionId === row.id}
+                              className="rounded-xl px-3 py-2 text-left text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                            >
+                              {actionId === row.id ? "Eliminando…" : "Eliminar"}
+                            </button>
                           </div>
-                        ) : null}
-                        {row.access_status === "active" && row.access_expires_at ? (
-                          <div className="mt-1 text-xs text-slate-500">Disponible hasta {formatDate(row.access_expires_at)}</div>
-                        ) : null}
-                        {row.access_status === "active" && row.access_granted_at ? (
-                          <div className="mt-1 text-xs text-slate-500">Desbloqueado el {formatDate(row.access_granted_at)}</div>
-                        ) : null}
-                        {row.access_status === "expired" && row.access_expires_at ? (
-                          <div className="mt-1 text-xs text-slate-500">Caducó el {formatDate(row.access_expires_at)}</div>
-                        ) : null}
-                        {row.access_status === "never" ? (
-                          <div className="mt-1 text-xs text-slate-500">El candidato sigue en perfil parcial. Desbloquéalo para ver el perfil completo.</div>
-                        ) : null}
-                      </td>
-                      <td className="py-4 pr-4 align-top">
-                        <div className="flex flex-wrap gap-2">
-                          {canOpenSnapshot ? (
-                            <a href={`/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}`} className={actionButtonClass({})}>
-                              Ver resumen
-                            </a>
-                          ) : (
-                            <span className={actionButtonClass({ disabled: true })}>Ver resumen</span>
-                          )}
-                          {canOpenInvitation ? (
-                            <a href={`/company-candidate-import/${encodeURIComponent(String(row.invite_token))}`} className={actionButtonClass({})}>
-                              Ver invitación
-                            </a>
-                          ) : (
-                            <span className={actionButtonClass({ disabled: true })}>Ver invitación</span>
-                          )}
-                          {canOpenSnapshot ? (
-                            <ProfileUnlockAction
-                              candidateToken={String(row.candidate_public_token || "")}
-                              href={`/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}?view=full`}
-                              requestHref={`/api/company/candidate/${encodeURIComponent(String(row.candidate_public_token))}/unlock`}
-                              availableAccesses={availableProfileAccesses}
-                              alreadyUnlocked={row.access_status === "active"}
-                              unlockedAt={row.access_granted_at || null}
-                              unlockedUntil={row.access_expires_at || null}
-                              primaryLabel={row.access_status === "active" ? "Perfil desbloqueado" : "Desbloquear perfil (consume 1 acceso)"}
-                            />
-                          ) : (
-                            <span className={actionButtonClass({ primary: true, disabled: true })}>Acceder al perfil</span>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => updateCompanyStage(row.id, row.company_stage === "saved" ? "none" : "saved")}
-                            disabled={actionId === row.id}
-                            className={`${actionButtonClass({})} disabled:opacity-60`}
-                          >
-                            {actionId === row.id && row.company_stage !== "saved"
-                              ? "Guardando…"
-                              : row.company_stage === "saved"
-                                ? "Quitar guardado"
-                                : "Guardar"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => updateCompanyStage(row.id, row.company_stage === "preselected" ? "none" : "preselected")}
-                            disabled={actionId === row.id}
-                            className={`${actionButtonClass({ primary: true })} disabled:opacity-60`}
-                          >
-                            {actionId === row.id && row.company_stage !== "preselected"
-                              ? "Actualizando…"
-                              : row.company_stage === "preselected"
-                                ? "Quitar preselección"
-                                : "Preseleccionar"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              void (row.company_stage === "archived" ? updateCompanyStage(row.id, "none") : archiveImport(row.id))
-                            }
-                            disabled={actionId === row.id}
-                            className={`${actionButtonClass({})} disabled:opacity-60`}
-                          >
-                            {actionId === row.id
-                              ? row.company_stage === "archived"
-                                ? "Restaurando…"
-                                : "Archivando…"
-                              : row.company_stage === "archived"
-                                ? "Restaurar"
-                                : "Archivar"}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => void deleteImport(row.id)}
-                            disabled={actionId === row.id}
-                            className={`${actionButtonClass({ danger: true })} disabled:opacity-60`}
-                          >
-                            {actionId === row.id ? "Eliminando…" : "Eliminar"}
-                          </button>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                      </details>
+                    </div>
+                  </div>
+                </article>
+              );
+            })
+          )}
         </div>
       </section>
 
@@ -804,12 +813,12 @@ export default function CompanyCandidatesClient() {
           {notice ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div> : null}
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div id="importar-cv" className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900">Importar CV externo</h3>
                   <p className="mt-1 text-xs text-slate-600">
-                    Sube un CV recibido fuera de VERIJOB y genera una invitación trazable al candidato.
+                    Sube un CV recibido fuera de VERIJOB y conviértelo en un candidato revisable.
                   </p>
                 </div>
                 <details className="text-xs text-slate-500">
@@ -890,33 +899,40 @@ export default function CompanyCandidatesClient() {
 
                 <div className="flex flex-wrap gap-3">
                   <button
-                    type="button"
-                    onClick={() => void analyzeImport()}
-                    disabled={previewing || submitting || !importsMeta.available || !file}
-                    className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50 disabled:opacity-60"
-                  >
-                    {previewing ? "Analizando CV…" : "Analizar y pre-rellenar"}
-                  </button>
-                  <button
                     type="submit"
                     disabled={submitDisabled}
                     className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
                   >
                     {submitting ? "Importando CV…" : "Subir CV e invitar"}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setForm({ candidate_email: "", candidate_name: "", target_role: "", source_notes: "" });
-                      setFile(null);
-                      setImportPreview(null);
-                      setError(null);
-                      setNotice(null);
-                    }}
-                    className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50"
-                  >
-                    Limpiar
-                  </button>
+                  <details className="relative">
+                    <summary className="inline-flex list-none cursor-pointer rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+                      Más acciones
+                    </summary>
+                    <div className="absolute left-0 z-10 mt-2 min-w-[220px] rounded-2xl border border-slate-200 bg-white p-2 shadow-[0_16px_36px_rgba(15,23,42,0.12)]">
+                      <button
+                        type="button"
+                        onClick={() => void analyzeImport()}
+                        disabled={previewing || submitting || !importsMeta.available || !file}
+                        className="block w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        {previewing ? "Analizando CV…" : "Analizar y pre-rellenar"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForm({ candidate_email: "", candidate_name: "", target_role: "", source_notes: "" });
+                          setFile(null);
+                          setImportPreview(null);
+                          setError(null);
+                          setNotice(null);
+                        }}
+                        className="block w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        Limpiar formulario
+                      </button>
+                    </div>
+                  </details>
                 </div>
               </form>
 

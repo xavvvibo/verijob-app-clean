@@ -96,10 +96,10 @@ export default async function CandidateProfilePage() {
         : "Sin validar todavía";
   const trustSummary =
     verifiedCount > 0
-      ? "Tu perfil ya cuenta con experiencia validada y transmite más credibilidad a las empresas."
+      ? "Tu perfil ya transmite más credibilidad. La siguiente validación puede convertir esa confianza en una decisión más rápida."
       : inProcessCount > 0
-        ? "Ya tienes una verificación en proceso. Puedes reforzar el perfil con documentación mientras esperas respuesta."
-        : "Tu perfil ya está en marcha. Validar una experiencia será el siguiente paso con más impacto.";
+        ? "Ya tienes una verificación en proceso. Añadir evidencias mientras esperas acelera el impacto potencial sobre tu trust."
+        : "Tu perfil ya está en marcha. Validar una experiencia es la acción que más puede mover tu trust score.";
   const nextActionHref =
     Number(experienceCount || 0) === 0
       ? "/candidate/experience?new=1#manual-experience"
@@ -127,7 +127,7 @@ export default async function CandidateProfilePage() {
       <CandidatePageHeader
         eyebrow="Perfil candidato"
         title="Tu identidad profesional"
-        description="Gestiona tus datos personales, revisa la confianza actual del perfil y deja preparada la información que verán las empresas."
+        description="Ordena tu identidad, resume tu señal real y deja lista la base profesional que verán las empresas."
         ctaLabel={nextActionLabel}
         ctaHref={nextActionHref}
         badges={[
@@ -139,11 +139,22 @@ export default async function CandidateProfilePage() {
         variant="management"
       />
 
-      <CandidateFormSection title="Confianza del perfil" description="Una lectura rápida del estado actual de tu credibilidad y del tipo de señales que ya ve una empresa.">
-        <CandidateSurface tone="subtle" className="p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Confianza del perfil</p>
-          <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{trustTitle} · {trustScore}</h2>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{trustSummary}</p>
+      <CandidateFormSection title="Confianza del perfil" description="La señal que hoy sostiene tu perfil y la acción con más impacto.">
+        <CandidateSurface tone="subtle" className="overflow-hidden p-5">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Lectura ejecutiva</p>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">{trustTitle}</h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">{trustSummary}</p>
+            </div>
+            <div className="rounded-[24px] border border-slate-200 bg-white px-5 py-4 shadow-sm">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Trust score</div>
+              <div className="mt-1 text-4xl font-semibold tracking-tight text-slate-950">{trustScore}</div>
+              <div className="mt-2 text-xs text-slate-500">
+                {verifiedCount} verificadas · {inProcessCount} en curso · {evidenceCount} evidencias
+              </div>
+            </div>
+          </div>
         </CandidateSurface>
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
           {trustEntries.map((entry) => (
@@ -178,9 +189,7 @@ export default async function CandidateProfilePage() {
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-lg font-semibold text-slate-900">Confianza por experiencia</h2>
-              <p className="mt-1 text-sm text-slate-600">
-                Cada experiencia refleja si ya transmite confianza, si está en proceso o si todavía necesita validación.
-              </p>
+              <p className="mt-1 text-sm text-slate-600">Cada experiencia deja claro si ya ayuda a decidir o si aún necesita validación.</p>
             </div>
             <Link href="/candidate/experience" className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
               Gestionar experiencias
@@ -230,27 +239,29 @@ export default async function CandidateProfilePage() {
         </section>
       ) : null}
 
-      <CandidateProfileIdentityClient
-        initialProfile={{
-          id: user.id,
-          email: user.email ?? null,
-          full_name: (profile as any)?.full_name ?? null,
-          phone: (profile as any)?.phone ?? null,
-          title: (profile as any)?.title ?? null,
-          location: (profile as any)?.location ?? null,
-          address_line1: null,
-          address_line2: null,
-          city: null,
-          region: null,
-          postal_code: null,
-          country: null,
-          identity_type: null,
-          identity_masked: null,
-          has_identity: false,
-        }}
-      />
+      <section className="grid gap-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)]">
+        <CandidateProfileIdentityClient
+          initialProfile={{
+            id: user.id,
+            email: user.email ?? null,
+            full_name: (profile as any)?.full_name ?? null,
+            phone: (profile as any)?.phone ?? null,
+            title: (profile as any)?.title ?? null,
+            location: (profile as any)?.location ?? null,
+            address_line1: null,
+            address_line2: null,
+            city: null,
+            region: null,
+            postal_code: null,
+            country: null,
+            identity_type: null,
+            identity_masked: null,
+            has_identity: false,
+          }}
+        />
 
-      <CandidateProfileSkillsClient initialSkills={manualSkills} />
+        <CandidateProfileSkillsClient initialSkills={manualSkills} />
+      </section>
     </CandidateFormLayout>
   );
 }

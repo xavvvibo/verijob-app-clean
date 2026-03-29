@@ -219,16 +219,16 @@ export default function CandidatePublicProfilePage() {
             </div>
           }
           right={
-            <div className="flex w-full max-w-[410px] flex-col gap-4 xl:ml-auto">
-              <div className="rounded-[26px] bg-slate-950 p-6 text-white shadow-[0_20px_50px_rgba(15,23,42,0.25)] ring-1 ring-white/10">
+            <div className="flex w-full max-w-[390px] flex-col gap-3 xl:ml-auto">
+              <div className="rounded-[24px] bg-slate-950 px-5 py-5 text-white shadow-[0_14px_34px_rgba(15,23,42,0.18)] ring-1 ring-white/10">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                   Acción principal
                 </p>
-                <h2 className="mt-3 text-2xl font-semibold leading-tight">
-                  Haz que tu perfil sea fácil de compartir y fácil de creer
+                <h2 className="mt-3 text-xl font-semibold leading-tight">
+                  Tu perfil ya puede jugar como activo compartible
                 </h2>
                 <p className="mt-3 text-sm leading-6 text-slate-300">
-                  Copia el enlace y úsalo como tu versión profesional verificable.
+                  Copia el enlace y compártelo como tu versión profesional verificable.
                 </p>
                 <button
                   type="button"
@@ -262,7 +262,7 @@ export default function CandidatePublicProfilePage() {
           }
         />
 
-        <div className="grid gap-12 xl:grid-cols-[minmax(0,1.08fr)_430px]">
+        <div className="grid gap-10 xl:grid-cols-[minmax(0,1.16fr)_390px]">
           <div className="space-y-5">
             <div className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500">
               Así verán tu perfil
@@ -278,7 +278,7 @@ export default function CandidatePublicProfilePage() {
             </SharePublicCard>
           </div>
 
-          <aside className="space-y-5">
+          <aside className="space-y-4">
             <ShareVisibilitySummary>
               <h3 className="text-lg font-semibold text-slate-900">
                 Comparte tu perfil verificable
@@ -329,53 +329,54 @@ export default function CandidatePublicProfilePage() {
 
               <div className="mt-4">
                 <ShareActions>
-                  {planCapabilities.canShareByQr ? (
-                  <button
-                    type="button"
-                    onClick={downloadQr}
-                    disabled={!qrSvgUrl}
-                    className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black disabled:opacity-50"
-                  >
-                    Descargar QR
-                  </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled
-                      className="inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white opacity-60"
-                    >
-                      Mejorar a Pro
-                    </button>
-                  )}
+                  <details className="w-full">
+                    <summary className="inline-flex w-full list-none items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 cursor-pointer">
+                      Más acciones de distribución
+                    </summary>
+                    <div className="mt-3 grid gap-2">
+                      {planCapabilities.canShareByQr ? (
+                        <button
+                          type="button"
+                          onClick={downloadQr}
+                          disabled={!qrSvgUrl}
+                          className="inline-flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50 disabled:opacity-50"
+                        >
+                          Descargar QR
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled
+                          className="inline-flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 opacity-60"
+                        >
+                          Mejorar a Pro para QR
+                        </button>
+                      )}
 
-                  <button
-                    type="button"
-                    onClick={() => void generateOrRefreshLink()}
-                    className="inline-flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
-                  >
-                    Regenerar enlace
-                  </button>
+                      <button
+                        type="button"
+                        onClick={() => void generateOrRefreshLink()}
+                        className="inline-flex w-full items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-50"
+                      >
+                        Regenerar enlace
+                      </button>
+                    </div>
+                  </details>
                 </ShareActions>
               </div>
             </ShareQRCodePanel>
 
             <ShareVisibilitySummary>
-              <div className="space-y-2">
-                <h3 className="text-lg font-semibold text-slate-900">
-                  Tu plan actual: {subscriptionPlan || "Free"}
-                </h3>
-                <p className="text-sm text-slate-700">
-                  Enlace público: listo para compartir
-                </p>
-                <p className="text-sm text-slate-700">
-                  Compartir por link: sí
-                </p>
-                <p className="text-sm text-slate-700">
-                  Compartir por QR: {planCapabilities.canShareByQr ? "sí" : "no"}
-                </p>
-                <p className="text-sm text-slate-700">
-                  Descarga de CV verificado: {((planCapabilities as any)?.canDownloadCv ?? false) ? "sí" : "no"}
-                </p>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Plan y distribución</p>
+                  <h3 className="mt-2 text-lg font-semibold text-slate-900">Plan actual: {subscriptionPlan || "Free"}</h3>
+                </div>
+                <div className="grid gap-2">
+                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">Enlace público listo para compartir</div>
+                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">Compartir por QR: {planCapabilities.canShareByQr ? "sí" : "no"}</div>
+                  <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">CV verificado descargable: {((planCapabilities as any)?.canDownloadCv ?? false) ? "sí" : "no"}</div>
+                </div>
               </div>
             </ShareVisibilitySummary>
 

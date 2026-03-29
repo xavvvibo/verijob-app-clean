@@ -151,11 +151,9 @@ export default function CompanyTeamClient() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Equipo y permisos</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Gestiona accesos reales de empresa, capacidad del plan e invitaciones pendientes.
-        </p>
+        <p className="mt-2 text-sm text-slate-600">Gestiona el workspace, entiende la capacidad actual y mueve invitaciones sin sensación de backoffice.</p>
         {error ? <p className="mt-4 text-sm text-rose-600">{error}</p> : null}
         {message ? <p className="mt-4 text-sm text-emerald-700">{message}</p> : null}
         {inviteLink ? (
@@ -173,20 +171,20 @@ export default function CompanyTeamClient() {
         ) : null}
       </section>
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section className="grid gap-3 md:grid-cols-4">
+        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Miembros activos</p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">{members.length}</p>
         </article>
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Admins</p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">{summary.admins}</p>
         </article>
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Reviewers</p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">{summary.reviewers}</p>
         </article>
-        <article className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+        <article className="rounded-3xl border border-violet-200 bg-violet-50/70 p-5 shadow-sm">
           <p className="text-xs uppercase tracking-wide text-slate-500">Capacidad</p>
           <p className="mt-2 text-3xl font-semibold text-slate-900">{seatsUsed + pendingInvitations}/{seatsLimit}</p>
           <p className="mt-2 text-sm text-slate-600">Plan {payload?.plan?.label || "Free"} · libres {seatsRemaining}</p>
@@ -233,9 +231,7 @@ export default function CompanyTeamClient() {
 
         <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-base font-semibold text-slate-900">Invitar nuevo usuario</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Crea invitaciones de acceso para administracion o revision operativa.
-          </p>
+          <p className="mt-1 text-sm text-slate-600">Añade admins o reviewers sin salir del workspace.</p>
           {payload?.invitations_meta?.available === false ? (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
               <p className="font-semibold">Invitaciones pendientes de activar</p>
@@ -289,7 +285,7 @@ export default function CompanyTeamClient() {
             <h3 className="text-sm font-semibold text-slate-900">Invitaciones</h3>
             {invitations.length === 0 ? (
               <p className="mt-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-3 py-4 text-sm text-slate-600">
-                No hay invitaciones registradas.
+                No hay invitaciones pendientes ahora mismo.
               </p>
             ) : (
               <div className="mt-3 space-y-3">

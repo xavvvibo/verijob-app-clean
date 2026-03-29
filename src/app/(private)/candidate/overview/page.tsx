@@ -1007,13 +1007,13 @@ export default function CandidateOverview() {
           </div>
         }
         right={
-        <div className={`mx-auto w-full max-w-[29rem] rounded-[28px] border p-5 shadow-[0_18px_42px_rgba(15,23,42,0.08)] backdrop-blur sm:p-6 xl:mx-0 xl:max-w-none ${opportunityCard.tone}`}>
+        <div className={`mx-auto w-full max-w-[22rem] rounded-[22px] border p-4 shadow-[0_12px_26px_rgba(15,23,42,0.05)] backdrop-blur sm:p-5 xl:mx-0 xl:max-w-none ${opportunityCard.tone}`}>
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Siguiente palanca</p>
-          <h2 className="mt-3 text-xl font-semibold leading-tight text-slate-950 sm:text-[1.35rem]">{opportunityCard.title}</h2>
-          <p className="mt-2 text-sm text-slate-600">{opportunityCard.body}</p>
+          <h2 className="mt-2 text-base font-semibold leading-tight text-slate-950 sm:text-[1.05rem]">{opportunityCard.title}</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">{opportunityCard.body}</p>
           <Link
             href={opportunityCard.href}
-            className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:bg-black active:scale-[0.98]"
+            className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-black active:scale-[0.98]"
           >
             {opportunityCard.cta}
           </Link>
@@ -1058,19 +1058,37 @@ export default function CandidateOverview() {
         </div>
       </OverviewHighlights>
 
-      <CandidateSurface tone="default" className="p-6 xl:p-7">
+      <OverviewExperiencesPreview
+        action={
+          <Link href="/candidate/experience" className="inline-flex rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+            Gestionar experiencias
+          </Link>
+        }
+      >
+        <div className="space-y-0">
+          {experienceTimeline.length ? (
+            experienceTimeline.slice(0, 3).map((item: any) => <ExperienceSummaryCard key={item.id} item={item} />)
+          ) : (
+            <div className="rounded-3xl border border-dashed border-slate-300 p-6 text-sm text-slate-600">
+              Todavía no hay experiencias suficientes para mostrar un resumen. Añade una experiencia o revisa las importadas para empezar a construir tu señal profesional.
+            </div>
+          )}
+        </div>
+      </OverviewExperiencesPreview>
+
+      <CandidateSurface tone="default" className="p-5 xl:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Tu perfil en una mirada</p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-tight text-slate-950">Qué partes ya sostienen tu perfil y cuáles aún no están ayudando suficiente</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Esto es lo que verá una empresa en segundos.</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-950">Qué ya pesa y qué aún necesita señal</h2>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">Lectura rápida de tu perfil cuando una empresa decide.</p>
           </div>
           <Link href="/candidate/profile" className="inline-flex rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
             Revisar perfil completo
           </Link>
         </div>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <SnapshotItem
             label="Formación"
             value={educationCount > 0 ? `${educationCount} entrada${educationCount === 1 ? "" : "s"}` : "Pendiente"}
@@ -1109,24 +1127,6 @@ export default function CandidateOverview() {
           />
         </div>
       </CandidateSurface>
-
-      <OverviewExperiencesPreview
-        action={
-          <Link href="/candidate/experience" className="inline-flex rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50">
-            Gestionar experiencias
-          </Link>
-        }
-      >
-        <div className="space-y-0">
-          {experienceTimeline.length ? (
-            experienceTimeline.slice(0, 3).map((item: any) => <ExperienceSummaryCard key={item.id} item={item} />)
-          ) : (
-            <div className="rounded-3xl border border-dashed border-slate-300 p-6 text-sm text-slate-600">
-              Todavía no hay experiencias suficientes para mostrar un resumen. Añade una experiencia o revisa las importadas para empezar a construir tu señal profesional.
-            </div>
-          )}
-        </div>
-      </OverviewExperiencesPreview>
 
       <OverviewProfilePublicCard>
         <PublicProfileCard

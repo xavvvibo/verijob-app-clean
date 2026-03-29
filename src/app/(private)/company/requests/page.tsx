@@ -269,11 +269,16 @@ export default async function CompanyRequestsPage({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Solicitudes de validación</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Revisa aquí qué experiencia te están pidiendo confirmar, si ya trae soporte documental y qué solicitudes requieren una decisión.
-        </p>
+      <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Solicitudes de validación</h1>
+            <p className="mt-2 text-sm text-slate-600">Resuelve primero lo pendiente con evidencias para decidir más rápido y con menos fricción.</p>
+          </div>
+          <Link href="?filter=pending&sort=priority" className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+            Resolver pendientes
+          </Link>
+        </div>
         {!planActive ? (
           <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
             Puedes revisar y resolver solicitudes aunque tu empresa esté en plan Free.
@@ -283,16 +288,12 @@ export default async function CompanyRequestsPage({
           </div>
         ) : null}
         <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-          <p className="font-semibold text-slate-900">Cómo priorizar esta cola</p>
-          <ul className="mt-2 space-y-1 text-xs leading-5 text-slate-600">
-            <li>Primero revisa las pendientes con evidencias.</li>
-            <li>Después resuelve las recientes que aún no tienen respuesta.</li>
-            <li>Las resueltas siguen aquí para trazabilidad, no para volver a decidir.</li>
-          </ul>
+          <p className="font-semibold text-slate-900">Prioriza así</p>
+          <p className="mt-2 text-sm text-slate-600">Primero pendientes con evidencias, después recientes sin resolver. Las resueltas se quedan solo como histórico operativo.</p>
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-5">
+      <section className="grid gap-3 md:grid-cols-5">
         <Link href="?filter=pending&sort=priority" className={`rounded-2xl border p-4 ${filter === "pending" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white text-slate-900"}`}>
           <div className="text-xs uppercase tracking-wide">Pendientes</div>
           <div className="mt-2 text-2xl font-semibold">{counts.pending}</div>
@@ -329,8 +330,24 @@ export default async function CompanyRequestsPage({
 
       <section className="space-y-4">
         {filtered.length === 0 ? (
-          <div className="rounded-3xl border border-slate-200 bg-white p-8 text-sm text-slate-500 shadow-sm">
-            No hay solicitudes para este filtro.
+          <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-sm text-slate-500 shadow-sm">
+            {filter === "pending" ? (
+              <div>
+                <p className="font-semibold text-slate-900">No hay solicitudes pendientes ahora mismo.</p>
+                <p className="mt-2">La cola está limpia. Puedes dedicar este tiempo a revisar candidatos con más señal y decidir mejor dónde abrir contexto.</p>
+                <Link href="/company/candidates" className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+                  Ir a candidatos con señal
+                </Link>
+              </div>
+            ) : (
+              <div>
+                <p className="font-semibold text-slate-900">No hay solicitudes para este filtro.</p>
+                <p className="mt-2">Vuelve a pendientes para priorizar decisiones con impacto real en validación.</p>
+                <Link href="?filter=pending&sort=priority" className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+                  Ver pendientes
+                </Link>
+              </div>
+            )}
           </div>
         ) : null}
 
@@ -363,6 +380,9 @@ export default async function CompanyRequestsPage({
                       {row.reuse_events} reutilización{row.reuse_events === 1 ? "" : "es"}
                     </span>
                   ) : null}
+                  <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1 font-semibold text-slate-700">
+                    {isPendingStatus(row.status_effective) ? "Pendiente de decisión" : "Trazabilidad"}
+                  </span>
                 </div>
               </div>
 
@@ -396,7 +416,7 @@ export default async function CompanyRequestsPage({
             </div>
             <p className="mt-4 text-xs text-slate-500">
               {isPendingStatus(row.status_effective)
-                ? "Pendiente de decisión. Abre el detalle para confirmar o rechazar la experiencia con contexto."
+                ? "Pendiente de decisión. Resolverla ahora acelera confianza y evita que la señal se quede bloqueada."
                 : "Solicitud ya resuelta. El detalle mantiene la trazabilidad completa de la decisión."}
             </p>
           </article>

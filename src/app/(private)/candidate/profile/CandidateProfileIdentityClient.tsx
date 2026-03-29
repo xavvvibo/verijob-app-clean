@@ -194,13 +194,12 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
 
   return (
     <div className="space-y-6">
-      <section className="rounded-2xl border border-gray-200 bg-white p-6">
+      <section className="rounded-[28px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Datos personales</h2>
-            <p className="mt-1 text-sm text-gray-600">
-              El documento de identidad es opcional. Puedes guardar y usar tu perfil sin completarlo.
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Identidad profesional</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight text-slate-900">Cómo te presentas dentro de VERIJOB</h2>
+            <p className="mt-1 text-sm text-slate-600">Nombre, rol, ubicación y documento si quieres reforzar trazabilidad interna.</p>
           </div>
           <button
             type="button"
@@ -212,7 +211,7 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
           </button>
         </div>
 
-        <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2">
           <Field label="Nombre completo" value={p.full_name ?? ""} onChange={(v) => setP({ ...p, full_name: v || null })} />
           <Field label="Título profesional" value={p.title ?? ""} onChange={(v) => setP({ ...p, title: v || null })} />
           <Field label="Teléfono" value={p.phone ?? ""} onChange={(v) => setP({ ...p, phone: v || null })} />
@@ -237,7 +236,7 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
             />
             <div className="mt-2 space-y-2 text-xs text-gray-500">
               <p>
-                Campo opcional. Se usa solo para deduplicación y auditoría interna. Nunca compartimos el documento completo con empresas.
+                Campo opcional. Se usa solo para deduplicación y auditoría interna.
               </p>
               <p>
                 Estado actual:{" "}
@@ -292,9 +291,10 @@ export default function CandidateProfileIdentityClient({ initialProfile }: { ini
         {profileMessage ? <InlineStatusMessage tone={profileMessage.tone} message={profileMessage.text} /> : null}
       </section>
 
-      <section className="rounded-2xl border border-gray-200 bg-white p-6">
-        <h2 className="text-lg font-semibold text-gray-900">Cuenta</h2>
-        <p className="mt-1 text-sm text-gray-600">Puedes solicitar cambio de email de acceso.</p>
+      <section className="rounded-[28px] border border-slate-200 bg-slate-50 p-6">
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Cuenta</p>
+        <h2 className="mt-2 text-lg font-semibold text-slate-900">Acceso y credenciales</h2>
+        <p className="mt-1 text-sm text-slate-600">Gestiona el email de acceso sin tocar tu identidad profesional.</p>
         <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
           <Field label="Email" value={email} onChange={setEmail} />
           <button

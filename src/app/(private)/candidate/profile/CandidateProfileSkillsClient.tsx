@@ -74,13 +74,15 @@ export default function CandidateProfileSkillsClient({
   }
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-[28px] border border-violet-200/80 bg-[linear-gradient(180deg,rgba(248,250,252,1)_0%,rgba(245,243,255,0.72)_100%)] p-5 shadow-sm">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">Skills</h2>
-          <p className="mt-1 text-sm text-slate-600">
-            Añade y elimina skills manualmente. La estructura queda preparada para futuras verificaciones.
-          </p>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-violet-600">Skills</p>
+          <h2 className="mt-2 text-lg font-semibold text-slate-900">Capacidades visibles de tu perfil</h2>
+          <p className="mt-1 text-sm text-slate-600">Úsalas para reforzar lo que una empresa entiende de ti en segundos.</p>
+        </div>
+        <div className="rounded-full border border-violet-200 bg-white px-3 py-1 text-xs font-semibold text-violet-700">
+          {skills.length} {skills.length === 1 ? "skill visible" : "skills visibles"}
         </div>
       </div>
 
@@ -125,7 +127,7 @@ export default function CandidateProfileSkillsClient({
         </button>
       </div>
 
-      <p className="mt-3 text-xs text-slate-500">Campos preparados: `source_type`, `verified` y `verification_type`.</p>
+      <p className="mt-3 text-xs text-slate-500">Las verificaciones futuras podrán reforzar estas skills sin cambiar su estructura actual.</p>
 
       {message ? (
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">{message}</div>

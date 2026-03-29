@@ -746,8 +746,8 @@ export default function CompanyDashboard() {
         </section>
       ) : null}
 
-      <section className="overflow-hidden rounded-[34px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(191,219,254,0.45),_transparent_42%),linear-gradient(135deg,_#0f172a_0%,_#172554_48%,_#eef2ff_100%)] shadow-[0_24px_80px_rgba(15,23,42,0.16)]">
-        <div className="grid gap-6 p-6 md:p-7 xl:grid-cols-[minmax(0,1.25fr)_320px] xl:items-start">
+      <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-[radial-gradient(circle_at_top_left,_rgba(191,219,254,0.42),_transparent_42%),linear-gradient(135deg,_#0f172a_0%,_#172554_48%,_#eef2ff_100%)] shadow-[0_20px_64px_rgba(15,23,42,0.14)]">
+        <div className="grid gap-5 p-6 md:p-6 xl:grid-cols-[minmax(0,1.2fr)_300px] xl:items-start">
           <div className="min-w-0">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-100/80">Workspace empresa</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-[2.25rem]">{companyName}</h1>
@@ -764,7 +764,7 @@ export default function CompanyDashboard() {
               <StatPill label="Verificaciones" value={String(recentVerifiedCount)} tone={recentVerifiedCount > 0 ? "green" : "slate"} />
             </div>
 
-            <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <div className="rounded-3xl border border-white/15 bg-white/10 p-4 text-white backdrop-blur">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-100/75">Estado del panel</p>
                 <p className="mt-2 text-base font-semibold">Listo para decisión</p>
@@ -794,7 +794,7 @@ export default function CompanyDashboard() {
             {errorMessage ? <p className="mt-4 text-sm text-rose-200">{errorMessage}</p> : null}
           </div>
 
-          <aside className="rounded-[28px] border border-white/15 bg-white/95 p-5 shadow-[0_18px_60px_rgba(15,23,42,0.18)]">
+          <aside className="rounded-[26px] border border-white/15 bg-white/95 p-5 shadow-[0_16px_48px_rgba(15,23,42,0.16)]">
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-500">Capacidad actual</p>
             <div className="mt-3 text-5xl font-semibold tracking-tight text-slate-950">{availableProfileAccesses}</div>
             <p className="mt-2 text-sm font-medium text-slate-700">{focusMetricLabel}</p>
@@ -804,7 +804,7 @@ export default function CompanyDashboard() {
                 : "Ahora mismo conviene priorizar resúmenes y detectar primero qué perfiles merecen contexto completo."}
             </p>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Listos para revisar</p>
                 <p className="mt-2 text-2xl font-semibold text-slate-950">{readyToReviewCount}</p>
@@ -903,13 +903,13 @@ export default function CompanyDashboard() {
           </div>
         </article>
 
-        <article className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+        <article className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
           <DashboardSectionTitle
             eyebrow="Qué hacer ahora"
             title="Tres movimientos útiles para hoy"
             description="Acciones cortas, sin rodeos, para avanzar la decisión y no solo navegar el panel."
           />
-          <div className="mt-5 grid gap-3">
+          <div className="mt-4 grid gap-3">
             <TacticalActionCard
               title={highSignalCandidateCount > 0 ? "Revisar perfiles con más señal" : "Abrir la base y buscar señal"}
               detail={highSignalCandidateCount > 0 ? `${highSignalCandidateCount} candidatos ya aportan contexto útil para priorizar revisión a fondo.` : "Todavía no hay perfiles con señal fuerte. Empieza por la base y detecta resúmenes prometedores."}
@@ -1024,7 +1024,7 @@ export default function CompanyDashboard() {
                         {priorityReason ? <p className="mt-1 text-xs font-medium text-slate-500">{priorityReason}</p> : null}
                       </div>
 
-                      <div className="grid gap-3 sm:min-w-[280px] sm:grid-cols-3 xl:min-w-[320px]">
+                  <div className="grid gap-2 sm:min-w-[260px] sm:grid-cols-3 xl:min-w-[300px]">
                         <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Trust score</p>
                           <p className="mt-2 text-2xl font-semibold text-slate-950">{trustScore > 0 ? trustScore : "—"}</p>
@@ -1041,7 +1041,7 @@ export default function CompanyDashboard() {
                     </div>
 
                     <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
-                      <div className="grid gap-3 sm:grid-cols-3">
+                      <div className="grid gap-2 sm:grid-cols-3">
                         <div className="rounded-2xl border border-slate-200 bg-white p-3">
                           <p className="text-xs font-semibold text-slate-500">Estado acceso</p>
                           <p className="mt-1 text-sm font-semibold text-slate-950">{access.label}</p>

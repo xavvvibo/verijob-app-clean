@@ -244,20 +244,31 @@ export default async function CandidateExperiencePage({
     <CandidateOperationsLayout>
       <CandidatePageHeader
         eyebrow="Experiencia profesional"
-        title="Tus experiencias"
-        description="Mantén tu trayectoria limpia, solicita verificaciones cuando toque y decide qué parte de tu historial quieres enseñar fuera de VERIJOB."
+        title="Tu trayectoria verificable"
+        description="Ordena tu historial, separa lo que ya aporta señal y decide qué parte de tu experiencia quieres hacer visible."
         ctaLabel="Añadir experiencia manual"
         ctaHref="/candidate/experience?new=1#manual-experience"
-        badges={["Historial revisable", "Verificaciones por experiencia", "Visibilidad pública controlada"]}
+        badges={["Trayectoria revisable", "Validación por experiencia", "Visibilidad pública controlada"]}
       />
       <CandidateToolbar className="-mt-4">
-        <div className="text-sm text-slate-600">Mantén tu trayectoria limpia, visible y preparada para verificaciones y documentación.</div>
-        <Link
-          href="#cv-upload"
-          className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition duration-150 hover:bg-slate-50"
-        >
-          Extraer perfil desde CV
-        </Link>
+        <div className="grid w-full gap-3 md:grid-cols-2">
+          <Link
+            href="#cv-upload"
+            className="rounded-2xl border border-blue-200 bg-blue-50/80 px-4 py-4 text-left"
+          >
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">Importar CV</div>
+            <div className="mt-2 text-sm font-semibold text-slate-900">Extraer experiencia desde tu CV</div>
+            <div className="mt-1 text-sm text-slate-600">Sube el archivo, revisa lo detectado y corrige antes de validar.</div>
+          </Link>
+          <Link
+            href="#manual-experience"
+            className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-left"
+          >
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Añadir manualmente</div>
+            <div className="mt-2 text-sm font-semibold text-slate-900">Crear una experiencia desde cero</div>
+            <div className="mt-1 text-sm text-slate-600">Útil cuando falta contexto o quieres dejar una experiencia lista para verificar.</div>
+          </Link>
+        </div>
       </CandidateToolbar>
 
       <section className="space-y-8">
@@ -318,16 +329,19 @@ export default async function CandidateExperiencePage({
           </div>
         ) : null}
 
-        <div className="flex flex-wrap items-center justify-between gap-4 border-y border-slate-100 py-4 text-sm text-slate-600">
-          <p>
-            Estados visibles por experiencia: <span className="font-semibold text-slate-900">Sin verificar</span>, <span className="font-semibold text-slate-900">Verificación solicitada</span>, <span className="font-semibold text-slate-900">En revisión</span>, <span className="font-semibold text-slate-900">Verificada</span> o <span className="font-semibold text-slate-900">Revocada</span>.
-          </p>
-          <p>
-            Plan actual: <span className="font-semibold text-slate-900">{candidateCapabilities.label}</span>. Puedes mostrar <span className="font-semibold text-slate-900">{publicLimits.label}</span> y destacar{" "}
-            <span className="font-semibold text-slate-900">
-              {publicLimits.featured == null ? "experiencias ilimitadas" : `${publicLimits.featured} experiencia${publicLimits.featured === 1 ? "" : "s"}`}
-            </span>.
-          </p>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Estado</div>
+            <p className="mt-2">Cada experiencia deja claro si está lista, en revisión o si aún necesita validación.</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Visibilidad pública</div>
+            <p className="mt-2">Tu plan {candidateCapabilities.label} permite mostrar {publicLimits.label} y destacar {publicLimits.featured == null ? "experiencias ilimitadas" : `${publicLimits.featured} experiencia${publicLimits.featured === 1 ? "" : "s"}`}.</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Siguiente criterio</div>
+            <p className="mt-2">Prioriza primero las experiencias con mejor señal y refuerza después las que siguen siendo declarativas.</p>
+          </div>
         </div>
 
         <ExperienceListClient

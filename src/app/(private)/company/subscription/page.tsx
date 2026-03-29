@@ -246,14 +246,31 @@ export default async function CompanySubscriptionPage({
   return (
     <div className="space-y-6">
       <CheckoutReturnSyncNotice checkoutState={checkoutState} />
-      <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold text-slate-900">Suscripción de empresa</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          Estado real del plan, capacidad operativa y camino claro para ampliar o gestionar la suscripción.
-        </p>
-        <p className="mt-2 text-sm text-slate-600">
-          Aquí ves de un vistazo qué capacidad viene del plan activo, qué parte viene de compras puntuales y en qué estado está la verificación documental de tu empresa.
-        </p>
+      <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr] lg:items-start">
+          <div>
+            <h1 className="text-2xl font-semibold text-slate-900">Suscripción de empresa</h1>
+            <p className="mt-2 text-sm text-slate-600">Centro de capacidad operativa: plan, accesos, límites útiles y siguiente recomendación.</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">Plan {label}</span>
+              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{accessCredits.available} accesos disponibles</span>
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">{companyPlan.accessesIncludedMonthly ?? "Capacidad personalizada"} por mes</span>
+            </div>
+          </div>
+          <div className="rounded-[24px] border border-slate-200 bg-slate-50 p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Siguiente recomendación</p>
+            <p className="mt-2 text-lg font-semibold text-slate-900">
+              {accessCredits.available > 0
+                ? "Mantén capacidad lista para abrir perfiles cuando la señal lo justifique."
+                : "Activa más accesos para no quedarte en resúmenes cuando un candidato ya promete."}
+            </p>
+            <p className="mt-2 text-sm text-slate-600">
+              {active
+                ? "Plan, accesos y verificación documental ya se leen juntos desde esta pantalla."
+                : "Tu empresa puede seguir operando en básico, pero con menos contexto para decidir rápido."}
+            </p>
+          </div>
+        </div>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">

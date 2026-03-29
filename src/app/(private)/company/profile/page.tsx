@@ -654,13 +654,11 @@ export default function CompanyProfilePage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border border-slate-200 bg-white p-7 shadow-sm">
+      <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Perfil de empresa</h1>
-            <p className="mt-2 text-sm text-slate-600">
-              Completa tu estructura operativa para mejorar confianza, trazabilidad y calidad de verificación en VERIJOB.
-            </p>
+            <p className="mt-2 text-sm text-slate-600">Completa tu estructura operativa y deja claro qué hacer ahora para mejorar confianza y operativa.</p>
             <div className={`mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(reviewStatus)}`}>
               {statusLabel(reviewStatus)}
             </div>
@@ -900,83 +898,100 @@ export default function CompanyProfilePage() {
         </div>
       </Section>
 
-      <Section title="Verificación documental de empresa" subtitle="Sube documentación oficial para iniciar o reforzar la verificación de empresa.">
-        <div className={`rounded-xl border p-4 ${documentarySummary.tone}`}>
-          <p className="text-sm text-slate-700">
-            Estado actual:{" "}
-            <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(reviewStatus)}`}>
-              {statusLabel(reviewStatus)}
-            </span>
-          </p>
-          <p className="mt-3 text-sm font-semibold">{documentarySummary.title}</p>
-          <p className="mt-1 text-xs text-slate-600">{documentarySummary.detail}</p>
-          {profile?.company_document_latest_document_type ? (
-            <p className="mt-2 text-xs text-slate-600">
-              Documento recibido: {docTypeLabel(profile.company_document_latest_document_type)}
+      <Section title="Verificación documental de empresa" subtitle="Sube documentación oficial y sigue la revisión sin ruido técnico innecesario.">
+        <div className="grid gap-3 lg:grid-cols-[1.05fr_0.95fr]">
+          <div className={`rounded-2xl border p-4 ${documentarySummary.tone}`}>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Estado documental</p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass(reviewStatus)}`}>
+                {statusLabel(reviewStatus)}
+              </span>
+              {profile?.company_document_latest_document_type ? (
+                <span className="text-xs text-slate-600">
+                  {docTypeLabel(profile.company_document_latest_document_type)}
+                  {profile?.company_document_last_submitted_at
+                    ? ` · ${new Date(String(profile.company_document_last_submitted_at)).toLocaleDateString("es-ES")}`
+                    : ""}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-3 text-sm font-semibold">{documentarySummary.title}</p>
+            <p className="mt-1 text-sm text-slate-700">{documentarySummary.detail}</p>
+            <div className="mt-4 grid gap-2 md:grid-cols-3">
+              <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 text-xs text-slate-700">
+                <div className="font-semibold text-slate-900">Documentos activos</div>
+                <div className="mt-1">{activeDocuments.length}</div>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 text-xs text-slate-700">
+                <div className="font-semibold text-slate-900">Pendientes de revisión</div>
+                <div className="mt-1">{pendingDocumentsCount}</div>
+              </div>
+              <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 text-xs text-slate-700">
+                <div className="font-semibold text-slate-900">Con datos detectados</div>
+                <div className="mt-1">{documentsWithDetectedDataCount}</div>
+              </div>
+            </div>
+            {profile?.company_document_rejection_reason || profile?.verification_rejection_reason ? (
+              <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                Motivo de corrección: {profile.company_document_rejection_reason || profile.verification_rejection_reason}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="space-y-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Qué hacer ahora</p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">
+                {profile?.company_document_review_eta_label && (reviewStatus === "uploaded" || reviewStatus === "under_review")
+                  ? "Esperar revisión o preparar un reemplazo si aparece una incidencia."
+                  : activeDocuments.length > 0
+                    ? "Mantén el histórico limpio y revisa si falta contexto en el perfil empresa."
+                    : "Sube el primer documento para activar la revisión documental."}
+              </p>
+              <p className="mt-2 text-sm text-slate-600">
+                {profile?.company_document_review_eta_label && (reviewStatus === "uploaded" || reviewStatus === "under_review")
+                  ? `Tiempo estimado: ${String(profile.company_document_review_eta_label)}${profile?.company_document_review_priority_label ? ` · ${String(profile.company_document_review_priority_label)}` : ""}`
+                  : "Importar datos detectados ayuda a completar la ficha, pero no sustituye la validación documental."}
+              </p>
+              {(profile?.company_document_last_reviewed_at || profile?.verification_last_reviewed_at) ? (
+                <p className="mt-2 text-xs text-slate-500">
+                  Última revisión: {new Date(String(profile.company_document_last_reviewed_at || profile.verification_last_reviewed_at)).toLocaleDateString("es-ES")}
+                </p>
+              ) : null}
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Histórico</p>
+              <p className="mt-2 text-sm text-slate-600">Cada documento conserva estado, datos detectados y siguiente paso sin mezclarlo con la acción principal.</p>
+              <div className="mt-3 flex gap-2 text-xs text-slate-600">
+                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1">Activos: {activeDocuments.length}</span>
+                <span className="rounded-full border border-slate-200 bg-white px-2.5 py-1">Eliminados: {deletedDocuments}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 text-xs text-slate-700">
+            <div className="font-semibold text-slate-900">1. Documento recibido</div>
+            <div className="mt-1">
               {profile?.company_document_last_submitted_at
-                ? ` · enviado el ${new Date(String(profile.company_document_last_submitted_at)).toLocaleDateString("es-ES")}`
-                : ""}
-            </p>
-          ) : null}
-          {profile?.company_document_review_eta_label && (reviewStatus === "uploaded" || reviewStatus === "under_review") ? (
-            <p className="mt-2 text-xs text-slate-600">
-              Tiempo estimado de revisión según tu plan: {String(profile.company_document_review_eta_label)}
-              {profile?.company_document_review_priority_label ? ` · ${String(profile.company_document_review_priority_label)}` : ""}
-            </p>
-          ) : null}
-          <div className="mt-3 grid gap-2 md:grid-cols-3">
-            <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 text-xs text-slate-700">
-              <div className="font-semibold text-slate-900">Documentos activos</div>
-              <div className="mt-1">{activeDocuments.length}</div>
-            </div>
-            <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 text-xs text-slate-700">
-              <div className="font-semibold text-slate-900">Pendientes de revisión</div>
-              <div className="mt-1">{pendingDocumentsCount}</div>
-            </div>
-            <div className="rounded-xl border border-white/70 bg-white/80 px-3 py-3 text-xs text-slate-700">
-              <div className="font-semibold text-slate-900">Con datos detectados</div>
-              <div className="mt-1">{documentsWithDetectedDataCount}</div>
+                ? `Registrado el ${new Date(String(profile.company_document_last_submitted_at)).toLocaleDateString("es-ES")}`
+                : "Pendiente de primera subida"}
             </div>
           </div>
-          <p className="mt-3 text-xs text-slate-600">
-            La revisión documental no es instantánea. Importar datos detectados del archivo ayuda a completar la ficha, pero no valida por sí solo el tipo documental ni la empresa.
-          </p>
-          {profile?.company_document_rejection_reason || profile?.verification_rejection_reason ? (
-            <p className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-              Motivo de corrección: {profile.company_document_rejection_reason || profile.verification_rejection_reason}
-            </p>
-          ) : null}
-          {(profile?.company_document_last_reviewed_at || profile?.verification_last_reviewed_at) ? (
-            <p className="mt-2 text-xs text-slate-500">
-              Última revisión: {new Date(String(profile.company_document_last_reviewed_at || profile.verification_last_reviewed_at)).toLocaleDateString("es-ES")}
-            </p>
-          ) : null}
-          <div className="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
-            Verás por separado el estado del archivo, los datos detectados de forma orientativa y la siguiente acción recomendada en cada caso.
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
+            <div className="font-semibold text-slate-900">2. Revisión en curso</div>
+            <div className="mt-1">
+              {profile?.company_document_review_priority_label || "Cola estándar"}
+              {profile?.company_document_review_eta_label ? ` · ${String(profile.company_document_review_eta_label)}` : ""}
+            </div>
           </div>
-          <div className="mt-3 grid gap-2 md:grid-cols-3">
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
-              <div className="font-semibold text-slate-900">1. Documento recibido</div>
-              <div className="mt-1">
-                {profile?.company_document_last_submitted_at
-                  ? `Registrado el ${new Date(String(profile.company_document_last_submitted_at)).toLocaleDateString("es-ES")}`
-                  : "Pendiente de primera subida"}
-              </div>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
-              <div className="font-semibold text-slate-900">2. Revisión en curso</div>
-              <div className="mt-1">
-                {profile?.company_document_review_priority_label || "Cola estándar"}
-                {profile?.company_document_review_eta_label ? ` · ${String(profile.company_document_review_eta_label)}` : ""}
-              </div>
-            </div>
-            <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
-              <div className="font-semibold text-slate-900">3. Resolución visible</div>
-              <div className="mt-1">
-                {(profile?.company_document_last_reviewed_at || profile?.verification_last_reviewed_at)
-                  ? `Actualizada el ${new Date(String(profile.company_document_last_reviewed_at || profile.verification_last_reviewed_at)).toLocaleDateString("es-ES")}`
-                  : "Se mostrará aquí cuando termine la revisión"}
-              </div>
+          <div className="rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs text-slate-600">
+            <div className="font-semibold text-slate-900">3. Resolución visible</div>
+            <div className="mt-1">
+              {(profile?.company_document_last_reviewed_at || profile?.verification_last_reviewed_at)
+                ? `Actualizada el ${new Date(String(profile.company_document_last_reviewed_at || profile.verification_last_reviewed_at)).toLocaleDateString("es-ES")}`
+                : "Se mostrará aquí cuando termine la revisión"}
             </div>
           </div>
         </div>
