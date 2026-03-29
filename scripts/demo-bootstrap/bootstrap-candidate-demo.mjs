@@ -20,6 +20,14 @@ import {
 } from "./_shared.mjs";
 
 const STORAGE_PATH = path.join(AUTH_DIR, "candidate-demo.json");
+const EXPERIENCE_ROLE_PATTERNS = [/^puesto$/i, /^cargo$/i, /^job title$/i, /puesto/i, /cargo/i, /job title/i];
+const EXPERIENCE_COMPANY_PATTERNS = [/^empresa$/i, /^compa[nñ][ií]a$/i, /^company$/i, /empresa/i, /company/i];
+const EXPERIENCE_START_PATTERNS = [/^fecha inicio$/i, /^inicio$/i, /^start date$/i, /fecha.*inicio/i, /start date/i];
+const EXPERIENCE_END_PATTERNS = [/^fecha fin$/i, /^fin$/i, /^end date$/i, /fecha.*fin/i, /end date/i];
+const EXPERIENCE_DESCRIPTION_PATTERNS = [/descripci[oó]n breve/i, /^descripci[oó]n$/i, /^summary$/i, /^description$/i];
+const EXPERIENCE_CURRENT_PATTERNS = [/trabajo actualmente aqu[ií]/i, /actualmente/i, /current/i, /present/i];
+const EXPERIENCE_ADD_BUTTON_PATTERNS = [/a[nñ]adir experiencia/i, /nueva experiencia/i, /add experience/i];
+const EXPERIENCE_SAVE_BUTTON_PATTERNS = [/guardar experiencia/i, /guardar/i, /save experience/i, /save/i];
 
 async function isCandidateSessionValid(page) {
   const pathname = new URL(page.url()).pathname;
@@ -65,34 +73,184 @@ async function ensureCandidateProfileSeed(page) {
   }
 }
 
+async function findInputByPatterns(page, patterns, options = {}) {
+  const inputTypes = options.textarea ? "textarea" : 'input, textarea';
+
+  for (const pattern of patterns) {
+    const label = page.locator("label").filter({ hasText: pattern }).first();
+    if ((await label.count()) > 0) {
+      const field = label.locator(inputTypes).first();
+      if ((await field.count()) > 0 && (await field.isVisible().catch(() => false))) {
+        return field;
+      }
+    }
+  }
+
+  for (const pattern of patterns) {
+    const byLabel = page.getByLabel(pattern).first();
+    if ((await byLabel.count()) > 0 && (await byLabel.isVisible().catch(() => false))) {
+      return byLabel;
+    }
+  }
+
+  const placeholders = [
+    ...patterns,
+    /empresa/i,
+    /company/i,
+    /puesto/i,
+    /cargo/i,
+    /job title/i,
+    /aaaa-mm/i,
+  ];
+
+  for (const pattern of placeholders) {
+    const byPlaceholder = page.getByPlaceholder(pattern).first();
+    if ((await byPlaceholder.count()) > 0 && (await byPlaceholder.isVisible().catch(() => false))) {
+      return byPlaceholder;
+    }
+  }
+
+  const genericSelectors = options.textarea
+    ? ["textarea[name*='description' i]", "textarea[id*='description' i]", "textarea"]
+    : [
+        "input[name*='role' i]",
+        "input[name*='title' i]",
+        "input[name*='puesto' i]",
+        "input[name*='cargo' i]",
+        "input[id*='role' i]",
+        "input[id*='title' i]",
+        "input[id*='puesto' i]",
+        "input[id*='cargo' i]",
+        "input[name*='company' i]",
+        "input[name*='empresa' i]",
+        "input[id*='company' i]",
+        "input[id*='empresa' i]",
+        "input",
+      ];
+
+  for (const selector of genericSelectors) {
+    const field = page.locator(selector).first();
+    if ((await field.count()) > 0 && (await field.isVisible().catch(() => false))) {
+      return field;
+    }
+  }
+
+  return null;
+}
+
+async function clickFirstMatchingButton(page, patterns) {
+  for (const pattern of patterns) {
+    const button = page.getByRole("button", { name: pattern }).first();
+    if ((await button.count()) === 0) continue;
+    const visible = await button.isVisible().catch(() => false);
+    if (!visible) continue;
+    await button.click({ timeout: 4_000 }).catch(() => null);
+    return true;
+  }
+  return false;
+}
+
+async function hasExperienceCard(page, experience) {
+  const roleVisible = await page.getByText(experience.roleTitle, { exact: false }).first().isVisible().catch(() => false);
+  const companyVisible = await page.getByText(experience.companyName, { exact: false }).first().isVisible().catch(() => false);
+  if (roleVisible && companyVisible) return true;
+
+  const combinedVisible = await page
+    .getByText(new RegExp(`${experience.roleTitle}.*${experience.companyName}|${experience.companyName}.*${experience.roleTitle}`, "i"))
+    .first()
+    .isVisible()
+    .catch(() => false);
+  return combinedVisible;
+}
+
+async function openExperienceForm(page) {
+  await clickFirstMatchingButton(page, EXPERIENCE_ADD_BUTTON_PATTERNS);
+
+  const roleField =
+    (await findInputByPatterns(page, EXPERIENCE_ROLE_PATTERNS)) ||
+    (await findInputByPatterns(page, EXPERIENCE_COMPANY_PATTERNS));
+
+  return roleField;
+}
+
+async function seedSingleExperience(page, experience) {
+  const roleField = await openExperienceForm(page);
+  if (!roleField) return false;
+
+  const companyField = await findInputByPatterns(page, EXPERIENCE_COMPANY_PATTERNS);
+  const startField = await findInputByPatterns(page, EXPERIENCE_START_PATTERNS);
+  const endField = await findInputByPatterns(page, EXPERIENCE_END_PATTERNS);
+  const descriptionField = await findInputByPatterns(page, EXPERIENCE_DESCRIPTION_PATTERNS, { textarea: true });
+
+  if (!companyField || !startField) {
+    return false;
+  }
+
+  await roleField.fill(experience.roleTitle);
+  await companyField.fill(experience.companyName);
+  await startField.fill(experience.startDate);
+
+  if (experience.isCurrent) {
+    for (const pattern of EXPERIENCE_CURRENT_PATTERNS) {
+      const checkbox = page.getByLabel(pattern).first();
+      if ((await checkbox.count()) > 0) {
+        await checkbox.check().catch(() => null);
+        break;
+      }
+
+      const toggleText = page.getByText(pattern, { exact: false }).first();
+      if ((await toggleText.count()) > 0) {
+        await toggleText.click().catch(() => null);
+        break;
+      }
+    }
+  } else if (endField) {
+    await endField.fill(experience.endDate);
+  }
+
+  if (descriptionField) {
+    await descriptionField.fill(experience.description);
+  }
+
+  const saved = await clickFirstMatchingButton(page, EXPERIENCE_SAVE_BUTTON_PATTERNS);
+  if (!saved) return false;
+
+  await page.waitForTimeout(1_500);
+  return hasExperienceCard(page, experience);
+}
+
 async function ensureExperienceRows(page) {
-  await page.goto(`${APP_URL}/candidate/experience?new=1#manual-experience`, {
-    waitUntil: "networkidle",
-  });
+  try {
+    await page.goto(`${APP_URL}/candidate/experience?new=1#manual-experience`, {
+      waitUntil: "networkidle",
+    });
 
-  for (const experience of CANDIDATE_DEMO.experiences) {
-    const experienceSignature = `${experience.roleTitle} ${experience.companyName}`;
-    const alreadyVisible = await page.getByText(experienceSignature, { exact: false }).first().isVisible().catch(() => false);
-    if (alreadyVisible) continue;
-
-    await page.getByRole("button", { name: /a[nñ]adir experiencia/i }).click().catch(() => null);
-    await page.getByText("Puesto", { exact: true }).waitFor({ timeout: 10_000 });
-
-    await page.locator("label").filter({ hasText: /^Puesto$/ }).locator("input").fill(experience.roleTitle);
-    await page.locator("label").filter({ hasText: /^Empresa$/ }).locator("input").fill(experience.companyName);
-    await page.locator("label").filter({ hasText: /^Fecha inicio$/ }).locator("input").fill(experience.startDate);
-
-    if (experience.isCurrent) {
-      await page.getByLabel(/trabajo actualmente aqu[ií]/i).check().catch(async () => {
-        await page.getByText(/trabajo actualmente aqu[ií]/i).click();
-      });
-    } else {
-      await page.locator("label").filter({ hasText: /^Fecha fin$/ }).locator("input").fill(experience.endDate);
+    const existingCount = await Promise.all(CANDIDATE_DEMO.experiences.map((experience) => hasExperienceCard(page, experience)));
+    const existingEnough = existingCount.filter(Boolean).length >= CANDIDATE_DEMO.experiences.length;
+    if (existingEnough) {
+      console.log("[demo-bootstrap] Las experiencias demo ya existen. No se duplican.");
+      return;
     }
 
-    await page.locator("label").filter({ hasText: /Descripci[oó]n breve/i }).locator("textarea").fill(experience.description);
-    await page.getByRole("button", { name: /guardar experiencia/i }).click();
-    await waitForText(page, "Experiencia guardada correctamente.", 20_000);
+    for (const experience of CANDIDATE_DEMO.experiences) {
+      const alreadyVisible = await hasExperienceCard(page, experience);
+      if (alreadyVisible) {
+        console.log(`[demo-bootstrap] Experiencia ya presente: ${experience.roleTitle} @ ${experience.companyName}`);
+        continue;
+      }
+
+      const created = await seedSingleExperience(page, experience);
+      if (!created) {
+        console.warn("[demo-bootstrap] No pude sembrar experiencias por selector no compatible con la UI actual.");
+        console.warn(`[demo-bootstrap] Continúo sin bloquear el bootstrap. Experiencia pendiente: ${experience.roleTitle} @ ${experience.companyName}`);
+        return;
+      }
+
+      await waitForText(page, experience.roleTitle, 10_000).catch(() => null);
+    }
+  } catch (error) {
+    console.warn("[demo-bootstrap] No pude sembrar experiencias por selector no compatible con la UI actual.");
+    console.warn(`[demo-bootstrap] Continúo sin bloquear el bootstrap: ${String(error?.message || error)}`);
   }
 }
 
