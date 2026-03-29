@@ -28,6 +28,24 @@ const EXPERIENCE_DESCRIPTION_PATTERNS = [/descripci[oó]n breve/i, /^descripci[o
 const EXPERIENCE_CURRENT_PATTERNS = [/trabajo actualmente aqu[ií]/i, /actualmente/i, /current/i, /present/i];
 const EXPERIENCE_ADD_BUTTON_PATTERNS = [/a[nñ]adir experiencia/i, /nueva experiencia/i, /add experience/i];
 const EXPERIENCE_SAVE_BUTTON_PATTERNS = [/guardar experiencia/i, /guardar/i, /save experience/i, /save/i];
+const CV_OPEN_PATTERNS = [
+  /importar cv/i,
+  /subir cv/i,
+  /a[nñ]adir cv/i,
+  /cargar cv/i,
+  /upload cv/i,
+  /upload resume/i,
+  /import resume/i,
+  /extraer perfil desde cv/i,
+];
+const CV_ALREADY_PRESENT_PATTERNS = [
+  /importaci[oó]n completada/i,
+  /estado:/i,
+  /id del proceso/i,
+  /experiencias laborales detectadas/i,
+  /formaci[oó]n acad[eé]mica detectada/i,
+];
+const CV_SUBMIT_PATTERNS = [/extraer perfil desde cv/i, /subiendo/i, /procesando/i, /analizar cv/i];
 
 async function isCandidateSessionValid(page) {
   const pathname = new URL(page.url()).pathname;
@@ -254,6 +272,67 @@ async function ensureExperienceRows(page) {
   }
 }
 
+async function openCvUploaderFlow(page) {
+  for (const pattern of CV_OPEN_PATTERNS) {
+    const button = page.getByRole("button", { name: pattern }).first();
+    if ((await button.count()) > 0) {
+      const visible = await button.isVisible().catch(() => false);
+      if (visible) {
+        await button.click({ timeout: 4_000 }).catch(() => null);
+        await page.waitForTimeout(800);
+      }
+    }
+
+    const link = page.getByRole("link", { name: pattern }).first();
+    if ((await link.count()) > 0) {
+      const visible = await link.isVisible().catch(() => false);
+      if (visible) {
+        await link.click({ timeout: 4_000 }).catch(() => null);
+        await page.waitForTimeout(800);
+      }
+    }
+
+    const textNode = page.getByText(pattern, { exact: false }).first();
+    if ((await textNode.count()) > 0) {
+      const visible = await textNode.isVisible().catch(() => false);
+      if (visible) {
+        await textNode.click({ timeout: 4_000 }).catch(() => null);
+        await page.waitForTimeout(800);
+      }
+    }
+  }
+}
+
+async function hasCvAlreadyImported(page) {
+  for (const pattern of CV_ALREADY_PRESENT_PATTERNS) {
+    const visible = await page.getByText(pattern, { exact: false }).first().isVisible().catch(() => false);
+    if (visible) return true;
+  }
+  return false;
+}
+
+async function findCvFileInput(page) {
+  const selectors = [
+    'input[type="file"][accept*=".pdf"]',
+    'input[type="file"][accept*="application/pdf"]',
+    'input[type="file"][accept*=".docx"]',
+    'input[type="file"]',
+  ];
+
+  for (const selector of selectors) {
+    const locator = page.locator(selector);
+    const count = await locator.count().catch(() => 0);
+    for (let index = 0; index < count; index += 1) {
+      const candidate = locator.nth(index);
+      const attached = await candidate.isAttached().catch(() => false);
+      if (!attached) continue;
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
 async function uploadCandidateCvIfPresent(page, assetMap) {
   const cv = assetMap.get("candidate-cv-demo.pdf");
   if (!cv?.exists) {
@@ -261,11 +340,36 @@ async function uploadCandidateCvIfPresent(page, assetMap) {
     return;
   }
 
-  await page.goto(`${APP_URL}/candidate/experience#cv-upload`, { waitUntil: "networkidle" });
-  const input = page.locator('input[type="file"]').first();
-  await input.setInputFiles(cv.path);
-  await page.getByRole("button", { name: /extraer perfil desde cv/i }).click();
-  await page.waitForTimeout(2_000);
+  try {
+    await page.goto(`${APP_URL}/candidate/experience#cv-upload`, { waitUntil: "networkidle" });
+
+    if (await hasCvAlreadyImported(page)) {
+      console.log("[demo-bootstrap] El CV ya parece estar cargado o en proceso. No se duplica la subida.");
+      return;
+    }
+
+    await openCvUploaderFlow(page);
+    let input = await findCvFileInput(page);
+
+    if (!input) {
+      await page.waitForTimeout(1_500);
+      await openCvUploaderFlow(page);
+      input = await findCvFileInput(page);
+    }
+
+    if (!input) {
+      console.warn("[demo-bootstrap] No pude subir candidate-cv-demo.pdf por selector/upload flow no compatible con la UI actual.");
+      return;
+    }
+
+    await input.setInputFiles(cv.path, { timeout: 8_000 });
+
+    await clickFirstMatchingButton(page, CV_SUBMIT_PATTERNS).catch(() => null);
+    await page.waitForTimeout(2_000);
+  } catch (error) {
+    console.warn("[demo-bootstrap] No pude subir candidate-cv-demo.pdf por selector/upload flow no compatible con la UI actual.");
+    console.warn(`[demo-bootstrap] Continúo sin bloquear el bootstrap: ${String(error?.message || error)}`);
+  }
 }
 
 async function uploadCandidateEvidenceIfPresent(page, assetMap) {
