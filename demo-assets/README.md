@@ -13,4 +13,4 @@ Recomendaciones:
 
 - Usa solo datos ficticios o anonimizados.
 - No subas DNI reales ni informacion sensible de terceros.
-- Manten PDFs ligeros y legibles para demos y grabaciones.
+- Mantén PDFs ligeros y legibles para demos y grabaciones.

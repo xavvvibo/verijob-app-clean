@@ -3,6 +3,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
+import readline from "node:readline/promises";
+import { stdin as input, stdout as output } from "node:process";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -197,6 +199,16 @@ export async function ensureLoggedOut(page) {
   await page.goto(`${APP_URL}/login`, { waitUntil: "domcontentloaded" });
 }
 
+const AUTH_BUTTON_PATTERNS = [
+  /enviar c[oó]digo/i,
+  /continuar con email/i,
+  /continuar/i,
+  /seguir/i,
+  /acceder/i,
+  /entrar/i,
+  /enviar/i,
+];
+
 async function clickIfVisible(page, selector) {
   const locator = page.locator(selector).first();
   if ((await locator.count()) > 0) {
@@ -204,6 +216,59 @@ async function clickIfVisible(page, selector) {
     return true;
   }
   return false;
+}
+
+async function waitForOtpInput(page, timeout = 4_000) {
+  try {
+    await page.getByPlaceholder("123456").waitFor({ state: "visible", timeout });
+    console.log("[demo-bootstrap] OTP detectado, continuando...");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function promptManualOtpStep() {
+  console.warn("[demo-bootstrap] No encontré botón compatible. Continúa manualmente en el navegador.");
+  console.warn("[demo-bootstrap] Cuando aparezca el campo OTP, vuelve a Terminal y pulsa ENTER.");
+
+  if (!input.isTTY || !output.isTTY) return;
+
+  const rl = readline.createInterface({ input, output });
+  try {
+    await rl.question("");
+  } finally {
+    rl.close();
+  }
+}
+
+async function triggerAuthContinue(page) {
+  console.log("[demo-bootstrap] Intentando flujo automático de auth...");
+
+  for (const pattern of AUTH_BUTTON_PATTERNS) {
+    const button = page.getByRole("button", { name: pattern }).first();
+    if ((await button.count()) === 0) continue;
+    const visible = await button.isVisible().catch(() => false);
+    if (!visible) continue;
+
+    try {
+      await button.click({ timeout: 3_000 });
+      return { clicked: true, pattern: String(pattern) };
+    } catch {}
+  }
+
+  return { clicked: false, pattern: null };
+}
+
+async function submitAuthScreen(page) {
+  const automatic = await triggerAuthContinue(page);
+  if (automatic.clicked) {
+    const otpVisible = await waitForOtpInput(page, 5_000);
+    if (otpVisible) return true;
+  }
+
+  await promptManualOtpStep();
+  return waitForOtpInput(page, 2_000);
 }
 
 export async function startAuthFlow(page, { role, email, nextPath }) {
@@ -215,16 +280,15 @@ export async function startAuthFlow(page, { role, email, nextPath }) {
   await clickIfVisible(page, `button:has-text("${role === "company" ? "Empresa" : "Candidato"}")`);
 
   await page.getByPlaceholder("tu@email.com").fill(email);
-  await page.getByRole("button", { name: /enviar c[oó]digo/i }).click();
+  const signupReachedOtp = await submitAuthScreen(page);
 
-  const otpVisible = await page.getByPlaceholder("123456").isVisible().catch(() => false);
-  if (!otpVisible) {
+  if (!signupReachedOtp) {
     const loginUrl = new URL(`${APP_URL}/login`);
     loginUrl.searchParams.set("mode", role);
     if (nextPath) loginUrl.searchParams.set("next", nextPath);
     await page.goto(loginUrl.toString(), { waitUntil: "networkidle" });
     await page.getByPlaceholder("tu@email.com").fill(email);
-    await page.getByRole("button", { name: /enviar c[oó]digo/i }).click();
+    await submitAuthScreen(page);
   }
 }
 
