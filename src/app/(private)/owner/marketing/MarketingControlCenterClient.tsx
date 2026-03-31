@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import OwnerModuleHeader, { OwnerProcessBadge } from "@/components/owner/OwnerModuleHeader";
 import OwnerTooltip from "@/components/ui/OwnerTooltip";
+import { marketingBuilderMeta, marketingFlowMeta, marketingHistoryMeta, resolvePromoMeta } from "@/lib/owner/owner-ui-metadata";
 
 type PromoCode = {
   id: string;
@@ -116,6 +118,10 @@ export default function MarketingControlCenterClient() {
     return { redemptions, activePromos, nextExpiry };
   }, [promoCodes]);
 
+  const builderMeta = marketingBuilderMeta(savingPromo);
+  const flowMeta = marketingFlowMeta();
+  const historyMeta = marketingHistoryMeta(promoCodes.length > 0);
+
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -139,7 +145,23 @@ export default function MarketingControlCenterClient() {
       </p>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-semibold text-slate-900">Crear promoción</h2>
+        <OwnerModuleHeader
+          title={builderMeta.title}
+          helperText={builderMeta.helperText}
+          processState={builderMeta.processState}
+          nextStep={builderMeta.nextStep}
+          stateLabel={builderMeta.stateLabel}
+        />
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">{flowMeta.title}</p>
+              <p className="mt-1 text-sm text-slate-600">{flowMeta.helperText}</p>
+              <p className="mt-1 text-xs text-slate-500">Siguiente paso: activar el incentivo para {promoForm.target_type} y validar la difusión.</p>
+            </div>
+            <OwnerProcessBadge processState={savingPromo ? "working" : "active"} label={savingPromo ? "Trabajando" : "Activa al crear"} />
+          </div>
+        </div>
         <form className="mt-4 grid gap-6 md:grid-cols-2" onSubmit={createPromo}>
           <SelectField label="Objetivo" value={promoForm.target_type} onChange={(v) => setPromoForm((s) => ({ ...s, target_type: v }))} options={targetOptions} />
           <SelectField label="Beneficio" value={promoForm.benefit_type} onChange={(v) => setPromoForm((s) => ({ ...s, benefit_type: v }))} options={benefitOptions} />
@@ -159,7 +181,12 @@ export default function MarketingControlCenterClient() {
       </section>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-2xl font-semibold text-slate-900">Historial de campañas promocionales</h2>
+        <OwnerModuleHeader
+          title={historyMeta.title}
+          helperText={historyMeta.helperText}
+          processState={historyMeta.processState}
+          nextStep={historyMeta.nextStep}
+        />
         {loading ? (
           <p className="mt-4 text-sm text-slate-600">Cargando promociones...</p>
         ) : promoCodes.length === 0 ? (
@@ -181,17 +208,26 @@ export default function MarketingControlCenterClient() {
                 </tr>
               </thead>
               <tbody>
-                {promoCodes.map((promo) => (
-                  <tr key={promo.id} className="border-b border-slate-100">
-                    <td className="px-3 py-2 text-slate-700">{new Date(promo.created_at).toLocaleDateString("es-ES")}</td>
-                    <td className="px-3 py-2 text-slate-700">{promo.target_type}</td>
-                    <td className="px-3 py-2 text-slate-700">{promo.benefit_type}</td>
-                    <td className="px-3 py-2 text-slate-700">{promo.expires_at ? new Date(promo.expires_at).toLocaleDateString("es-ES") : "Sin caducidad"}</td>
-                    <td className="px-3 py-2 text-slate-700">{promo.max_redemptions ?? "∞"}</td>
-                    <td className="px-3 py-2 text-slate-700">{promo.current_redemptions}</td>
-                    <td className="px-3 py-2 text-slate-700">{promo.is_active ? "Activa" : "Inactiva"}</td>
-                  </tr>
-                ))}
+                {promoCodes.map((promo) => {
+                  const promoMeta = resolvePromoMeta(promo);
+                  return (
+                    <tr key={promo.id} className="border-b border-slate-100 align-top">
+                      <td className="px-3 py-2 text-slate-700">{new Date(promo.created_at).toLocaleDateString("es-ES")}</td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-slate-900">{promo.target_type}</div>
+                        <div className="mt-1 max-w-md text-xs text-slate-500">{promoMeta.helperText}</div>
+                        {promoMeta.nextStep ? <div className="mt-1 text-[11px] text-slate-400">Siguiente paso: {promoMeta.nextStep}</div> : null}
+                      </td>
+                      <td className="px-3 py-2 text-slate-700">{promo.benefit_type}</td>
+                      <td className="px-3 py-2 text-slate-700">{promo.expires_at ? new Date(promo.expires_at).toLocaleDateString("es-ES") : "Sin caducidad"}</td>
+                      <td className="px-3 py-2 text-slate-700">{promo.max_redemptions ?? "∞"}</td>
+                      <td className="px-3 py-2 text-slate-700">{promo.current_redemptions}</td>
+                      <td className="px-3 py-2">
+                        <OwnerProcessBadge processState={promoMeta.processState} label={promoMeta.stateLabel} />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

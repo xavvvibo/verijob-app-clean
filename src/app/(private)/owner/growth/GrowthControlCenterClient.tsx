@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import OwnerModuleHeader, { OwnerProcessBadge } from "@/components/owner/OwnerModuleHeader";
 import OwnerTooltip from "@/components/ui/OwnerTooltip";
+import { growthBuilderMeta, growthHistoryMeta, growthObjectiveFlow, resolveGrowthCampaignMeta } from "@/lib/owner/owner-ui-metadata";
 
 type Campaign = {
   id: string;
@@ -12,6 +14,7 @@ type Campaign = {
   channel: string;
   message_style: string;
   status: string;
+  execution_status?: string | null;
   created_at: string;
   leads_discovered: number;
   contacts_found: number;
@@ -145,6 +148,10 @@ export default function GrowthControlCenterClient() {
     );
   }, [campaigns]);
 
+  const builderMeta = growthBuilderMeta(saving);
+  const historyMeta = growthHistoryMeta(campaigns.length > 0);
+  const objectiveFlow = growthObjectiveFlow(form.objective, form.channel);
+
   return (
     <div className="space-y-6">
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -156,7 +163,15 @@ export default function GrowthControlCenterClient() {
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-2xl font-semibold text-slate-900">Constructor de campañas</h2>
+          <div className="min-w-[260px] flex-1">
+            <OwnerModuleHeader
+              title={builderMeta.title}
+              helperText={builderMeta.helperText}
+              processState={builderMeta.processState}
+              nextStep={builderMeta.nextStep}
+              stateLabel={builderMeta.stateLabel}
+            />
+          </div>
           <button
             type="button"
             onClick={(e) => {
@@ -168,6 +183,17 @@ export default function GrowthControlCenterClient() {
           >
             {saving ? "Creando..." : "Crear campaña"}
           </button>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-slate-900">{form.objective}</p>
+              <p className="mt-1 text-sm text-slate-600">{objectiveFlow}</p>
+              <p className="mt-1 text-xs text-slate-500">Siguiente paso: lanzar el canal {form.channel} con el mensaje base seleccionado.</p>
+            </div>
+            <OwnerProcessBadge processState={builderMeta.processState} label={builderMeta.stateLabel} />
+          </div>
         </div>
 
         <form className="mt-4 grid gap-6 md:grid-cols-2" onSubmit={onCreateCampaign}>
@@ -194,7 +220,12 @@ export default function GrowthControlCenterClient() {
       </p>
 
       <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-        <h3 className="text-2xl font-semibold text-slate-900">Historial de campañas</h3>
+        <OwnerModuleHeader
+          title={historyMeta.title}
+          helperText={historyMeta.helperText}
+          processState={historyMeta.processState}
+          nextStep={historyMeta.nextStep}
+        />
         {loading ? (
           <p className="mt-4 text-sm text-slate-600">Cargando histórico...</p>
         ) : campaigns.length === 0 ? (
@@ -207,26 +238,39 @@ export default function GrowthControlCenterClient() {
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-3 py-2">Fecha</th>
+                  <th className="px-3 py-2">Objetivo</th>
                   <th className="px-3 py-2">Sector</th>
                   <th className="px-3 py-2">Ubicación</th>
                   <th className="px-3 py-2">Canal</th>
                   <th className="px-3 py-2">Leads</th>
                   <th className="px-3 py-2">Respuestas</th>
                   <th className="px-3 py-2">Demos</th>
+                  <th className="px-3 py-2">Estado</th>
                 </tr>
               </thead>
               <tbody>
-                {campaigns.map((campaign) => (
-                  <tr key={campaign.id} className="border-b border-slate-100">
-                    <td className="px-3 py-2 text-slate-700">{new Date(campaign.created_at).toLocaleDateString("es-ES")}</td>
-                    <td className="px-3 py-2 text-slate-700">{campaign.sector}</td>
-                    <td className="px-3 py-2 text-slate-700">{campaign.location_value || campaign.location_scope}</td>
-                    <td className="px-3 py-2 text-slate-700">{campaign.channel}</td>
-                    <td className="px-3 py-2 text-slate-700">{campaign.leads_discovered || 0}</td>
-                    <td className="px-3 py-2 text-slate-700">{campaign.replies_count || 0}</td>
-                    <td className="px-3 py-2 text-slate-700">{campaign.demos_count || 0}</td>
-                  </tr>
-                ))}
+                {campaigns.map((campaign) => {
+                  const campaignMeta = resolveGrowthCampaignMeta(campaign);
+                  return (
+                    <tr key={campaign.id} className="border-b border-slate-100 align-top">
+                      <td className="px-3 py-2 text-slate-700">{new Date(campaign.created_at).toLocaleDateString("es-ES")}</td>
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-slate-900">{campaign.objective}</div>
+                        <div className="mt-1 max-w-md text-xs text-slate-500">{campaignMeta.helperText}</div>
+                        {campaignMeta.nextStep ? <div className="mt-1 text-[11px] text-slate-400">Siguiente paso: {campaignMeta.nextStep}</div> : null}
+                      </td>
+                      <td className="px-3 py-2 text-slate-700">{campaign.sector}</td>
+                      <td className="px-3 py-2 text-slate-700">{campaign.location_value || campaign.location_scope}</td>
+                      <td className="px-3 py-2 text-slate-700">{campaign.channel}</td>
+                      <td className="px-3 py-2 text-slate-700">{campaign.leads_discovered || 0}</td>
+                      <td className="px-3 py-2 text-slate-700">{campaign.replies_count || 0}</td>
+                      <td className="px-3 py-2 text-slate-700">{campaign.demos_count || 0}</td>
+                      <td className="px-3 py-2">
+                        <OwnerProcessBadge processState={campaignMeta.processState} label={campaignMeta.stateLabel} />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

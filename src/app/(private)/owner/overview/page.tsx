@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import type { ReactNode } from "react";
+import OwnerModuleHeader from "@/components/owner/OwnerModuleHeader";
 import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { conversionStateLabel, loadVerificationCompanyAcquisition, subscriptionStateLabel } from "@/lib/owner/verification-company-acquisition";
+import type { OwnerProcessState } from "@/lib/owner/owner-ui-metadata";
 import { isMissingExternalResolvedColumn } from "@/lib/verification/external-resolution";
 import OwnerTooltip from "@/components/ui/OwnerTooltip";
 
@@ -55,18 +57,27 @@ function MetricCard({
 function Section({
   title,
   subtitle,
+  processState,
+  nextStep,
+  stateLabel,
   children,
 }: {
   title: string;
   subtitle: string;
+  processState?: OwnerProcessState;
+  nextStep?: string;
+  stateLabel?: string;
   children: ReactNode;
 }) {
   return (
     <section className="space-y-3">
-      <div>
-        <h2 className="text-xl font-semibold text-slate-900">{title}</h2>
-        <p className="text-sm text-slate-600">{subtitle}</p>
-      </div>
+      <OwnerModuleHeader
+        title={title}
+        helperText={subtitle}
+        processState={processState || "working"}
+        nextStep={nextStep}
+        stateLabel={stateLabel}
+      />
       {children}
     </section>
   );
@@ -920,7 +931,9 @@ async function OwnerOverviewServer({
 
       <Section
         title="Estado global del sistema"
-        subtitle="Semáforo rápido para detectar qué requiere acción inmediata."
+        subtitle="Resume la salud operativa del sistema y te ayuda a detectar incidencias, crecimiento y monetización en un solo panel."
+        processState={globalSystemLevel === "critical" ? "failed" : globalSystemLevel === "warning" ? "waiting_action" : "completed"}
+        nextStep={globalSystemLevel === "ok" ? "Mantener vigilancia sobre jobs, incidencias y cola de verificación." : "Prioriza el bloque con señal crítica antes de continuar con tareas no urgentes."}
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <GlobalSignalCard
@@ -946,7 +959,12 @@ async function OwnerOverviewServer({
         </div>
       </Section>
 
-      <Section title="Métricas clave" subtitle={`Estado del negocio para ${rangeLabel}, manteniendo MRR como foto actual.`}>
+      <Section
+        title="Métricas clave"
+        subtitle="Resume el estado actual del negocio, producto y actividad operativa."
+        processState="working"
+        nextStep={`Revisa la variación de actividad y altas frente al periodo anterior de ${rangeLabel}.`}
+      >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard
             title={<span className="inline-flex items-center gap-2">Perfiles activos ({rangeLabel}) <OwnerTooltip text="Perfiles con señal de actividad en el rango activo según last_activity_at." /></span>}
@@ -976,7 +994,9 @@ async function OwnerOverviewServer({
 
       <Section
         title="Actividad de hoy"
-        subtitle="Pulso operativo diario sin estimaciones artificiales de presencia live."
+        subtitle="Concentra la actividad diaria para validar tracción y carga operativa real."
+        processState={todayEventsTotal > 0 ? "working" : "draft"}
+        nextStep={todayEventsTotal > 0 ? "Contrasta usuarios, empresas y eventos para detectar desbalance diario." : "Esperar nueva actividad registrada para consolidar el pulso del día."}
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <MetricCard title="Nuevos usuarios hoy" value={String(usersCreatedToday)} />
@@ -989,7 +1009,9 @@ async function OwnerOverviewServer({
 
       <Section
         title="Embudo de activación"
-        subtitle={`Cohorte de candidatos registrados en ${rangeLabel} y su estado actual dentro del funnel.`}
+        subtitle="Muestra el paso de usuario activo a conversión para detectar bloqueos."
+        processState={funnelStepRegistros === 0 ? "draft" : verifiedRate >= 40 ? "working" : "waiting_action"}
+        nextStep="Revisa el primer tramo con caída fuerte antes de empujar más adquisición."
       >
         <FunnelVisual
           steps={[
@@ -1040,7 +1062,9 @@ async function OwnerOverviewServer({
 
       <Section
         title="Distribución de confianza"
-        subtitle="Lectura rápida de salud del Trust Score en la base de candidatos."
+        subtitle="Resume cómo evoluciona la confianza verificada dentro de la base de candidatos."
+        processState={trustInVerification > trustHigh ? "waiting_action" : "working"}
+        nextStep="Prioriza cohortes con baja confianza y alto potencial de verificación."
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard title="Alta confianza (>80)" value={String(trustHigh)} note={`Sobre ${candidatesTotal} candidatos`} />
@@ -1052,7 +1076,9 @@ async function OwnerOverviewServer({
 
       <Section
         title="Resumen de crecimiento"
-        subtitle={`Salida operativa agregada de campañas creadas en ${rangeLabel}.`}
+        subtitle="Resume la salida comercial del flujo de captación y seguimiento activo."
+        processState={activeCampaigns > 0 ? "working" : "draft"}
+        nextStep={activeCampaigns > 0 ? "Convierte respuestas y demos en siguiente acción comercial." : "Activa campañas nuevas si quieres mover el embudo comercial."}
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <MetricCard title="Leads descubiertos" value={String(growthTotals.leads)} note={`Campañas creadas en ${rangeLabel}`} />
@@ -1065,7 +1091,9 @@ async function OwnerOverviewServer({
 
       <Section
         title="Evolución de verificaciones por semana"
-        subtitle="Comparativa semanal de solicitudes y verificaciones cerradas en estado aprobada."
+        subtitle="Muestra la secuencia de solicitud a resolución para detectar cuellos de botella."
+        processState={weeklyRequested.some((value) => value > 0) ? "working" : "draft"}
+        nextStep="Compara el ritmo de entrada frente al cierre semanal para detectar acumulación."
       >
         <WeeklyVerificationChart
           labels={weeklyLabels}
@@ -1077,7 +1105,9 @@ async function OwnerOverviewServer({
       <div className="grid gap-6 xl:grid-cols-2">
         <Section
           title="Operaciones diarias"
-          subtitle="Foto actual de backlog y operación. Este bloque no se reescala con el rango para no mezclar inventario con flujo."
+          subtitle="Centraliza tareas que requieren revisión o seguimiento inmediato."
+          processState={pendingVerifications > 0 || openIssues > 0 ? "waiting_action" : "completed"}
+          nextStep="Ataca primero borradores, esperas de empresa e incidencias abiertas."
         >
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <MetricCard title="Borrador pendiente de envío" value={String(statusCounts.draft)} />
@@ -1097,7 +1127,9 @@ async function OwnerOverviewServer({
 
         <Section
           title="Calidad del sistema"
-          subtitle="Salud de verificación: volumen, éxito, tiempos y carga de revisión."
+          subtitle="Resume tiempos, éxito y carga de revisión para validar estabilidad operativa."
+          processState={failedJobs > 0 ? "waiting_action" : verificationSuccessRate >= 65 ? "completed" : "working"}
+          nextStep="Reduce fallos de jobs y revisa el tiempo medio antes de escalar volumen."
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <MetricCard title="Ratio de éxito" value={`${verificationSuccessRate}%`} note="Aprobadas / verificaciones resueltas" />
@@ -1114,7 +1146,9 @@ async function OwnerOverviewServer({
 
       <Section
         title="Integridad del sistema"
-        subtitle="Señales de fraude, inconsistencias y degradación de confianza."
+        subtitle="Ayuda a detectar anomalías, fraude potencial o incoherencias operativas."
+        processState={suspiciousVerifications > 0 ? "waiting_action" : "completed"}
+        nextStep="Revisa duplicidades y empresas con rechazo alto antes de escalar automatización."
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard title="Verificaciones sospechosas" value={String(suspiciousVerifications)} note="Proxy por ratio de rechazo y duplicidad de evidencias" />
@@ -1126,7 +1160,9 @@ async function OwnerOverviewServer({
 
       <Section
         title="Oportunidades de crecimiento"
-        subtitle={`Brechas detectadas con señales actuales y actividad de ${rangeLabel}.`}
+        subtitle="Señala segmentos, zonas o patrones con potencial comercial."
+        processState={growthOpportunities.length > 0 ? "waiting_action" : "completed"}
+        nextStep={growthOpportunities.length > 0 ? "Valida qué oportunidad merece activación comercial inmediata." : "Mantén monitorización hasta que aparezcan nuevas señales de expansión."}
       >
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           {growthOpportunities.length === 0 ? (
@@ -1143,7 +1179,9 @@ async function OwnerOverviewServer({
 
       <Section
         title="Economía del negocio"
-        subtitle={`Composición de ingresos actual y ritmo de altas en ${rangeLabel}.`}
+        subtitle="Resume ingresos, planes, consumo y señales SaaS clave."
+        processState={subscriptionsPastDue.length > 0 ? "waiting_action" : "working"}
+        nextStep="Cruza altas, churn y MRR para decidir dónde corregir pricing o activación."
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard title="MRR total" value={money(totalMrr)} note="Suscripciones activas/trialing" />
@@ -1162,7 +1200,9 @@ async function OwnerOverviewServer({
       {alerts.length > 0 ? (
         <Section
           title="Alertas y anomalías"
-          subtitle="Señales clave calculadas con umbrales operativos para reacción rápida."
+          subtitle="Destaca incidencias o desviaciones que requieren atención."
+          processState={alerts.some((alert) => alert.severity === "high") ? "failed" : "waiting_action"}
+          nextStep="Prioriza primero alertas de severidad alta y después las de seguimiento."
         >
           <div className="grid gap-3 lg:grid-cols-2">
             {alerts.map((alert) => (
@@ -1174,7 +1214,9 @@ async function OwnerOverviewServer({
 
       <Section
         title="Eventos recientes y críticos"
-        subtitle="Actividad reciente de alto impacto para operación, soporte y monetización."
+        subtitle="Recoge la actividad reciente relevante del sistema."
+        processState={recentCriticalEvents.length > 0 ? "working" : "completed"}
+        nextStep={recentCriticalEvents.length > 0 ? "Usa la secuencia reciente para validar qué área necesita seguimiento." : "Sin eventos críticos recientes; mantén la observación normal."}
       >
         <div className="grid gap-3 lg:grid-cols-2">
           {recentCriticalEvents.length ? (
@@ -1208,7 +1250,9 @@ async function OwnerOverviewServer({
 
       <Section
         title="Acciones rápidas"
-        subtitle="Prioridades operativas del día con acceso directo."
+        subtitle="Atajos para revisar, corregir o actuar sin salir del panel."
+        processState="waiting_action"
+        nextStep="Abre el módulo correspondiente y resuelve el primer bloqueo operativo del día."
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <Link href="/owner/users" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
@@ -1242,7 +1286,9 @@ async function OwnerOverviewServer({
 
       <Section
         title="Empresas captadas por verificación"
-        subtitle="Resumen operativo del embudo empresa generado desde solicitudes de verificación."
+        subtitle="Resume el flujo desde verificación a registro y conversión de empresa."
+        processState={verificationAcquisition.summary.impactedCompanies > 0 ? "working" : "draft"}
+        nextStep="Revisa si las empresas impactadas acaban entrando en onboarding y pago."
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <MetricCard title="Impactadas" value={String(verificationAcquisition.summary.impactedCompanies)} note="Empresas con al menos una solicitud de verificación." />
@@ -1297,7 +1343,9 @@ async function OwnerOverviewServer({
 
       <Section
         title="Timeline global del sistema"
-        subtitle={`Actividad reciente filtrada por ${rangeLabel}.`}
+        subtitle="Recoge la actividad reciente relevante del sistema."
+        processState="working"
+        nextStep="Usa el timeline para validar continuidad entre operación, growth y monetización."
       >
         <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
           <ul className="space-y-2 text-sm text-slate-700">
