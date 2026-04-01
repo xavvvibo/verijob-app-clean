@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createCompanyContext, loginWithOtp, signupWithOtp } from "./helpers/auth";
+import { createCompanyContext, ensureAuthenticatedActor } from "./helpers/auth";
 import { requireSmokeEmail, smokeConfig } from "./helpers/smoke-config";
 
 test.describe.serial("@company smoke company", () => {
@@ -9,20 +9,9 @@ test.describe.serial("@company smoke company", () => {
     const { page } = actor;
 
     try {
-      if (smokeConfig.company.authMode === "login") {
-        await loginWithOtp(page, testInfo, {
-          email: smokeConfig.company.email,
-          otp: smokeConfig.company.otp,
-          mode: "company",
-          next: "/company",
-        });
-      } else {
-        await signupWithOtp(page, testInfo, {
-          role: "company",
-          email: smokeConfig.company.email,
-          otp: smokeConfig.company.otp,
-        });
-      }
+      await ensureAuthenticatedActor(page, testInfo, "company", {
+        next: "/company",
+      });
 
       if (/\/onboarding\/company/.test(page.url())) {
         await expect(page.getByRole("heading", { name: /activa tu entorno de empresa/i })).toBeVisible();

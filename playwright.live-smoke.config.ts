@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const headed = process.env.PLAYWRIGHT_HEADED !== '0';
+
 export default defineConfig({
   testDir: './tests',
   timeout: 180000,
@@ -9,15 +11,21 @@ export default defineConfig({
   reporter: 'list',
   use: {
     baseURL: 'https://app.verijob.es',
-    headless: false,
+    headless: !headed,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
-    storageState: '/Users/xavibocanegra/VERIJOB/verijob-app/playwright/.auth/company.json',
   },
   projects: [
     {
+      name: 'auth-setup',
+      testMatch: /tests\/auth\/live-auth\.setup\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
       name: 'chromium',
+      testIgnore: /tests\/auth\/.*\.spec\.ts/,
+      dependencies: ['auth-setup'],
       use: { ...devices['Desktop Chrome'] },
     },
   ],

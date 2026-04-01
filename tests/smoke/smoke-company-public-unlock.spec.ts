@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createCompanyContext, loginWithOtp } from "./helpers/auth";
+import { createCompanyContext, ensureAuthenticatedActor } from "./helpers/auth";
 import { requireSmokeEmail, smokeConfig } from "./helpers/smoke-config";
 
 const publicToken = process.env.SMOKE_COMPANY_PUBLIC_TOKEN || "9b3383905a508e4de1f9700412e3559a07bd82e399c3989b";
@@ -11,10 +11,7 @@ test.describe.serial("@company @public-access smoke company public unlock", () =
     const { page } = actor;
 
     try {
-      await loginWithOtp(page, testInfo, {
-        email: smokeConfig.company.email,
-        otp: smokeConfig.company.otp,
-        mode: "company",
+      await ensureAuthenticatedActor(page, testInfo, "company", {
         next: "/company",
       });
 

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createCandidateContext, loginWithOtp } from "./helpers/auth";
+import { createCandidateContext, ensureAuthenticatedActor } from "./helpers/auth";
 import { requireSmokeEmail, smokeConfig } from "./helpers/smoke-config";
 
 test.describe.serial("@public-profile smoke public profile", () => {
@@ -9,10 +9,7 @@ test.describe.serial("@public-profile smoke public profile", () => {
     const { page } = actor;
 
     try {
-      await loginWithOtp(page, testInfo, {
-        email: smokeConfig.candidate.email,
-        otp: smokeConfig.candidate.otp,
-        mode: "candidate",
+      await ensureAuthenticatedActor(page, testInfo, "candidate", {
         next: "/candidate/share",
       });
 

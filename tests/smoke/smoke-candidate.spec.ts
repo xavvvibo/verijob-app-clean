@@ -1,6 +1,6 @@
 import path from "path";
 import { expect, test } from "@playwright/test";
-import { createCandidateContext, loginWithOtp, signupWithOtp } from "./helpers/auth";
+import { createCandidateContext, ensureAuthenticatedActor } from "./helpers/auth";
 import { requireSmokeEmail, smokeConfig } from "./helpers/smoke-config";
 
 const validEvidencePath = path.resolve(process.cwd(), "tests/fixtures/evidence-valid.pdf");
@@ -13,20 +13,9 @@ test.describe.serial("@candidate smoke candidate", () => {
     const { page } = actor;
 
     try {
-      if (smokeConfig.candidate.authMode === "login") {
-        await loginWithOtp(page, testInfo, {
-          email: smokeConfig.candidate.email,
-          otp: smokeConfig.candidate.otp,
-          mode: "candidate",
-          next: "/candidate/overview",
-        });
-      } else {
-        await signupWithOtp(page, testInfo, {
-          role: "candidate",
-          email: smokeConfig.candidate.email,
-          otp: smokeConfig.candidate.otp,
-        });
-      }
+      await ensureAuthenticatedActor(page, testInfo, "candidate", {
+        next: "/candidate/overview",
+      });
 
       if (/\/onboarding(\/)?$/.test(page.url())) {
         await expect(page.getByRole("heading", { name: /construye tu perfil profesional/i })).toBeVisible();
