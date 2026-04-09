@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { addDaysIso, genPromoCode, parseDurationDays, requireOwner } from "../../_lib";
+import { buildOwnerMarketingMetadata, normalizeOwnerMarketingSurface } from "@/lib/owner/marketing-promotions";
 
 function json(status: number, body: any) {
   const res = NextResponse.json(body, { status });
@@ -35,6 +36,7 @@ export async function POST(req: Request) {
   const custom_code = String(body?.custom_code || "").trim();
   const campaign_type = String(body?.campaign_type || "campaign").trim();
   const custom_expires_at = String(body?.custom_expires_at || "").trim();
+  const application_surface = normalizeOwnerMarketingSurface(body?.application_surface);
 
   if (!target_type || !benefit_type) {
     return json(400, { error: "missing_required_fields" });
@@ -57,15 +59,18 @@ export async function POST(req: Request) {
       benefit_type,
       benefit_value,
       duration_days,
-      starts_at: new Date().toISOString(),
+      starts_at: null,
       expires_at,
       max_redemptions: Number.isFinite(max_redemptions) ? max_redemptions : null,
       current_redemptions: 0,
-      is_active: true,
+      is_active: false,
       campaign_type,
-      metadata: {
+      metadata: buildOwnerMarketingMetadata({
+        lifecycleStatus: "draft",
+        applicationSurface: application_surface,
+        executionConnected: false,
         source: "owner_marketing_builder",
-      },
+      }),
       created_by: owner.ownerId,
     })
     .select("*")

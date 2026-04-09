@@ -40,9 +40,11 @@ type GrowthCampaignLike = {
 
 type MarketingPromotionLike = {
   is_active?: Nullable<boolean>;
+  starts_at?: Nullable<string>;
   expires_at?: Nullable<string>;
   current_redemptions?: Nullable<number>;
   max_redemptions?: Nullable<number>;
+  metadata?: Nullable<unknown>;
   status?: Nullable<string>;
 };
 
@@ -270,12 +272,12 @@ export function marketingBuilderMeta(isSaving = false): OwnerModuleMeta {
   const processState: OwnerProcessState = isSaving ? "working" : "draft";
   return {
     title: "Crear promoción",
-    helperText: "Configura una acción comercial con target, incentivo, duración y límite de uso.",
+    helperText: "Registra una promoción interna con target, incentivo, duración y destino previsto. No activa automatización real por sí sola.",
     processState,
     stateLabel: labelForState(processState),
     nextStep: isSaving
-      ? "Guardando promoción y preparando activación."
-      : "Definir target y activar la promoción cuando esté lista.",
+      ? "Guardando borrador y preparando revisión owner."
+      : "Definir target, destino y dejarla lista antes de activación real.",
     nextAction: {
       label: isSaving ? "Guardando..." : "Crear promoción",
     },
@@ -283,20 +285,20 @@ export function marketingBuilderMeta(isSaving = false): OwnerModuleMeta {
 }
 
 export function marketingHistoryMeta(hasPromotions = false): OwnerModuleMeta {
-  const processState: OwnerProcessState = hasPromotions ? "active" : "draft";
+  const processState: OwnerProcessState = hasPromotions ? "waiting_action" : "draft";
   return {
     title: "Historial de promociones",
-    helperText: "Permite revisar qué promociones están activas, pausadas o finalizadas.",
+    helperText: "Permite revisar promociones registradas, su estado operativo y si impactan una superficie conectada.",
     processState,
     stateLabel: labelForState(processState),
     nextStep: hasPromotions
-      ? "Detectar qué promociones deben activarse, pausarse o cerrarse."
-      : "Crear la primera promoción para activar el canal.",
+      ? "Detectar qué promociones siguen en borrador, cuáles están pausadas y cuáles aún no tienen automatización."
+      : "Crear la primera promoción para dejar trazabilidad comercial.",
   };
 }
 
 export const marketingPromotionFlow =
-  "Flujo: definición de target → configuración del beneficio → activación temporal → publicación/canal → seguimiento de uso → medición de conversión.";
+  "Flujo MVP: definición de target → configuración del beneficio → selección del destino previsto → revisión owner → activación interna/pausa → seguimiento de usos registrados.";
 
 export const marketingPromotionLifecycleFlow = marketingPromotionFlow;
 
@@ -312,19 +314,19 @@ export function resolveMarketingPromotionMeta(
     stateLabel: labelForState(processState),
     nextStep:
       processState === "draft"
-        ? "Revisar condiciones y activar la promoción."
+        ? "Revisar condiciones y completar el borrador."
         : processState === "active"
-          ? "Seguir uso y conversión mientras esté activa."
+          ? "Seguir uso y confirmar que la superficie conectada sigue vigente."
           : processState === "completed"
-            ? "Analizar resultados y decidir si relanzar."
+            ? "Analizar resultados y decidir si archivar o relanzar."
             : processState === "failed"
               ? "Corregir el problema antes de volver a activarla."
-              : "Revisar el siguiente paso operativo.",
+              : "Revisar el siguiente paso operativo o si falta conexión real.",
     nextAction:
       processState === "draft"
-        ? { label: "Activar promoción" }
+        ? { label: "Editar borrador" }
         : processState === "active"
-          ? { label: "Ver rendimiento" }
+          ? { label: "Ver detalle" }
           : undefined,
   };
 }
@@ -337,15 +339,15 @@ export const marketingPromoHistoryMeta = marketingHistoryMeta;
 export const resolvePromoCodeMeta = resolveMarketingPromotionMeta;
 
 export function marketingFlowMeta(isActive = false): OwnerModuleMeta {
-  const processState: OwnerProcessState = isActive ? "active" : "draft";
+  const processState: OwnerProcessState = isActive ? "waiting_action" : "draft";
   return {
     title: "Flujo de promoción",
     helperText: marketingPromotionFlow,
     processState,
     stateLabel: labelForState(processState),
     nextStep: isActive
-      ? "Seguir uso, redenciones y conversión mientras la promoción esté activa."
-      : "Definir condiciones, activar la promoción y lanzar difusión.",
+      ? "Revisar si la promoción ya tiene destino conectado o solo está configurada."
+      : "Definir condiciones, guardar el borrador y decidir si requiere activación real.",
   };
 }
 
