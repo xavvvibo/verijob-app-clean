@@ -80,6 +80,16 @@ function accessMeta(status: string | null | undefined) {
   return { label: "Perfil parcial disponible", tone: "border-slate-200 bg-slate-100 text-slate-700" };
 }
 
+function decisionStateMeta(row: ImportRow) {
+  const approved = Number(row.approved_verifications || 0);
+  const evidences = Number((row as any).evidence_count || 0);
+  const displayStatus = String(row.display_status || "").toLowerCase();
+  if (approved > 0) return { label: "Verificado", tone: "border-emerald-200 bg-emerald-50 text-emerald-800" };
+  if (evidences > 0) return { label: "Con evidencias", tone: "border-violet-200 bg-violet-50 text-violet-800" };
+  if (displayStatus === "in_review") return { label: "En validación", tone: "border-amber-200 bg-amber-50 text-amber-800" };
+  return { label: "Sin validar", tone: "border-slate-200 bg-slate-100 text-slate-700" };
+}
+
 function trustHelper(raw: unknown) {
   const score = Number(raw || 0);
   if (!Number.isFinite(score) || score <= 0) return "No abras todavía: faltan verificaciones o evidencias para decidir con criterio.";
@@ -661,6 +671,7 @@ export default function CompanyCandidatesClient() {
               const canOpenSnapshot = Boolean(row.linked_user_id && row.candidate_public_token);
               const canOpenInvitation = Boolean(row.invite_token);
               const stage = String(row.company_stage || "none").toLowerCase();
+              const decisionState = decisionStateMeta(row);
               return (
                 <article key={row.id} className="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,#ffffff_100%)] p-5 shadow-sm">
                   <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -676,6 +687,7 @@ export default function CompanyCandidatesClient() {
                         <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${fit.tone}`} title={fit.reasons.join(" · ")}>
                           {fit.label}
                         </span>
+                        <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${decisionState.tone}`}>{decisionState.label}</span>
                         <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${status.tone}`}>{status.label}</span>
                         <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${operational.tone}`}>{operational.label}</span>
                       </div>

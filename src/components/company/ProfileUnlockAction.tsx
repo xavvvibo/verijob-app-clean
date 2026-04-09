@@ -50,7 +50,7 @@ export default function ProfileUnlockAction({
     return (
       <div className="space-y-3">
         <div className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
-          Perfil completo disponible
+          Perfil desbloqueado
         </div>
         <button
           type="button"
@@ -139,14 +139,14 @@ export default function ProfileUnlockAction({
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Acceso al perfil completo</p>
             <h2 className="mt-2 text-xl font-semibold text-slate-900">Abre el perfil completo</h2>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              Vas a ver más contexto profesional, más detalle de trayectoria y más señal para decidir con menos incertidumbre.
+              Vas a desbloquear el detalle completo del candidato para decidir con menos incertidumbre.
             </p>
             <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
               <p className="font-semibold text-slate-900">Qué desbloqueas</p>
               <ul className="mt-2 space-y-1.5 text-sm text-slate-700">
-                <li>Más contexto sobre la trayectoria</li>
-                <li>Más detalle útil para evaluar</li>
-                <li>Menos decisión a ciegas</li>
+                <li>Contacto del candidato</li>
+                <li>Detalle completo del perfil y la trayectoria</li>
+                <li>Validaciones y señales verificables</li>
               </ul>
             </div>
             <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
@@ -168,7 +168,7 @@ export default function ProfileUnlockAction({
                 disabled={submitting}
                 className="inline-flex min-w-[220px] justify-center rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
               >
-                {submitting ? "Abriendo perfil…" : "Ver perfil completo"}
+                {submitting ? "Abriendo perfil…" : "Ver perfil completo (-1 acceso)"}
               </button>
               <button
                 type="button"

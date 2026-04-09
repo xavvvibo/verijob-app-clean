@@ -967,7 +967,7 @@ export default function CompanyDashboard() {
           <DashboardSectionTitle
             eyebrow="Candidatos para decidir"
             title="Candidatos para decidir"
-            description="Aquí decides rápido quién merece revisión a fondo y quién todavía no tiene suficiente señal."
+            description="Estos son los candidatos que más contexto útil aportan ahora mismo para decidir si compensa abrir el perfil completo."
             action={<a href="/company/candidates" className="text-sm font-semibold text-slate-900 underline underline-offset-2">Abrir base completa</a>}
           />
 
@@ -1018,7 +1018,7 @@ export default function CompanyDashboard() {
                 </Link>
               </div>
             ) : (
-              candidateDecisionRows.slice(0, 8).map(({ row, fit, approved, inProcess, unverified }) => {
+              candidateDecisionRows.slice(0, 3).map(({ row, fit, approved, inProcess, unverified }) => {
                 const operational = resolveCandidateOperationalStateMeta(row);
                 const displayName = resolveCandidateDisplayName(row);
                 const stage = String(row.company_stage || "none").toLowerCase();
@@ -1105,7 +1105,9 @@ export default function CompanyDashboard() {
                           >
                             {access.cta}
                           </button>
-                          <p className="text-[11px] font-medium text-slate-500">{access.helper}</p>
+                          <p className="text-[11px] font-medium text-slate-500">
+                            {String(row.access_status || "").toLowerCase() === "active" ? access.helper : "Desbloquea contacto, detalle completo y validaciones."}
+                          </p>
                         </div>
                         <button
                           type="button"

@@ -292,12 +292,15 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
               <p className="mt-2 text-sm text-slate-600">
                 Este resumen parcial no muestra historial laboral, empresas previas, contacto ni documentos del candidato.
               </p>
+              <p className="mt-2 text-sm font-semibold text-slate-900">
+                Este es un resumen. Abre el perfil completo para ver todos los detalles.
+              </p>
             </article>
 
             <article className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
               <h2 className="text-sm font-semibold text-slate-900">Siguiente paso</h2>
               <p className="mt-4 text-sm text-slate-600">
-                Si este candidato encaja, desbloquea el perfil completo. El primer acceso consume 1 crédito y los siguientes dentro de la ventana activa no vuelven a consumir.
+                Si este candidato encaja, desbloquea el perfil completo. El primer acceso consume 1 acceso y los siguientes dentro de la ventana activa no vuelven a consumir.
               </p>
               <div className="mt-5 flex flex-wrap gap-3">
                 <CompanyCandidateAccessCta
@@ -423,6 +426,28 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
             </ul>
           </div>
         ) : null}
+      </section>
+
+      <section className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Perfil desbloqueado</p>
+            <h2 className="mt-2 text-base font-semibold text-emerald-950">Ya puedes tomar una decisión con el perfil completo</h2>
+            <p className="mt-2 text-sm text-emerald-900">
+              Aquí ya tienes contacto, detalle completo y validaciones para decidir con más contexto.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {hasEmail ? (
+              <a className="rounded-xl border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100" href={`mailto:${contact.email}`}>
+                Contactar
+              </a>
+            ) : null}
+            <a className="rounded-xl border border-emerald-300 bg-white px-4 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100" href="/company/candidates">
+              Ver más candidatos
+            </a>
+          </div>
+        </div>
       </section>
 
       <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -573,8 +598,8 @@ export default async function CompanyCandidateTokenPage({ params, searchParams }
         </div>
       </section>
 
-      <div className="mt-6 flex gap-3">
-        <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/requests">Continuar evaluación en solicitudes</a>
+      <div className="mt-6 flex flex-wrap gap-3">
+        <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/requests">Seguir evaluando solicitudes</a>
         <a className="rounded-md border px-4 py-2 text-sm inline-block" href="/company/candidates">Ver más candidatos</a>
       </div>
     </main>
