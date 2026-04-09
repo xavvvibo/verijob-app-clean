@@ -138,6 +138,22 @@ function formatTimelineDate(value?: string | null) {
   return formatMonthYear(value) || (value ? String(value) : "");
 }
 
+function resolveCandidateNameFallback(rawCvJson: unknown) {
+  const raw = rawCvJson && typeof rawCvJson === "object" ? (rawCvJson as Record<string, any>) : {};
+  const updates = Array.isArray(raw.company_cv_import_updates) ? raw.company_cv_import_updates : [];
+  for (const entry of updates) {
+    const proposal = entry && typeof entry === "object" ? (entry as any).profile_proposal : null;
+    const nextName = String(proposal?.full_name || "").trim();
+    if (nextName) return nextName;
+  }
+
+  const companyImportName = String(raw?.company_cv_import?.candidate_identity?.display_name || raw?.company_cv_import?.candidate_identity?.reliable_name || "").trim();
+  if (companyImportName) return companyImportName;
+
+  const extractedName = String(raw?.company_cv_import?.extracted_payload?.full_name || "").trim();
+  return extractedName || null;
+}
+
 function buildPreparationSegments(args: {
   profileCompletionScore: number;
   experienceCount: number;
@@ -212,7 +228,18 @@ function buildOpportunityCard(args: {
   metrics: ReturnType<typeof computeCandidateOverviewMetrics>;
   profileCompletionScore: number;
   publicProfileActive: boolean;
+  identityIncomplete?: boolean;
 }) {
+  if (args.identityIncomplete) {
+    return {
+      title: "Tu perfil necesita una base más clara para transmitir confianza",
+      body: "Completar nombre, titular y ubicación mejora cómo te verán las empresas antes incluso de revisar tus verificaciones.",
+      href: "/candidate/profile",
+      cta: "Completa tu perfil",
+      tone: "border-blue-200 bg-blue-50/90",
+    };
+  }
+
   if (args.metrics.evidences === 0 && (args.metrics.verified > 0 || args.metrics.inProcess > 0)) {
     return {
       title: "Te faltan evidencias para destacar frente a otros candidatos",
@@ -884,6 +911,13 @@ export default function CandidateOverview() {
   const publicLanguages = Array.isArray(publicPreview?.teaser?.languages) ? publicPreview?.teaser?.languages : [];
   const educationCount = Number(publicPreview?.teaser?.education_total ?? 0);
   const achievementsCount = Number(publicPreview?.teaser?.achievements_total ?? 0);
+  const displayName = profile?.full_name || resolveCandidateNameFallback(candidateProfile?.raw_cv_json) || null;
+  const identityFieldsMissing = {
+    fullName: !String(profile?.full_name || "").trim(),
+    title: !String(profile?.title || "").trim(),
+    location: !String(profile?.location || "").trim(),
+  };
+  const identityIncomplete = identityFieldsMissing.fullName || identityFieldsMissing.title || identityFieldsMissing.location;
   const verifiedSkillsCount = Array.isArray(publicPreview?.verified_skills) ? publicPreview?.verified_skills.length : 0;
   const publicProfileActive = Boolean(publicToken);
   const publicVisibilityLabel =
@@ -909,8 +943,9 @@ export default function CandidateOverview() {
         metrics,
         profileCompletionScore,
         publicProfileActive,
+        identityIncomplete,
       }),
-    [metrics, profileCompletionScore, publicProfileActive]
+    [identityIncomplete, metrics, profileCompletionScore, publicProfileActive]
   );
 
   return (
@@ -953,15 +988,35 @@ export default function CandidateOverview() {
           <div className="min-w-0">
             <div className="flex items-start gap-4 sm:gap-5 xl:gap-6 2xl:gap-7">
               <AvatarView
-                fullName={profile?.full_name}
+                fullName={displayName}
                 avatarUrl={profile?.avatar_url}
                 onAvatarSaved={(next) => setProfile((prev) => ({ ...(prev || {}), avatar_url: next }))}
               />
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Estado actual del perfil</p>
-                <p className="mt-3 text-[2rem] font-semibold tracking-tight text-slate-950 sm:text-[2.75rem]">{profile?.full_name || "Tu perfil verificable"}</p>
+                <p className="mt-3 text-[2rem] font-semibold tracking-tight text-slate-950 sm:text-[2.75rem]">{displayName || "Tu perfil verificable"}</p>
                 <p className="mt-2 text-base text-slate-700">{profile?.title || "Profesional verificable en Verijob"}</p>
                 <p className="mt-1 text-sm text-slate-500">{profile?.location || "Ubicación no definida"}</p>
+                {identityIncomplete ? (
+                  <div className="mt-4 max-w-2xl rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900">
+                    <p className="font-semibold">Completa tu perfil básico</p>
+                    <p className="mt-1 leading-6 text-amber-800">
+                      {experienceCount > 0
+                        ? "Ya tienes experiencia en el perfil. Completar nombre, titular y ubicación mejora cómo te verán las empresas."
+                        : "Completar nombre, titular y ubicación hace que tu perfil se entienda mejor desde el primer vistazo."}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Link href="/candidate/profile" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">
+                        Completa tu perfil
+                      </Link>
+                      {identityFieldsMissing.fullName && displayName ? (
+                        <span className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-semibold text-amber-900">
+                          Nombre detectado: {displayName}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="mt-8 flex flex-col gap-5 md:flex-row md:items-center md:gap-8 xl:gap-10">
                   <TrustRing score={metrics.score} stateTitle={trustState.title} />

@@ -203,7 +203,7 @@ export default function CandidateQuickView({
             </p>
             <p className="mt-3 text-sm text-slate-700">{fit.summary}</p>
             <p className="mt-2 text-xs text-slate-500">
-              El encaje rápido se apoya en trust score, verificaciones registradas, preparación del perfil y momento real del pipeline.
+              El encaje rápido se apoya en trust score, verificaciones registradas, preparación del perfil y momento real de la revisión.
             </p>
             <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-sm font-semibold text-slate-900">Accesos a perfiles disponibles: {availableProfileAccesses}</p>
@@ -248,7 +248,7 @@ export default function CandidateQuickView({
               <h3 className="text-base font-semibold text-slate-900">Resumen parcial del candidato</h3>
               <ul className="mt-3 space-y-2 text-sm text-slate-600">
                 <li>• Estado RRHH: {operational.label}</li>
-                <li>• Estado del pipeline: {resolveCandidatePipelineLabel(pipeline)}</li>
+                <li>• Estado de revisión: {resolveCandidatePipelineLabel(pipeline)}</li>
                 <li>• Perfil verificable: {profileReadiness === "complete" ? "sí" : "todavía no"}</li>
                 <li>• Estado verificado: {verified ? "con señales verificadas" : "sin validación aprobada todavía"}</li>
                 <li>• Verificaciones aprobadas: {approved}</li>

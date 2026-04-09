@@ -348,7 +348,7 @@ function candidateEmptyState(tab: CandidateFocusTab) {
       title: "Todavía no hay candidatos verificados",
       detail: "Empieza revisando perfiles en proceso o importando nuevos candidatos con señales de confianza.",
       href: "/company/candidates",
-      cta: "Importar candidato",
+      cta: "Importar primer CV",
     };
   }
   if (tab === "priority") {
@@ -356,7 +356,7 @@ function candidateEmptyState(tab: CandidateFocusTab) {
       title: "No hay candidatos prioritarios ahora mismo",
       detail: "Revisa candidatos en proceso o desbloquea perfiles para generar una cola de decisión más fuerte.",
       href: "/company/candidates",
-      cta: "Revisar candidatos en proceso",
+      cta: "Importar primer CV",
     };
   }
   if (tab === "in_process") {
@@ -371,7 +371,7 @@ function candidateEmptyState(tab: CandidateFocusTab) {
     title: "No hay candidatos sin validar en esta vista",
     detail: "Importa nuevos candidatos o vuelve a revisar tu base completa para ampliar la cobertura.",
     href: "/company/candidates",
-    cta: "Importar candidato",
+    cta: "Importar primer CV",
   };
 }
 
@@ -680,6 +680,7 @@ export default function CompanyDashboard() {
     const fit = computeCandidateQuickFit(item);
     return fit.level === "high" || Number(item.approved_verifications || 0) > 0;
   }).length;
+  const hasCandidates = imports.length > 0;
   const focusMetricLabel =
     availableProfileAccesses > 0
       ? "accesos listos para abrir contexto"
@@ -752,7 +753,9 @@ export default function CompanyDashboard() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-blue-100/80">Workspace empresa</p>
             <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white sm:text-[2.25rem]">{companyName}</h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-blue-100/85">
-              Decide más rápido qué candidatos merecen revisión a fondo, qué perfiles ya aportan señal real y dónde conviene consumir accesos.
+              {hasCandidates
+                ? "Decide más rápido qué candidatos merecen revisión a fondo, qué perfiles ya aportan señal real y dónde conviene consumir accesos."
+                : "Empieza subiendo el CV de tu primer candidato para generar un resumen y decidir con más contexto."}
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
@@ -767,9 +770,11 @@ export default function CompanyDashboard() {
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <div className="rounded-3xl border border-white/15 bg-white/10 p-4 text-white backdrop-blur">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-100/75">Estado del panel</p>
-                <p className="mt-2 text-base font-semibold">Listo para decisión</p>
+                <p className="mt-2 text-base font-semibold">{hasCandidates ? "Listo para decisión" : "Empieza aquí"}</p>
                 <p className="mt-2 text-sm leading-6 text-blue-100/80">
-                  {verificationStatusDetail || "Tienes la base lista para revisar resúmenes, priorizar señal y desbloquear cuando de verdad compense."}
+                  {hasCandidates
+                    ? verificationStatusDetail || "Tienes la base lista para revisar resúmenes, priorizar señal y desbloquear cuando de verdad compense."
+                    : "Tu siguiente paso útil es subir un CV. Primero verás un resumen y solo abrirás el perfil completo cuando te compense."}
                 </p>
               </div>
               <div className="rounded-3xl border border-white/15 bg-white/10 p-4 text-white backdrop-blur">
@@ -819,7 +824,7 @@ export default function CompanyDashboard() {
 
             <div className="mt-5 flex flex-col gap-2">
               <Link href="/company/candidates" className="inline-flex justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-black">
-                Revisar candidatos
+                {hasCandidates ? "Revisar candidatos" : "Subir primer CV"}
               </Link>
               <a href="/company/requests" className="inline-flex justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
                 Revisar solicitudes
@@ -911,11 +916,11 @@ export default function CompanyDashboard() {
           />
           <div className="mt-4 grid gap-3">
             <TacticalActionCard
-              title={highSignalCandidateCount > 0 ? "Revisar perfiles con más señal" : "Abrir la base y buscar señal"}
-              detail={highSignalCandidateCount > 0 ? `${highSignalCandidateCount} candidatos ya aportan contexto útil para priorizar revisión a fondo.` : "Todavía no hay perfiles con señal fuerte. Empieza por la base y detecta resúmenes prometedores."}
-              cta="Ir a candidatos"
+              title={hasCandidates ? (highSignalCandidateCount > 0 ? "Revisar perfiles con más señal" : "Abrir la base y buscar señal") : "Sube tu primer CV"}
+              detail={hasCandidates ? (highSignalCandidateCount > 0 ? `${highSignalCandidateCount} candidatos ya aportan contexto útil para priorizar revisión a fondo.` : "Todavía no hay perfiles con señal fuerte. Empieza por la base y detecta resúmenes prometedores.") : "Primero verás un resumen del candidato. Solo abrirás el perfil completo cuando te compense."}
+              cta={hasCandidates ? "Ir a candidatos" : "Subir primer CV"}
               href="/company/candidates"
-              tone={highSignalCandidateCount > 0 ? "green" : "blue"}
+              tone={hasCandidates && highSignalCandidateCount > 0 ? "green" : "blue"}
             />
             <TacticalActionCard
               title={pendingRequestCount > 0 ? "Resolver solicitudes pendientes" : "Mantener la cola vacía"}

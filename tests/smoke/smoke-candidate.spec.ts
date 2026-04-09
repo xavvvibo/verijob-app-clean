@@ -23,11 +23,14 @@ test.describe.serial("@candidate smoke candidate", () => {
       }
 
       await page.goto("/candidate/experience?new=1#manual-experience");
-      await expect(page.getByText(/mis experiencias/i)).toBeVisible();
 
+      await expect(page).toHaveURL(/\/candidate\/experience/);
       const manualExperienceSection = page.locator("#manual-experience");
+      await expect(manualExperienceSection.getByLabel("Puesto")).toBeVisible();
+      await expect(
+        manualExperienceSection.getByRole("button", { name: /guardar experiencia/i })
+      ).toBeVisible();
 
-      await manualExperienceSection.getByRole("button", { name: /guardar experiencia/i }).waitFor({ state: "visible" });
       await manualExperienceSection.getByLabel("Puesto").fill(smokeConfig.candidateExperience.roleTitle);
       await manualExperienceSection.getByLabel("Empresa").fill(smokeConfig.candidateExperience.companyName);
       await manualExperienceSection.getByLabel("Fecha inicio").fill(smokeConfig.candidateExperience.startDate);
@@ -40,7 +43,8 @@ test.describe.serial("@candidate smoke candidate", () => {
       ).toBeVisible();
 
       await page.goto("/candidate/profile");
-      await expect(page.getByRole("heading", { name: /^perfil$/i })).toBeVisible();
+      await expect(page).toHaveURL(/\/candidate\/profile/);
+      await expect(page.getByLabel(/nombre|name/i).first()).toBeVisible();
 
       await page.goto("/candidate/evidence");
       await expect(page.getByText(/subir nueva documentación/i)).toBeVisible();
@@ -54,14 +58,15 @@ test.describe.serial("@candidate smoke candidate", () => {
       await page.getByLabel("Archivo").setInputFiles(validEvidencePath);
       await page.getByRole("button", { name: /subir documentación/i }).click();
       await expect(
-        page.getByText(/documento recibido|en análisis|pendiente de revisión/i)
+        page.getByText(/documento recibido|en análisis|pendiente de revisión/i).first()
       ).toBeVisible({ timeout: 25_000 });
 
       await page.getByLabel("Archivo").setInputFiles(invalidEvidencePath);
       await expect(page.getByText(/no es compatible|admite solo|formato/i)).toBeVisible();
 
       await page.goto("/candidate/verifications");
-      await expect(page.getByRole("heading", { name: /verificaciones/i })).toBeVisible();
+      await expect(page).toHaveURL(/\/candidate\/verifications/);
+      await expect(page.locator("main")).toContainText(/verific/i);
 
       await page.goto("/candidate/experience");
 

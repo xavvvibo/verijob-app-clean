@@ -82,10 +82,10 @@ function toFriendlyCvError(raw: string | null | undefined) {
     return "Formato no soportado. Usa PDF o DOCX, o completa tu perfil manualmente.";
   }
   if (lower.includes("invalid_json_response")) {
-    return "No hemos podido completar el análisis en este momento. Inténtalo de nuevo en unos minutos.";
+    return "No hemos podido completar el procesamiento en este momento. Inténtalo de nuevo en unos minutos.";
   }
   if (lower.includes("dispatch") || lower.includes("runner_failed")) {
-    return "No hemos podido arrancar el análisis automático. Vuelve a intentarlo en unos minutos.";
+    return "No hemos podido iniciar el procesamiento del CV. Vuelve a intentarlo en unos minutos.";
   }
   return msg;
 }
@@ -355,11 +355,12 @@ export default function CvUploadAndParse() {
 
       setLastImport(nextImport);
       setMsg(
-        `Importación completada: ${nextImport.blocks.experiences.imported} experiencias, ${nextImport.blocks.education.imported} formaciones, ${nextImport.blocks.languages.imported} idiomas y ${nextImport.blocks.achievements.imported} logros/certificaciones añadidos.${blockErrors.length ? ` Hubo incidencias en: ${blockErrors.join(", ")}.` : ""}`
+        `Tu perfil ya está creado: ${nextImport.blocks.experiences.imported} experiencias, ${nextImport.blocks.education.imported} formaciones, ${nextImport.blocks.languages.imported} idiomas y ${nextImport.blocks.achievements.imported} logros o certificaciones añadidos.${blockErrors.length ? ` Hubo incidencias en: ${blockErrors.join(", ")}.` : ""}`
       );
 
       await loadProfileSets();
       router.refresh();
+      router.push("/candidate/experience?cv_import=1&focus=verify-first");
     } catch (e: any) {
       setMsg(e?.message || "No se pudo aplicar la propuesta de importación.");
     } finally {
@@ -444,7 +445,7 @@ export default function CvUploadAndParse() {
 
       setJobId(String(parseBody.job_id));
       setUploadStage("queued");
-      setMsg(parseBody?.processing_error ? toFriendlyCvError(parseBody.processing_error) : "Job en cola…");
+      setMsg(parseBody?.processing_error ? toFriendlyCvError(parseBody.processing_error) : "Estamos preparando tu perfil.");
     } catch (e: any) {
       setUploadStage(null);
       setMsg(toFriendlyCvError(e?.message || "Error subiendo/procesando CV."));
@@ -473,10 +474,10 @@ export default function CvUploadAndParse() {
 
         if (casted.status === "queued") {
           setUploadStage("queued");
-          setMsg("Job en cola…");
+          setMsg("Estamos preparando tu perfil.");
         } else if (casted.status === "processing") {
           setUploadStage(null);
-          setMsg("Procesando CV…");
+          setMsg("Estamos procesando tu CV para organizar tu experiencia profesional.");
         } else if (casted.status === "succeeded") {
           setUploadStage(null);
           if (shouldApplyParsedResultOnce({ nextJobId: casted.id, lastAppliedJobId })) {
@@ -496,7 +497,7 @@ export default function CvUploadAndParse() {
           } else if (ed === 0) {
             setMsg("Procesamiento completado: se detectaron experiencias, pero no formación académica.");
           } else {
-            setMsg("Listo. CV procesado con extracción laboral y académica.");
+            setMsg("Listo. Ya puedes revisar la información detectada antes de crear tu perfil.");
           }
         } else if (casted.status === "failed") {
           setUploadStage(null);
@@ -537,14 +538,14 @@ export default function CvUploadAndParse() {
     uploadStage === "uploading"
       ? "Subiendo CV…"
       : uploadStage === "creating_job"
-        ? "Preparando análisis…"
-        : "Procesando la extracción inicial…";
+        ? "Preparando tu perfil…"
+        : "Extrayendo información de tu CV…";
   const progressText =
     uploadStage === "uploading"
       ? "Estamos cargando el archivo de forma segura para poder analizarlo."
       : uploadStage === "creating_job"
-        ? "Estamos registrando el CV y arrancando el análisis automático."
-        : "El proceso ya está en marcha. En unos segundos verás el estado del job y la revisión unificada.";
+        ? "Estamos registrando el CV para organizar tu experiencia profesional."
+        : "El proceso ya está en marcha. En unos segundos verás qué información hemos preparado para tu perfil.";
 
   return (
     <div className="space-y-3">
@@ -597,13 +598,14 @@ export default function CvUploadAndParse() {
 
       {lastImport ? (
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
-          <div>Importación completada: {lastImport.imported_total} elementos añadidos al perfil.</div>
+          <div>Tu perfil ya está creado: {lastImport.imported_total} elementos añadidos.</div>
           <div className="mt-1">
             Experiencias {lastImport.blocks.experiences.imported} · Formación {lastImport.blocks.education.imported} · Idiomas {lastImport.blocks.languages.imported} · Logros/certificaciones {lastImport.blocks.achievements.imported}
           </div>
+          <div className="mt-1 text-xs text-blue-800">Ahora el siguiente paso útil es verificar al menos una experiencia para reforzar tu perfil.</div>
           <div className="mt-2 flex flex-wrap gap-2">
-            <a href="/candidate/experience" className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
-              Abrir experiencias
+            <a href="/candidate/experience?cv_import=1&focus=verify-first" className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
+              Verificar mi primera experiencia
             </a>
             <a href="/candidate/education" className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
               Abrir formación
@@ -766,14 +768,14 @@ export default function CvUploadAndParse() {
 
               <div className="space-y-2">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="text-sm font-medium">Idiomas y logros detectados</div>
+                  <div className="text-sm font-medium">Logros y certificaciones detectados</div>
                   <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => setAchievementChecked(achievementDrafts.map(() => true))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Seleccionar todos</button>
                     <button type="button" onClick={() => setAchievementChecked(achievementDrafts.map(() => false))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Deseleccionar todos</button>
                   </div>
                 </div>
                 <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
-                  Mantén en una sola revisión los idiomas, certificaciones y otros logros detectados antes de importarlos al perfil.
+                  Revisa aquí los logros y certificaciones detectados antes de añadirlos al perfil. Si algo no encaja, podrás dejarlo fuera.
                 </div>
 
                 {achievementDrafts.length === 0 ? (
@@ -815,6 +817,7 @@ export default function CvUploadAndParse() {
                     <div className="mt-1">
                       Seleccionadas: {selectedSummary.experiences} experiencias, {selectedSummary.education} formaciones, {selectedSummary.languages} idiomas y {selectedSummary.achievements} logros/certificaciones.
                     </div>
+                    <div className="mt-1 text-xs text-slate-500">Se añadirán a tu perfil y podrás editarlas después.</div>
                   </div>
                   <button
                     type="button"
@@ -822,7 +825,7 @@ export default function CvUploadAndParse() {
                     disabled={importing !== null || dedupLoading || totalSelected === 0}
                     className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                   >
-                    {importing === "all" ? "Importando…" : "Importar seleccionadas"}
+                    {importing === "all" ? "Creando perfil…" : "Crear mi perfil"}
                   </button>
                 </div>
               </div>

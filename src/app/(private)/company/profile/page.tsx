@@ -393,6 +393,10 @@ export default function CompanyProfilePage() {
   }, []);
 
   const completeness = Number(completion?.score ?? profile?.profile_completeness_score ?? 0);
+  const checklist = Array.isArray(completion?.checklist) ? completion.checklist : [];
+  const requiredPending = checklist.filter((item) => item.priority === "required" && item.status !== "completed");
+  const recommendedPending = checklist.filter((item) => item.priority === "recommended" && item.status !== "completed");
+  const optionalPending = checklist.filter((item) => item.priority === "optional" && item.status !== "completed");
   const hasInitialData = Boolean(
     profile?.legal_name ||
       profile?.trade_name ||
@@ -687,6 +691,19 @@ export default function CompanyProfilePage() {
             <p className="mt-2 text-xs text-slate-600">
               Obligatorios y recomendados cuentan. Los opcionales no penalizan el porcentaje.
             </p>
+            <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50 px-3 py-3 text-xs text-blue-900">
+              <div className="font-semibold">Qué hacer ahora</div>
+              <div className="mt-1">
+                {requiredPending.length > 0
+                  ? `Empieza por ${requiredPending.length} campo${requiredPending.length === 1 ? "" : "s"} obligatorio${requiredPending.length === 1 ? "" : "s"}.`
+                  : recommendedPending.length > 0
+                    ? `Sigue con ${recommendedPending.length} campo${recommendedPending.length === 1 ? "" : "s"} recomendado${recommendedPending.length === 1 ? "" : "s"}.`
+                    : "Los opcionales ya son mejora, no bloqueo."}
+              </div>
+              <a href="#checklist-perfil" className="mt-3 inline-flex rounded-lg bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black">
+                Completar ahora
+              </a>
+            </div>
             <div className="mt-3 grid grid-cols-3 gap-2 text-[11px] text-slate-600">
               <div className="rounded-xl border border-slate-200 bg-white px-2 py-2">
                 <div className="font-semibold text-slate-900">{Number(completion?.required?.completed || 0)}/{Number(completion?.required?.total || 0)}</div>
@@ -712,10 +729,27 @@ export default function CompanyProfilePage() {
         ) : null}
       </section>
 
-      {Array.isArray(completion?.checklist) && completion?.checklist?.length ? (
-        <Section title="Checklist del perfil" subtitle="Vista clara de lo que ya esta listo y lo que conviene completar antes de lanzamiento.">
+      {checklist.length ? (
+        <Section title="Checklist del perfil" subtitle="Primero completa lo obligatorio. Después refuerza lo recomendado y deja lo opcional para una mejora posterior.">
+          <div id="checklist-perfil" className="mb-4 grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-rose-700">Obligatorio</div>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{requiredPending.length} pendiente{requiredPending.length === 1 ? "" : "s"}</p>
+              <p className="mt-1 text-xs text-slate-600">Esto es lo primero que conviene cerrar para operar sin dudas.</p>
+            </div>
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-amber-700">Recomendado</div>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{recommendedPending.length} pendiente{recommendedPending.length === 1 ? "" : "s"}</p>
+              <p className="mt-1 text-xs text-slate-600">Refuerza credibilidad y claridad operativa.</p>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Opcional</div>
+              <p className="mt-2 text-sm font-semibold text-slate-900">{optionalPending.length} pendiente{optionalPending.length === 1 ? "" : "s"}</p>
+              <p className="mt-1 text-xs text-slate-600">Mejoras útiles, pero no bloquean tu avance ahora.</p>
+            </div>
+          </div>
           <div className="grid gap-3 lg:grid-cols-2">
-            {completion.checklist.map((item) => (
+            {checklist.map((item) => (
               <article key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>

@@ -235,17 +235,28 @@ export default async function CandidateExperiencePage({
   const companyCvImportFlag = Array.isArray(resolvedSearchParams?.company_cv_import)
     ? resolvedSearchParams.company_cv_import[0]
     : resolvedSearchParams?.company_cv_import;
+  const cvImportFlag = Array.isArray(resolvedSearchParams?.cv_import)
+    ? resolvedSearchParams.cv_import[0]
+    : resolvedSearchParams?.cv_import;
+  const focusFlag = Array.isArray(resolvedSearchParams?.focus)
+    ? resolvedSearchParams.focus[0]
+    : resolvedSearchParams?.focus;
   const onboardingFlag = Array.isArray(resolvedSearchParams?.onboarding)
     ? resolvedSearchParams.onboarding[0]
     : resolvedSearchParams?.onboarding;
   const importSummary = summarizeCompanyCvImportUpdates((candidateProfile as any)?.raw_cv_json);
+  const hasExperiences = normalizedRows.length > 0;
+  const hasVerifiedOrInFlight = normalizedRows.some((row) =>
+    row.status === "Verificada" || row.status === "En revisión" || row.status === "Verificación solicitada",
+  );
+  const shouldPushFirstVerification = hasExperiences && !hasVerifiedOrInFlight;
 
   return (
     <CandidateOperationsLayout>
       <CandidatePageHeader
         eyebrow="Experiencia profesional"
         title="Tu trayectoria verificable"
-        description="Ordena tu historial, separa lo que ya aporta señal y decide qué parte de tu experiencia quieres hacer visible."
+        description="Ordena tu historial, crea tu perfil con claridad y valida primero la experiencia que más confianza puede aportar."
         ctaLabel="Añadir experiencia manual"
         ctaHref="/candidate/experience?new=1#manual-experience"
         badges={["Trayectoria revisable", "Validación por experiencia", "Visibilidad pública controlada"]}
@@ -272,6 +283,29 @@ export default async function CandidateExperiencePage({
       </CandidateToolbar>
 
       <section className="space-y-8">
+        {shouldPushFirstVerification ? (
+          <div className="rounded-3xl border border-emerald-200 bg-emerald-50 px-6 py-6 shadow-sm">
+            <p className="text-sm font-semibold text-emerald-900">Tu perfil ya está creado.</p>
+            <p className="mt-2 text-sm leading-6 text-emerald-800">
+              Ahora valida al menos una experiencia para generar confianza real.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <a
+                href="#verify-first"
+                className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+              >
+                Verificar mi primera experiencia
+              </a>
+              <Link
+                href="/candidate/profile"
+                className="inline-flex rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
+              >
+                Completar mi perfil
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
         <CandidateSurface id="cv-upload" tone="subtle" className="px-6 py-6">
           <div className="max-w-3xl space-y-2">
             <h2 className="text-lg font-semibold text-slate-950">Importa tu experiencia desde tu CV</h2>
@@ -279,6 +313,14 @@ export default async function CandidateExperiencePage({
               Sube tu CV, revisa lo detectado y corrige lo necesario antes de solicitar verificaciones o vincular documentación.
             </p>
           </div>
+          {String(cvImportFlag || "") === "1" ? (
+            <div className="mt-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-4 text-sm text-blue-900">
+              <p className="font-semibold">Tu perfil ya está preparado.</p>
+              <p className="mt-1 leading-6 text-blue-800">
+                Revisa las experiencias importadas y valida primero la más relevante para que tu perfil genere confianza real.
+              </p>
+            </div>
+          ) : null}
           <div className="mt-4">
             <CvUploadAndParse />
           </div>
@@ -346,6 +388,7 @@ export default async function CandidateExperiencePage({
 
         <ExperienceListClient
           initialRows={normalizedRows as any}
+          focusFirstVerifiable={String(focusFlag || "") === "verify-first" || shouldPushFirstVerification}
           publicPlan={{
             work: publicLimits.work,
             featured: publicLimits.featured,

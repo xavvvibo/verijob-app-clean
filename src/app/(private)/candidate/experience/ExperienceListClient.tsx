@@ -87,9 +87,11 @@ function statusClasses(status: ExperienceStatus) {
 export default function ExperienceListClient({
   initialRows,
   publicPlan,
+  focusFirstVerifiable = false,
 }: {
   initialRows: Row[];
   publicPlan?: PublicPlanInfo;
+  focusFirstVerifiable?: boolean;
 }) {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
@@ -105,6 +107,10 @@ export default function ExperienceListClient({
   const [verifyStateById, setVerifyStateById] = useState<Record<string, VerifyState>>({});
   const [verifyMessageById, setVerifyMessageById] = useState<Record<string, string | null>>({});
   const [savingVisibilityId, setSavingVisibilityId] = useState<string | null>(null);
+  const firstVerifiableId = useMemo(
+    () => rows.find((row) => row.status === "Sin verificar" || row.status === "Revocada")?.id || null,
+    [rows],
+  );
 
   useEffect(() => {
     setRows(initialRows || []);
@@ -114,6 +120,11 @@ export default function ExperienceListClient({
       return initialRows[0]?.id || null;
     });
   }, [initialRows]);
+
+  useEffect(() => {
+    if (!focusFirstVerifiable || !firstVerifiableId) return;
+    setExpandedId(firstVerifiableId);
+  }, [firstVerifiableId, focusFirstVerifiable]);
 
   useEffect(() => {
     const onCreated = (event: Event) => {
@@ -347,9 +358,10 @@ export default function ExperienceListClient({
         ...prev,
         [row.id]:
           json?.already_exists === true
-            ? "Ya existía una solicitud activa para esta experiencia y este email. Hemos reutilizado la solicitud existente."
-            : "Solicitud enviada correctamente.",
+            ? "Ya existía una solicitud activa para esta experiencia. Seguiremos con esa misma validación."
+            : "Solicitud enviada. Cuando se confirme, esta experiencia aparecerá como validada y reforzará tu perfil.",
       }));
+      setFeedback("Solicitud enviada. Cuando se confirme, esta experiencia aparecerá como validada y reforzará tu perfil.", "success");
     } catch (err: any) {
       setVerifyStateById((prev) => ({ ...prev, [row.id]: "error" }));
       setVerifyMessageById((prev) => ({
@@ -422,9 +434,18 @@ export default function ExperienceListClient({
         });
         const primaryVerificationBadge = verificationBadges[0] || null;
         const secondaryVerificationBadges = verificationBadges.slice(1, 3);
+        const canRequestVerification = row.status === "Sin verificar" || row.status === "Revocada";
+        const isVerificationInFlight = row.status === "Validación solicitada" || row.status === "En revisión";
+        const highlightForVerification = firstVerifiableId === row.id;
 
         return (
-          <article key={row.id} id={`exp-${row.id}`} className="border-b border-slate-100 pb-5 last:border-b-0 last:pb-0">
+          <article
+            key={row.id}
+            id={highlightForVerification ? "verify-first" : `exp-${row.id}`}
+            className={`border-b border-slate-100 pb-5 last:border-b-0 last:pb-0 ${
+              highlightForVerification ? "scroll-mt-28 rounded-2xl border border-emerald-200 bg-emerald-50/40 px-3" : ""
+            }`}
+          >
             <button
               type="button"
               onClick={() => {
@@ -468,7 +489,7 @@ export default function ExperienceListClient({
                 </p>
               </div>
               <span className="inline-flex items-center rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">
-                {isExpanded ? "Ocultar detalle" : "Ver detalle"}
+                {canRequestVerification ? (isExpanded ? "Verificación lista" : "Verificar experiencia") : isVerificationInFlight ? row.status : isExpanded ? "Ocultar detalle" : "Ver detalle"}
               </span>
             </button>
 
@@ -679,9 +700,9 @@ export default function ExperienceListClient({
                       </p>
                     </div>
 
-                    {!isVerified ? (
+                    {canRequestVerification ? (
                       <div className="rounded-2xl bg-sky-50/80 p-4">
-                        <div className="text-sm font-semibold text-sky-900">Solicitar verificación</div>
+                        <div className="text-sm font-semibold text-sky-900">Verificar experiencia</div>
                         <p className="mt-1 text-xs text-sky-800">
                           Indica el email de la empresa o de la persona que puede validar esta experiencia.
                         </p>
@@ -715,8 +736,14 @@ export default function ExperienceListClient({
                             disabled={verifyState === "loading"}
                             className="inline-flex items-center justify-center rounded-xl bg-slate-900 px-3 py-2 text-xs font-semibold text-white hover:bg-black disabled:opacity-60"
                           >
-                            {verifyState === "loading" ? "Enviando…" : "Enviar solicitud"}
+                            {verifyState === "loading" ? "Enviando…" : "Verificar experiencia"}
                           </button>
+                          <Link
+                            href="/candidate/verifications"
+                            className="inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
+                          >
+                            Ver detalle
+                          </Link>
                         </div>
                         {verifyMessage ? (
                           <div
@@ -730,7 +757,29 @@ export default function ExperienceListClient({
                           </div>
                         ) : null}
                       </div>
-                    ) : null}
+                    ) : (
+                      <div className={`rounded-2xl p-4 ${isVerified ? "bg-emerald-50/80" : "bg-blue-50/80"}`}>
+                        <div className={`text-sm font-semibold ${isVerified ? "text-emerald-900" : "text-blue-900"}`}>
+                          {isVerified ? "Experiencia validada" : "Solicitud enviada"}
+                        </div>
+                        <p className={`mt-1 text-xs ${isVerified ? "text-emerald-800" : "text-blue-800"}`}>
+                          {isVerified
+                            ? "Esta experiencia ya aparece como validada y ya está reforzando tu perfil."
+                            : "Ya hay una solicitud en curso para esta experiencia. Evitamos duplicarla para no generar ruido."}
+                        </p>
+                        <div className={`mt-3 rounded-lg border p-3 text-xs ${isVerified ? "border-emerald-200 bg-white text-emerald-700" : "border-blue-200 bg-white text-blue-700"}`}>
+                          {isVerified
+                            ? "Experiencia validada."
+                            : "Cuando se confirme, esta experiencia aparecerá como validada y reforzará tu perfil."}
+                        </div>
+                        <Link
+                          href="/candidate/verifications"
+                          className="mt-3 inline-flex rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-900 hover:bg-slate-50"
+                        >
+                          Ver detalle
+                        </Link>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

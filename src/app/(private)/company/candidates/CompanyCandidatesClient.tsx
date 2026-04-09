@@ -132,6 +132,7 @@ export default function CompanyCandidatesClient() {
   const [archivedFilter, setArchivedFilter] = useState(searchParams.get("archived") || "hide");
   const [sort, setSort] = useState(searchParams.get("sort") || "recent");
   const [checkoutMessage, setCheckoutMessage] = useState<string | null>(null);
+  const [latestImportedId, setLatestImportedId] = useState<string | null>(null);
   const [form, setForm] = useState({
     candidate_email: "",
     candidate_name: "",
@@ -191,9 +192,14 @@ export default function CompanyCandidatesClient() {
       if (!res.ok) {
         throw new Error(data?.user_message || data?.details || data?.error || "No se pudo cargar la base de candidatos.");
       }
-      setImports(Array.isArray(data?.imports) ? data.imports : []);
+      const nextImports = Array.isArray(data?.imports) ? data.imports : [];
+      setImports(nextImports);
       setAvailableProfileAccesses(Number(data?.available_profile_accesses || 0));
       setImportsMeta(data?.imports_meta || { available: true, migration_files: [] });
+      if (latestImportedId) {
+        const latestRow = nextImports.find((row: any) => String(row?.id || "") === latestImportedId) || nextImports[0] || null;
+        if (latestRow) setQuickViewRow(latestRow);
+      }
     } catch (e: any) {
       setError(e?.message || "No se pudo cargar la base de candidatos.");
     } finally {
@@ -203,7 +209,7 @@ export default function CompanyCandidatesClient() {
 
   useEffect(() => {
     void loadImports();
-  }, []);
+  }, [latestImportedId]);
 
   useEffect(() => {
     const handleUnlocked = (event: Event) => {
@@ -316,7 +322,12 @@ export default function CompanyCandidatesClient() {
       });
       setFile(null);
       setImportPreview(null);
-      setNotice(data?.user_message || "CV importado correctamente.");
+      setLatestImportedId(String(data?.import_invite?.id || data?.processing?.invite_id || "").trim() || null);
+      setNotice(
+        data?.candidate_already_exists
+          ? "CV recibido. Se ha dejado en revisión para que puedas decidir sin sobrescribir el perfil existente."
+          : "Tu candidato ya está preparado para revisión."
+      );
       await loadImports();
     } catch (e: any) {
       setError(e?.message || "No se pudo crear la invitación.");
@@ -455,7 +466,7 @@ export default function CompanyCandidatesClient() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Base RRHH</h1>
             <p className="mt-2 text-sm text-slate-600">
-              Centro operativo para revisar pipeline, abrir resúmenes parciales y decidir cuándo merece la pena desbloquear un perfil completo.
+              Revisa resúmenes de candidatos y decide cuándo compensa abrir el perfil completo.
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
@@ -467,6 +478,23 @@ export default function CompanyCandidatesClient() {
           </div>
         </div>
       </section>
+
+      {imports.length === 0 ? (
+        <section className="rounded-[30px] border border-blue-200 bg-blue-50 p-6 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="max-w-3xl">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">Empieza aquí</p>
+              <h2 className="mt-2 text-2xl font-semibold text-slate-900">Sube tu primer CV</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-700">
+                Primero verás un resumen del candidato. Solo abrirás el perfil completo cuando te compense.
+              </p>
+            </div>
+            <a href="#importar-cv" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+              Importar primer CV
+            </a>
+          </div>
+        </section>
+      ) : null}
 
       <section className="rounded-[30px] border border-slate-200 bg-white p-6 shadow-sm">
         <div className="flex items-center justify-between gap-4">
@@ -544,7 +572,7 @@ export default function CompanyCandidatesClient() {
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {[
-                { label: "Todo pipeline", active: pipelineFilter === "all", onClick: () => setPipelineFilter("all") },
+                { label: "Todos", active: pipelineFilter === "all", onClick: () => setPipelineFilter("all") },
                 { label: "Guardados", active: savedFilter === "saved", onClick: () => setSavedFilter("saved") },
                 { label: "Preseleccionados", active: savedFilter === "preselected", onClick: () => setSavedFilter("preselected") },
                 { label: "Archivados", active: archivedFilter === "only", onClick: () => setArchivedFilter("only") },
@@ -596,7 +624,7 @@ export default function CompanyCandidatesClient() {
               {imports.length === 0 ? (
                 <div>
                   <p className="font-semibold text-slate-900">Todavía no hay candidatos importados.</p>
-                  <p className="mt-2">Subir un CV te da una base real para empezar a decidir y priorizar unlocks con criterio.</p>
+                  <p className="mt-2">Primero verás un resumen del candidato. Solo abrirás el perfil completo cuando te compense.</p>
                   <a href="#importar-cv" className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
                     Importar primer CV
                   </a>
@@ -801,7 +829,7 @@ export default function CompanyCandidatesClient() {
             <div>
               <h2 className="text-base font-semibold text-slate-900">Quick actions</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Usa estas acciones para incorporar candidatos externos o abrir directamente un perfil compartido por token.
+                Empieza importando un CV o abre un resumen ya compartido por token.
               </p>
             </div>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
@@ -811,6 +839,30 @@ export default function CompanyCandidatesClient() {
 
           {error ? <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div> : null}
           {notice ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div> : null}
+          {latestImportedId && quickViewRow ? (
+            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+              <p className="font-semibold">Tu candidato ya está preparado para revisión</p>
+              <p className="mt-1">Abre el resumen para decidir con más contexto antes de desbloquear el perfil completo.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {quickViewRow.candidate_public_token ? (
+                  <a
+                    href={`/company/candidate/${encodeURIComponent(String(quickViewRow.candidate_public_token))}`}
+                    className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+                  >
+                    Revisar candidato
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setQuickViewRow(quickViewRow)}
+                    className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+                  >
+                    Revisar candidato
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
             <div id="importar-cv" className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -818,7 +870,7 @@ export default function CompanyCandidatesClient() {
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900">Importar CV externo</h3>
                   <p className="mt-1 text-xs text-slate-600">
-                    Sube un CV recibido fuera de VERIJOB y conviértelo en un candidato revisable.
+                    Sube un CV recibido fuera de VERIJOB. Primero verás un resumen del candidato.
                   </p>
                 </div>
                 <details className="text-xs text-slate-500">
@@ -903,7 +955,7 @@ export default function CompanyCandidatesClient() {
                     disabled={submitDisabled}
                     className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
                   >
-                    {submitting ? "Importando CV…" : "Subir CV e invitar"}
+                    {submitting ? "Importando CV…" : imports.length === 0 ? "Subir primer CV" : "Subir CV e invitar"}
                   </button>
                   <details className="relative">
                     <summary className="inline-flex list-none cursor-pointer rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50">
@@ -916,7 +968,7 @@ export default function CompanyCandidatesClient() {
                         disabled={previewing || submitting || !importsMeta.available || !file}
                         className="block w-full rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                       >
-                        {previewing ? "Analizando CV…" : "Analizar y pre-rellenar"}
+                        {previewing ? "Preparando resumen…" : "Preparar resumen"}
                       </button>
                       <button
                         type="button"
