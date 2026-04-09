@@ -13,11 +13,16 @@ function json(status: number, body: any) {
   return res;
 }
 
+async function resolveId(ctx: any) {
+  const params = await Promise.resolve(ctx?.params);
+  return String(params?.id || "").trim();
+}
+
 export async function GET(_req: Request, ctx: any) {
   const owner = await requireOwner();
   if (!owner.ok) return json(owner.status, { error: owner.error });
 
-  const id = String(ctx?.params?.id || "").trim();
+  const id = await resolveId(ctx);
   if (!id) return json(400, { error: "missing_id" });
 
   const { data, error } = await owner.admin.from("promo_codes").select("*").eq("id", id).maybeSingle();
@@ -37,7 +42,7 @@ export async function PATCH(req: Request, ctx: any) {
   const owner = await requireOwner();
   if (!owner.ok) return json(owner.status, { error: owner.error });
 
-  const id = String(ctx?.params?.id || "").trim();
+  const id = await resolveId(ctx);
   if (!id) return json(400, { error: "missing_id" });
 
   const body = await req.json().catch(() => ({}));
@@ -239,7 +244,7 @@ export async function DELETE(_req: Request, ctx: any) {
   const owner = await requireOwner();
   if (!owner.ok) return json(owner.status, { error: owner.error });
 
-  const id = String(ctx?.params?.id || "").trim();
+  const id = await resolveId(ctx);
   if (!id) return json(400, { error: "missing_id" });
 
   const loaded = await loadPromo(owner, id);
