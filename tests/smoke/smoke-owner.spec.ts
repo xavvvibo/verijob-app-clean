@@ -17,7 +17,7 @@ const OWNER_ROUTES = [
 ];
 
 function toPathRegex(route: string) {
-  return new RegExp(`^${route.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
+  return new RegExp(`${route.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:$|[?#])`);
 }
 
 test.describe.serial("@owner smoke owner", () => {

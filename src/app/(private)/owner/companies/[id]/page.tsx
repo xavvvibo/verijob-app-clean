@@ -61,8 +61,44 @@ function documentDecisionSource(rawReviewedBy: unknown, rawReviewedAt: unknown) 
   return { label: "Pendiente", className: "border-amber-200 bg-amber-50 text-amber-800" };
 }
 
+function isMissingColumnError(error: any, columnName: string) {
+  const code = String(error?.code || "");
+  const msg = String(error?.message || "").toLowerCase();
+  return code === "42703" || (msg.includes("column") && msg.includes(columnName.toLowerCase()) && msg.includes("does not exist"));
+}
+
+async function resolveParamId(params: Promise<{ id: string }>) {
+  const resolved = await params;
+  return String(resolved?.id || "").trim();
+}
+
+function LoadErrorState({ companyId, details }: { companyId: string; details?: string | null }) {
+  return (
+    <div className="space-y-5">
+      <section className="rounded-xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold text-rose-950">No se pudo cargar la ficha de empresa</h1>
+            <p className="mt-1 text-sm text-rose-900">
+              La ruta existe, pero la consulta de datos ha fallado. No se devuelve 404 porque no es una ausencia confirmada de empresa.
+            </p>
+          </div>
+          <Link href="/owner/companies" className="rounded-lg border border-rose-300 bg-white px-3 py-2 text-sm font-semibold text-rose-900">
+            Volver a empresas
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          <Card label="Company ID solicitada" value={companyId || "—"} mono />
+          <Card label="Error" value={details || "Error no detallado"} />
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default async function OwnerCompanyDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+  const id = await resolveParamId(params);
+  if (!id) notFound();
 
   const sessionClient = await createServerSupabaseClient();
   const { data: auth } = await sessionClient.auth.getUser();
@@ -73,13 +109,24 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
   if (!["owner", "admin"].includes(ownerRole)) redirect("/dashboard?forbidden=1&from=owner");
 
   const admin = createServiceRoleClient();
-  const companyRes = await admin
+  let companyRes = await admin
     .from("companies")
     .select("id,name,status,created_at,updated_at")
     .eq("id", id)
     .maybeSingle();
 
-  if (companyRes.error || !companyRes.data) notFound();
+  if (companyRes.error && isMissingColumnError(companyRes.error, "status")) {
+    companyRes = await admin
+      .from("companies")
+      .select("id,name,created_at,updated_at")
+      .eq("id", id)
+      .maybeSingle();
+  }
+
+  if (companyRes.error) {
+    return <LoadErrorState companyId={id} details={companyRes.error.message} />;
+  }
+  if (!companyRes.data) notFound();
   const company = companyRes.data as any;
 
   const [profileRes, membersRes, requestsRes, docsRes] = await Promise.all([
@@ -118,9 +165,16 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
     )
   );
 
-  const [profilesRes, companyAdminRes, docActorProfilesRes] = await Promise.all([
+  const requesterIds = Array.from(
+    new Set(requests.map((row: any) => String(row?.requested_by || "").trim()).filter(Boolean))
+  );
+
+  const [profilesRes, requesterProfilesRes, companyAdminRes, docActorProfilesRes] = await Promise.all([
     memberIds.length
       ? admin.from("profiles").select("id,full_name,email,last_activity_at").in("id", memberIds)
+      : Promise.resolve({ data: [] } as any),
+    requesterIds.length
+      ? admin.from("profiles").select("id,full_name,email").in("id", requesterIds)
       : Promise.resolve({ data: [] } as any),
     members.length
       ? admin.from("company_members").select("user_id,role").eq("company_id", id).limit(1).maybeSingle()
@@ -131,6 +185,7 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
   ]);
 
   const profilesById = new Map((Array.isArray(profilesRes.data) ? profilesRes.data : []).map((row: any) => [String(row.id), row]));
+  const requesterProfilesById = new Map((Array.isArray(requesterProfilesRes.data) ? requesterProfilesRes.data : []).map((row: any) => [String(row.id), row]));
   const docActorById = new Map((Array.isArray(docActorProfilesRes.data) ? docActorProfilesRes.data : []).map((row: any) => [String(row.id), row]));
   const companyAdminUserId = String((companyAdminRes.data as any)?.user_id || "").trim() || memberIds[0] || null;
   const effectiveSubscription = companyAdminUserId
@@ -352,7 +407,7 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
                 </thead>
                 <tbody>
                   {requests.map((row: any) => {
-                    const candidate = profilesById.get(String(row.requested_by || "")) as any;
+                    const candidate = requesterProfilesById.get(String(row.requested_by || "")) as any;
                     return (
                       <tr key={row.id} className="border-b border-slate-100 text-slate-800">
                         <td className="px-3 py-3 font-mono text-xs">{row.id}</td>
