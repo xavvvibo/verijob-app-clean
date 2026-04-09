@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireOwner } from "@/app/api/internal/owner/_lib";
 import {
-  estimateManagedPlanAmountCents,
   getManagedSubscriptionPlansForRole,
   managedPlanLabel,
   normalizeManagedSubscriptionPlanKey,
@@ -54,34 +53,55 @@ function asText(v: unknown, max = 500) {
   return String(v || "").trim().slice(0, max);
 }
 
-function classifyPlanPersistenceError(error: any) {
-  const code = String(error?.code || "").trim();
-  const message = String(error?.message || "").trim();
-  const lower = message.toLowerCase();
-  const isConstraintLike =
-    code === "23514" ||
-    code === "22P02" ||
-    code === "23502" ||
-    lower.includes("check constraint") ||
-    lower.includes("violates check constraint") ||
-    lower.includes("violates not-null constraint") ||
-    lower.includes("invalid input value") ||
-    lower.includes("enum") ||
-    lower.includes("subscriptions_plan") ||
-    (lower.includes("plan") && lower.includes("constraint"));
+async function createOwnerPlanOverride(args: {
+  admin: any;
+  targetUserId: string;
+  targetPlan: string;
+  ownerId: string;
+  reason: string;
+  activeCompanyId?: string | null;
+}) {
+  const overrideColumns = await getTableColumns(args.admin, "plan_overrides");
+  const nowIso = new Date().toISOString();
+  const insertPayload: Record<string, any> = {
+    user_id: args.targetUserId,
+    plan_key: args.targetPlan,
+    source_type: "owner_manual_plan_change",
+    source_id: null,
+    starts_at: nowIso,
+    expires_at: null,
+    is_active: true,
+    metadata: {
+      reason: args.reason,
+      owner_user_id: args.ownerId,
+      target_plan: args.targetPlan,
+      company_id: args.activeCompanyId || null,
+    },
+  };
+  if (overrideColumns.has("company_id") && args.activeCompanyId) {
+    insertPayload.company_id = args.activeCompanyId;
+  }
 
-  if (isConstraintLike) {
-    return {
-      error: "plan_persistence_rejected",
-      probable_cause: "remote_subscription_plan_constraint",
-      details: message || null,
-    };
+  const { data, error } = await args.admin
+    .from("plan_overrides")
+    .insert(insertPayload)
+    .select("id,plan_key,source_type,source_id,starts_at,expires_at,is_active,metadata,created_at")
+    .single();
+
+  if (error) {
+    return { ok: false as const, error };
   }
 
   return {
-    error: "plan_change_failed",
-    probable_cause: null,
-    details: message || null,
+    ok: true as const,
+    row: {
+      id: data.id,
+      plan: data.plan_key,
+      status: "active",
+      current_period_end: data.expires_at,
+      metadata: data.metadata,
+      source: "override",
+    },
   };
 }
 
@@ -299,118 +319,37 @@ export async function POST(req: Request, ctx: any) {
       .eq("user_id", targetUserId)
       .eq("is_active", true);
 
-    const columns = await getTableColumns(owner.admin, "subscriptions");
-    const latestSub = await readLatestSubscriptionForTarget({
-      admin: owner.admin,
-      targetUserId,
-      activeCompanyId,
-      subscriptionsColumns: columns,
-    });
-    const metadata = {
-      ...(asObject((latestSub as any)?.metadata)),
-      owner_override: {
-        type: "manual_plan_change",
-        owner_user_id: owner.ownerId,
-        reason,
-        at: new Date().toISOString(),
-        target_plan: targetPlan,
-      },
-    };
-
-    const nextStatus = targetPlan === "free" ? "canceled" : "active";
-    const estimatedAmount = estimateManagedPlanAmountCents(targetPlan);
-
-    const updatePayload: Record<string, any> = {
-      plan: targetPlan,
-      status: nextStatus,
-      metadata,
-    };
-    if (columns.has("amount")) updatePayload.amount = estimatedAmount ?? 0;
-    if (columns.has("currency")) updatePayload.currency = "eur";
-    if (columns.has("current_period_end")) {
-      updatePayload.current_period_end = targetPlan === "free" ? new Date().toISOString() : (latestSub as any)?.current_period_end || null;
-    }
-    if (columns.has("company_id") && activeCompanyId && inferredRole === "company") {
-      updatePayload.company_id = activeCompanyId;
-    }
-
     let resultRow: any = null;
-    if ((latestSub as any)?.id) {
-      const { data: updated, error: updateErr } = await owner.admin
-        .from("subscriptions")
-        .update(updatePayload)
-        .eq("id", (latestSub as any).id)
-        .select("id,plan,status,current_period_end,metadata")
-        .single();
-      if (updateErr) {
-        const classified = classifyPlanPersistenceError(updateErr);
-        return json(400, classified);
+    if (targetPlan !== "free") {
+      const overrideRes = await createOwnerPlanOverride({
+        admin: owner.admin,
+        targetUserId,
+        targetPlan,
+        ownerId: owner.ownerId,
+        reason,
+        activeCompanyId: inferredRole === "company" ? activeCompanyId : null,
+      });
+      if (!overrideRes.ok) {
+        return json(400, { error: "plan_override_create_failed", details: overrideRes.error.message });
       }
-      resultRow = updated;
+      resultRow = overrideRes.row;
     } else {
-      if (targetPlan !== "free") {
-        if (inferredRole === "company" && activeCompanyId) {
-          const insertPayload: Record<string, any> = {
-            user_id: targetUserId,
-            plan: targetPlan,
-            status: "active",
-            metadata,
-          };
-          if (columns.has("company_id")) insertPayload.company_id = activeCompanyId;
-          if (columns.has("amount")) insertPayload.amount = estimatedAmount ?? 0;
-          if (columns.has("currency")) insertPayload.currency = "eur";
-          if (columns.has("current_period_end")) insertPayload.current_period_end = null;
-          const { data: inserted, error: insertErr } = await owner.admin
-            .from("subscriptions")
-            .insert(insertPayload)
-            .select("id,plan,status,current_period_end,metadata")
-            .single();
-          if (insertErr) {
-            const classified = classifyPlanPersistenceError(insertErr);
-            return json(400, classified);
-          }
-          resultRow = inserted;
-        } else {
-        const { data: overrideRow, error: overrideErr } = await owner.admin
-          .from("plan_overrides")
-          .insert({
-            user_id: targetUserId,
-            plan_key: targetPlan,
-            source_type: "owner_manual_plan_change",
-            source_id: null,
-            starts_at: new Date().toISOString(),
-            expires_at: null,
-            is_active: true,
-            metadata: {
-              reason,
-              owner_user_id: owner.ownerId,
-              target_plan: targetPlan,
-            },
-          })
-          .select("id,plan_key,source_type,source_id,starts_at,expires_at,is_active,metadata,created_at")
-          .single();
-        if (overrideErr) {
-          return json(400, { error: "plan_override_create_failed", details: overrideErr.message });
-        }
-        resultRow = {
-          id: overrideRow.id,
-          plan: overrideRow.plan_key,
-          status: "active",
-          current_period_end: overrideRow.expires_at,
-          metadata: overrideRow.metadata,
-          source: "override",
-        };
-        }
-      } else {
-        resultRow = {
-          id: null,
-          plan: "free",
-          status: "free",
-          current_period_end: null,
-          metadata: {},
-          source: "none",
-        };
-      }
+      resultRow = {
+        id: null,
+        plan: "free",
+        status: "free",
+        current_period_end: null,
+        metadata: {
+          owner_override: {
+            type: "manual_plan_change",
+            owner_user_id: owner.ownerId,
+            reason,
+            at: new Date().toISOString(),
+            target_plan: "free",
+          },
+        },
+        source: "override",
+      };
     }
 
     const logged = await logOwnerAction(owner, targetUserId, actionType, reason, {

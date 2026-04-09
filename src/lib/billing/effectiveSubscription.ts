@@ -139,7 +139,13 @@ export async function readEffectiveCompanySubscriptionState(admin: any, args: {
           .eq("is_active", true)
           .order("created_at", { ascending: false })
           .limit(10)
-      : Promise.resolve({ data: [], error: null } as any),
+      : admin
+          .from("plan_overrides")
+          .select("id,user_id,plan_key,source_type,source_id,starts_at,expires_at,is_active,metadata,created_at")
+          .eq("user_id", args.userId)
+          .eq("is_active", true)
+          .order("created_at", { ascending: false })
+          .limit(10),
   ]);
 
   let subscription = subscriptionRes.data || null;
@@ -154,7 +160,19 @@ export async function readEffectiveCompanySubscriptionState(admin: any, args: {
     subscription = legacyFallback.data || null;
   }
 
-  return buildEffectiveState(nowIso, subscription, overridesRes.data || []);
+  let overrides = overridesRes.data || [];
+  if ((!Array.isArray(overrides) || overrides.length === 0) && hasCompanyIdOnOverrides) {
+    const legacyOverrideFallback = await admin
+      .from("plan_overrides")
+      .select("id,user_id,plan_key,source_type,source_id,starts_at,expires_at,is_active,metadata,created_at")
+      .eq("user_id", args.userId)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false })
+      .limit(10);
+    overrides = legacyOverrideFallback.data || [];
+  }
+
+  return buildEffectiveState(nowIso, subscription, overrides);
 }
 
 export async function readEffectiveSubscriptionStates(admin: any, userIds: string[]) {

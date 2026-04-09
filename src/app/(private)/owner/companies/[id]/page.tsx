@@ -322,7 +322,7 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
             Trazabilidad documental interna por empresa. Aquí ves archivo recibido, tipo declarado, datos detectados, revisión registrada y notas internas disponibles.
           </p>
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-            Estado actual del módulo owner: esta vista expone trazabilidad y contexto real. La decisión manual owner todavía no tiene acción dedicada en esta pantalla; hoy el `review_status` se resuelve por el flujo interno existente.
+            Estado actual del módulo owner: esta vista expone trazabilidad y contexto real. Owner ya puede abrir el archivo original y registrar decisión manual sobre el `review_status`.
           </div>
           {!activeDocs.length ? (
             <p className="mt-3 text-sm text-slate-600">No hay documentos activos registrados para esta empresa.</p>
@@ -377,6 +377,22 @@ export default async function OwnerCompanyDetailPage({ params }: { params: Promi
                     {doc.rejected_reason ? (
                       <p className="mt-2 text-xs text-rose-700">Motivo de rechazo: {String(doc.rejected_reason)}</p>
                     ) : null}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <a
+                        href={`/api/internal/owner/company-documents/${encodeURIComponent(String(doc.id))}/open`}
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Abrir documento
+                      </a>
+                      <a
+                        href={`/api/internal/owner/company-documents/${encodeURIComponent(String(doc.id))}/open?download=1`}
+                        className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                      >
+                        Descargar
+                      </a>
+                    </div>
                     <OwnerCompanyDocumentReviewActions
                       documentId={String(doc.id)}
                       currentStatus={String(doc.review_status || "pending_review")}

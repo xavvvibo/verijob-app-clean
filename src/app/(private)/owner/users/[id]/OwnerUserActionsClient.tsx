@@ -48,6 +48,9 @@ function ownerActionErrorMessage(errorCode: string, details: string | null) {
   if (errorCode === "plan_persistence_rejected") {
     return "El plan es válido en la app, pero la base remota ha rechazado guardarlo. Revisa la restricción legacy de subscriptions antes de reintentar.";
   }
+  if (errorCode === "plan_override_create_failed") {
+    return "No se pudo guardar el cambio manual de plan en overrides owner. Revisa la persistencia remota antes de reintentar.";
+  }
   if (errorCode === "plan_change_failed") {
     if (details && /constraint|check|enum|invalid input value/i.test(details)) {
       return "No se pudo aplicar el plan porque la persistencia remota lo ha rechazado. Revisa la configuración legacy de subscriptions.";

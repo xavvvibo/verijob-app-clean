@@ -1,5 +1,15 @@
 import { expect, type Page, type TestInfo } from "@playwright/test";
 
+function isExpectedNavigationAbort(request: any) {
+  const url = String(request?.url?.() || "");
+  const errorText = String(request?.failure?.()?.errorText || "");
+  if (!/net::ERR_ABORTED/i.test(errorText)) return false;
+  if (url.includes("_rsc=")) return true;
+  if (/\/favicon\.ico(?:[?#]|$)/i.test(url)) return true;
+  if (/\.(png|jpe?g|webp|svg|ico|css|js)(?:[?#]|$)/i.test(url)) return true;
+  return false;
+}
+
 export function installPageDiagnostics(page: Page, testInfo: TestInfo, label: string) {
   const failures: string[] = [];
   const pageErrors: string[] = [];
@@ -9,6 +19,7 @@ export function installPageDiagnostics(page: Page, testInfo: TestInfo, label: st
   });
 
   page.on("requestfailed", (request) => {
+    if (isExpectedNavigationAbort(request)) return;
     failures.push(`requestfailed ${request.method()} ${request.url()} :: ${request.failure()?.errorText || "unknown"}`);
   });
 
