@@ -19,6 +19,7 @@ export default function DecisionPanel(props: {
 
   const disabled =
     isPending || status === "verified" || status === "rejected";
+  const isResolved = status === "verified" || status === "rejected";
 
   function act(nextStatus: "verified" | "rejected") {
     setError(null);
@@ -44,9 +45,11 @@ export default function DecisionPanel(props: {
     <section className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h2 className="text-base font-semibold text-slate-900">Resolver verificación</h2>
+          <h2 className="text-base font-semibold text-slate-900">{isResolved ? "Solicitud resuelta" : "Toma una decisión"}</h2>
           <p className="mt-1 text-sm leading-6 text-slate-600">
-            Confirma o rechaza esta experiencia laboral. La decisión impactará en el estado visible para el candidato y quedará registrada con trazabilidad.
+            {isResolved
+              ? "Esta solicitud ya está resuelta y el candidato verá el resultado registrado."
+              : "Confirma o rechaza esta experiencia. Tu decisión quedará registrada para el candidato."}
           </p>
         </div>
         <div className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700">
@@ -54,17 +57,29 @@ export default function DecisionPanel(props: {
         </div>
       </div>
 
-      <div className="mt-4">
-        <div className="mb-1.5 text-xs font-medium text-slate-600">Nota interna (opcional)</div>
-        <textarea
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          rows={3}
-          className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none ring-blue-500/50 placeholder:text-slate-400 focus:ring-2"
-          placeholder="Ej: Confirmado por RRHH / No consta en nuestros registros / Falta contexto..."
-          disabled={disabled}
-        />
-      </div>
+      {isResolved ? (
+        <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${status === "verified" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-700"}`}>
+          Esta solicitud ya está resuelta.
+        </div>
+      ) : (
+        <div className="mt-4 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          Decide solo si puedes confirmar con seguridad que esta experiencia ocurrió.
+        </div>
+      )}
+
+      {!isResolved ? (
+        <div className="mt-4">
+          <div className="mb-1.5 text-xs font-medium text-slate-600">Nota interna (opcional)</div>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            rows={3}
+            className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-800 shadow-sm outline-none ring-blue-500/50 placeholder:text-slate-400 focus:ring-2"
+            placeholder="Ej: Confirmado por RRHH / No consta en nuestros registros / Falta contexto..."
+            disabled={disabled}
+          />
+        </div>
+      ) : null}
 
       {error ? (
         <div className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
@@ -95,13 +110,10 @@ export default function DecisionPanel(props: {
           {status === "rejected" ? "Experiencia rechazada" : "Rechazar experiencia"}
         </button>
       </div>
-      {status === "verified" || status === "rejected" ? (
-        <p className="mt-3 text-xs font-medium text-slate-600">
-          Esta solicitud ya está resuelta y no volverá a consumir trabajo operativo salvo que se abra un caso nuevo.
-        </p>
-      ) : null}
       <p className="mt-3 text-xs text-slate-500">
-        Verificar experiencias recibidas es gratuito para empresas. Solo confirma aquello que puedas sostener con seguridad.
+        {isResolved
+          ? "No necesitas hacer nada más salvo que se abra un caso nuevo."
+          : "Tu decisión quedará registrada para el candidato y para tu equipo."}
       </p>
     </section>
   );

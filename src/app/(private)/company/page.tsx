@@ -767,6 +767,22 @@ export default function CompanyDashboard() {
               <StatPill label="Verificaciones" value={String(recentVerifiedCount)} tone={recentVerifiedCount > 0 ? "green" : "slate"} />
             </div>
 
+            {pendingRequestCount > 0 ? (
+              <div className="mt-5 max-w-3xl rounded-3xl border border-amber-200 bg-amber-50/95 p-5 text-amber-950 shadow-sm">
+                <p className="text-sm font-semibold">
+                  Tienes {pendingRequestCount} verificaci{pendingRequestCount === 1 ? "ón pendiente" : "ones pendientes"}.
+                </p>
+                <p className="mt-2 text-sm leading-6 text-amber-900">
+                  Revísalas primero para no dejar decisiones bloqueadas. Tu respuesta quedará registrada para el candidato.
+                </p>
+                <div className="mt-4">
+                  <a href="/company/requests" className="inline-flex rounded-xl bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+                    Revisar solicitudes
+                  </a>
+                </div>
+              </div>
+            ) : null}
+
             <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <div className="rounded-3xl border border-white/15 bg-white/10 p-4 text-white backdrop-blur">
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-100/75">Estado del panel</p>
@@ -823,11 +839,17 @@ export default function CompanyDashboard() {
             </div>
 
             <div className="mt-5 flex flex-col gap-2">
-              <Link href="/company/candidates" className="inline-flex justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-black">
-                {hasCandidates ? "Revisar candidatos" : "Subir primer CV"}
-              </Link>
-              <a href="/company/requests" className="inline-flex justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
-                Revisar solicitudes
+              {pendingRequestCount > 0 ? (
+                <a href="/company/requests" className="inline-flex justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-black">
+                  Revisar solicitudes
+                </a>
+              ) : (
+                <Link href="/company/candidates" className="inline-flex justify-center rounded-xl bg-slate-950 px-4 py-3 text-sm font-semibold text-white hover:bg-black">
+                  {hasCandidates ? "Revisar candidatos" : "Subir primer CV"}
+                </Link>
+              )}
+              <a href={pendingRequestCount > 0 ? "/company/candidates" : "/company/requests"} className="inline-flex justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+                {pendingRequestCount > 0 ? "Revisar candidatos" : "Revisar solicitudes"}
               </a>
             </div>
           </aside>
@@ -925,7 +947,7 @@ export default function CompanyDashboard() {
             <TacticalActionCard
               title={pendingRequestCount > 0 ? "Resolver solicitudes pendientes" : "Mantener la cola vacía"}
               detail={pendingRequestCount > 0 ? `Tienes ${pendingRequestCount} solicitudes esperando resolución o seguimiento.` : "No hay solicitudes urgentes. Buen momento para revisar candidatos listos para decisión."}
-              cta="Abrir solicitudes"
+              cta={pendingRequestCount > 0 ? "Revisar solicitudes" : "Abrir solicitudes"}
               href="/company/requests"
               tone={pendingRequestCount > 0 ? "amber" : "slate"}
             />
@@ -1123,7 +1145,7 @@ export default function CompanyDashboard() {
                 <QueueItem
                   key={`recent-request-${item.id}`}
                   tone="border-amber-200 bg-amber-50/90 text-amber-900"
-                  title={item.candidate_name || "Solicitud pendiente"}
+                  title={`Nueva verificación recibida${item.candidate_name ? ` · ${item.candidate_name}` : ""}`}
                   detail={`${item.position || "Experiencia sin puesto"} · ${item.company_name || "Empresa"}`}
                   meta={`Pendiente desde ${formatDate(item.requested_at)}`}
                   action={

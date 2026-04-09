@@ -163,7 +163,7 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
           </div>
           <h1 className="mt-2 text-3xl font-semibold text-slate-900">Validación de experiencia</h1>
           <p className="mt-2 text-sm text-slate-600">
-            Revisa exactamente qué experiencia te piden confirmar, qué señales la sostienen ya y deja una decisión clara y trazable.
+            Revisa qué experiencia te piden confirmar y toma una decisión clara.
           </p>
         </div>
 
@@ -175,24 +175,20 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
         </Link>
       </div>
 
-      <section className="grid gap-6 lg:grid-cols-[1.4fr_0.9fr]">
+      <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
         <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
           <div className="flex flex-wrap items-center gap-3">
             <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${status.className}`}>
               {status.label}
             </span>
-            <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${confidence.className}`}>
-              Confianza {confidence.label}
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+              Recibida {fmtDate(receivedAt)}
             </span>
-            {Number(requestRow.trust_score_awarded || 0) > 0 ? (
-              <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-800">
-                +{requestRow.trust_score_awarded} puntos de confianza
+            {requestRow.resolved_at ? (
+              <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
+                Resuelta {fmtDate(requestRow.resolved_at)}
               </span>
-            ) : (
-              <span className="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
-                No suma Trust Score
-              </span>
-            )}
+            ) : null}
           </div>
 
           <div className="mt-6 grid gap-4 md:grid-cols-2">
@@ -217,99 +213,36 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
             </div>
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-4">
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Recibida</div>
-              <div className="mt-2 text-sm font-semibold text-slate-900">{fmtDate(receivedAt)}</div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Resuelta</div>
-              <div className="mt-2 text-sm font-semibold text-slate-900">{fmtDate(requestRow.resolved_at)}</div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Evidencias</div>
-              <div className="mt-2 text-sm font-semibold text-slate-900">{summary?.evidence_count ?? 0}</div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Acciones</div>
-              <div className="mt-2 text-sm font-semibold text-slate-900">{summary?.actions_count ?? 0}</div>
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-4">
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <div className="text-sm font-semibold text-slate-900">Nivel de confianza</div>
-              <p className="mt-2 text-sm text-slate-600">{confidence.helper}</p>
-
-              <div className="mt-4 grid gap-3 md:grid-cols-2">
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Dominio del email verificador</div>
-                  <div className="mt-1 text-sm font-semibold text-slate-900">
-                    {requestRow.verifier_email_domain || "Pendiente"}
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-xs uppercase tracking-wide text-slate-500">Nivel de confianza</div>
-                  <div className="mt-1 text-sm font-semibold text-slate-900">
-                    {requestRow.verification_confidence_score ?? 0}/100
-                  </div>
-                </div>
-              </div>
-
-              {requestRow.verifier_company_match_note ? (
-                <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3 text-sm text-slate-600">
-                  {requestRow.verifier_company_match_note}
-                </div>
-              ) : null}
-            </div>
-
-            {requestRow.owner_attention_required ? (
-              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
-                <div className="text-sm font-semibold text-amber-900">Revisión adicional recomendada</div>
-                <p className="mt-2 text-sm text-amber-800">
-                  Esta validación necesita una revisión adicional. Conviene pedir documentación antes de darla por consolidada.
-                </p>
-              </div>
-            ) : null}
-
-            {String(requestRow.verification_confidence_level || "").toLowerCase() !== "high" ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="text-sm font-semibold text-slate-900">Siguiente paso sugerido</div>
-                <p className="mt-2 text-sm text-slate-600">
-                  Solicita documentación para reforzar esta experiencia si necesitas una prueba más sólida.
-                </p>
-              </div>
-            ) : null}
-
-            {requestRow.resolution_notes ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <div className="text-sm font-semibold text-slate-900">Detalle registrado</div>
-                <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">
-                  {requestRow.resolution_notes}
-                </p>
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="space-y-6">
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="text-sm font-semibold text-slate-900">Qué puedes hacer</div>
-            <p className="mt-2 text-sm text-slate-600">
-              Confirma o rechaza esta experiencia. La resolución quedará registrada para el candidato y para tu equipo.
+          <div className={`mt-6 rounded-3xl border p-5 ${String(effectiveStatus || "").toLowerCase() === "verified" ? "border-emerald-200 bg-emerald-50" : String(effectiveStatus || "").toLowerCase() === "rejected" ? "border-rose-200 bg-rose-50" : "border-blue-200 bg-blue-50"}`}>
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Decisión</div>
+            <p className="mt-2 text-base font-semibold text-slate-900">
+              {String(effectiveStatus || "").toLowerCase() === "verified"
+                ? "La experiencia ya está confirmada."
+                : String(effectiveStatus || "").toLowerCase() === "rejected"
+                  ? "La experiencia ya está rechazada."
+                  : "Confirma o rechaza esta experiencia."}
             </p>
-
+            <p className="mt-2 text-sm text-slate-700">
+              {String(effectiveStatus || "").toLowerCase() === "verified" || String(effectiveStatus || "").toLowerCase() === "rejected"
+                ? "Esta decisión ya quedó registrada para el candidato."
+                : "Tu decisión quedará registrada para el candidato."}
+            </p>
             <div className="mt-5">
               <DecisionPanel verificationRequestId={id} currentStatus={String(effectiveStatus || "")} />
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="text-sm font-semibold text-slate-900">Resumen</div>
+          <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-sm font-semibold text-slate-900">Qué estás confirmando</div>
+            <p className="mt-2 text-sm text-slate-700">
+              Te pedimos confirmar si <span className="font-semibold text-slate-900">{candidateName}</span> trabajó en <span className="font-semibold text-slate-900">{companyLabel}</span> como <span className="font-semibold text-slate-900">{roleLabel}</span> durante el periodo indicado.
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <details className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+            <summary className="cursor-pointer list-none text-sm font-semibold text-slate-900">Más contexto</summary>
             <div className="mt-4 space-y-3 text-sm text-slate-600">
               <div className="flex items-center justify-between gap-4">
                 <span>Estado</span>
@@ -320,11 +253,9 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
                 <span className="font-semibold text-slate-900">{confidence.label}</span>
               </div>
               <div className="flex items-center justify-between gap-4">
-                <span>Trust score</span>
+                <span>Confianza</span>
                 <span className="font-semibold text-slate-900">
-                  {Number(requestRow.trust_score_awarded || 0) > 0
-                    ? `+${requestRow.trust_score_awarded}`
-                    : "0"}
+                  {confidence.label}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-4">
@@ -333,27 +264,32 @@ export default async function CompanyVerificationDetail({ params }: PageProps) {
                   {requestRow.verifier_email_domain || "—"}
                 </span>
               </div>
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="text-sm font-semibold text-slate-900">Qué estás confirmando</div>
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-              <p className="mt-2 text-sm text-slate-600">
-                Estás validando si la persona trabajó realmente en <span className="font-semibold text-slate-900">{companyLabel}</span> en el puesto <span className="font-semibold text-slate-900">{roleLabel}</span> durante el periodo indicado.
-              </p>
-              <p className="mt-2 text-xs text-slate-500">
-                Si no puedes confirmarlo con seguridad, recházalo o deja una nota breve para mantener la trazabilidad.
-              </p>
-            </div>
-
-            {requestRow.resolution_notes ? (
-              <div className="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                <div className="text-xs uppercase tracking-wide text-slate-500">Notas registradas</div>
-                <p className="mt-2 text-sm text-slate-700">{requestRow.resolution_notes}</p>
+              <div className="flex items-center justify-between gap-4">
+                <span>Evidencias</span>
+                <span className="font-semibold text-slate-900">{summary?.evidence_count ?? 0}</span>
               </div>
-            ) : null}
-          </div>
+              <div className="flex items-center justify-between gap-4">
+                <span>Acciones registradas</span>
+                <span className="font-semibold text-slate-900">{summary?.actions_count ?? 0}</span>
+              </div>
+              {requestRow.verifier_company_match_note ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+                  {requestRow.verifier_company_match_note}
+                </div>
+              ) : null}
+              {requestRow.owner_attention_required ? (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                  Esta validación puede necesitar una revisión adicional antes de darla por cerrada.
+                </div>
+              ) : null}
+              {requestRow.resolution_notes ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                  {requestRow.resolution_notes}
+                </div>
+              ) : null}
+              <p className="text-xs text-slate-500">{confidence.helper}</p>
+            </div>
+          </details>
         </div>
       </section>
     </div>

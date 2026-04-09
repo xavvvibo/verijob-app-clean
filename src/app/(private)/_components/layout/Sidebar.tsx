@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
 type Role = "candidate" | "company" | "owner" | string | null | undefined;
@@ -65,7 +66,7 @@ function NavSection({ title, items, pathname }: { title: string; items: Item[]; 
   );
 }
 
-function getSections(role: Role, candidateOnboardingLocked = false): Section[] {
+function getSections(role: Role, candidateOnboardingLocked = false, companyPendingRequests = 0): Section[] {
   const r = String(role || "").toLowerCase();
 
   // ==================
@@ -112,7 +113,7 @@ function getSections(role: Role, candidateOnboardingLocked = false): Section[] {
         items: [
           { href: "/company", label: "Dashboard" },
           { href: "/company/profile", label: "Perfil de empresa" },
-          { href: "/company/requests", label: "Solicitudes" },
+          { href: "/company/requests", label: "Solicitudes", badge: companyPendingRequests > 0 ? String(companyPendingRequests) : undefined },
           { href: "/company/candidates", label: "Candidatos" },
         ],
       },
@@ -160,7 +161,29 @@ export default function Sidebar({ role }: { role?: Role }) {
   const pathname = usePathname() || "/";
   const normalizedRole = String(role || "candidate").toLowerCase();
   const candidateOnboardingLocked = normalizedRole === "candidate" && pathname.startsWith("/onboarding");
-  const sections = getSections(role, candidateOnboardingLocked);
+  const [companyPendingRequests, setCompanyPendingRequests] = useState(0);
+
+  useEffect(() => {
+    if (normalizedRole !== "company") return;
+    let cancelled = false;
+
+    async function loadCompanyPendingRequests() {
+      try {
+        const res = await fetch("/api/company/dashboard", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || cancelled) return;
+        const count = Number(data?.kpis?.pending_requests || data?.verification_activity?.pending || 0);
+        if (!cancelled) setCompanyPendingRequests(Number.isFinite(count) ? count : 0);
+      } catch {}
+    }
+
+    void loadCompanyPendingRequests();
+    return () => {
+      cancelled = true;
+    };
+  }, [normalizedRole]);
+
+  const sections = getSections(role, candidateOnboardingLocked, companyPendingRequests);
 
   return (
     <aside className="sticky top-0 h-screen border-r border-slate-200 bg-white">
