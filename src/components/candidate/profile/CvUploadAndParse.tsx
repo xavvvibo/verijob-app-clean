@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { normalizeCvLanguages, shouldApplyParsedResultOnce } from "@/lib/candidate/cv-parse-normalize";
 import { validateCvFileMeta } from "@/lib/candidate/file-validation";
 
@@ -178,6 +178,13 @@ function matchStatusLabel(status: MatchStatus) {
 export default function CvUploadAndParse() {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
+  const pathname = usePathname() || "";
+  const inOnboardingFlow = pathname === "/onboarding/experience" || pathname.startsWith("/onboarding/");
+  const experienceHomeHref = inOnboardingFlow ? "/onboarding/experience" : "/candidate/experience";
+  const educationHref = inOnboardingFlow ? "/candidate/education?onboarding=1" : "/candidate/education";
+  const achievementsHref = inOnboardingFlow ? "/candidate/achievements?onboarding=1" : "/candidate/achievements";
+  const achievementsLanguageHref = inOnboardingFlow ? "/candidate/achievements?onboarding=1&open=language" : "/candidate/achievements?open=language";
+  const verifyFirstHref = inOnboardingFlow ? "/onboarding/experience?cv_import=1&focus=verify-first" : "/candidate/experience?cv_import=1&focus=verify-first";
 
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
@@ -360,7 +367,7 @@ export default function CvUploadAndParse() {
 
       await loadProfileSets();
       router.refresh();
-      router.push("/candidate/experience?cv_import=1&focus=verify-first");
+      router.push(verifyFirstHref);
     } catch (e: any) {
       setMsg(e?.message || "No se pudo aplicar la propuesta de importación.");
     } finally {
@@ -582,13 +589,13 @@ export default function CvUploadAndParse() {
           <div>{msg}</div>
           {String(msg).toLowerCase().includes("manualmente") ? (
             <div className="mt-2 flex flex-wrap gap-2">
-              <a href="/candidate/experience" className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100">
+              <a href={experienceHomeHref} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100">
                 Completar experiencia manualmente
               </a>
-              <a href="/candidate/education" className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100">
+              <a href={educationHref} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100">
                 Completar formacion
               </a>
-              <a href="/candidate/achievements?open=language" className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100">
+              <a href={achievementsLanguageHref} className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-900 hover:bg-slate-100">
                 Anadir idiomas
               </a>
             </div>
@@ -604,13 +611,13 @@ export default function CvUploadAndParse() {
           </div>
           <div className="mt-1 text-xs text-blue-800">Ahora el siguiente paso útil es verificar al menos una experiencia para reforzar tu perfil.</div>
           <div className="mt-2 flex flex-wrap gap-2">
-            <a href="/candidate/experience?cv_import=1&focus=verify-first" className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
+            <a href={verifyFirstHref} className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
               Verificar mi primera experiencia
             </a>
-            <a href="/candidate/education" className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
+            <a href={educationHref} className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
               Abrir formación
             </a>
-            <a href="/candidate/achievements" className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
+            <a href={achievementsHref} className="rounded-md border border-blue-300 bg-white px-3 py-1.5 text-xs font-semibold text-blue-900 hover:bg-blue-100">
               Abrir idiomas y logros
             </a>
           </div>

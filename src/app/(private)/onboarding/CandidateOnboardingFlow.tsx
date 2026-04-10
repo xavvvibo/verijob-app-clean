@@ -129,8 +129,7 @@ export default function CandidateOnboardingFlow({
     try {
       setMessage(null)
       await persistOnboardingStep("experience")
-      document.cookie = "candidate_onboarding_access=1; Path=/; Max-Age=1800; SameSite=Lax"
-      router.push(target === "cv" ? "/candidate/experience?onboarding=1#cv-upload" : "/candidate/experience?onboarding=1&new=1#manual-experience")
+      router.push(target === "cv" ? "/onboarding/experience?onboarding=1#cv-upload" : "/onboarding/experience?onboarding=1&new=1#manual-experience")
     } catch (error: any) {
       setMessage(error?.message || "No hemos podido abrir tu bandeja de experiencias.")
     }
@@ -377,7 +376,7 @@ export default function CandidateOnboardingFlow({
               ) : null}
               <button
                 type="button"
-                onClick={() => router.push("/candidate/experience?onboarding=1")}
+                onClick={() => router.push("/onboarding/experience?onboarding=1")}
                 className="inline-flex rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
               >
                 Abrir historial de experiencias
@@ -427,7 +426,7 @@ export default function CandidateOnboardingFlow({
             <div className="mt-8 flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={() => router.push("/candidate/experience?new=1#manual-experience")}
+                onClick={() => router.push("/onboarding/experience?new=1#manual-experience")}
                 className="inline-flex rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-black"
               >
                 Añadir otra experiencia
