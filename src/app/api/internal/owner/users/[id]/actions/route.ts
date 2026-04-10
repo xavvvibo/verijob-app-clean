@@ -233,12 +233,20 @@ async function readProfileById(admin: any, userId: string, columns: Set<string>)
   return admin.from("profiles").select(selected).eq("id", userId).maybeSingle();
 }
 
-async function deactivateCandidatePublicLinks(admin: any, userId: string) {
+async function deactivateCandidatePublicLinks(admin: any, candidateId: string) {
   await admin
     .from("candidate_public_links")
     .update({ is_active: false })
-    .eq("candidate_id", userId)
+    .eq("candidate_id", candidateId)
     .eq("is_active", true);
+}
+
+function isDeletedProfileRow(profile: any) {
+  return (
+    String(profile?.lifecycle_status || "").toLowerCase() === "deleted" &&
+    Boolean(profile?.deleted_at) &&
+    Boolean(profile?.deleted_by)
+  );
 }
 
 async function logOwnerAction(owner: { ownerId: string; admin: any }, targetUserId: string, actionType: string, reason: string, payload: Record<string, any>) {
@@ -478,11 +486,11 @@ export async function POST(req: Request, ctx: any) {
     const profilePatch: Record<string, any> = {
       onboarding_completed: false,
       active_company_id: null,
+      lifecycle_status: "deleted",
+      deleted_at: nowIso,
+      deleted_by: owner.ownerId,
+      deletion_reason: reason,
     };
-    if (profileColumns.has("lifecycle_status")) profilePatch.lifecycle_status = "deleted";
-    if (profileColumns.has("deleted_at")) profilePatch.deleted_at = nowIso;
-    if (profileColumns.has("deleted_by")) profilePatch.deleted_by = owner.ownerId;
-    if (profileColumns.has("deletion_reason")) profilePatch.deletion_reason = reason;
     if (profileColumns.has("full_name")) profilePatch.full_name = "Perfil eliminado";
     if (profileColumns.has("identity_type")) profilePatch.identity_type = null;
     if (profileColumns.has("identity_masked")) profilePatch.identity_masked = null;
@@ -497,6 +505,12 @@ export async function POST(req: Request, ctx: any) {
       .select("*")
       .single();
     if (profileErr) return json(400, { error: "hard_delete_profile_failed", details: profileErr.message });
+    if (!isDeletedProfileRow(profileAfter)) {
+      return json(400, {
+        error: "hard_delete_profile_not_persisted",
+        details: "profiles row was updated but lifecycle_status/deleted_at/deleted_by were not persisted as deleted",
+      });
+    }
 
     const { error: authDisableErr } = await owner.admin.auth.admin.updateUserById(targetUserId, {
       ban_duration: "876000h",
@@ -1028,24 +1042,32 @@ export async function POST(req: Request, ctx: any) {
 
     const nowIso = new Date().toISOString();
     const profilePatch: Record<string, any> = {
+      id: targetUserId,
       onboarding_completed: false,
       active_company_id: profileBefore?.active_company_id || null,
       role: String(profileBefore?.role || "candidate"),
       email: asText(targetAuthUser.user.email, 320) || asText(profileBefore?.email, 320) || null,
+      lifecycle_status: "deleted",
+      deleted_at: nowIso,
+      deletion_reason: reason,
+      deleted_by: owner.ownerId,
     };
-    if (profileColumns.has("lifecycle_status")) profilePatch.lifecycle_status = "deleted";
-    if (profileColumns.has("deleted_at")) profilePatch.deleted_at = nowIso;
-    if (profileColumns.has("deletion_reason")) profilePatch.deletion_reason = reason;
-    if (profileColumns.has("deleted_by")) profilePatch.deleted_by = owner.ownerId;
     if (!keepRole) profilePatch.role = "candidate";
     if (clearFullName) profilePatch.full_name = null;
 
     const { data: profileAfter, error: profileUpdateErr } = await owner.admin
       .from("profiles")
-      .upsert(profilePatch, { onConflict: "id" })
+      .update(profilePatch)
+      .eq("id", targetUserId)
       .select("*")
       .single();
     if (profileUpdateErr) return json(400, { error: "profiles_archive_failed", details: profileUpdateErr.message });
+    if (!isDeletedProfileRow(profileAfter)) {
+      return json(400, {
+        error: "profiles_archive_not_persisted",
+        details: "profiles row was updated but lifecycle_status/deleted_at/deleted_by were not persisted as deleted",
+      });
+    }
 
     let authUpdateError: string | null = null;
     if (disableSignIn) {

@@ -136,8 +136,14 @@ function ownerActionErrorMessage(errorCode: string, details: string | null) {
   if (errorCode === "hard_delete_profile_failed") {
     return withDetails("La limpieza se ejecutó, pero no se pudo marcar el perfil como eliminado.");
   }
+  if (errorCode === "hard_delete_profile_not_persisted") {
+    return withDetails("La limpieza terminó, pero profiles no quedó persistido como deleted.");
+  }
   if (errorCode === "hard_delete_auth_disable_failed") {
     return withDetails("No se pudo bloquear el acceso en Auth tras la limpieza fuerte del candidato.");
+  }
+  if (errorCode === "profiles_archive_not_persisted") {
+    return withDetails("El usuario se intentó archivar, pero profiles no quedó persistido como deleted.");
   }
   if (errorCode === "owner_action_failed") return "La acción owner no pudo completarse.";
   return withDetails(`No se pudo ejecutar la acción (${errorCode || "unknown_error"}).`);
