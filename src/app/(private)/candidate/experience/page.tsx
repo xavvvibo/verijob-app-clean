@@ -258,6 +258,7 @@ export async function CandidateExperienceContent({
   const profileFullName = String((profile as any)?.full_name || "").trim();
   const confirmedNameParts = profileFullName.split(/\s+/).filter(Boolean);
   const hasConfirmedIdentity = confirmedNameParts.length >= 2;
+  const onboardingStage = !hasConfirmedIdentity ? "identity" : !hasExperiences ? "cv" : shouldPushFirstVerification ? "verify" : "continue";
 
   return (
     <CandidateOperationsLayout>
@@ -266,7 +267,7 @@ export async function CandidateExperienceContent({
         title={onboardingMode ? "Confirma tu base y revisa tu experiencia" : "Tu trayectoria verificable"}
         description={
           onboardingMode
-            ? "Sigue dentro del onboarding: confirma primero nombre y apellidos, luego importa o revisa tu experiencia antes de salir al flujo normal."
+            ? "Confirma tu nombre, añade experiencia y sigue con la primera validación."
             : "Ordena tu historial, crea tu perfil con claridad y valida primero la experiencia que más confianza puede aportar."
         }
         ctaLabel="Añadir experiencia manual"
@@ -274,8 +275,37 @@ export async function CandidateExperienceContent({
         badges={onboardingMode ? ["Dentro del onboarding", "Nombre obligatorio", "Experiencia revisable"] : ["Trayectoria revisable", "Validación por experiencia", "Visibilidad pública controlada"]}
       />
       {onboardingMode ? <OnboardingExperienceIdentityBlock initialFullName={String((profile as any)?.full_name || "").trim() || null} /> : null}
+      <div className={onboardingMode ? "mt-6 grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]" : "mt-6"}>
+        {onboardingMode ? (
+          <aside className="rounded-3xl border border-slate-200 bg-white px-5 py-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Siguiente paso</p>
+            <div className="mt-4 space-y-3">
+              {[
+                { id: "identity", label: "Confirmar nombre", done: hasConfirmedIdentity, active: onboardingStage === "identity" },
+                { id: "cv", label: "Importar o añadir experiencia", done: hasExperiences, active: onboardingStage === "cv" },
+                { id: "verify", label: "Solicitar primera verificación", done: hasVerifiedOrInFlight, active: onboardingStage === "verify" },
+              ].map((step) => (
+                <div key={step.id} className={`rounded-2xl border px-4 py-3 text-sm ${step.active ? "border-slate-900 bg-slate-900 text-white" : step.done ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-slate-200 bg-slate-50 text-slate-700"}`}>
+                  <div className="font-semibold">{step.label}</div>
+                  <div className="mt-1 text-xs opacity-80">{step.done ? "Listo" : step.active ? "Ahora" : "Pendiente"}</div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              {onboardingStage === "identity"
+                ? "Empieza por guardar nombre y apellidos."
+                : onboardingStage === "cv"
+                  ? "Ahora importa tu CV o añade una experiencia manual."
+                  : onboardingStage === "verify"
+                    ? "Tu siguiente paso útil es pedir la primera verificación."
+                    : "Ya tienes base suficiente para seguir con el flujo normal."}
+            </div>
+          </aside>
+        ) : null}
+
+        <div className="space-y-6">
       {onboardingMode && !hasConfirmedIdentity ? (
-        <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 px-6 py-5 text-sm text-amber-900 shadow-sm">
+        <div className="rounded-3xl border border-amber-200 bg-amber-50 px-6 py-5 text-sm text-amber-900 shadow-sm">
           <p className="font-semibold">Antes de importar tu CV o tocar experiencias, guarda nombre y apellidos.</p>
           <p className="mt-2 leading-6 text-amber-800">
             Esta pantalla sigue dentro del onboarding. Hasta que confirmes ese dato mínimo, no puedes continuar al resto del flujo.
@@ -283,6 +313,39 @@ export async function CandidateExperienceContent({
           <p className="mt-2 text-xs font-medium uppercase tracking-[0.14em] text-amber-700">
             Superficie activa: {onboardingEntry === "experience" ? "onboarding/experience" : "candidate/experience"}
           </p>
+        </div>
+      ) : null}
+      {onboardingMode && hasConfirmedIdentity ? (
+        <div className="rounded-3xl border border-slate-200 bg-white px-6 py-5 text-sm text-slate-700 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold text-slate-900">
+                {hasExperiences ? "Ya tienes base suficiente para seguir." : "Ya puedes pasar a la parte operativa."}
+              </p>
+              <p className="mt-1 text-slate-600">
+                {hasExperiences
+                  ? shouldPushFirstVerification
+                    ? "Revisa la experiencia más relevante y solicita la primera verificación."
+                    : "Continúa revisando tu historial o sigue al flujo normal cuando quieras."
+                  : "Importa tu CV o añade una experiencia para completar la base mínima del perfil."}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {!hasExperiences ? (
+                <a href="#cv-upload" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+                  Importar CV
+                </a>
+              ) : shouldPushFirstVerification ? (
+                <a href="#verify-first" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+                  Solicitar verificación
+                </a>
+              ) : (
+                <Link href="/candidate/overview" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+                  Ir al flujo normal
+                </Link>
+              )}
+            </div>
+          </div>
         </div>
       ) : null}
       <div className={onboardingMode && !hasConfirmedIdentity ? "pointer-events-none opacity-45" : ""}>
@@ -422,6 +485,8 @@ export async function CandidateExperienceContent({
           }}
         />
       </section>
+        </div>
+      </div>
       </div>
     </CandidateOperationsLayout>
   );

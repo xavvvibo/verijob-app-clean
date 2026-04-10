@@ -53,6 +53,7 @@ export default function OnboardingExperienceIdentityBlock({
 
   const currentFullName = composeFullName(firstName, lastName);
   const missingRequiredName = !String(firstName || "").trim() || !String(lastName || "").trim();
+  const isCompact = !missingRequiredName && !suggestedFullName && message?.tone !== "warning" && message?.tone !== "error";
 
   async function saveName(nextFullName?: string) {
     const fullName = String(nextFullName || currentFullName).trim();
@@ -120,13 +121,17 @@ export default function OnboardingExperienceIdentityBlock({
   }, [firstName, lastName, savedFullName]);
 
   return (
-    <section id="identity-block" data-testid="onboarding-identity-block" className="rounded-[28px] border border-blue-200 bg-blue-50/80 p-6 shadow-sm">
+    <section id="identity-block" data-testid="onboarding-identity-block" className={`rounded-[28px] border shadow-sm ${isCompact ? "border-emerald-200 bg-emerald-50/80 p-4" : "border-blue-200 bg-blue-50/80 p-6"}`}>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-3xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">Paso obligatorio</p>
-          <h2 className="mt-2 text-xl font-semibold text-slate-950">Confirma tu nombre antes de importar o revisar experiencias</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-700">
-            Este es el dato mínimo obligatorio del onboarding. Puedes importarlo desde tu CV, corregirlo aquí y guardarlo antes de continuar.
+          <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${isCompact ? "text-emerald-700" : "text-blue-700"}`}>Paso obligatorio</p>
+          <h2 className={`mt-2 font-semibold text-slate-950 ${isCompact ? "text-lg" : "text-xl"}`}>
+            {isCompact ? "Nombre confirmado" : "Confirma tu nombre antes de importar o revisar experiencias"}
+          </h2>
+          <p className={`mt-2 text-sm ${isCompact ? "text-emerald-800" : "leading-6 text-slate-700"}`}>
+            {isCompact
+              ? "Ya puedes seguir con tu CV o revisar experiencias."
+              : "Es el dato mínimo obligatorio del onboarding. Revísalo y guárdalo antes de continuar."}
           </p>
         </div>
         <button
@@ -139,7 +144,7 @@ export default function OnboardingExperienceIdentityBlock({
         </button>
       </div>
 
-      <div className="mt-5 grid gap-4 md:grid-cols-2">
+      <div className={`grid gap-4 md:grid-cols-2 ${isCompact ? "mt-4" : "mt-5"}`}>
         <label className="block">
           <div className="text-sm font-semibold text-slate-900">Nombre</div>
           <input
@@ -160,7 +165,7 @@ export default function OnboardingExperienceIdentityBlock({
         </label>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+      <div className={`flex flex-wrap items-center gap-3 ${isCompact ? "mt-3" : "mt-4"}`}>
         <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${missingRequiredName ? "border-amber-300 bg-white text-amber-900" : "border-emerald-200 bg-white text-emerald-700"}`}>
           {missingRequiredName ? "Nombre y apellidos pendientes" : "Nombre mínimo confirmado"}
         </span>
