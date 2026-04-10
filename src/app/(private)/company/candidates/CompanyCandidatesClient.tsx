@@ -490,17 +490,29 @@ export default function CompanyCandidatesClient() {
       </section>
 
       {imports.length === 0 ? (
-        <section className="rounded-[30px] border border-blue-200 bg-blue-50 p-6 shadow-sm">
+        <section className="rounded-[30px] border border-blue-200 bg-[linear-gradient(180deg,rgba(239,246,255,1)_0%,rgba(255,255,255,1)_100%)] p-6 shadow-sm">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="max-w-3xl">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">Empieza aquí</p>
-              <h2 className="mt-2 text-2xl font-semibold text-slate-900">Sube tu primer CV</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-700">
-                Primero verás un resumen del candidato. Solo abrirás el perfil completo cuando te compense.
+              <h2 className="mt-2 text-2xl font-semibold text-slate-900">Empieza a decidir con datos reales, no solo con CVs planos</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-700">
+                Sube un CV y verás un resumen profesional del candidato, su experiencia ordenada y señales útiles para decidir si merece la pena abrir el perfil completo.
+              </p>
+              <div className="mt-4 rounded-2xl border border-blue-200 bg-white/80 p-4">
+                <p className="text-sm font-semibold text-slate-900">Qué verás después de subir un CV</p>
+                <ul className="mt-3 grid gap-2 text-sm text-slate-700 sm:grid-cols-2">
+                  <li className="rounded-xl border border-slate-200 bg-white px-3 py-2">Resumen claro del candidato</li>
+                  <li className="rounded-xl border border-slate-200 bg-white px-3 py-2">Experiencia ordenada para revisión rápida</li>
+                  <li className="rounded-xl border border-slate-200 bg-white px-3 py-2">Señales verificables para decidir mejor</li>
+                  <li className="rounded-xl border border-slate-200 bg-white px-3 py-2">Cuándo compensa abrir el perfil completo</li>
+                </ul>
+              </div>
+              <p className="mt-4 text-sm font-medium text-slate-800">
+                Tienes <span className="font-semibold text-slate-950">{availableProfileAccesses}</span> acceso{availableProfileAccesses === 1 ? "" : "s"} disponible{availableProfileAccesses === 1 ? "" : "s"} para ver perfiles completos cuando compense.
               </p>
             </div>
             <a href="#importar-cv" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
-              Importar primer CV
+              Subir CV para empezar a decidir
             </a>
           </div>
         </section>
@@ -633,10 +645,10 @@ export default function CompanyCandidatesClient() {
             <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 p-8 text-center text-slate-500">
               {imports.length === 0 ? (
                 <div>
-                  <p className="font-semibold text-slate-900">Todavía no hay candidatos importados.</p>
-                  <p className="mt-2">Primero verás un resumen del candidato. Solo abrirás el perfil completo cuando te compense.</p>
+                  <p className="font-semibold text-slate-900">Todavía no has activado tu base de candidatos.</p>
+                  <p className="mt-2">Empieza subiendo un CV para ver un resumen del candidato y decidir con más contexto antes de abrir el perfil completo.</p>
                   <a href="#importar-cv" className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
-                    Importar primer CV
+                    Subir CV para empezar a decidir
                   </a>
                 </div>
               ) : (
@@ -836,16 +848,18 @@ export default function CompanyCandidatesClient() {
       </section>
 
       <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <article className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <article className={`rounded-3xl border p-5 shadow-sm ${imports.length === 0 ? "border-slate-200 bg-slate-50/80" : "border-slate-200 bg-white"}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">Quick actions</h2>
+              <h2 className="text-base font-semibold text-slate-900">{imports.length === 0 ? "Acciones secundarias" : "Quick actions"}</h2>
               <p className="mt-1 text-sm text-slate-600">
-                Empieza importando un CV o abre un resumen ya compartido por token.
+                {imports.length === 0
+                  ? "Estas acciones siguen disponibles, pero el siguiente paso recomendado es subir tu primer CV."
+                  : "Empieza importando un CV o abre un resumen ya compartido por token."}
               </p>
             </div>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-              Acciones auxiliares
+              {imports.length === 0 ? "Secundario" : "Acciones auxiliares"}
             </span>
           </div>
 
