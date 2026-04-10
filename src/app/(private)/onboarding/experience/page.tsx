@@ -1,4 +1,4 @@
-import CandidateExperiencePage from "../../candidate/experience/page";
+import { CandidateExperienceContent } from "../../candidate/experience/page";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -8,5 +8,5 @@ export default async function OnboardingCandidateExperiencePage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  return <CandidateExperiencePage searchParams={searchParams} />;
+  return <CandidateExperienceContent searchParams={searchParams} onboardingMode={true} />;
 }

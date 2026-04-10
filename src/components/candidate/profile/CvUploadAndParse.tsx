@@ -264,6 +264,10 @@ export default function CvUploadAndParse() {
     const parsedEdu = Array.isArray(nextJob?.result_json?.education) ? nextJob.result_json.education : [];
     const parsedLanguages = Array.isArray(nextJob?.result_json?.languages) ? nextJob.result_json.languages : [];
     const parsedAchievements = Array.isArray(nextJob?.result_json?.achievements) ? nextJob.result_json.achievements : [];
+    const detectedFullName = String(nextJob?.result_json?.full_name || "").trim();
+    if (detectedFullName && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("candidate-cv-name-detected", { detail: { fullName: detectedFullName } }));
+    }
     setExpDrafts(parsedExps.map((x: any) => ({
       company_name: x.company_name || x.company || "",
       role_title: x.role_title || x.title || "",

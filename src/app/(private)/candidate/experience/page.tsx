@@ -16,14 +16,17 @@ import {
 } from "@/lib/candidate/profile-visibility";
 import ExperienceQuickAddClient from "./ExperienceQuickAddClient";
 import ExperienceListClient from "./ExperienceListClient";
+import OnboardingExperienceIdentityBlock from "../../onboarding/experience/OnboardingExperienceIdentityBlock";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function CandidateExperiencePage({
+export async function CandidateExperienceContent({
   searchParams,
+  onboardingMode = false,
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
+  onboardingMode?: boolean;
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const supabase = await createServerSupabaseClient();
@@ -254,13 +257,18 @@ export default async function CandidateExperiencePage({
   return (
     <CandidateOperationsLayout>
       <CandidatePageHeader
-        eyebrow="Experiencia profesional"
-        title="Tu trayectoria verificable"
-        description="Ordena tu historial, crea tu perfil con claridad y valida primero la experiencia que más confianza puede aportar."
+        eyebrow={onboardingMode ? "Onboarding candidato" : "Experiencia profesional"}
+        title={onboardingMode ? "Confirma tu base y revisa tu experiencia" : "Tu trayectoria verificable"}
+        description={
+          onboardingMode
+            ? "Sigue dentro del onboarding: confirma tu identidad mínima y revisa tu historial antes de salir al flujo normal."
+            : "Ordena tu historial, crea tu perfil con claridad y valida primero la experiencia que más confianza puede aportar."
+        }
         ctaLabel="Añadir experiencia manual"
-        ctaHref="/candidate/experience?new=1#manual-experience"
+        ctaHref={onboardingMode ? "/onboarding/experience?new=1#manual-experience" : "/candidate/experience?new=1#manual-experience"}
         badges={["Trayectoria revisable", "Validación por experiencia", "Visibilidad pública controlada"]}
       />
+      {onboardingMode ? <OnboardingExperienceIdentityBlock initialFullName={String((profile as any)?.full_name || "").trim() || null} /> : null}
       <CandidateToolbar className="-mt-4">
         <div className="grid w-full gap-3 md:grid-cols-2">
           <Link
@@ -297,10 +305,10 @@ export default async function CandidateExperiencePage({
                 Verificar mi primera experiencia
               </a>
               <Link
-                href="/candidate/profile"
+                href={onboardingMode ? "#identity-block" : "/candidate/profile"}
                 className="inline-flex rounded-xl border border-emerald-300 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-900 hover:bg-emerald-100"
               >
-                Completar mi perfil
+                {onboardingMode ? "Revisar nombre y apellidos" : "Completar mi perfil"}
               </Link>
             </div>
           </div>
@@ -399,4 +407,12 @@ export default async function CandidateExperiencePage({
       </section>
     </CandidateOperationsLayout>
   );
+}
+
+export default async function CandidateExperiencePage({
+  searchParams,
+}: {
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  return <CandidateExperienceContent searchParams={searchParams} onboardingMode={false} />;
 }
