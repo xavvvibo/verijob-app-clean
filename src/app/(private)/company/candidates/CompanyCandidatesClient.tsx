@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import CandidateQuickView from "@/components/company/CandidateQuickView";
 import ProfileUnlockAction, { COMPANY_PROFILE_UNLOCKED_EVENT } from "@/components/company/ProfileUnlockAction";
@@ -151,6 +151,15 @@ export default function CompanyCandidatesClient() {
   });
   const [file, setFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [inviteForm, setInviteForm] = useState({
+    candidate_name: "",
+    candidate_email: "",
+    target_role: "",
+  });
+  const [highlightedSection, setHighlightedSection] = useState<"import" | "invite" | "token" | null>(null);
+  const importSectionRef = useRef<HTMLDivElement | null>(null);
+  const inviteSectionRef = useRef<HTMLDivElement | null>(null);
+  const tokenSectionRef = useRef<HTMLDivElement | null>(null);
 
   const tokenDisabled = useMemo(() => token.trim().length === 0, [token]);
   const submitDisabled = useMemo(
@@ -288,6 +297,21 @@ export default function CompanyCandidatesClient() {
       window.clearInterval(interval);
     };
   }, [searchParams]);
+
+  function focusSection(target: "import" | "invite" | "token") {
+    const node =
+      target === "import"
+        ? importSectionRef.current
+        : target === "invite"
+          ? inviteSectionRef.current
+          : tokenSectionRef.current;
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "start" });
+    setHighlightedSection(target);
+    window.setTimeout(() => {
+      setHighlightedSection((current) => (current === target ? null : current));
+    }, 1800);
+  }
 
   function openCandidate(event: React.FormEvent) {
     event.preventDefault();
@@ -511,9 +535,13 @@ export default function CompanyCandidatesClient() {
                 Tienes <span className="font-semibold text-slate-950">{availableProfileAccesses}</span> acceso{availableProfileAccesses === 1 ? "" : "s"} disponible{availableProfileAccesses === 1 ? "" : "s"} para ver perfiles completos cuando compense.
               </p>
             </div>
-            <a href="#importar-cv" className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+            <button
+              type="button"
+              onClick={() => focusSection("import")}
+              className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+            >
               Subir CV para empezar a decidir
-            </a>
+            </button>
           </div>
         </section>
       ) : null}
@@ -647,9 +675,13 @@ export default function CompanyCandidatesClient() {
                 <div>
                   <p className="font-semibold text-slate-900">Todavía no has activado tu base de candidatos.</p>
                   <p className="mt-2">Empieza subiendo un CV para ver un resumen del candidato y decidir con más contexto antes de abrir el perfil completo.</p>
-                  <a href="#importar-cv" className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black">
+                  <button
+                    type="button"
+                    onClick={() => focusSection("import")}
+                    className="mt-4 inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black"
+                  >
                     Subir CV para empezar a decidir
-                  </a>
+                  </button>
                 </div>
               ) : (
                 <div>
@@ -847,62 +879,39 @@ export default function CompanyCandidatesClient() {
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+      <section className="grid gap-4">
         <article className={`rounded-3xl border p-5 shadow-sm ${imports.length === 0 ? "border-slate-200 bg-slate-50/80" : "border-slate-200 bg-white"}`}>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-base font-semibold text-slate-900">{imports.length === 0 ? "Acciones secundarias" : "Quick actions"}</h2>
+              <h2 className="text-base font-semibold text-slate-900">Acciones sobre candidatos</h2>
               <p className="mt-1 text-sm text-slate-600">
-                {imports.length === 0
-                  ? "Estas acciones siguen disponibles, pero el siguiente paso recomendado es subir tu primer CV."
-                  : "Empieza importando un CV o abre un resumen ya compartido por token."}
+                Importa candidatos desde CV, prepara invitaciones manuales y deja el acceso por token como utilidad puntual.
               </p>
             </div>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-600">
-              {imports.length === 0 ? "Secundario" : "Acciones auxiliares"}
+              Jerarquía operativa
             </span>
           </div>
 
           {error ? <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</div> : null}
           {notice ? <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-700">{notice}</div> : null}
-          {latestImportedId && quickViewRow ? (
-            <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-              <p className="font-semibold">Tu candidato ya está preparado para revisión</p>
-              <p className="mt-1">Abre el resumen para decidir con más contexto antes de desbloquear el perfil completo.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                {quickViewRow.candidate_public_token ? (
-                  <a
-                    href={`/company/candidate/${encodeURIComponent(String(quickViewRow.candidate_public_token))}`}
-                    className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
-                  >
-                    Revisar candidato
-                  </a>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setQuickViewRow(quickViewRow)}
-                    className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
-                  >
-                    Revisar candidato
-                  </button>
-                )}
-              </div>
-            </div>
-          ) : null}
-
           <div className="mt-4 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-            <div id="importar-cv" className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div
+              id="importar-cv"
+              ref={importSectionRef}
+              className={`rounded-2xl border p-4 transition ${highlightedSection === "import" ? "border-blue-300 bg-blue-50 shadow-[0_0_0_4px_rgba(191,219,254,0.55)]" : "border-slate-200 bg-slate-50"}`}
+            >
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-semibold text-slate-900">Importar CV externo</h3>
+                  <h3 className="text-sm font-semibold text-slate-900">Importa candidatos desde CV</h3>
                   <p className="mt-1 text-xs text-slate-600">
-                    Sube un CV recibido fuera de VERIJOB. Primero verás un resumen del candidato.
+                    Sube un CV para incorporarlo a tu base y revisarlo después con más contexto.
                   </p>
                 </div>
                 <details className="text-xs text-slate-500">
                   <summary className="cursor-pointer list-none font-semibold text-slate-700">Ayuda rápida</summary>
                   <div className="mt-2 max-w-sm rounded-xl border border-slate-200 bg-white p-3 text-slate-600">
-                    VERIJOB registra la aceptación legal del candidato antes de activar su perfil pre-rellenado y mostrarlo en esta base RRHH.
+                    Este flujo usa el CV para preparar un resumen del candidato y dejar la incorporación en staging sin romper la trazabilidad.
                   </div>
                 </details>
               </div>
@@ -981,7 +990,7 @@ export default function CompanyCandidatesClient() {
                     disabled={submitDisabled}
                     className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
                   >
-                    {submitting ? "Importando CV…" : imports.length === 0 ? "Subir primer CV" : "Subir CV e invitar"}
+                    {submitting ? "Importando CV…" : imports.length === 0 ? "Subir CV para empezar a decidir" : "Subir CV y revisar candidato"}
                   </button>
                   <details className="relative">
                     <summary className="inline-flex list-none cursor-pointer rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50">
@@ -1068,10 +1077,88 @@ export default function CompanyCandidatesClient() {
                   ) : null}
                 </div>
               ) : null}
+
+              {notice && latestImportedId ? (
+                <div className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+                  <p className="font-semibold">{notice}</p>
+                  <p className="mt-1">El resultado queda en esta misma zona para que puedas revisar el siguiente paso sin perder el hilo.</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {quickViewRow?.candidate_public_token ? (
+                      <a
+                        href={`/company/candidate/${encodeURIComponent(String(quickViewRow.candidate_public_token))}`}
+                        className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+                      >
+                        Revisar candidato
+                      </a>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => quickViewRow && setQuickViewRow(quickViewRow)}
+                        className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black"
+                      >
+                        Revisar candidato
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div
+                ref={inviteSectionRef}
+                className={`rounded-2xl border p-4 transition ${highlightedSection === "invite" ? "border-blue-300 bg-blue-50 shadow-[0_0_0_4px_rgba(191,219,254,0.55)]" : "border-slate-200 bg-white"}`}
+              >
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Invitar candidato</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  Usa este bloque cuando quieras invitar manualmente a una persona por nombre, email y puesto, sin depender del CV.
+                </p>
+                <div className="mt-4 grid gap-3">
+                  <input
+                    value={inviteForm.candidate_name}
+                    onChange={(e) => setInviteForm((prev) => ({ ...prev, candidate_name: e.target.value }))}
+                    placeholder="Nombre del candidato"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  />
+                  <input
+                    type="email"
+                    value={inviteForm.candidate_email}
+                    onChange={(e) => setInviteForm((prev) => ({ ...prev, candidate_email: e.target.value }))}
+                    placeholder="email@candidato.com"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  />
+                  <input
+                    value={inviteForm.target_role}
+                    onChange={(e) => setInviteForm((prev) => ({ ...prev, target_role: e.target.value }))}
+                    placeholder="Puesto"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                  />
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-400 cursor-not-allowed"
+                  >
+                    Enviar invitación
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => focusSection("import")}
+                    className="inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                  >
+                    Ir al bloque de importación
+                  </button>
+                </div>
+                <p className="mt-3 text-xs text-slate-500">
+                  La invitación manual separada todavía no tiene envío propio en este entorno. Hoy el backend operativo sigue siendo la importación con CV.
+                </p>
+              </div>
+
+              <div
+                ref={tokenSectionRef}
+                className={`rounded-2xl border p-4 transition ${highlightedSection === "token" ? "border-blue-300 bg-blue-50 shadow-[0_0_0_4px_rgba(191,219,254,0.55)]" : "border-slate-200 bg-slate-50"}`}
+              >
                 <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Abrir por token</p>
                 <p className="mt-2 text-sm text-slate-600">
                   Utilidad rápida para abrir un candidato compartido fuera de la base actual.
@@ -1099,7 +1186,7 @@ export default function CompanyCandidatesClient() {
               <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">
                 <p className="font-semibold text-slate-900">Ayuda contextual</p>
                 <p className="mt-2">
-                  La base RRHH es el centro de trabajo. Importa un CV externo cuando el candidato aún no está en VERIJOB y usa el token solo como acceso rápido puntual.
+                  Importar candidatos y abrir por token no son lo mismo: importa un CV para incorporarlo a tu base y usa el token solo como acceso rápido puntual.
                 </p>
               </div>
             </div>

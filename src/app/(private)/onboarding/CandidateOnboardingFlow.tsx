@@ -82,12 +82,14 @@ function progressWidth(step: Step) {
 
 export default function CandidateOnboardingFlow({
   initialProfile,
+  readiness,
   initialExperience,
   initialVerification,
   initialEvidence,
   initialTrustScore,
 }: {
-  initialProfile: { fullName: string | null; onboardingStep: string | null }
+  initialProfile: { fullName: string | null; title: string | null; onboardingStep: string | null }
+  readiness: { hasFullName: boolean; hasTitle: boolean; hasExperience: boolean; isReady: boolean }
   initialExperience: ExperienceInput | null
   initialVerification: VerificationInput | null
   initialEvidence: EvidenceInput[]
@@ -134,6 +136,11 @@ export default function CandidateOnboardingFlow({
     }
   }
 
+  function goToProfileBasics() {
+    document.cookie = "candidate_onboarding_access=1; Path=/; Max-Age=1800; SameSite=Lax"
+    router.push("/candidate/profile?onboarding=1")
+  }
+
   async function continueToReview() {
     try {
       setMessage(null)
@@ -164,6 +171,7 @@ export default function CandidateOnboardingFlow({
     initialTrustScore >= 60 || verificationStatus === "Verificada" || initialEvidence.length > 0
       ? "Tu perfil ya transmite confianza"
       : "Tu perfil ya empieza a transmitir valor real"
+  const missingBasics = !readiness.hasFullName || !readiness.hasTitle
 
   return (
     <main className="min-h-screen bg-slate-50 px-6 py-10">
@@ -189,6 +197,23 @@ export default function CandidateOnboardingFlow({
         {message ? (
           <div className="mb-6 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
             {message}
+          </div>
+        ) : null}
+
+        {!readiness.isReady ? (
+          <div className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm text-amber-900 shadow-sm">
+            <p className="font-semibold">Antes de cerrar tu onboarding necesitas una base mínima real.</p>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs font-medium">
+              <span className={`rounded-full border px-3 py-1 ${readiness.hasFullName ? "border-emerald-200 bg-white text-emerald-700" : "border-amber-300 bg-white text-amber-900"}`}>
+                {readiness.hasFullName ? "Nombre y apellidos completos" : "Completa nombre y apellidos"}
+              </span>
+              <span className={`rounded-full border px-3 py-1 ${readiness.hasTitle ? "border-emerald-200 bg-white text-emerald-700" : "border-amber-300 bg-white text-amber-900"}`}>
+                {readiness.hasTitle ? "Titular profesional listo" : "Añade tu titular profesional"}
+              </span>
+              <span className={`rounded-full border px-3 py-1 ${readiness.hasExperience ? "border-emerald-200 bg-white text-emerald-700" : "border-amber-300 bg-white text-amber-900"}`}>
+                {readiness.hasExperience ? "Experiencia registrada" : "Añade al menos una experiencia"}
+              </span>
+            </div>
           </div>
         ) : null}
 
@@ -218,6 +243,16 @@ export default function CandidateOnboardingFlow({
             </div>
 
             <p className="mt-4 text-sm text-slate-500">Primero crea tu base. Luego podrás reforzarla con verificaciones y evidencias.</p>
+
+            {missingBasics ? (
+              <button
+                type="button"
+                onClick={goToProfileBasics}
+                className="mt-6 inline-flex rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Completar datos básicos
+              </button>
+            ) : null}
 
             {initialExperience ? (
               <button
@@ -331,6 +366,15 @@ export default function CandidateOnboardingFlow({
             </div>
 
             <div className="mt-8 flex flex-wrap gap-3">
+              {missingBasics ? (
+                <button
+                  type="button"
+                  onClick={goToProfileBasics}
+                  className="inline-flex rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Completar datos básicos
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => router.push("/candidate/experience?onboarding=1")}
@@ -341,12 +385,17 @@ export default function CandidateOnboardingFlow({
               <button
                 type="button"
                 onClick={() => void completeOnboarding()}
-                disabled={completing}
+                disabled={completing || !readiness.isReady}
                 className="inline-flex rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
               >
                 {completing ? "Guardando…" : "Ir a mi dashboard"}
               </button>
             </div>
+            {!readiness.isReady ? (
+              <p className="mt-4 text-sm text-slate-500">
+                Completa nombre y apellidos, titular profesional y al menos una experiencia antes de entrar al dashboard.
+              </p>
+            ) : null}
           </section>
         ) : null}
 

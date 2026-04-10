@@ -4,6 +4,7 @@ import { resolveCompanyDisplayName } from "@/lib/company/company-profile";
 import { companyVerificationMethodTone, deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
+import OwnerCompanyDocumentReviewActions from "./[id]/OwnerCompanyDocumentReviewActions";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,21 @@ function documentTypeLabel(raw: unknown) {
   if (value === "escritura") return "Escritura o documento equivalente";
   if (value === "otro") return "Otro documento";
   return String(raw || "Documento");
+}
+
+function documentReviewLabel(raw: unknown) {
+  const value = String(raw || "").toLowerCase();
+  if (value === "approved") return "Aprobado";
+  if (value === "rejected") return "Rechazado";
+  if (value === "uploaded") return "Recibido";
+  return "Pendiente de revisión";
+}
+
+function documentReviewClass(raw: unknown) {
+  const value = String(raw || "").toLowerCase();
+  if (value === "approved") return "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (value === "rejected") return "border-rose-200 bg-rose-50 text-rose-800";
+  return "border-amber-200 bg-amber-50 text-amber-800";
 }
 
 export default async function OwnerCompaniesPage({
@@ -227,6 +243,7 @@ export default async function OwnerCompaniesPage({
       const review = String(doc?.review_status || "").toLowerCase();
       return lifecycle !== "deleted" && (review === "pending_review" || review === "uploaded");
     })
+    .filter((doc: any) => normalized.some((entry) => entry.id === String(doc.company_id || "")))
     .sort((a: any, b: any) => Date.parse(String(b?.created_at || "")) - Date.parse(String(a?.created_at || "")))
     .slice(0, 12);
 
@@ -274,39 +291,53 @@ export default async function OwnerCompaniesPage({
             No hay documentos empresa pendientes de revisión manual.
           </p>
         ) : (
-          <div className="mt-4 overflow-auto">
-            <table className="min-w-[860px] w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
-                  <th className="px-3 py-3">Empresa</th>
-                  <th className="px-3 py-3">Documento</th>
-                  <th className="px-3 py-3">Subido</th>
-                  <th className="px-3 py-3">Uploader</th>
-                  <th className="px-3 py-3">Estado</th>
-                  <th className="px-3 py-3">Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                {pendingDocumentQueue.map((doc: any) => {
-                  const company = normalized.find((entry) => entry.id === String(doc.company_id || ""));
-                  const uploader = uploaderProfilesById.get(String(doc.uploaded_by || "")) as any;
-                  return (
-                    <tr key={String(doc.id)} className="border-b border-slate-100 text-slate-800">
-                      <td className="px-3 py-3 font-semibold text-slate-900">{company?.displayName || String(doc.company_id || "Empresa")}</td>
-                      <td className="px-3 py-3">{documentTypeLabel(doc.document_type)}</td>
-                      <td className="px-3 py-3">{doc.created_at ? new Date(String(doc.created_at)).toLocaleDateString("es-ES") : "—"}</td>
-                      <td className="px-3 py-3">{uploader?.full_name || uploader?.email || String(doc.uploaded_by || "—")}</td>
-                      <td className="px-3 py-3">Pendiente de revisión</td>
-                      <td className="px-3 py-3">
-                        <Link href={`/owner/companies/${doc.company_id}`} className="text-xs font-semibold text-slate-700 underline">
-                          Abrir ficha
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="mt-4 grid gap-3 xl:grid-cols-2">
+            {pendingDocumentQueue.map((doc: any) => {
+              const company = normalized.find((entry) => entry.id === String(doc.company_id || ""));
+              if (!company) return null;
+              const uploader = uploaderProfilesById.get(String(doc.uploaded_by || "")) as any;
+              return (
+                <article key={String(doc.id)} className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <Link href={`/owner/companies/${doc.company_id}`} className="text-base font-semibold text-slate-900 underline">
+                        {company.displayName}
+                      </Link>
+                      <p className="mt-1 text-sm text-slate-700">{documentTypeLabel(doc.document_type)}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Subido {doc.created_at ? new Date(String(doc.created_at)).toLocaleDateString("es-ES") : "—"} · {uploader?.full_name || uploader?.email || "Uploader no identificado"}
+                      </p>
+                    </div>
+                    <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${documentReviewClass(doc.review_status)}`}>
+                      {documentReviewLabel(doc.review_status)}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <a
+                      href={`/api/internal/owner/company-documents/${encodeURIComponent(String(doc.id))}/open`}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Abrir documento
+                    </a>
+                    <a
+                      href={`/api/internal/owner/company-documents/${encodeURIComponent(String(doc.id))}/open?download=1`}
+                      className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+                    >
+                      Descargar
+                    </a>
+                    <Link href={`/owner/companies/${doc.company_id}`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700">
+                      Abrir ficha empresa
+                    </Link>
+                  </div>
+                  <OwnerCompanyDocumentReviewActions
+                    documentId={String(doc.id)}
+                    currentStatus={String(doc.review_status || "pending_review")}
+                  />
+                </article>
+              );
+            })}
           </div>
         )}
       </section>

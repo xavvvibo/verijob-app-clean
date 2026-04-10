@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 import { createServerSupabaseClient } from "@/utils/supabase/server"
-import { resolveCandidateOnboardingCompleted } from "@/lib/auth/onboarding-state"
+import { resolveCandidateMinimumReadiness, resolveCandidateOnboardingCompleted } from "@/lib/auth/onboarding-state"
 import CandidateOnboardingFlow from "./CandidateOnboardingFlow"
 
 export const dynamic = "force-dynamic"
@@ -27,7 +27,7 @@ export default async function CandidateOnboardingPage() {
   const [{ data: profile }, { data: experiences }, { data: employmentRows }, { data: verificationRows }, { data: evidenceRows }, { data: candidateProfile }] = await Promise.all([
     supabase
       .from("profiles")
-      .select("id,role,full_name,onboarding_step,onboarding_completed")
+      .select("id,role,full_name,title,onboarding_step,onboarding_completed")
       .eq("id", auth.user.id)
       .maybeSingle(),
     supabase
@@ -62,10 +62,6 @@ export default async function CandidateOnboardingPage() {
   const role = String(profile.role || "").toLowerCase()
   if (role === "company") redirect("/onboarding/company")
 
-  if (resolveCandidateOnboardingCompleted(profile)) {
-    redirect("/candidate/overview")
-  }
-
   const employmentBySignature = new Map<string, string>()
   for (const row of employmentRows || []) {
     const key = matchKey(row)
@@ -86,6 +82,22 @@ export default async function CandidateOnboardingPage() {
     matched_verification_id: row.matched_verification_id ? String(row.matched_verification_id) : "",
   }))
 
+  const readiness = resolveCandidateMinimumReadiness({
+    full_name: profile.full_name,
+    title: (profile as any)?.title,
+    experienceCount: mappedExperiences.length,
+  })
+
+  if (
+    resolveCandidateOnboardingCompleted({
+      ...(profile || {}),
+      title: (profile as any)?.title,
+      experienceCount: mappedExperiences.length,
+    })
+  ) {
+    redirect("/candidate/overview")
+  }
+
   const primaryExperience = mappedExperiences[0] || null
   const verificationByEmploymentId = new Map<string, any>()
 
@@ -104,8 +116,10 @@ export default async function CandidateOnboardingPage() {
     <CandidateOnboardingFlow
       initialProfile={{
         fullName: String(profile.full_name || "").trim() || null,
+        title: String((profile as any)?.title || "").trim() || null,
         onboardingStep: String(profile.onboarding_step || "").trim() || null,
       }}
+      readiness={readiness}
       initialExperience={primaryExperience}
       initialVerification={
         primaryVerification

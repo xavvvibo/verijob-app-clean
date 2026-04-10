@@ -94,7 +94,7 @@ function statusLabel(statusRaw: unknown) {
   if (status === "verified") return "Verificada documentalmente";
   if (status === "uploaded") return "Documento recibido";
   if (status === "under_review") return "En revisión";
-  if (status === "rejected") return "Requiere corrección";
+  if (status === "rejected") return "Documento rechazado";
   return "Sin documento";
 }
 
@@ -184,19 +184,19 @@ function documentaryNextStep(doc: CompanyVerificationDocument) {
   const importStatus = String(doc.import_status || "").toLowerCase();
 
   if (lifecycle === "deleted") return "Documento archivado. No requiere acción adicional.";
-  if (review === "rejected") return "Revisa el motivo indicado y sube una nueva versión del documento.";
+  if (review === "rejected") return "Documento rechazado. Revisa el motivo y vuelve a subir un documento válido.";
   if (review === "pending_review" || review === "uploaded") {
     return detected > 0
-      ? "El archivo sigue en revisión interna. Los datos detectados son orientativos y puedes importarlos al perfil si te encajan."
-      : "El archivo sigue en revisión interna. No necesitas hacer nada más hasta que revisemos el documento.";
+      ? "Documento recibido. Estamos revisándolo. Los datos detectados son orientativos y puedes importarlos al perfil si te encajan."
+      : "Documento recibido. Estamos revisándolo. No necesitas hacer nada más por ahora.";
   }
   if (review === "approved") {
     if (detected > 0 && importStatus !== "imported") {
-      return "Documento validado internamente. Puedes importar los datos detectados del archivo al perfil de empresa si te encajan.";
+      return "Documento aprobado. La empresa ya cuenta con validación documental. Puedes importar los datos detectados si te encajan.";
     }
-    return "Documento validado internamente. No requiere más acciones.";
+    return "Documento aprobado. La empresa ya cuenta con validación documental.";
   }
-  return "Documento recibido. Te avisaremos si hace falta revisar o completar algo.";
+  return "Documento recibido. Estamos revisándolo.";
 }
 
 function globalDocumentarySummary(input: {
@@ -208,25 +208,25 @@ function globalDocumentarySummary(input: {
   const { approvedDocumentsCount, pendingDocumentsCount, rejectedDocumentsCount, activeDocumentsCount } = input;
   if (approvedDocumentsCount > 0) {
     return {
-      title: "La verificación documental ya está completada",
+      title: "Documento aprobado. La empresa ya cuenta con validación documental",
       detail:
         pendingDocumentsCount > 0
-          ? "Ya tienes documentación válida, aunque aún queda alguna revisión abierta en documentos más recientes."
-          : "Tu empresa ya cuenta con al menos un documento validado.",
+          ? "Ya tienes documentación válida, aunque todavía queda alguna revisión abierta en documentos más recientes."
+          : "Tu empresa ya tiene al menos un documento aprobado y no necesitas hacer nada más ahora.",
       tone: "border-emerald-200 bg-emerald-50 text-emerald-900",
     };
   }
   if (pendingDocumentsCount > 0) {
     return {
-      title: "Tu documentación está en revisión",
-      detail: "Hemos recibido tus documentos. La revisión documental sigue abierta hasta confirmar la validez de la empresa.",
+      title: "Documento recibido. Estamos revisándolo",
+      detail: "Tu documentación ya está en cola de revisión. Cuando terminemos verás el resultado aquí mismo.",
       tone: "border-indigo-200 bg-indigo-50 text-indigo-900",
     };
   }
   if (rejectedDocumentsCount > 0) {
     return {
-      title: "Hay documentación rechazada pendiente de corregir",
-      detail: "Revisa el motivo indicado en cada documento y sube una nueva versión para retomar la validación.",
+      title: "Documento rechazado. Revisa el motivo y vuelve a subir uno válido",
+      detail: "La revisión ya está cerrada para el documento rechazado. Corrige el problema indicado y vuelve a enviarlo.",
       tone: "border-rose-200 bg-rose-50 text-rose-900",
     };
   }
@@ -238,11 +238,11 @@ function globalDocumentarySummary(input: {
     };
   }
   return {
-    title: "Todavía no has iniciado la verificación documental",
-    detail: "Sube un documento oficial para iniciar la revisión documental de tu empresa.",
-    tone: "border-slate-200 bg-slate-50 text-slate-900",
-  };
-}
+      title: "Sube un documento para iniciar la validación documental",
+      detail: "Cuando lo subas quedará en revisión y el resultado aparecerá aquí con su siguiente paso.",
+      tone: "border-slate-200 bg-slate-50 text-slate-900",
+    };
+  }
 
 function Section({ title, subtitle, children }: { title: string; subtitle: string; children: React.ReactNode }) {
   return (
@@ -676,11 +676,16 @@ export default function CompanyProfilePage() {
               </p>
             ) : null}
             <div className={`mt-2 inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${companyVerificationMethodTone(profile?.company_verification_method || "none")}`}>
-              {profile?.company_verification_method_label || "Sin señal adicional confirmada"}
+              {profile?.company_verification_method_label || "Sin validación adicional todavía"}
             </div>
             {profile?.company_verification_method_detail ? (
-              <p className="mt-2 text-sm text-slate-500">Señales adicionales: {String(profile.company_verification_method_detail)}</p>
+              <p className="mt-2 text-sm text-slate-500">Validación actual: {String(profile.company_verification_method_detail)}</p>
             ) : null}
+            <div className="mt-4">
+              <a href="#company-documentation" className="inline-flex rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+                Ir a documentación de empresa
+              </a>
+            </div>
           </div>
           <div className="min-w-[260px] rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <p className="text-xs uppercase tracking-wide text-slate-500">Perfil listo para operación</p>
@@ -932,7 +937,8 @@ export default function CompanyProfilePage() {
         </div>
       </Section>
 
-      <Section title="Verificación documental de empresa" subtitle="Sube documentación oficial y sigue la revisión sin ruido técnico innecesario.">
+      <Section title="Verificación documental de empresa" subtitle="Aquí ves si el documento ya se recibió, si sigue en revisión o si tienes que corregir algo para continuar.">
+        <div id="company-documentation" className="scroll-mt-24" />
         <div className="grid gap-3 lg:grid-cols-[1.05fr_0.95fr]">
           <div className={`rounded-2xl border p-4 ${documentarySummary.tone}`}>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Estado documental</p>
@@ -967,7 +973,7 @@ export default function CompanyProfilePage() {
             </div>
             {profile?.company_document_rejection_reason || profile?.verification_rejection_reason ? (
               <p className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                Motivo de corrección: {profile.company_document_rejection_reason || profile.verification_rejection_reason}
+                Motivo del rechazo: {profile.company_document_rejection_reason || profile.verification_rejection_reason}
               </p>
             ) : null}
           </div>
@@ -976,16 +982,24 @@ export default function CompanyProfilePage() {
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Qué hacer ahora</p>
               <p className="mt-2 text-sm font-semibold text-slate-900">
-                {profile?.company_document_review_eta_label && (reviewStatus === "uploaded" || reviewStatus === "under_review")
-                  ? "Esperar revisión o preparar un reemplazo si aparece una incidencia."
-                  : activeDocuments.length > 0
-                    ? "Mantén el histórico limpio y revisa si falta contexto en el perfil empresa."
-                    : "Sube el primer documento para activar la revisión documental."}
+                {reviewStatus === "rejected"
+                  ? "Revisa el motivo del rechazo y vuelve a subir un documento válido."
+                  : reviewStatus === "verified"
+                    ? "La revisión ya está resuelta. Solo vuelve a subir documentación si necesitas actualizarla."
+                    : profile?.company_document_review_eta_label && (reviewStatus === "uploaded" || reviewStatus === "under_review")
+                      ? "Tu documento ya está recibido. El siguiente paso es esperar la revisión."
+                      : activeDocuments.length > 0
+                        ? "Revisa el histórico si necesitas contexto, pero la siguiente acción dependerá del estado del documento."
+                        : "Sube el primer documento para activar la revisión documental."}
               </p>
               <p className="mt-2 text-sm text-slate-600">
-                {profile?.company_document_review_eta_label && (reviewStatus === "uploaded" || reviewStatus === "under_review")
-                  ? `Tiempo estimado: ${String(profile.company_document_review_eta_label)}${profile?.company_document_review_priority_label ? ` · ${String(profile.company_document_review_priority_label)}` : ""}`
-                  : "Importar datos detectados ayuda a completar la ficha, pero no sustituye la validación documental."}
+                {reviewStatus === "rejected"
+                  ? "Cuando subas un nuevo documento, volverá a entrar en revisión y aquí verás el resultado."
+                  : profile?.company_document_review_eta_label && (reviewStatus === "uploaded" || reviewStatus === "under_review")
+                    ? `Tiempo estimado: ${String(profile.company_document_review_eta_label)}${profile?.company_document_review_priority_label ? ` · ${String(profile.company_document_review_priority_label)}` : ""}`
+                    : reviewStatus === "verified"
+                      ? "La validación documental ya está cerrada para la empresa."
+                      : "Importar datos detectados ayuda a completar la ficha, pero no sustituye la revisión documental."}
               </p>
               {(profile?.company_document_last_reviewed_at || profile?.verification_last_reviewed_at) ? (
                 <p className="mt-2 text-xs text-slate-500">
@@ -1078,7 +1092,7 @@ export default function CompanyProfilePage() {
                 disabled={!docFile || uploadingDoc || Boolean(documentsMeta)}
                 className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
               >
-                {uploadingDoc ? "Subiendo…" : "Subir documento de verificación"}
+                {uploadingDoc ? "Subiendo…" : reviewStatus === "rejected" ? "Volver a subir documento" : "Subir documento de verificación"}
               </button>
               <p className="mt-2 text-xs text-slate-500">
                 Puedes añadir varios documentos del mismo tipo sin perder trazabilidad histórica.

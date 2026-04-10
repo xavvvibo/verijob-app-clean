@@ -19,11 +19,17 @@ export default async function CandidateLayout({ children }: { children: React.Re
 
   if (!au.user) redirect("/login?next=/candidate/overview");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role,active_company_id,onboarding_completed,onboarding_step")
-    .eq("id", au.user.id)
-    .maybeSingle();
+  const [{ data: profile }, { count: experienceCount }] = await Promise.all([
+    supabase
+      .from("profiles")
+      .select("role,active_company_id,onboarding_completed,onboarding_step,full_name,title")
+      .eq("id", au.user.id)
+      .maybeSingle(),
+    supabase
+      .from("profile_experiences")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", au.user.id),
+  ]);
 
   const role = String(profile?.role || "").toLowerCase();
 
@@ -32,7 +38,10 @@ export default async function CandidateLayout({ children }: { children: React.Re
   if (role === "owner") redirect("/owner?forbidden=1&from=candidate");
 
   const onboardingAccessGranted = cookieStore.get("candidate_onboarding_access")?.value === "1";
-  const onboardingCompleted = resolveCandidateOnboardingCompleted(profile || {});
+  const onboardingCompleted = resolveCandidateOnboardingCompleted({
+    ...(profile || {}),
+    experienceCount: Number(experienceCount || 0),
+  });
 
   if (!onboardingCompleted && !onboardingAccessGranted) {
     redirect("/onboarding?blocked=1&source=candidate");

@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { resolveCandidateMinimumReadiness } from "@/lib/auth/onboarding-state";
 import { createPagesRouteClient } from "@/utils/supabase/pages";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
@@ -54,6 +55,35 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       requestedStep === "finish" || requestedStep === "verification" || requestedStep === "evidence" || requestedStep === "experience"
         ? requestedStep
         : "finish";
+
+    if (nextStep === "finish") {
+      const [{ data: profileSnapshot, error: profileSnapshotErr }, { count: experienceCount, error: experienceCountErr }] = await Promise.all([
+        srv.from("profiles").select("full_name,title").eq("id", au.user.id).maybeSingle(),
+        srv.from("profile_experiences").select("id", { count: "exact", head: true }).eq("user_id", au.user.id),
+      ]);
+
+      if (profileSnapshotErr || experienceCountErr) {
+        return json(res, 400, {
+          error: "candidate_onboarding_minimum_check_failed",
+          route: "/pages/api/onboarding/complete",
+          details: profileSnapshotErr?.message || experienceCountErr?.message || "minimum_check_failed",
+        });
+      }
+
+      const readiness = resolveCandidateMinimumReadiness({
+        full_name: (profileSnapshot as any)?.full_name,
+        title: (profileSnapshot as any)?.title,
+        experienceCount: Number(experienceCount || 0),
+      });
+
+      if (!readiness.isReady) {
+        return json(res, 409, {
+          error: "candidate_onboarding_minimum_incomplete",
+          route: "/pages/api/onboarding/complete",
+          details: "Completa nombre y apellidos, titular profesional y al menos una experiencia antes de cerrar el onboarding.",
+        });
+      }
+    }
 
     const patch: Record<string, any> = {
       id: au.user.id,

@@ -1,7 +1,9 @@
 import { createClient } from "@/utils/supabase/server";
+import { createServiceRoleClient } from "@/utils/supabase/service";
 import Link from "next/link";
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
 import { buildCandidateExperienceTrustTimeline } from "@/lib/candidate/experience-trust";
+import { readCandidateProfileCollections } from "@/lib/candidate/profile-collections";
 import { readCandidateSkills } from "@/lib/candidate/profile-visibility";
 import { getTrustBreakdownDisplayEntries, normalizeTrustBreakdown } from "@/lib/trust/trust-model";
 import CandidateFormLayout from "@/components/candidate-v2/layouts/CandidateFormLayout";
@@ -72,8 +74,12 @@ export default async function CandidateProfilePage() {
       .eq("candidate_id", user.id)
       .order("start_date", { ascending: false }),
   ]);
+  const admin = createServiceRoleClient();
+  const collections = await readCandidateProfileCollections(admin, user.id, { candidateProfile });
   const importSummary = summarizeCompanyCvImportUpdates((candidateProfile as any)?.raw_cv_json);
   const manualSkills = readCandidateSkills(candidateProfile);
+  const visibleSignalsCount =
+    collections.languages.length + collections.certifications.length + collections.achievements.length;
   const trustScore = Number((candidateProfile as any)?.trust_score ?? 0);
   const trustBreakdown = normalizeTrustBreakdown((candidateProfile as any)?.trust_score_breakdown);
   const trustEntries = getTrustBreakdownDisplayEntries((candidateProfile as any)?.trust_score_breakdown);
@@ -183,6 +189,39 @@ export default async function CandidateProfilePage() {
           </div>
         </section>
       ) : null}
+
+      <CandidateFormSection
+        title="Idiomas y logros visibles"
+        description="Todo lo que ya se haya importado correctamente desde tu CV o añadido después debe quedar visible aquí, sin desaparecer en segundo plano."
+      >
+        <div className="grid gap-3 md:grid-cols-3">
+          <CandidateSurface tone="subtle" className="p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Idiomas</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-950">{collections.languages.length}</div>
+            <p className="mt-1 text-sm text-slate-600">Idiomas visibles ahora mismo en tu perfil.</p>
+          </CandidateSurface>
+          <CandidateSurface tone="subtle" className="p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Certificaciones</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-950">{collections.certifications.length}</div>
+            <p className="mt-1 text-sm text-slate-600">Certificaciones detectadas o añadidas manualmente.</p>
+          </CandidateSurface>
+          <CandidateSurface tone="subtle" className="p-4">
+            <div className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Logros</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-950">{collections.achievements.length}</div>
+            <p className="mt-1 text-sm text-slate-600">Logros y señales complementarias ya registradas.</p>
+          </CandidateSurface>
+        </div>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Link href="/candidate/achievements" className="inline-flex rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black">
+            Revisar idiomas y logros
+          </Link>
+          <p className="text-sm text-slate-600">
+            {visibleSignalsCount > 0
+              ? `Ya tienes ${visibleSignalsCount} señal${visibleSignalsCount === 1 ? "" : "es"} visible${visibleSignalsCount === 1 ? "" : "s"} en esta parte del perfil.`
+              : "Si tu CV aporta idiomas, certificaciones o logros, aparecerán aquí cuando queden importados correctamente."}
+          </p>
+        </div>
+      </CandidateFormSection>
 
       {experienceTimeline.length > 0 ? (
         <section className="space-y-5">

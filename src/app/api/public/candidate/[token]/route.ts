@@ -541,8 +541,6 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       if (!!aSetting?.featured !== !!bSetting?.featured) return aSetting?.featured ? -1 : 1;
       return 0;
     });
-  const publicExperiences = visibleExperiences.slice(0, publicLimits.work ?? undefined);
-  const publicEducation = educationItems.slice(0, publicLimits.academic ?? undefined);
   const featuredVisibleExperiences = visibleExperiences
     .filter((item: any) =>
       Boolean(
@@ -554,6 +552,16 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       ),
     )
     .slice(0, publicLimits.featured ?? undefined);
+  const publicExperiencesSummary = {
+    total_experiences: canonicalProfileExperiences.length,
+    verified_experiences: canonicalVerifiedExperienceCount,
+    total_verifications: Math.max(totalVerifications, canonicalVerifiedExperienceCount),
+    total_evidences: canonicalEvidencesTotal,
+    total_education_items: educationTotal,
+    total_languages: publicLanguages.length,
+    total_visible_skills: verifiedSkills.length,
+    has_locked_experience_detail: true,
+  };
   const teaser = {
     full_name: internalPreviewAllowed ? profileFullName : publicName,
     public_name: publicName,
@@ -571,7 +579,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     evidences_count: canonicalEvidencesTotal,
     reuse_total: Number(legacyTrustBreakdown.reuseEvents ?? 0),
     reuse_companies: Number(legacyTrustBreakdown.reuseCompanies ?? 0),
-    education_total: internalPreviewAllowed ? educationTotal : publicEducation.length,
+    education_total: educationTotal,
     achievements_total: internalPreviewAllowed ? candidateCollections.achievements_catalog.all.length : 0,
     verified_work_count: canonicalVerifiedExperienceCount,
     verified_education_count: internalPreviewAllowed ? verifiedEducation : 0,
@@ -587,7 +595,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       verifiedRows
         .map((row: any) => row?.resolved_at || row?.created_at || null)
         .find(Boolean) || null,
-    featured_verified_experiences: (internalPreviewAllowed ? featuredVisibleExperiences : publicExperiences)
+    featured_verified_experiences: (internalPreviewAllowed ? featuredVisibleExperiences : [])
       .filter((item: any) => Boolean(item?.is_verified))
       .slice(0, 2)
       .map((item: any) => ({
@@ -605,8 +613,9 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     token: linkResolved.token,
     candidate_id: candidateId,
     teaser,
-    experiences: internalPreviewAllowed ? experiencesEnriched : publicExperiences,
-    education: internalPreviewAllowed ? educationItems : publicEducation,
+    experiences_summary: publicExperiencesSummary,
+    experiences: internalPreviewAllowed ? experiencesEnriched : [],
+    education: internalPreviewAllowed ? educationItems : [],
     recommendations: internalPreviewAllowed ? derivedRecommendations : [],
     achievements: internalPreviewAllowed ? achievementItems : [],
     verified_skills: verifiedSkills,
@@ -620,6 +629,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
       languages: internalPreviewAllowed ? publicLanguages : [],
       education: internalPreviewAllowed ? educationItems : [],
       experiences: internalPreviewAllowed ? experiencesEnriched : [],
+      experiences_summary: publicExperiencesSummary,
       verifications: {
         total: Math.max(totalVerifications, canonicalVerifiedExperienceCount),
         verified_work_count: canonicalVerifiedExperienceCount,

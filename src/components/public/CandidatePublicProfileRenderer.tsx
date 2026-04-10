@@ -33,6 +33,7 @@ export type PublicCandidateTeaser = {
   experiences_total?: number | null;
   verified_experiences?: number | null;
   confirmed_experiences?: number | null;
+  total_verifications?: number | null;
   evidences_total?: number | null;
   reuse_total?: number | null;
   reuse_companies?: number | null;
@@ -111,6 +112,16 @@ export type PublicCandidateContact = {
 
 export type PublicCandidatePayload = {
   teaser?: PublicCandidateTeaser;
+  experiences_summary?: {
+    total_experiences?: number | null;
+    verified_experiences?: number | null;
+    total_verifications?: number | null;
+    total_evidences?: number | null;
+    total_education_items?: number | null;
+    total_languages?: number | null;
+    total_visible_skills?: number | null;
+    has_locked_experience_detail?: boolean | null;
+  };
   experiences?: PublicCandidateExperience[];
   education?: PublicCandidateEducation[];
   recommendations?: PublicCandidateRecommendation[];
@@ -209,6 +220,10 @@ export function CandidatePublicProfileRenderer({
     : [];
   const achievements = Array.isArray(payload?.achievements) ? payload.achievements : [];
   const displaySummary = useMemo(() => resolvePublicProfileDisplaySummary(payload), [payload]);
+  const publicExperienceSummary = useMemo(
+    () => payload?.experiences_summary || {},
+    [payload],
+  );
 
   const capabilities = getModeCapabilities(mode);
   const experiences = useMemo(() => {
@@ -545,7 +560,11 @@ export function CandidatePublicProfileRenderer({
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <SignalCard label="Nivel de confianza" value={Math.round(trust)} hint="Resume qué parte de la trayectoria ya está respaldada por señales verificables." />
             <SignalCard label="Experiencias verificadas" value={verificationSummary.verified} hint="Trayectoria contrastada" />
-            <SignalCard label="Experiencias visibles" value={experiences.length} hint="Vista pública resumida" />
+            <SignalCard
+              label="Experiencias registradas"
+              value={Number(publicExperienceSummary?.total_experiences ?? teaser?.experiences_total ?? experiences.length)}
+              hint="Señal agregada visible"
+            />
             <SignalCard
               label="Formación"
               value={displaySummary.educationCount || "Formacion pendiente"}
@@ -562,45 +581,38 @@ export function CandidatePublicProfileRenderer({
           <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">Trayectoria visible</h2>
-                <p className="mt-1 text-sm text-slate-600">Lo que el candidato declara y decide compartir.</p>
+                <h2 className="text-lg font-semibold text-slate-900">Perfil resumido</h2>
+                <p className="mt-1 text-sm text-slate-600">Esta vista pública muestra señal agregada. El detalle completo queda reservado para empresas con acceso.</p>
               </div>
               <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
-                Sin datos de contacto
+                Detalle bloqueado
               </span>
             </div>
 
-            <div className="mt-4 space-y-3">
-              {experiences.length ? (
-                experiences.map((exp, index) => {
-                  const verificationBadges = resolveExperienceVerificationBadges({
-                    verificationBadges: exp?.verification_badges,
-                    verificationChannel: exp?.verification_method,
-                    verificationStatus: exp?.status_text,
-                    companyVerificationStatusSnapshot: exp?.company_verification_status_snapshot,
-                    evidenceCount: exp?.evidence_count,
-                  });
-                  const primaryVerificationBadge = verificationBadges[0] || null;
-                  return (
-                    <article key={String(exp?.experience_id || `public-exp-${index}`)} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <h3 className="text-base font-semibold text-slate-900">{exp?.position || "Experiencia profesional"}</h3>
-                          <p className="text-sm text-slate-600">{exp?.company_name || "Empresa verificada"}</p>
-                        </div>
-                        {primaryVerificationBadge ? (
-                          <span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${getExperienceVerificationBadgeClasses(primaryVerificationBadge.tone, "primary")}`}>
-                            {primaryVerificationBadge.label}
-                          </span>
-                        ) : null}
-                      </div>
-                    </article>
-                  );
-                })
-              ) : (
-                <Empty text="Todavía no hay experiencias públicas visibles." />
-              )}
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <SummaryInfo
+                label="Experiencias registradas"
+                value={String(Number(publicExperienceSummary?.total_experiences ?? teaser?.experiences_total ?? 0))}
+              />
+              <SummaryInfo
+                label="Verificaciones"
+                value={String(Number(publicExperienceSummary?.total_verifications ?? teaser?.total_verifications ?? verificationSummary.verified))}
+              />
+              <SummaryInfo
+                label="Evidencias"
+                value={String(Number(publicExperienceSummary?.total_evidences ?? teaser?.evidences_total ?? verificationSummary.evidences))}
+              />
+              <SummaryInfo
+                label="Idiomas y skills"
+                value={String(
+                  Number(publicExperienceSummary?.total_languages ?? publicLanguages.length) +
+                  Number(publicExperienceSummary?.total_visible_skills ?? displaySummary.skills.length)
+                )}
+              />
             </div>
+            <p className="mt-4 text-sm text-slate-600">
+              Más detalle disponible para empresas con acceso. Esta vista no muestra empresas, puestos ni fechas concretas.
+            </p>
           </section>
         </div>
       </section>
