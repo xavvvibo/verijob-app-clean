@@ -336,10 +336,6 @@ export async function resetCandidateAccountForQa(args: {
     await bestEffortStorageRemove(admin, bucket, paths);
   }
 
-  const trustResult = await import("@/server/trustScore/calculateTrustScore").then((mod) =>
-    mod.recalculateAndPersistCandidateTrustScore(userId),
-  );
-
   const [postProfileRes, postCandidateProfileRes, postExperiencesRes, postEvidencesRes] = await Promise.all([
     admin.from("profiles").select("avatar_url,onboarding_completed").eq("id", userId).maybeSingle(),
     admin
@@ -374,8 +370,8 @@ export async function resetCandidateAccountForQa(args: {
       candidate_profile_cleared: Boolean(candidateProfileColumns.size),
       public_links_deleted: true,
       subscription_reset: subscriptionReset,
-      trust_score_recalculated: true,
-      trust_score: trustResult.score,
+      trust_score_recalculated: false,
+      trust_score: Number((postCandidateProfileRes.data as any)?.trust_score ?? 0),
     },
     validation: {
       experience_count: Number(postExperiencesRes.count || 0),
@@ -384,7 +380,7 @@ export async function resetCandidateAccountForQa(args: {
       avatar_url: (postProfileRes.data as any)?.avatar_url || null,
       evidences_count: Number(postEvidencesRes.count || 0),
       onboarding_completed: Boolean((postProfileRes.data as any)?.onboarding_completed),
-      trust_score: Number((postCandidateProfile as any)?.trust_score ?? trustResult.score ?? 0),
+      trust_score: Number((postCandidateProfile as any)?.trust_score ?? 0),
     },
   };
 }
