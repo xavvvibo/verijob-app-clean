@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 
 const CV_NAME_DETECTED_EVENT = "candidate-cv-name-detected";
 
@@ -41,6 +42,7 @@ export default function OnboardingExperienceIdentityBlock({
 }: {
   initialFullName: string | null;
 }) {
+  const router = useRouter();
   const initialSplit = useMemo(() => splitFullName(initialFullName), [initialFullName]);
   const [firstName, setFirstName] = useState(initialSplit.firstName);
   const [lastName, setLastName] = useState(initialSplit.lastName);
@@ -79,6 +81,7 @@ export default function OnboardingExperienceIdentityBlock({
       setSavedFullName(persisted);
       setSuggestedFullName(null);
       setMessage({ tone: "success", text: "Nombre guardado correctamente." });
+      router.refresh();
       return true;
     } catch (error: any) {
       setMessage({ tone: "error", text: error?.message || "No se pudo guardar el nombre." });
@@ -117,7 +120,7 @@ export default function OnboardingExperienceIdentityBlock({
   }, [firstName, lastName, savedFullName]);
 
   return (
-    <section id="identity-block" className="rounded-[28px] border border-blue-200 bg-blue-50/80 p-6 shadow-sm">
+    <section id="identity-block" data-testid="onboarding-identity-block" className="rounded-[28px] border border-blue-200 bg-blue-50/80 p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="max-w-3xl">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-blue-700">Paso obligatorio</p>

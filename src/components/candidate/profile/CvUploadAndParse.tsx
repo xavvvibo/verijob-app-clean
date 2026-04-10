@@ -175,7 +175,13 @@ function matchStatusLabel(status: MatchStatus) {
   return "Ya existente";
 }
 
-export default function CvUploadAndParse() {
+export default function CvUploadAndParse({
+  blocked = false,
+  blockedMessage,
+}: {
+  blocked?: boolean;
+  blockedMessage?: string;
+}) {
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const pathname = usePathname() || "";
@@ -300,7 +306,7 @@ export default function CvUploadAndParse() {
   }
 
   async function importSelected() {
-    if (!jobId || !job || job.status !== "succeeded") return;
+    if (blocked || !jobId || !job || job.status !== "succeeded") return;
     setImporting("all");
     setMsg(null);
 
@@ -380,6 +386,10 @@ export default function CvUploadAndParse() {
   }
 
   async function start() {
+    if (blocked) {
+      setMsg(blockedMessage || "Guarda nombre y apellidos antes de subir tu CV.");
+      return;
+    }
     setMsg(null);
     setLastImport(null);
     setJob(null);
@@ -566,15 +576,22 @@ export default function CvUploadAndParse() {
           <input
             type="file"
             accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            disabled={busy}
+            disabled={busy || blocked}
             onChange={(e) => setFile(e.target.files?.[0] || null)}
             className="mt-1 w-full rounded-lg border px-3 py-2 text-sm bg-white disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
           />
         </div>
-        <button onClick={start} disabled={busy} className="rounded-lg px-3 py-2 text-sm font-medium border bg-slate-900 text-white disabled:opacity-50">
+        <button onClick={start} disabled={busy || blocked} className="rounded-lg px-3 py-2 text-sm font-medium border bg-slate-900 text-white disabled:opacity-50">
           {busy ? "Subiendo…" : "Extraer perfil desde CV"}
         </button>
       </div>
+
+      {blocked ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          <div className="font-semibold">Importación bloqueada temporalmente</div>
+          <div className="mt-1">{blockedMessage || "Guarda nombre y apellidos antes de subir tu CV."}</div>
+        </div>
+      ) : null}
 
       {uploadStage ? (
         <div className={`rounded-lg border p-3 ${progressTone}`}>
@@ -651,8 +668,8 @@ export default function CvUploadAndParse() {
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="text-sm font-medium">Experiencias laborales detectadas</div>
                   <div className="flex flex-wrap gap-2">
-                    <button type="button" onClick={() => setExpChecked(expStatuses.map(() => true))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Seleccionar todas</button>
-                    <button type="button" onClick={() => setExpChecked(expStatuses.map(() => false))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium">Deseleccionar todas</button>
+                    <button type="button" disabled={blocked} onClick={() => setExpChecked(expStatuses.map(() => true))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium disabled:opacity-50">Seleccionar todas</button>
+                    <button type="button" disabled={blocked} onClick={() => setExpChecked(expStatuses.map(() => false))} className="rounded-md border bg-white px-3 py-1.5 text-xs font-medium disabled:opacity-50">Deseleccionar todas</button>
                   </div>
                 </div>
                 <div className="rounded-md border border-blue-200 bg-blue-50 p-2 text-xs text-blue-800">
@@ -670,6 +687,7 @@ export default function CvUploadAndParse() {
                             <input
                               type="checkbox"
                               checked={Boolean(expChecked[idx])}
+                              disabled={blocked}
                               onChange={(e) => setExpChecked((prev) => prev.map((v, i) => (i === idx ? e.target.checked : v)))}
                             />
                             Seleccionar
@@ -680,12 +698,12 @@ export default function CvUploadAndParse() {
                         </div>
 
                         <div className="grid gap-2 md:grid-cols-2">
-                          <input value={x.company_name || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, company_name: e.target.value } : r)))} placeholder="Empresa" className="rounded-lg border px-3 py-2 text-sm" />
-                          <input value={x.role_title || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, role_title: e.target.value } : r)))} placeholder="Puesto" className="rounded-lg border px-3 py-2 text-sm" />
-                          <input value={x.start_date || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, start_date: e.target.value } : r)))} placeholder="Fecha inicio (YYYY-MM)" className="rounded-lg border px-3 py-2 text-sm" />
-                          <input value={x.end_date || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, end_date: e.target.value } : r)))} placeholder="Fecha fin (YYYY-MM o Actual)" className="rounded-lg border px-3 py-2 text-sm" />
+                          <input disabled={blocked} value={x.company_name || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, company_name: e.target.value } : r)))} placeholder="Empresa" className="rounded-lg border px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-500" />
+                          <input disabled={blocked} value={x.role_title || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, role_title: e.target.value } : r)))} placeholder="Puesto" className="rounded-lg border px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-500" />
+                          <input disabled={blocked} value={x.start_date || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, start_date: e.target.value } : r)))} placeholder="Fecha inicio (YYYY-MM)" className="rounded-lg border px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-500" />
+                          <input disabled={blocked} value={x.end_date || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, end_date: e.target.value } : r)))} placeholder="Fecha fin (YYYY-MM o Actual)" className="rounded-lg border px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-500" />
                         </div>
-                        <textarea value={x.description || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, description: e.target.value } : r)))} rows={2} placeholder="Descripción" className="mt-2 w-full rounded-lg border px-3 py-2 text-sm" />
+                        <textarea disabled={blocked} value={x.description || ""} onChange={(e) => setExpDrafts((prev) => prev.map((r, i) => (i === idx ? { ...r, description: e.target.value } : r)))} rows={2} placeholder="Descripción" className="mt-2 w-full rounded-lg border px-3 py-2 text-sm disabled:bg-slate-100 disabled:text-slate-500" />
                       </div>
                     ))}
                   </div>

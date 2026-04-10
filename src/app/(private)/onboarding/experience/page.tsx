@@ -8,5 +8,5 @@ export default async function OnboardingCandidateExperiencePage({
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  return <CandidateExperienceContent searchParams={searchParams} onboardingMode={true} />;
+  return <CandidateExperienceContent searchParams={searchParams} onboardingMode={true} onboardingEntry="experience" />;
 }

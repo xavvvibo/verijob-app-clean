@@ -24,9 +24,11 @@ export const revalidate = 0;
 export async function CandidateExperienceContent({
   searchParams,
   onboardingMode = false,
+  onboardingEntry,
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
   onboardingMode?: boolean;
+  onboardingEntry?: "experience";
 }) {
   const resolvedSearchParams = searchParams ? await searchParams : {};
   const supabase = await createServerSupabaseClient();
@@ -253,6 +255,9 @@ export async function CandidateExperienceContent({
     row.status === "Verificada" || row.status === "En revisión" || row.status === "Verificación solicitada",
   );
   const shouldPushFirstVerification = hasExperiences && !hasVerifiedOrInFlight;
+  const profileFullName = String((profile as any)?.full_name || "").trim();
+  const confirmedNameParts = profileFullName.split(/\s+/).filter(Boolean);
+  const hasConfirmedIdentity = confirmedNameParts.length >= 2;
 
   return (
     <CandidateOperationsLayout>
@@ -261,14 +266,26 @@ export async function CandidateExperienceContent({
         title={onboardingMode ? "Confirma tu base y revisa tu experiencia" : "Tu trayectoria verificable"}
         description={
           onboardingMode
-            ? "Sigue dentro del onboarding: confirma tu identidad mínima y revisa tu historial antes de salir al flujo normal."
+            ? "Sigue dentro del onboarding: confirma primero nombre y apellidos, luego importa o revisa tu experiencia antes de salir al flujo normal."
             : "Ordena tu historial, crea tu perfil con claridad y valida primero la experiencia que más confianza puede aportar."
         }
         ctaLabel="Añadir experiencia manual"
-        ctaHref={onboardingMode ? "/onboarding/experience?new=1#manual-experience" : "/candidate/experience?new=1#manual-experience"}
-        badges={["Trayectoria revisable", "Validación por experiencia", "Visibilidad pública controlada"]}
+        ctaHref={onboardingMode ? "/onboarding/experience?onboarding=1&intent=manual" : "/candidate/experience?new=1#manual-experience"}
+        badges={onboardingMode ? ["Dentro del onboarding", "Nombre obligatorio", "Experiencia revisable"] : ["Trayectoria revisable", "Validación por experiencia", "Visibilidad pública controlada"]}
       />
       {onboardingMode ? <OnboardingExperienceIdentityBlock initialFullName={String((profile as any)?.full_name || "").trim() || null} /> : null}
+      {onboardingMode && !hasConfirmedIdentity ? (
+        <div className="mt-6 rounded-3xl border border-amber-200 bg-amber-50 px-6 py-5 text-sm text-amber-900 shadow-sm">
+          <p className="font-semibold">Antes de importar tu CV o tocar experiencias, guarda nombre y apellidos.</p>
+          <p className="mt-2 leading-6 text-amber-800">
+            Esta pantalla sigue dentro del onboarding. Hasta que confirmes ese dato mínimo, no puedes continuar al resto del flujo.
+          </p>
+          <p className="mt-2 text-xs font-medium uppercase tracking-[0.14em] text-amber-700">
+            Superficie activa: {onboardingEntry === "experience" ? "onboarding/experience" : "candidate/experience"}
+          </p>
+        </div>
+      ) : null}
+      <div className={onboardingMode && !hasConfirmedIdentity ? "pointer-events-none opacity-45" : ""}>
       <CandidateToolbar className="-mt-4">
         <div className="grid w-full gap-3 md:grid-cols-2">
           <Link
@@ -330,7 +347,7 @@ export async function CandidateExperienceContent({
             </div>
           ) : null}
           <div className="mt-4">
-            <CvUploadAndParse />
+            <CvUploadAndParse blocked={onboardingMode && !hasConfirmedIdentity} blockedMessage="Guarda primero nombre y apellidos para activar la importación desde CV." />
           </div>
         </CandidateSurface>
 
@@ -405,6 +422,7 @@ export async function CandidateExperienceContent({
           }}
         />
       </section>
+      </div>
     </CandidateOperationsLayout>
   );
 }

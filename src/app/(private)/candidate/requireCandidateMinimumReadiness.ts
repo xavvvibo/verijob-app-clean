@@ -4,7 +4,7 @@ import { resolveCandidateMinimumReadiness } from "@/lib/auth/onboarding-state";
 
 export async function requireCandidateMinimumReadiness(
   next = "/candidate/overview",
-  options?: { requireFullReadiness?: boolean }
+  options?: { requireFullReadiness?: boolean; missingNameRedirect?: string }
 ) {
   const supabase = await createServerSupabaseClient();
   const { data: auth } = await supabase.auth.getUser();
@@ -32,7 +32,7 @@ export async function requireCandidateMinimumReadiness(
   });
 
   if (!readiness.hasFullName) {
-    redirect("/onboarding?blocked=1&source=candidate&reason=missing_name");
+    redirect(options?.missingNameRedirect || "/onboarding?blocked=1&source=candidate&reason=missing_name");
   }
 
   if ((options?.requireFullReadiness ?? true) && !readiness.isReady) {
