@@ -151,6 +151,7 @@ export default function CompanyCandidatesClient() {
   });
   const [file, setFile] = useState<File | null>(null);
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [showImportFallbackFields, setShowImportFallbackFields] = useState(false);
   const [inviteForm, setInviteForm] = useState({
     candidate_name: "",
     candidate_email: "",
@@ -162,9 +163,13 @@ export default function CompanyCandidatesClient() {
   const tokenSectionRef = useRef<HTMLDivElement | null>(null);
 
   const tokenDisabled = useMemo(() => token.trim().length === 0, [token]);
+  const resolvedPreviewEmail = String(importPreview?.prefill?.candidate_email || "").trim();
+  const resolvedPreviewName = String(importPreview?.prefill?.candidate_name || "").trim();
+  const resolvedPreviewRole = String(importPreview?.prefill?.target_role || "").trim();
+  const resolvedCandidateEmail = String(resolvedPreviewEmail || form.candidate_email || "").trim();
   const submitDisabled = useMemo(
-    () => submitting || !importsMeta.available || !file || !String(form.candidate_email || "").trim(),
-    [file, form.candidate_email, importsMeta.available, submitting]
+    () => submitting || previewing || !importsMeta.available || !file || !resolvedCandidateEmail,
+    [file, importsMeta.available, previewing, resolvedCandidateEmail, submitting]
   );
   const filteredImports = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -334,9 +339,9 @@ export default function CompanyCandidatesClient() {
       if (!file) throw new Error("Adjunta un CV en PDF, DOC o DOCX.");
       const fd = new FormData();
       fd.append("file", file);
-      fd.append("candidate_email", form.candidate_email);
-      fd.append("candidate_name", form.candidate_name);
-      fd.append("target_role", form.target_role);
+      if (String(form.candidate_email || "").trim()) fd.append("candidate_email", form.candidate_email);
+      if (String(form.candidate_name || "").trim()) fd.append("candidate_name", form.candidate_name);
+      if (String(form.target_role || "").trim()) fd.append("target_role", form.target_role);
       fd.append("source_notes", form.source_notes);
 
       const res = await fetch("/api/company/candidate-imports", {
@@ -356,6 +361,7 @@ export default function CompanyCandidatesClient() {
       });
       setFile(null);
       setImportPreview(null);
+      setShowImportFallbackFields(false);
       setLatestImportedId(String(data?.import_invite?.id || data?.processing?.invite_id || "").trim() || null);
       setNotice(
         data?.candidate_already_exists
@@ -370,18 +376,19 @@ export default function CompanyCandidatesClient() {
     }
   }
 
-  async function analyzeImport() {
+  async function analyzeImport(nextFile?: File | null) {
     setPreviewing(true);
     setError(null);
     setNotice(null);
 
     try {
-      if (!file) throw new Error("Adjunta un CV antes de analizarlo.");
+      const activeFile = nextFile || file;
+      if (!activeFile) throw new Error("Adjunta un CV antes de analizarlo.");
       const fd = new FormData();
-      fd.append("file", file);
-      fd.append("candidate_email", form.candidate_email);
-      fd.append("candidate_name", form.candidate_name);
-      fd.append("target_role", form.target_role);
+      fd.append("file", activeFile);
+      if (String(form.candidate_email || "").trim()) fd.append("candidate_email", form.candidate_email);
+      if (String(form.candidate_name || "").trim()) fd.append("candidate_name", form.candidate_name);
+      if (String(form.target_role || "").trim()) fd.append("target_role", form.target_role);
       fd.append("source_notes", form.source_notes);
       fd.append("preview_only", "1");
 
@@ -401,6 +408,7 @@ export default function CompanyCandidatesClient() {
         candidate_name: data?.prefill?.candidate_name || prev.candidate_name,
         target_role: data?.prefill?.target_role || prev.target_role,
       }));
+      setShowImportFallbackFields(Boolean(!data?.prefill?.candidate_email));
       setNotice(data?.user_message || "CV analizado. Revisa el prefill antes de enviar.");
     } catch (e: any) {
       setError(e?.message || "No se pudo analizar el CV.");
@@ -718,8 +726,8 @@ export default function CompanyCandidatesClient() {
               const decisionState = decisionStateMeta(row);
               return (
                 <article key={row.id} className="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,#ffffff_100%)] p-5 shadow-sm">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                    <div className="min-w-0 flex-1">
+                  <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px] xl:items-start">
+                    <div className="min-w-0 space-y-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <button
                           type="button"
@@ -736,20 +744,36 @@ export default function CompanyCandidatesClient() {
                         <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${operational.tone}`}>{operational.label}</span>
                       </div>
                       <p className="mt-2 text-sm font-medium text-slate-800">{row.target_role || "Puesto pendiente de completar"}</p>
-                      <p className="mt-1 text-sm text-slate-600">
+                      <p className="text-sm text-slate-600">
                         {resolveCandidateSector(row)} · {resolveCandidateYearsExperience(row)} · {resolveCandidateApproxLocation(row)}
                       </p>
-                      <p className="mt-2 text-sm text-slate-700">{fit.summary}</p>
-                      <p className="mt-1 text-xs text-slate-500">{operational.detail}</p>
-                      {row.candidate_already_exists ? (
-                        <div className="mt-2 text-xs text-violet-700">Candidato existente detectado por email único. La importación se ha dejado en staging.</div>
-                      ) : null}
-                      {Number((row as any).import_attempts || 0) > 1 ? (
-                        <div className="mt-1 text-xs text-slate-500">{Number((row as any).import_attempts)} importaciones agrupadas en esta misma identidad.</div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="rounded-2xl border border-slate-200 bg-white/80 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Lectura rápida</p>
+                          <p className="mt-2 text-sm text-slate-700">{fit.summary}</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-white/80 p-3">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Siguiente paso</p>
+                          <p className="mt-2 text-sm text-slate-700">{operational.detail}</p>
+                        </div>
+                      </div>
+                      {(row.candidate_already_exists || Number((row as any).import_attempts || 0) > 1) ? (
+                        <div className="flex flex-wrap gap-2">
+                          {row.candidate_already_exists ? (
+                            <span className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-xs font-semibold text-violet-700">
+                              Candidato existente detectado. Se mantiene en staging.
+                            </span>
+                          ) : null}
+                          {Number((row as any).import_attempts || 0) > 1 ? (
+                            <span className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                              {Number((row as any).import_attempts)} importaciones agrupadas
+                            </span>
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
 
-                    <div className="grid gap-2 sm:min-w-[300px] sm:grid-cols-3 xl:min-w-[340px]">
+                    <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
                       <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Trust score</p>
                         <p className="mt-2 text-2xl font-semibold text-slate-950">{row.trust_score ?? "—"}</p>
@@ -774,7 +798,7 @@ export default function CompanyCandidatesClient() {
                     </div>
                   </div>
 
-                  <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
+                  <div className="mt-4 border-t border-slate-100 pt-4 grid gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-end">
                     <div className="flex flex-wrap gap-2">
                       <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${access.tone}`}>{access.label}</span>
                       {stage !== "none" ? (
@@ -905,7 +929,7 @@ export default function CompanyCandidatesClient() {
                 <div>
                   <h3 className="text-sm font-semibold text-slate-900">Importa candidatos desde CV</h3>
                   <p className="mt-1 text-xs text-slate-600">
-                    Sube un CV para incorporarlo a tu base y revisarlo después con más contexto.
+                    Sube un CV para detectar los datos principales del candidato y dejarlo listo para revisión sin pedirte alta manual en este paso.
                   </p>
                 </div>
                 <details className="text-xs text-slate-500">
@@ -929,60 +953,36 @@ export default function CompanyCandidatesClient() {
               <form onSubmit={submitImport} className="mt-4 space-y-3">
                 <div className="grid gap-3 md:grid-cols-2">
                   <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email del candidato</span>
-                    <input
-                      type="email"
-                      value={form.candidate_email}
-                      onChange={(e) => setForm((prev) => ({ ...prev, candidate_email: e.target.value }))}
-                      placeholder="candidato@email.com"
-                      className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    />
-                  </label>
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nombre</span>
-                    <input
-                      value={form.candidate_name}
-                      onChange={(e) => setForm((prev) => ({ ...prev, candidate_name: e.target.value }))}
-                      placeholder="Opcional si el CV ya lo trae"
-                      className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    />
-                  </label>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <label className="block">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Puesto</span>
-                    <input
-                      value={form.target_role}
-                      onChange={(e) => setForm((prev) => ({ ...prev, target_role: e.target.value }))}
-                      placeholder="Opcional"
-                      className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                    />
-                  </label>
-                  <label className="block">
                     <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">CV</span>
                     <input
                       type="file"
                       accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                       onChange={(e) => {
-                        setFile(e.target.files?.[0] || null);
+                        const nextFile = e.target.files?.[0] || null;
+                        setFile(nextFile);
                         setImportPreview(null);
+                        setShowImportFallbackFields(false);
+                        if (nextFile) {
+                          void analyzeImport(nextFile);
+                        }
                       }}
                       className="mt-2 block w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-700"
                     />
+                    <p className="mt-2 text-xs text-slate-500">
+                      El sistema intentará detectar nombre, email y titular desde el CV. Solo te pediremos completarlos si falta alguno.
+                    </p>
+                  </label>
+                  <label className="block">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nota interna</span>
+                    <textarea
+                      value={form.source_notes}
+                      onChange={(e) => setForm((prev) => ({ ...prev, source_notes: e.target.value }))}
+                      placeholder="Ej. CV recibido en entrevista presencial para responsable de turno."
+                      rows={4}
+                      className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                    />
                   </label>
                 </div>
-
-                <label className="block">
-                  <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nota interna</span>
-                  <textarea
-                    value={form.source_notes}
-                    onChange={(e) => setForm((prev) => ({ ...prev, source_notes: e.target.value }))}
-                    placeholder="Ej. CV recibido en entrevista presencial para responsable de turno."
-                    rows={2}
-                    className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
-                  />
-                </label>
 
                 <div className="flex flex-wrap gap-3">
                   <button
@@ -1011,6 +1011,7 @@ export default function CompanyCandidatesClient() {
                           setForm({ candidate_email: "", candidate_name: "", target_role: "", source_notes: "" });
                           setFile(null);
                           setImportPreview(null);
+                          setShowImportFallbackFields(false);
                           setError(null);
                           setNotice(null);
                         }}
@@ -1041,17 +1042,63 @@ export default function CompanyCandidatesClient() {
                   <dl className="mt-3 grid gap-3 text-sm text-slate-700 md:grid-cols-3">
                     <div>
                       <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</dt>
-                      <dd className="mt-1">{form.candidate_email || "No detectado"}</dd>
+                      <dd className="mt-1">{resolvedCandidateEmail || "No detectado"}</dd>
                     </div>
                     <div>
                       <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nombre</dt>
-                      <dd className="mt-1">{form.candidate_name || "No detectado"}</dd>
+                      <dd className="mt-1">{resolvedPreviewName || form.candidate_name || "No detectado"}</dd>
                     </div>
                     <div>
                       <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Puesto</dt>
-                      <dd className="mt-1">{form.target_role || "No detectado"}</dd>
+                      <dd className="mt-1">{resolvedPreviewRole || form.target_role || "No detectado"}</dd>
                     </div>
                   </dl>
+                  {!resolvedPreviewEmail ? (
+                    <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+                      <p className="text-sm font-semibold text-amber-900">No hemos detectado un email fiable en el CV.</p>
+                      <p className="mt-1 text-xs text-amber-800">Complétalo manualmente para poder dejar la importación preparada y enviar la invitación cuando corresponda.</p>
+                    </div>
+                  ) : null}
+                  {(showImportFallbackFields || !resolvedPreviewEmail) ? (
+                    <div className="mt-4 grid gap-3 md:grid-cols-3">
+                      <label className="block">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email del candidato</span>
+                        <input
+                          type="email"
+                          value={form.candidate_email}
+                          onChange={(e) => setForm((prev) => ({ ...prev, candidate_email: e.target.value }))}
+                          placeholder="candidato@email.com"
+                          className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Nombre</span>
+                        <input
+                          value={form.candidate_name}
+                          onChange={(e) => setForm((prev) => ({ ...prev, candidate_name: e.target.value }))}
+                          placeholder="Solo si quieres corregirlo"
+                          className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Puesto</span>
+                        <input
+                          value={form.target_role}
+                          onChange={(e) => setForm((prev) => ({ ...prev, target_role: e.target.value }))}
+                          placeholder="Solo si quieres completarlo"
+                          className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900"
+                        />
+                      </label>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowImportFallbackFields(true)}
+                      className="mt-4 inline-flex rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-slate-50"
+                    >
+                      Corregir datos detectados
+                    </button>
+                  )}
                   {importPreview.candidate_already_exists ? (
                     <p className="mt-3 text-xs text-violet-700">
                       El email ya existe en VERIJOB.
