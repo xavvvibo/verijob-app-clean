@@ -440,34 +440,45 @@ export async function POST(req: Request, ctx: any) {
 
     const nowIso = new Date().toISOString();
     const profileColumns = await getTableColumns(owner.admin, "profiles");
-    const candidateProfileColumns = await getTableColumns(owner.admin, "candidate_profiles");
     const { data: profileBefore, error: profileBeforeErr } = await readProfileById(owner.admin, targetUserId, profileColumns);
     if (profileBeforeErr) return json(400, { error: "profiles_read_failed", details: profileBeforeErr.message });
 
-    const candidatePatch: Record<string, any> = {};
-    if (candidateProfileColumns.has("summary")) candidatePatch.summary = null;
-    if (candidateProfileColumns.has("education")) candidatePatch.education = [];
-    if (candidateProfileColumns.has("certifications")) candidatePatch.certifications = [];
-    if (candidateProfileColumns.has("job_search_status")) candidatePatch.job_search_status = "no_disponible";
-    if (candidateProfileColumns.has("preferred_workday")) candidatePatch.preferred_workday = "flexible";
-    if (candidateProfileColumns.has("preferred_roles")) candidatePatch.preferred_roles = [];
-    if (candidateProfileColumns.has("work_zones")) candidatePatch.work_zones = null;
-    if (candidateProfileColumns.has("availability_schedule")) candidatePatch.availability_schedule = [];
-    if (candidateProfileColumns.has("allow_company_email_contact")) candidatePatch.allow_company_email_contact = false;
-    if (candidateProfileColumns.has("allow_company_phone_contact")) candidatePatch.allow_company_phone_contact = false;
-    if (candidateProfileColumns.has("show_trust_score")) candidatePatch.show_trust_score = false;
-    if (candidateProfileColumns.has("show_verification_counts")) candidatePatch.show_verification_counts = false;
-    if (candidateProfileColumns.has("show_verified_timeline")) candidatePatch.show_verified_timeline = false;
-    if (candidateProfileColumns.has("raw_cv_json")) candidatePatch.raw_cv_json = null;
-    if (candidateProfileColumns.has("updated_at")) candidatePatch.updated_at = nowIso;
-    if (Object.keys(candidatePatch).length > 0) {
-      await owner.admin.from("candidate_profiles").update(candidatePatch).eq("user_id", targetUserId);
+    let cleanupResult: any = null;
+    try {
+      cleanupResult = await resetCandidateAccountForQa({
+        admin: owner.admin,
+        userId: targetUserId,
+        userEmail: asText(targetAuthUser.user.email, 320),
+        bypassEmailCheck: true,
+      });
+    } catch (error: any) {
+      return json(400, {
+        error: "hard_delete_cleanup_failed",
+        details: String(error?.message || error || "candidate_cleanup_failed"),
+      });
     }
 
-    await clearCandidateProfileCollections(owner.admin, targetUserId);
-    await deactivateCandidatePublicLinks(owner.admin, targetUserId);
+    if (!cleanupResult?.ok) {
+      return json(400, {
+        error: "hard_delete_cleanup_failed",
+        details: String(cleanupResult?.user_message || cleanupResult?.error || "candidate_cleanup_failed"),
+      });
+    }
 
-    const profilePatch: Record<string, any> = {};
+    try {
+      await clearCandidateProfileCollections(owner.admin, targetUserId);
+      await deactivateCandidatePublicLinks(owner.admin, targetUserId);
+    } catch (error: any) {
+      return json(400, {
+        error: "hard_delete_cleanup_failed",
+        details: String(error?.message || error || "candidate_cleanup_finalize_failed"),
+      });
+    }
+
+    const profilePatch: Record<string, any> = {
+      onboarding_completed: false,
+      active_company_id: null,
+    };
     if (profileColumns.has("lifecycle_status")) profilePatch.lifecycle_status = "deleted";
     if (profileColumns.has("deleted_at")) profilePatch.deleted_at = nowIso;
     if (profileColumns.has("deleted_by")) profilePatch.deleted_by = owner.ownerId;
@@ -487,32 +498,36 @@ export async function POST(req: Request, ctx: any) {
       .single();
     if (profileErr) return json(400, { error: "hard_delete_profile_failed", details: profileErr.message });
 
-    let authDeleteError: string | null = null;
-    const { error: authErr } = await owner.admin.auth.admin.deleteUser(targetUserId);
-    if (authErr) authDeleteError = authErr.message;
+    const { error: authDisableErr } = await owner.admin.auth.admin.updateUserById(targetUserId, {
+      ban_duration: "876000h",
+    });
+    if (authDisableErr) {
+      return json(400, {
+        error: "hard_delete_auth_disable_failed",
+        details: authDisableErr.message,
+      });
+    }
 
     const logged = await logOwnerAction(owner, targetUserId, ACTION_HARD_DELETE_USER, reason, {
       before: profileBefore || null,
       after: profileAfter || null,
-      auth_delete_error: authDeleteError,
-      cleaned: {
-        candidate_profile: Object.keys(candidatePatch).length > 0,
-        candidate_collections: true,
-        public_links: true,
-      },
+      deletion_mode: "hard_delete_equivalent",
+      auth_strategy: "auth_user_preserved_but_signin_disabled",
+      cleaned: cleanupResult?.cleaned || null,
+      validation: cleanupResult?.validation || null,
     });
     if (!logged.ok) return json(500, { error: "owner_action_log_failed", details: logged.error.message });
 
     return json(200, {
       ok: true,
       executed: true,
-      message: authDeleteError
-        ? "Perfil limpiado y marcado como eliminado, pero no se pudo borrar el usuario en Auth."
-        : "Usuario eliminado completamente.",
-      warning: authDeleteError ? "auth_delete_failed" : null,
-      warning_details: authDeleteError,
+      message: "Candidato eliminado con borrado fuerte equivalente. El acceso queda bloqueado y el perfil sale del sistema operativo.",
       action: logged.action,
-      result: profileAfter,
+      result: {
+        profile: profileAfter,
+        cleanup: cleanupResult,
+        deletion_mode: "hard_delete_equivalent",
+      },
     });
   }
 

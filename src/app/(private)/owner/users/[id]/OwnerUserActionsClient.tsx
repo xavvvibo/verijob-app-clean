@@ -111,6 +111,7 @@ function ActionModal({
 }
 
 function ownerActionErrorMessage(errorCode: string, details: string | null) {
+  const withDetails = (message: string) => (details ? `${message} Detalle: ${details}` : message);
   if (errorCode === "invalid_target_plan") return "El plan seleccionado no está soportado en el catálogo actual.";
   if (errorCode === "invalid_target_plan_for_role") return "Ese plan no es válido para el tipo de usuario seleccionado.";
   if (errorCode === "missing_plan_mapping") return "Falta el mapeo interno del plan seleccionado. Revisa catálogo de billing.";
@@ -129,8 +130,17 @@ function ownerActionErrorMessage(errorCode: string, details: string | null) {
     }
     return "No se pudo aplicar el cambio de plan. Revisa la configuración interna de suscripciones.";
   }
+  if (errorCode === "hard_delete_cleanup_failed") {
+    return withDetails("No se pudo completar la limpieza fuerte del candidato.");
+  }
+  if (errorCode === "hard_delete_profile_failed") {
+    return withDetails("La limpieza se ejecutó, pero no se pudo marcar el perfil como eliminado.");
+  }
+  if (errorCode === "hard_delete_auth_disable_failed") {
+    return withDetails("No se pudo bloquear el acceso en Auth tras la limpieza fuerte del candidato.");
+  }
   if (errorCode === "owner_action_failed") return "La acción owner no pudo completarse.";
-  return "No se pudo ejecutar la acción.";
+  return withDetails(`No se pudo ejecutar la acción (${errorCode || "unknown_error"}).`);
 }
 
 function normalizeRole(raw: string) {
@@ -809,7 +819,7 @@ export default function OwnerUserActionsClient({
       <ActionModal
         open={adminModal === "hard-delete"}
         title="Eliminar completamente"
-        description="Esto eliminará el perfil del candidato y ejecutará la limpieza fuerte equivalente al borrado manual. Escribe DELETE para continuar."
+        description="Esto ejecutará un borrado fuerte equivalente: limpia datos operativos, desactiva enlaces públicos y bloquea el acceso. Escribe DELETE para continuar."
         confirmLabel="Confirmar"
         confirmTone="danger"
         confirmTextValue={hardDeleteConfirm}
