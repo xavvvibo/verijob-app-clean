@@ -77,6 +77,10 @@ function roleBadge(role: string | null) {
   return "border-slate-200 bg-slate-50 text-slate-600";
 }
 
+function normalizeLifecycleStatus(raw: string | null | undefined) {
+  return String(raw || "active").toLowerCase();
+}
+
 export default function OwnerUsersPage() {
   const [q, setQ] = useState("");
   const [role, setRole] = useState("all");
@@ -340,6 +344,9 @@ export default function OwnerUsersPage() {
             </thead>
             <tbody>
               {rows.map((r) => (
+                (() => {
+                  const lifecycle = normalizeLifecycleStatus(r.lifecycle_status);
+                  return (
                 <tr key={r.id} className="text-slate-900">
                   <td className="border-b border-slate-100 px-3 py-2">
                     <div className="truncate text-sm font-medium text-slate-900" title={r.email || "-"}>
@@ -348,9 +355,13 @@ export default function OwnerUsersPage() {
                     <div className="truncate text-xs text-slate-500" title={r.full_name || "-"}>
                       {r.full_name || "Sin nombre"}
                     </div>
-                    {String(r.lifecycle_status || "active").toLowerCase() === "deleted" ? (
+                    {lifecycle === "deleted" ? (
                       <div className="mt-1 inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
                         ELIMINADO
+                      </div>
+                    ) : lifecycle === "disabled" ? (
+                      <div className="mt-1 inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
+                        BLOQUEADO
                       </div>
                     ) : null}
                   </td>
@@ -382,9 +393,11 @@ export default function OwnerUsersPage() {
                     <div className="mt-1 text-slate-500">
                       {r.onboarding_completed === false
                         ? "Onboarding pendiente"
-                        : String(r.lifecycle_status || "active").toLowerCase() === "deleted"
+                        : lifecycle === "deleted"
                           ? "Cuenta archivada"
-                          : "Operativo"}
+                          : lifecycle === "disabled"
+                            ? "Acceso bloqueado"
+                            : "Operativo"}
                     </div>
                   </td>
                   <td className="border-b border-slate-100 px-3 py-2 text-xs text-slate-700">
@@ -400,6 +413,8 @@ export default function OwnerUsersPage() {
                     </Link>
                   </td>
                 </tr>
+                  );
+                })()
               ))}
               {rows.length === 0 && !loading ? (
                 <tr>

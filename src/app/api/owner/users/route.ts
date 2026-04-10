@@ -29,6 +29,7 @@ type AuthUserRow = {
   email: string | null;
   created_at: string | null;
   last_sign_in_at: string | null;
+  banned_until?: string | null;
 };
 
 function json(status: number, body: any) {
@@ -45,6 +46,23 @@ function normalizeRole(v: string | null) {
   const role = String(v || "").toLowerCase();
   if (role === "candidate" || role === "company" || role === "owner" || role === "admin") return role;
   return null;
+}
+
+function isAuthUserBanned(raw: unknown) {
+  const value = String(raw || "").trim();
+  if (!value) return false;
+  const t = Date.parse(value);
+  if (!Number.isFinite(t)) return true;
+  return t > Date.now();
+}
+
+function resolveEffectiveLifecycleStatus(profileLifecycle: unknown, authBanned: boolean) {
+  const lifecycle = String(profileLifecycle || "active").toLowerCase();
+  if (lifecycle === "deleted") return "deleted";
+  if (lifecycle === "disabled") return "disabled";
+  if (lifecycle === "scheduled_for_deletion") return "scheduled_for_deletion";
+  if (authBanned) return "disabled";
+  return "active";
 }
 
 async function listAllAuthUsers(admin: ReturnType<typeof createServiceRoleClient>) {
@@ -66,6 +84,7 @@ async function listAllAuthUsers(admin: ReturnType<typeof createServiceRoleClient
         email: u?.email ? String(u.email) : null,
         created_at: u?.created_at ? String(u.created_at) : null,
         last_sign_in_at: u?.last_sign_in_at ? String(u.last_sign_in_at) : null,
+        banned_until: u?.banned_until ? String(u.banned_until) : null,
       });
     }
     if (users.length < perPage) break;
@@ -165,6 +184,7 @@ export async function GET(req: Request) {
     const mergedRows: ProfileRow[] = authUsers.map((authRow) => {
       const id = String(authRow.id || "");
       const profileRow = profileById.get(id) || null;
+      const lifecycleStatus = resolveEffectiveLifecycleStatus(profileRow?.lifecycle_status, isAuthUserBanned(authRow.banned_until));
       return {
         id,
         email: profileRow?.email || authRow.email || null,
@@ -173,7 +193,7 @@ export async function GET(req: Request) {
         onboarding_completed: profileRow?.onboarding_completed ?? null,
         created_at: profileRow?.created_at || authRow.created_at || null,
         active_company_id: profileRow?.active_company_id || null,
-        lifecycle_status: profileRow?.lifecycle_status ? String(profileRow.lifecycle_status) : "active",
+        lifecycle_status: lifecycleStatus,
         deleted_at: profileRow?.deleted_at ? String(profileRow.deleted_at) : null,
       };
     });
@@ -206,7 +226,7 @@ export async function GET(req: Request) {
       if (quickFilter === "with_company" && !row.active_company_id) return false;
       if (quickFilter === "without_company" && !!row.active_company_id) return false;
       if (quickFilter === "deleted" && String(row.lifecycle_status || "active").toLowerCase() !== "deleted") return false;
-      if (quickFilter === "active_only" && String(row.lifecycle_status || "active").toLowerCase() === "deleted") return false;
+      if (quickFilter === "active_only" && String(row.lifecycle_status || "active").toLowerCase() !== "active") return false;
 
       if (!qLower) return true;
       const haystack = [
@@ -238,7 +258,10 @@ export async function GET(req: Request) {
       }).length,
       onboarding_incomplete: profileRoleRows.filter((r: any) => Boolean(r.onboarding_completed) === false).length,
       with_active_company: profileRoleRows.filter((r: any) => Boolean(r.active_company_id)).length,
-      archived: profileRoleRows.filter((r: any) => String((r as any).lifecycle_status || "").toLowerCase() === "deleted").length,
+      archived: mergedRows.filter((r: any) => {
+        const lifecycle = String((r as any).lifecycle_status || "").toLowerCase();
+        return lifecycle === "deleted" || lifecycle === "disabled" || lifecycle === "scheduled_for_deletion";
+      }).length,
       without_profile: authUsers.length - profileRows.length,
       total_auth_users: authUsers.length,
     };

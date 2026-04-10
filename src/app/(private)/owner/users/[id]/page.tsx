@@ -41,6 +41,23 @@ async function getTableColumns(admin: any, tableName: string) {
   return new Set(data.map((r: any) => String(r.column_name || "")));
 }
 
+function isAuthUserBanned(raw: unknown) {
+  const value = String(raw || "").trim();
+  if (!value) return false;
+  const t = Date.parse(value);
+  if (!Number.isFinite(t)) return true;
+  return t > Date.now();
+}
+
+function resolveEffectiveLifecycleStatus(profileLifecycle: unknown, authBanned: boolean) {
+  const lifecycle = String(profileLifecycle || "active").toLowerCase();
+  if (lifecycle === "deleted") return "deleted";
+  if (lifecycle === "disabled") return "disabled";
+  if (lifecycle === "scheduled_for_deletion") return "scheduled_for_deletion";
+  if (authBanned) return "disabled";
+  return "active";
+}
+
 export default async function OwnerUserDetailPage({ params }: any) {
   const resolvedParams = await params;
   const targetUserId = String(resolvedParams?.id || "").trim();
@@ -129,10 +146,11 @@ export default async function OwnerUserDetailPage({ params }: any) {
       .limit(10),
   ]);
 
+  const profileUser = userRes.data as any;
   const authUser = (authUserRes as any)?.data?.user || null;
   if (!authUser) notFound();
-
-  const profileUser = userRes.data as any;
+  const authBanned = isAuthUserBanned((authUser as any)?.banned_until);
+  const effectiveLifecycleStatus = resolveEffectiveLifecycleStatus(profileUser?.lifecycle_status, authBanned);
   const user = {
     id: String(authUser.id || targetUserId),
     email: profileUser?.email || authUser.email || null,
@@ -142,9 +160,10 @@ export default async function OwnerUserDetailPage({ params }: any) {
     active_company_id: profileUser?.active_company_id || null,
     created_at: profileUser?.created_at || authUser.created_at || null,
     last_sign_in_at: authUser.last_sign_in_at ? String(authUser.last_sign_in_at) : null,
-    lifecycle_status: String(profileUser?.lifecycle_status || "active").toLowerCase(),
+    lifecycle_status: effectiveLifecycleStatus,
     deleted_at: profileUser?.deleted_at ? String(profileUser.deleted_at) : null,
     deletion_reason: profileUser?.deletion_reason ? String(profileUser.deletion_reason) : null,
+    auth_banned_until: (authUser as any)?.banned_until ? String((authUser as any).banned_until) : null,
   };
   const latestSub = Array.isArray(subscriptionsRes.data) && subscriptionsRes.data.length > 0 ? subscriptionsRes.data[0] : null;
   const effectiveSubscription =
@@ -195,6 +214,13 @@ export default async function OwnerUserDetailPage({ params }: any) {
           <p className="text-sm font-semibold text-rose-900">Usuario eliminado del sistema operativo</p>
           <p className="mt-1 text-sm text-rose-800">
             Esta ficha queda solo como trazabilidad owner. El acceso está bloqueado y el perfil no debe tratarse como un usuario activo.
+          </p>
+        </section>
+      ) : user.lifecycle_status === "disabled" ? (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+          <p className="text-sm font-semibold text-amber-900">Usuario bloqueado o deshabilitado</p>
+          <p className="mt-1 text-sm text-amber-800">
+            El acceso está bloqueado en Auth y esta ficha no debe tratarse como un usuario operativo normal.
           </p>
         </section>
       ) : null}
@@ -260,9 +286,17 @@ export default async function OwnerUserDetailPage({ params }: any) {
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
             <div className="text-xs text-slate-500">Estado lifecycle</div>
             <div className="text-sm font-semibold text-slate-900">
-              {user.lifecycle_status === "deleted" ? "Eliminado" : user.lifecycle_status === "disabled" ? "Deshabilitado" : "Activo"}
+              {user.lifecycle_status === "deleted"
+                ? "Eliminado"
+                : user.lifecycle_status === "disabled"
+                  ? "Deshabilitado"
+                  : user.lifecycle_status === "scheduled_for_deletion"
+                    ? "Programado para eliminación"
+                    : "Activo"}
             </div>
-            <div className="text-xs text-slate-500">{fmtDate(user.deleted_at)}</div>
+            <div className="text-xs text-slate-500">
+              {user.deleted_at ? fmtDate(user.deleted_at) : user.auth_banned_until ? `Auth bloqueado hasta ${fmtDate(user.auth_banned_until)}` : "—"}
+            </div>
             {user.deletion_reason ? <div className="text-xs text-slate-500 truncate" title={user.deletion_reason}>{user.deletion_reason}</div> : null}
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
