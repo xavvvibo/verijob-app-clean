@@ -190,6 +190,15 @@ export default async function OwnerUserDetailPage({ params }: any) {
 
   return (
     <div className="space-y-5">
+      {user.lifecycle_status === "deleted" ? (
+        <section className="rounded-xl border border-rose-200 bg-rose-50 p-5 shadow-sm">
+          <p className="text-sm font-semibold text-rose-900">Usuario eliminado del sistema operativo</p>
+          <p className="mt-1 text-sm text-rose-800">
+            Esta ficha queda solo como trazabilidad owner. El acceso está bloqueado y el perfil no debe tratarse como un usuario activo.
+          </p>
+        </section>
+      ) : null}
+
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-3">
           <div>

@@ -80,7 +80,7 @@ function roleBadge(role: string | null) {
 export default function OwnerUsersPage() {
   const [q, setQ] = useState("");
   const [role, setRole] = useState("all");
-  const [quick, setQuick] = useState("all");
+  const [quick, setQuick] = useState("active_only");
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);

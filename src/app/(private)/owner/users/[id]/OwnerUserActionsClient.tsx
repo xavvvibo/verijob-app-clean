@@ -836,11 +836,12 @@ export default function OwnerUserActionsClient({
             "hard_delete_user",
             "Owner hard deleted candidate from owner panel",
             { confirm_phrase: "DELETE" },
-            true
+            false
           );
           if (result) {
             setHardDeleteConfirm("");
             setAdminModal(null);
+            window.location.href = "/owner/users?deleted=1";
           }
         }}
       />
