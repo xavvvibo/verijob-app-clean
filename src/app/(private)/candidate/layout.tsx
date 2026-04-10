@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { createServerSupabaseClient } from "@/utils/supabase/server";
 import { resolveCandidateOnboardingCompleted } from "@/lib/auth/onboarding-state";
+import { isUnavailableLifecycleStatus } from "@/lib/account/lifecycle";
 
 export const metadata: Metadata = {
   title: { default: "VERIJOB — Candidato", template: "VERIJOB Candidato — %s" },
@@ -36,6 +37,9 @@ export default async function CandidateLayout({ children }: { children: React.Re
   if (!role) redirect("/login?next=/candidate/overview");
   if (role === "company") redirect("/company?forbidden=1&from=candidate");
   if (role === "owner") redirect("/owner?forbidden=1&from=candidate");
+  if (isUnavailableLifecycleStatus((profile as any)?.lifecycle_status)) {
+    redirect("/login?account_deleted=1");
+  }
 
   const onboardingAccessGranted = cookieStore.get("candidate_onboarding_access")?.value === "1";
   const onboardingCompleted = resolveCandidateOnboardingCompleted({

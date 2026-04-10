@@ -1013,13 +1013,6 @@ export async function POST(req: Request, ctx: any) {
 
   if (actionType === ACTION_ARCHIVE_USER || actionType === ACTION_DELETE_USER) {
     const profileColumns = await getTableColumns(owner.admin, "profiles");
-    if (!profileColumns.has("lifecycle_status") || !profileColumns.has("deleted_at")) {
-      return json(400, {
-        error: "user_lifecycle_missing_migration",
-        details: "Ejecuta scripts/sql/f33_user_lifecycle_and_legacy_bootstrap.sql",
-      });
-    }
-
     const confirmPhrase = asText(payload?.confirm_phrase, 64).toUpperCase();
     if (confirmPhrase !== "ELIMINAR") return json(400, { error: "invalid_confirmation_phrase" });
 
@@ -1035,15 +1028,14 @@ export async function POST(req: Request, ctx: any) {
 
     const nowIso = new Date().toISOString();
     const profilePatch: Record<string, any> = {
-      id: targetUserId,
-      lifecycle_status: "deleted",
-      deleted_at: nowIso,
-      deletion_reason: reason,
       onboarding_completed: false,
       active_company_id: profileBefore?.active_company_id || null,
       role: String(profileBefore?.role || "candidate"),
       email: asText(targetAuthUser.user.email, 320) || asText(profileBefore?.email, 320) || null,
     };
+    if (profileColumns.has("lifecycle_status")) profilePatch.lifecycle_status = "deleted";
+    if (profileColumns.has("deleted_at")) profilePatch.deleted_at = nowIso;
+    if (profileColumns.has("deletion_reason")) profilePatch.deletion_reason = reason;
     if (profileColumns.has("deleted_by")) profilePatch.deleted_by = owner.ownerId;
     if (!keepRole) profilePatch.role = "candidate";
     if (clearFullName) profilePatch.full_name = null;

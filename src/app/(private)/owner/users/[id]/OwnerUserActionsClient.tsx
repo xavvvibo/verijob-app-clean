@@ -501,7 +501,7 @@ export default function OwnerUserActionsClient({
           <button
             type="button"
             onClick={() => setAdminModal("hard-delete")}
-            disabled={stateByAction.hard_delete_user?.busy || !canResetCandidate}
+            disabled={stateByAction.hard_delete_user?.busy || !canResetCandidate || isDeletedLifecycle}
             className="rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
           >
             Eliminar completamente

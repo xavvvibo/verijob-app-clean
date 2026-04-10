@@ -122,7 +122,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const q = String(url.searchParams.get("q") || "").trim();
     const roleFilter = String(url.searchParams.get("role") || "all").trim().toLowerCase();
-    const quickFilter = String(url.searchParams.get("quick") || "all").trim().toLowerCase();
+    const quickFilter = String(url.searchParams.get("quick") || "active_only").trim().toLowerCase();
     const limitRaw = url.searchParams.get("limit") || "50";
     const offsetRaw = url.searchParams.get("offset") || "0";
     const limit = Math.min(Math.max(parseInt(limitRaw, 10) || 50, 1), 200);
