@@ -2,8 +2,10 @@ import React from "react";
 import { VjShell } from "@/app/(private)/_components/ui/v4/VjShell";
 import { VjSidebar } from "@/app/(private)/_components/ui/v4/VjSidebar";
 import { VjQueueTable } from "@/app/(private)/_components/ui/v4/VjQueueTable";
+import { requireCandidateMinimumReadiness } from "../requireCandidateMinimumReadiness";
 
-export default function CandidateDashboardV4() {
+export default async function CandidateDashboardV4() {
+  await requireCandidateMinimumReadiness("/candidate/dashboard-v4");
   return (
     <VjShell title="Candidate Dashboard" subtitle="Trust Center (V4 · preview)">
       <div className="vj-grid v3">
