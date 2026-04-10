@@ -115,9 +115,10 @@ export async function resetCandidateAccountForQa(args: {
   admin: SupabaseLike;
   userId: string;
   userEmail: string;
+  bypassEmailCheck?: boolean;
 }) {
-  const { admin, userId, userEmail } = args;
-  if (String(userEmail || "").trim().toLowerCase() !== QA_CANDIDATE_RESET_EMAIL) {
+  const { admin, userId, userEmail, bypassEmailCheck = false } = args;
+  if (!bypassEmailCheck && String(userEmail || "").trim().toLowerCase() !== QA_CANDIDATE_RESET_EMAIL) {
     return {
       ok: false as const,
       error: "candidate_reset_forbidden",

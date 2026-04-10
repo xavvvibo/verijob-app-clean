@@ -10,6 +10,8 @@ import {
   readEffectiveSubscriptionState,
 } from "@/lib/billing/effectiveSubscription";
 import { buildSubscriptionLifecycleEmail } from "@/lib/email/templates/subscriptionLifecycle";
+import { resetCandidateAccountForQa } from "@/lib/account/qa-reset";
+import { clearCandidateProfileCollections } from "@/lib/candidate/profile-collections";
 import { sendTransactionalEmail } from "@/server/email/sendTransactionalEmail";
 
 export const dynamic = "force-dynamic";
@@ -23,6 +25,11 @@ const ACTION_MARK_EXPERIENCE = "mark_experience_manual_review";
 const ACTION_MARK_EVIDENCE = "mark_evidence_manual_review";
 const ACTION_REPAIR_COMPANY_CONTEXT = "repair_company_context";
 const ACTION_ARCHIVE_USER = "archive_user";
+const ACTION_DISABLE_USER = "disable_user";
+const ACTION_REACTIVATE_USER = "reactivate_user";
+const ACTION_RESET_CANDIDATE = "reset_candidate";
+const ACTION_HARD_DELETE_USER = "hard_delete_user";
+const ACTION_DELETE_USER = "delete_user";
 
 const ALLOWED_ACTIONS = new Set([
   ACTION_CHANGE_PLAN,
@@ -33,6 +40,11 @@ const ALLOWED_ACTIONS = new Set([
   ACTION_MARK_EVIDENCE,
   ACTION_REPAIR_COMPANY_CONTEXT,
   ACTION_ARCHIVE_USER,
+  ACTION_DELETE_USER,
+  ACTION_DISABLE_USER,
+  ACTION_REACTIVATE_USER,
+  ACTION_RESET_CANDIDATE,
+  ACTION_HARD_DELETE_USER,
 ]);
 
 function json(status: number, body: any) {
@@ -221,6 +233,14 @@ async function readProfileById(admin: any, userId: string, columns: Set<string>)
   return admin.from("profiles").select(selected).eq("id", userId).maybeSingle();
 }
 
+async function deactivateCandidatePublicLinks(admin: any, userId: string) {
+  await admin
+    .from("candidate_public_links")
+    .update({ is_active: false })
+    .eq("candidate_id", userId)
+    .eq("is_active", true);
+}
+
 async function logOwnerAction(owner: { ownerId: string; admin: any }, targetUserId: string, actionType: string, reason: string, payload: Record<string, any>) {
   const actionRow = {
     target_user_id: targetUserId,
@@ -274,6 +294,227 @@ export async function POST(req: Request, ctx: any) {
 
   const role = String(targetProfile?.role || "").toLowerCase();
   const activeCompanyId = String(targetProfile?.active_company_id || "").trim() || null;
+
+  if (actionType === ACTION_DISABLE_USER) {
+    const profileColumns = await getTableColumns(owner.admin, "profiles");
+    const { data: profileBefore, error: profileBeforeErr } = await readProfileById(owner.admin, targetUserId, profileColumns);
+    if (profileBeforeErr) return json(400, { error: "profiles_read_failed", details: profileBeforeErr.message });
+
+    const nowIso = new Date().toISOString();
+    const patch: Record<string, any> = {};
+    if (profileColumns.has("lifecycle_status")) patch.lifecycle_status = "disabled";
+    if (profileColumns.has("deletion_reason")) patch.deletion_reason = reason;
+    if (profileColumns.has("deleted_at")) patch.deleted_at = null;
+    const { data: profileAfter, error: profileErr } = await owner.admin
+      .from("profiles")
+      .update(patch)
+      .eq("id", targetUserId)
+      .select("*")
+      .single();
+    if (profileErr) return json(400, { error: "user_disable_failed", details: profileErr.message });
+
+    let authUpdateError: string | null = null;
+    const { error: authErr } = await owner.admin.auth.admin.updateUserById(targetUserId, {
+      ban_duration: "876000h",
+    });
+    if (authErr) authUpdateError = authErr.message;
+
+    if (role === "candidate") {
+      await deactivateCandidatePublicLinks(owner.admin, targetUserId);
+    }
+
+    const logged = await logOwnerAction(owner, targetUserId, ACTION_DISABLE_USER, reason, {
+      before: profileBefore || null,
+      after: profileAfter || null,
+      disabled_at: nowIso,
+      auth_update_error: authUpdateError,
+    });
+    if (!logged.ok) return json(500, { error: "owner_action_log_failed", details: logged.error.message });
+
+    return json(200, {
+      ok: true,
+      executed: true,
+      message: authUpdateError
+        ? "Usuario desactivado, pero no se pudo bloquear acceso en Auth."
+        : "Usuario desactivado correctamente.",
+      warning: authUpdateError ? "auth_disable_signin_failed" : null,
+      warning_details: authUpdateError,
+      action: logged.action,
+      result: profileAfter,
+    });
+  }
+
+  if (actionType === ACTION_REACTIVATE_USER) {
+    const profileColumns = await getTableColumns(owner.admin, "profiles");
+    const { data: profileBefore, error: profileBeforeErr } = await readProfileById(owner.admin, targetUserId, profileColumns);
+    if (profileBeforeErr) return json(400, { error: "profiles_read_failed", details: profileBeforeErr.message });
+
+    const patch: Record<string, any> = {};
+    if (profileColumns.has("lifecycle_status")) patch.lifecycle_status = "active";
+    if (profileColumns.has("deleted_at")) patch.deleted_at = null;
+    if (profileColumns.has("deleted_by")) patch.deleted_by = null;
+    if (profileColumns.has("deletion_reason")) patch.deletion_reason = null;
+    const { data: profileAfter, error: profileErr } = await owner.admin
+      .from("profiles")
+      .update(patch)
+      .eq("id", targetUserId)
+      .select("*")
+      .single();
+    if (profileErr) return json(400, { error: "user_reactivate_failed", details: profileErr.message });
+
+    let authUpdateError: string | null = null;
+    const { error: authErr } = await owner.admin.auth.admin.updateUserById(targetUserId, {
+      ban_duration: "none",
+    });
+    if (authErr) authUpdateError = authErr.message;
+
+    const logged = await logOwnerAction(owner, targetUserId, ACTION_REACTIVATE_USER, reason, {
+      before: profileBefore || null,
+      after: profileAfter || null,
+      auth_update_error: authUpdateError,
+    });
+    if (!logged.ok) return json(500, { error: "owner_action_log_failed", details: logged.error.message });
+
+    return json(200, {
+      ok: true,
+      executed: true,
+      message: authUpdateError
+        ? "Usuario reactivado, pero no se pudo restaurar el acceso en Auth."
+        : "Usuario reactivado correctamente.",
+      warning: authUpdateError ? "auth_reactivate_failed" : null,
+      warning_details: authUpdateError,
+      action: logged.action,
+      result: profileAfter,
+    });
+  }
+
+  if (actionType === ACTION_RESET_CANDIDATE) {
+    if (role !== "candidate") {
+      return json(400, { error: "candidate_role_required" });
+    }
+
+    let result;
+    try {
+      result = await resetCandidateAccountForQa({
+        admin: owner.admin,
+        userId: targetUserId,
+        userEmail: targetAuthUser.user.email || "",
+        bypassEmailCheck: true,
+      });
+    } catch (error: any) {
+      return json(500, {
+        error: "candidate_reset_failed",
+        details: String(error?.message || error),
+      });
+    }
+
+    if (!result?.ok) {
+      return json(400, {
+        error: result?.error || "candidate_reset_failed",
+        details: result?.user_message || null,
+      });
+    }
+
+    const logged = await logOwnerAction(owner, targetUserId, ACTION_RESET_CANDIDATE, reason, {
+      cleaned: result.cleaned,
+      validation: result.validation,
+    });
+    if (!logged.ok) return json(500, { error: "owner_action_log_failed", details: logged.error.message });
+
+    return json(200, {
+      ok: true,
+      executed: true,
+      message: "Candidato reseteado correctamente.",
+      action: logged.action,
+      result,
+    });
+  }
+
+  if (actionType === ACTION_HARD_DELETE_USER) {
+    if (role !== "candidate") {
+      return json(400, { error: "candidate_role_required" });
+    }
+
+    const confirmPhrase = asText(payload?.confirm_phrase, 64).toUpperCase();
+    if (confirmPhrase !== "DELETE") return json(400, { error: "invalid_confirmation_phrase" });
+
+    const nowIso = new Date().toISOString();
+    const profileColumns = await getTableColumns(owner.admin, "profiles");
+    const candidateProfileColumns = await getTableColumns(owner.admin, "candidate_profiles");
+    const { data: profileBefore, error: profileBeforeErr } = await readProfileById(owner.admin, targetUserId, profileColumns);
+    if (profileBeforeErr) return json(400, { error: "profiles_read_failed", details: profileBeforeErr.message });
+
+    const candidatePatch: Record<string, any> = {};
+    if (candidateProfileColumns.has("summary")) candidatePatch.summary = null;
+    if (candidateProfileColumns.has("education")) candidatePatch.education = [];
+    if (candidateProfileColumns.has("certifications")) candidatePatch.certifications = [];
+    if (candidateProfileColumns.has("job_search_status")) candidatePatch.job_search_status = "no_disponible";
+    if (candidateProfileColumns.has("preferred_workday")) candidatePatch.preferred_workday = "flexible";
+    if (candidateProfileColumns.has("preferred_roles")) candidatePatch.preferred_roles = [];
+    if (candidateProfileColumns.has("work_zones")) candidatePatch.work_zones = null;
+    if (candidateProfileColumns.has("availability_schedule")) candidatePatch.availability_schedule = [];
+    if (candidateProfileColumns.has("allow_company_email_contact")) candidatePatch.allow_company_email_contact = false;
+    if (candidateProfileColumns.has("allow_company_phone_contact")) candidatePatch.allow_company_phone_contact = false;
+    if (candidateProfileColumns.has("show_trust_score")) candidatePatch.show_trust_score = false;
+    if (candidateProfileColumns.has("show_verification_counts")) candidatePatch.show_verification_counts = false;
+    if (candidateProfileColumns.has("show_verified_timeline")) candidatePatch.show_verified_timeline = false;
+    if (candidateProfileColumns.has("raw_cv_json")) candidatePatch.raw_cv_json = null;
+    if (candidateProfileColumns.has("updated_at")) candidatePatch.updated_at = nowIso;
+    if (Object.keys(candidatePatch).length > 0) {
+      await owner.admin.from("candidate_profiles").update(candidatePatch).eq("user_id", targetUserId);
+    }
+
+    await clearCandidateProfileCollections(owner.admin, targetUserId);
+    await deactivateCandidatePublicLinks(owner.admin, targetUserId);
+
+    const profilePatch: Record<string, any> = {};
+    if (profileColumns.has("lifecycle_status")) profilePatch.lifecycle_status = "deleted";
+    if (profileColumns.has("deleted_at")) profilePatch.deleted_at = nowIso;
+    if (profileColumns.has("deleted_by")) profilePatch.deleted_by = owner.ownerId;
+    if (profileColumns.has("deletion_reason")) profilePatch.deletion_reason = reason;
+    if (profileColumns.has("full_name")) profilePatch.full_name = "Perfil eliminado";
+    if (profileColumns.has("identity_type")) profilePatch.identity_type = null;
+    if (profileColumns.has("identity_masked")) profilePatch.identity_masked = null;
+    if (profileColumns.has("identity_hash")) profilePatch.identity_hash = null;
+    if (profileColumns.has("title")) profilePatch.title = null;
+    if (profileColumns.has("location")) profilePatch.location = null;
+
+    const { data: profileAfter, error: profileErr } = await owner.admin
+      .from("profiles")
+      .update(profilePatch)
+      .eq("id", targetUserId)
+      .select("*")
+      .single();
+    if (profileErr) return json(400, { error: "hard_delete_profile_failed", details: profileErr.message });
+
+    let authDeleteError: string | null = null;
+    const { error: authErr } = await owner.admin.auth.admin.deleteUser(targetUserId);
+    if (authErr) authDeleteError = authErr.message;
+
+    const logged = await logOwnerAction(owner, targetUserId, ACTION_HARD_DELETE_USER, reason, {
+      before: profileBefore || null,
+      after: profileAfter || null,
+      auth_delete_error: authDeleteError,
+      cleaned: {
+        candidate_profile: Object.keys(candidatePatch).length > 0,
+        candidate_collections: true,
+        public_links: true,
+      },
+    });
+    if (!logged.ok) return json(500, { error: "owner_action_log_failed", details: logged.error.message });
+
+    return json(200, {
+      ok: true,
+      executed: true,
+      message: authDeleteError
+        ? "Perfil limpiado y marcado como eliminado, pero no se pudo borrar el usuario en Auth."
+        : "Usuario eliminado completamente.",
+      warning: authDeleteError ? "auth_delete_failed" : null,
+      warning_details: authDeleteError,
+      action: logged.action,
+      result: profileAfter,
+    });
+  }
 
   if (actionType === ACTION_CHANGE_PLAN || actionType === ACTION_CANCEL_SUBSCRIPTION) {
     const isCompanyTarget = role === "company" && activeCompanyId;
@@ -755,7 +996,7 @@ export async function POST(req: Request, ctx: any) {
     });
   }
 
-  if (actionType === ACTION_ARCHIVE_USER) {
+  if (actionType === ACTION_ARCHIVE_USER || actionType === ACTION_DELETE_USER) {
     const profileColumns = await getTableColumns(owner.admin, "profiles");
     if (!profileColumns.has("lifecycle_status") || !profileColumns.has("deleted_at")) {
       return json(400, {
@@ -807,7 +1048,7 @@ export async function POST(req: Request, ctx: any) {
       if (authErr) authUpdateError = authErr.message;
     }
 
-    const logged = await logOwnerAction(owner, targetUserId, ACTION_ARCHIVE_USER, reason, {
+    const logged = await logOwnerAction(owner, targetUserId, actionType, reason, {
       before: profileBefore || null,
       after: profileAfter || null,
       disable_signin: disableSignIn,

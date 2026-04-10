@@ -41,6 +41,75 @@ const INITIAL_ACTION_STATE: ActionState = {
   isError: false,
 };
 
+function ActionModal({
+  open,
+  title,
+  description,
+  confirmLabel,
+  confirmTone = "neutral",
+  confirmTextValue,
+  confirmTextPlaceholder,
+  onConfirmTextChange,
+  confirmDisabled = false,
+  busy = false,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  confirmTone?: "neutral" | "danger";
+  confirmTextValue?: string;
+  confirmTextPlaceholder?: string;
+  onConfirmTextChange?: (value: string) => void;
+  confirmDisabled?: boolean;
+  busy?: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6">
+      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+          <p className="text-sm leading-6 text-slate-600">{description}</p>
+        </div>
+        {onConfirmTextChange ? (
+          <input
+            type="text"
+            value={confirmTextValue || ""}
+            onChange={(e) => onConfirmTextChange(e.target.value)}
+            placeholder={confirmTextPlaceholder}
+            className="mt-4 w-full rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900"
+          />
+        ) : null}
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={busy || confirmDisabled}
+            onClick={onConfirm}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${
+              confirmTone === "danger" ? "bg-red-700" : "bg-slate-900"
+            }`}
+          >
+            {busy ? "Procesando..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ownerActionErrorMessage(errorCode: string, details: string | null) {
   if (errorCode === "invalid_target_plan") return "El plan seleccionado no está soportado en el catálogo actual.";
   if (errorCode === "invalid_target_plan_for_role") return "Ese plan no es válido para el tipo de usuario seleccionado.";
@@ -115,6 +184,13 @@ export default function OwnerUserActionsClient({
 
   const [archiveReason, setArchiveReason] = useState("");
   const [archiveConfirmPhrase, setArchiveConfirmPhrase] = useState("");
+  const [adminModal, setAdminModal] = useState<null | "disable" | "reactivate" | "reset" | "delete" | "hard-delete">(null);
+  const [hardDeleteConfirm, setHardDeleteConfirm] = useState("");
+
+  const lifecycle = String(currentLifecycleStatus || "active").toLowerCase();
+  const canResetCandidate = normalizedRole === "candidate";
+  const isDisabled = lifecycle === "disabled";
+  const isDeletedLifecycle = lifecycle === "deleted";
 
   function setActionState(actionKey: string, partial: Partial<ActionState>) {
     setStateByAction((prev) => ({
@@ -126,8 +202,14 @@ export default function OwnerUserActionsClient({
     }));
   }
 
-  async function runAction(actionType: string, reason: string, payload: Record<string, any>, confirmText: string) {
-    if (!window.confirm(confirmText)) return null;
+  async function runAction(
+    actionType: string,
+    reason: string,
+    payload: Record<string, any>,
+    confirmText: string,
+    options?: { skipBrowserConfirm?: boolean }
+  ) {
+    if (!options?.skipBrowserConfirm && !window.confirm(confirmText)) return null;
     setActionState(actionType, { busy: true, message: null, isError: false });
     try {
       const res = await fetch(`/api/internal/owner/users/${encodeURIComponent(targetUserId)}/actions`, {
@@ -347,6 +429,16 @@ export default function OwnerUserActionsClient({
     );
   }
 
+  async function submitAdminAction(actionType: string, reason: string, payload: Record<string, any>, reload = true) {
+    const result = await runAction(actionType, reason, payload, "Confirmar acción", {
+      skipBrowserConfirm: true,
+    });
+    if (result && reload) {
+      window.location.reload();
+    }
+    return result;
+  }
+
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="text-lg font-semibold text-slate-900">Acciones owner (operativas)</h2>
@@ -361,6 +453,56 @@ export default function OwnerUserActionsClient({
           El usuario está archivado. Las acciones de plan/trial/revisión se desactivan hasta reactivar el contexto.
         </div>
       ) : null}
+
+      <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setAdminModal("disable")}
+            disabled={stateByAction.disable_user?.busy || isDeletedLifecycle || isDisabled}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 disabled:opacity-50"
+          >
+            Desactivar usuario
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminModal("reactivate")}
+            disabled={stateByAction.reactivate_user?.busy || (!isDisabled && !isArchived)}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 disabled:opacity-50"
+          >
+            Reactivar usuario
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminModal("reset")}
+            disabled={stateByAction.reset_candidate?.busy || !canResetCandidate}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 disabled:opacity-50"
+          >
+            Resetear candidato
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminModal("delete")}
+            disabled={stateByAction.delete_user?.busy || isArchived}
+            className="rounded-lg border border-red-300 bg-white px-3 py-2 text-xs font-semibold text-red-700 disabled:opacity-50"
+          >
+            Eliminar usuario
+          </button>
+          <button
+            type="button"
+            onClick={() => setAdminModal("hard-delete")}
+            disabled={stateByAction.hard_delete_user?.busy || !canResetCandidate}
+            className="rounded-lg bg-red-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+          >
+            Eliminar completamente
+          </button>
+        </div>
+        <ActionFeedback actionKey="disable_user" />
+        <ActionFeedback actionKey="reactivate_user" />
+        <ActionFeedback actionKey="reset_candidate" />
+        <ActionFeedback actionKey="delete_user" />
+        <ActionFeedback actionKey="hard_delete_user" />
+      </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <article className="rounded-lg border border-slate-200 bg-slate-50 p-3">
@@ -601,6 +743,97 @@ export default function OwnerUserActionsClient({
       <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
         Reenviar magic link no está disponible en este módulo: no existe backend seguro de reenvío owner en el sistema actual.
       </div>
+
+      <ActionModal
+        open={adminModal === "disable"}
+        title="Desactivar usuario"
+        description="Se bloqueará el acceso y el perfil dejará de estar operativo."
+        confirmLabel="Confirmar"
+        busy={Boolean(stateByAction.disable_user?.busy)}
+        confirmDisabled={isDeletedLifecycle || isDisabled}
+        onClose={() => setAdminModal(null)}
+        onConfirm={async () => {
+          const result = await submitAdminAction("disable_user", "Owner disabled user from owner panel", {}, true);
+          if (result) setAdminModal(null);
+        }}
+      />
+
+      <ActionModal
+        open={adminModal === "reactivate"}
+        title="Reactivar usuario"
+        description="Se restaurará el acceso y el perfil volverá a estar operativo."
+        confirmLabel="Confirmar"
+        busy={Boolean(stateByAction.reactivate_user?.busy)}
+        confirmDisabled={!isDisabled && !isArchived}
+        onClose={() => setAdminModal(null)}
+        onConfirm={async () => {
+          const result = await submitAdminAction("reactivate_user", "Owner reactivated user from owner panel", {}, true);
+          if (result) setAdminModal(null);
+        }}
+      />
+
+      <ActionModal
+        open={adminModal === "reset"}
+        title="Resetear candidato"
+        description="Esto borrará el perfil del candidato y lo dejará limpio para QA."
+        confirmLabel="Confirmar"
+        busy={Boolean(stateByAction.reset_candidate?.busy)}
+        confirmDisabled={!canResetCandidate}
+        onClose={() => setAdminModal(null)}
+        onConfirm={async () => {
+          const result = await submitAdminAction("reset_candidate", "Owner reset candidate for QA from owner panel", {}, true);
+          if (result) setAdminModal(null);
+        }}
+      />
+
+      <ActionModal
+        open={adminModal === "delete"}
+        title="Eliminar usuario"
+        description="Se archivará el usuario y se bloqueará su acceso."
+        confirmLabel="Confirmar"
+        confirmTone="danger"
+        busy={Boolean(stateByAction.delete_user?.busy)}
+        confirmDisabled={isArchived}
+        onClose={() => setAdminModal(null)}
+        onConfirm={async () => {
+          const result = await submitAdminAction(
+            "delete_user",
+            "Owner soft deleted user from owner panel",
+            { confirm_phrase: "ELIMINAR", disable_signin: true, clear_full_name: true, keep_role: true },
+            true
+          );
+          if (result) setAdminModal(null);
+        }}
+      />
+
+      <ActionModal
+        open={adminModal === "hard-delete"}
+        title="Eliminar completamente"
+        description="Esto eliminará el perfil del candidato y ejecutará la limpieza fuerte equivalente al borrado manual. Escribe DELETE para continuar."
+        confirmLabel="Confirmar"
+        confirmTone="danger"
+        confirmTextValue={hardDeleteConfirm}
+        confirmTextPlaceholder="DELETE"
+        onConfirmTextChange={setHardDeleteConfirm}
+        confirmDisabled={!canResetCandidate || hardDeleteConfirm.trim().toUpperCase() !== "DELETE"}
+        busy={Boolean(stateByAction.hard_delete_user?.busy)}
+        onClose={() => {
+          setAdminModal(null);
+          setHardDeleteConfirm("");
+        }}
+        onConfirm={async () => {
+          const result = await submitAdminAction(
+            "hard_delete_user",
+            "Owner hard deleted candidate from owner panel",
+            { confirm_phrase: "DELETE" },
+            true
+          );
+          if (result) {
+            setHardDeleteConfirm("");
+            setAdminModal(null);
+          }
+        }}
+      />
     </section>
   );
 }

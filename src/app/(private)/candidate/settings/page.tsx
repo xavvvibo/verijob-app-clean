@@ -176,6 +176,75 @@ function MultiSelectChecks({
   );
 }
 
+function ActionModal({
+  open,
+  title,
+  description,
+  confirmLabel,
+  confirmTone = "neutral",
+  confirmDisabled = false,
+  confirmTextValue,
+  confirmTextPlaceholder,
+  onConfirmTextChange,
+  busy = false,
+  onClose,
+  onConfirm,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  confirmLabel: string;
+  confirmTone?: "neutral" | "danger";
+  confirmDisabled?: boolean;
+  confirmTextValue?: string;
+  confirmTextPlaceholder?: string;
+  onConfirmTextChange?: (value: string) => void;
+  busy?: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4 py-6">
+      <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl">
+        <div className="space-y-2">
+          <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+          <p className="text-sm leading-6 text-slate-600">{description}</p>
+        </div>
+        {onConfirmTextChange ? (
+          <input
+            type="text"
+            value={confirmTextValue || ""}
+            onChange={(e) => onConfirmTextChange(e.target.value)}
+            placeholder={confirmTextPlaceholder}
+            className="mt-4 w-full rounded-2xl border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900"
+          />
+        ) : null}
+        <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
+          >
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={busy || confirmDisabled}
+            onClick={onConfirm}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${
+              confirmTone === "danger" ? "bg-rose-700" : "bg-slate-900"
+            }`}
+          >
+            {busy ? "Procesando..." : confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function CandidateSettings() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [initial, setInitial] = useState<Settings | null>(null);
@@ -186,9 +255,8 @@ export default function CandidateSettings() {
   const [accountSaving, setAccountSaving] = useState(false);
   const [accountMessage, setAccountMessage] = useState<string | null>(null);
   const [accountError, setAccountError] = useState<string | null>(null);
-  const [disableConfirmed, setDisableConfirmed] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
-  const [resetCandidateConfirmation, setResetCandidateConfirmation] = useState("");
+  const [accountModal, setAccountModal] = useState<null | "disable" | "delete">(null);
 
   useEffect(() => {
     (async () => {
@@ -300,17 +368,7 @@ export default function CandidateSettings() {
         window.location.href = "/login?account_deleted=1";
       }, 900);
     }
-  }
-
-  async function resetCandidateForQa() {
-    const result = await runAccountAction("reset_candidate_for_qa", {
-      confirm_phrase: resetCandidateConfirmation,
-    });
-    if (result?.ok) {
-      window.setTimeout(() => {
-        window.location.href = "/candidate/onboarding?qa_reset=1";
-      }, 900);
-    }
+    return result;
   }
 
   const hasChanges = !!(settings && initial && JSON.stringify(settings) !== JSON.stringify(initial));
@@ -321,8 +379,8 @@ export default function CandidateSettings() {
     <CandidateFormLayout>
       <CandidatePageHeader
         eyebrow="Ajustes"
-        title="Controla la visibilidad y el estado de tu perfil"
-        description="Gestiona privacidad, contacto, disponibilidad profesional y las acciones críticas de tu cuenta sin perder contexto."
+        title="Ajustes de perfil"
+        description="Gestiona privacidad, contacto, disponibilidad y el estado de tu perfil."
         badges={["Privacidad", "Contacto", "Disponibilidad"]}
         variant="management"
       />
@@ -431,10 +489,7 @@ export default function CandidateSettings() {
           <section className="rounded-3xl bg-white p-6 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h2 className="text-lg font-semibold text-slate-900">Gestión de perfil / cuenta</h2>
-                <p className="mt-1 text-sm text-slate-600">
-                  Controla el estado de tu perfil. El documento de identidad ahora se gestiona dentro de tus datos personales.
-                </p>
+                <h2 className="text-lg font-semibold text-slate-900">Perfil</h2>
               </div>
               <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700">
                 Estado: {lifecycleLabel(account?.lifecycle_status)}
@@ -452,90 +507,28 @@ export default function CandidateSettings() {
                 </p>
               </section>
 
-              <section className="space-y-4">
-                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
-                  <h3 className="text-sm font-semibold text-amber-950">Desactivar perfil temporalmente</h3>
-                  <p className="mt-2 text-sm text-amber-900">
-                    Tu perfil público dejará de estar disponible y no aparecerás como candidato activo, pero tus datos seguirán recuperables.
-                  </p>
-                  <label className="mt-4 flex items-start gap-2 text-sm text-amber-900">
-                    <input type="checkbox" checked={disableConfirmed} onChange={(e) => setDisableConfirmed(e.target.checked)} />
-                    <span>Entiendo que la desactivación oculta mi perfil y puedo reactivarlo más adelante.</span>
-                  </label>
-                  <div className="mt-4 flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      disabled={accountSaving || isDisabled || isDeleted || !disableConfirmed}
-                      onClick={() => runAccountAction("disable_profile")}
-                      className="rounded-xl bg-amber-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-amber-300"
-                    >
-                      Desactivar perfil
-                    </button>
-                    <button
-                      type="button"
-                      disabled={accountSaving || !isDisabled}
-                      onClick={() => runAccountAction("reactivate_profile")}
-                      className="rounded-xl border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-900 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      Reactivar perfil
-                    </button>
-                  </div>
-                </div>
+              <section className="grid gap-3 md:grid-cols-2">
+                <button
+                  type="button"
+                  disabled={accountSaving || isDeleted}
+                  onClick={() => setAccountModal("disable")}
+                  className="flex min-h-[120px] flex-col items-start justify-between rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="text-sm font-semibold text-slate-900">
+                    {isDisabled ? "Reactivar perfil" : "Desactivar perfil"}
+                  </span>
+                  <span className="text-xs text-slate-500">Visibilidad del perfil</span>
+                </button>
 
-                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-5">
-                  <h3 className="text-sm font-semibold text-rose-950">Eliminar perfil definitivamente</h3>
-                  <p className="mt-2 text-sm text-rose-900">
-                    Esta acción es irreversible. El perfil público desaparecerá y conservaremos solo la información mínima necesaria para integridad técnica e histórica.
-                  </p>
-                  <p className="mt-2 text-sm text-rose-900">
-                    Las verificaciones ya emitidas no se destruyen, pero el perfil y los enlaces públicos dejarán de estar disponibles.
-                  </p>
-                  <label className="mt-4 block">
-                    <span className="text-sm font-semibold text-rose-950">Escribe ELIMINAR para confirmar</span>
-                    <input
-                      type="text"
-                      value={deleteConfirmation}
-                      onChange={(e) => setDeleteConfirmation(e.target.value)}
-                      className="mt-2 w-full rounded-xl border border-rose-300 bg-white px-3 py-2.5 text-sm text-slate-900"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    disabled={accountSaving || isDeleted || deleteConfirmation.trim().toUpperCase() !== "ELIMINAR"}
-                    onClick={deleteProfile}
-                    className="mt-4 rounded-xl bg-rose-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-rose-300"
-                  >
-                    Eliminar perfil definitivamente
-                  </button>
-                </div>
-
-                <div className="rounded-2xl border border-sky-200 bg-sky-50 p-5">
-                  <h3 className="text-sm font-semibold text-sky-950">Reset cuenta candidata de prueba</h3>
-                  <p className="mt-2 text-sm text-sky-900">
-                    Esta opción limpia tu workspace candidato de prueba para rehacer QA manual desde cero: perfil, experiencias, formación,
-                    idiomas, logros, CV importado, foto, evidencias, verificaciones, enlaces públicos, onboarding y estado visible del plan.
-                  </p>
-                  <p className="mt-2 text-sm text-sky-900">
-                    No elimina el usuario de Auth ni pretende destruir trazas mínimas técnicas que puedan quedar fuera del workspace operativo.
-                  </p>
-                  <label className="mt-4 block">
-                    <span className="text-sm font-semibold text-sky-950">Escribe RESET CANDIDATO para confirmar</span>
-                    <input
-                      type="text"
-                      value={resetCandidateConfirmation}
-                      onChange={(e) => setResetCandidateConfirmation(e.target.value)}
-                      className="mt-2 w-full rounded-xl border border-sky-300 bg-white px-3 py-2.5 text-sm text-slate-900"
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    disabled={accountSaving || resetCandidateConfirmation.trim().toUpperCase() !== "RESET CANDIDATO"}
-                    onClick={resetCandidateForQa}
-                    className="mt-4 rounded-xl bg-sky-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-sky-300"
-                  >
-                    Reset cuenta candidata de prueba
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  disabled={accountSaving || isDeleted}
+                  onClick={() => setAccountModal("delete")}
+                  className="flex min-h-[120px] flex-col items-start justify-between rounded-2xl border border-rose-200 bg-rose-50 p-5 text-left shadow-sm disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="text-sm font-semibold text-rose-950">Eliminar perfil</span>
+                  <span className="text-xs text-rose-700">Acción definitiva</span>
+                </button>
               </section>
             </div>
           </section>
@@ -566,6 +559,48 @@ export default function CandidateSettings() {
             </button>
         </CandidateSaveBar>
       ) : null}
+
+      <ActionModal
+        open={accountModal === "disable"}
+        title={isDisabled ? "Reactivar perfil" : "Desactivar perfil"}
+        description={
+          isDisabled
+            ? "Tu perfil volverá a estar visible y disponible."
+            : "Tu perfil dejará de ser visible. Podrás reactivarlo más adelante."
+        }
+        confirmLabel={isDisabled ? "Confirmar" : "Confirmar"}
+        confirmDisabled={accountSaving || isDeleted}
+        busy={accountSaving}
+        onClose={() => setAccountModal(null)}
+        onConfirm={async () => {
+          const result = await runAccountAction(isDisabled ? "reactivate_profile" : "disable_profile");
+          if (result?.ok) setAccountModal(null);
+        }}
+      />
+
+      <ActionModal
+        open={accountModal === "delete"}
+        title="Eliminar perfil"
+        description="Esta acción es definitiva. Escribe ELIMINAR para continuar."
+        confirmLabel="Confirmar"
+        confirmTone="danger"
+        confirmDisabled={accountSaving || isDeleted || deleteConfirmation.trim().toUpperCase() !== "ELIMINAR"}
+        confirmTextValue={deleteConfirmation}
+        confirmTextPlaceholder="ELIMINAR"
+        onConfirmTextChange={setDeleteConfirmation}
+        busy={accountSaving}
+        onClose={() => {
+          setAccountModal(null);
+          setDeleteConfirmation("");
+        }}
+        onConfirm={async () => {
+          const result = await deleteProfile();
+          if (result?.ok) {
+            setDeleteConfirmation("");
+            setAccountModal(null);
+          }
+        }}
+      />
     </CandidateFormLayout>
   );
 }
