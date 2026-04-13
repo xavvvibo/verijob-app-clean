@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
+import TrustScoreRing from "@/components/candidate/TrustScoreRing";
 import ProfileUnlockAction from "@/components/company/ProfileUnlockAction";
 import { createClient as createBrowserSupabaseClient } from "@/utils/supabase/client";
 import {
@@ -334,11 +335,6 @@ export function CandidatePublicProfileRenderer({
   const qrEnabled = Boolean(teaser?.qr_enabled);
   const cvDownloadEnabled = Boolean(teaser?.cv_download_enabled);
   const qrImageUrl = token && qrEnabled ? `/api/public/candidate/${token}/qr.svg` : null;
-
-  const trustProgress = Math.min(100, Math.max(0, trust));
-  const trustRingStyle = {
-    background: `conic-gradient(#1d4ed8 ${trustProgress * 3.6}deg, #dbeafe 0deg)`,
-  };
 
   const verificationSummary = useMemo(() => {
     return {
@@ -821,14 +817,10 @@ export function CandidatePublicProfileRenderer({
               <div className="mt-5 grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
                 <div className="rounded-3xl border border-blue-100 bg-blue-50/75 p-5">
                   <div className="flex items-center justify-center">
-                    <div className="relative h-28 w-28 rounded-full p-1.5" style={trustRingStyle}>
-                      <div className="flex h-full w-full items-center justify-center rounded-full bg-white px-3 text-center text-sm font-semibold text-slate-900">
-                        {trustStateLabel}
-                      </div>
-                    </div>
+                    <TrustScoreRing score={trust} stateTitle={trustStateLabel} label="Trust" size="card" />
                   </div>
                   <p className="mt-4 text-center text-sm font-semibold text-slate-900">
-                    {trustStateLabel}
+                    {Math.round(trust)} · {trustStateLabel}
                   </p>
                   <p className="mt-2 text-center text-xs leading-5 text-slate-600">
                     {trustStateExplanation}

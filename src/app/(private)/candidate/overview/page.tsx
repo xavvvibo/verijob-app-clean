@@ -13,6 +13,7 @@ import OverviewExperiencesPreview from "@/components/candidate-v2/overview/Overv
 import OverviewProfilePublicCard from "@/components/candidate-v2/overview/OverviewProfilePublicCard";
 import OverviewUpgradeCard from "@/components/candidate-v2/overview/OverviewUpgradeCard";
 import CandidateSurface from "@/components/candidate-v2/primitives/CandidateSurface";
+import TrustScoreRing from "@/components/candidate/TrustScoreRing";
 import { summarizeCompanyCvImportUpdates } from "@/lib/candidate/import-update-summary";
 import { mapCandidateAvailability } from "@/lib/candidate/availability";
 import {
@@ -460,22 +461,7 @@ function AvatarView({
 }
 
 function TrustRing({ score, stateTitle }: { score: number; stateTitle: string }) {
-  const safeScore = clamp(score);
-  const progressStyle = {
-    background: `conic-gradient(rgb(15 23 42) ${safeScore * 3.6}deg, rgb(219 234 254) 0deg)`,
-  };
-  return (
-    <div
-      className="relative flex h-52 w-52 scale-[1.08] items-center justify-center rounded-full p-[10px] shadow-[0_0_40px_rgba(99,102,241,0.18),0_0_80px_rgba(99,102,241,0.08)] transition-transform duration-300 motion-safe:animate-[fade-in_350ms_ease-out] motion-safe:[animation-fill-mode:both]"
-      style={progressStyle}
-    >
-      <div className="flex h-full w-full flex-col items-center justify-center rounded-full bg-white text-center shadow-inner">
-        <span className="text-[3rem] font-semibold tabular-nums text-slate-950">{safeScore}</span>
-        <span className="mt-1 text-[11px] font-semibold tracking-[0.01em] text-slate-700">Nivel de confianza</span>
-        <span className="mt-2 max-w-[100px] text-[11px] font-medium leading-4 text-slate-600">{stateTitle}</span>
-      </div>
-    </div>
-  );
+  return <TrustScoreRing score={score} stateTitle={stateTitle} label="Trust score" size="hero" className="scale-[1.03]" />;
 }
 
 function InsightCard({

@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from "@/utils/supabase/server";
 import CandidateOperationsLayout from "@/components/candidate-v2/layouts/CandidateOperationsLayout";
 import CandidatePageHeader from "@/components/candidate-v2/primitives/CandidatePageHeader";
 import CandidateEmptyState from "@/components/candidate-v2/primitives/CandidateEmptyState";
+import { candidateFacingCompanyVerificationLabel } from "@/lib/verification/company-verification-status";
 import DeleteVerificationInlineButton from "./DeleteVerificationInlineButton";
 
 export const dynamic = "force-dynamic";
@@ -28,12 +29,7 @@ function channelLabel(rawValue: string | null | undefined) {
 }
 
 function companySignalLabel(status: string | null | undefined) {
-  const raw = String(status || "").toLowerCase();
-  if (raw === "registered_in_verijob") return "Empresa registrada en VERIJOB";
-  if (raw === "verified_document") return "Empresa verificadora validada documentalmente";
-  if (raw === "verified_paid") return "Empresa con plan activo";
-  if (raw === "unverified_external") return "Validación por Email corporativo";
-  return "Sin señal adicional";
+  return candidateFacingCompanyVerificationLabel(status);
 }
 
 function fmt(value: string | null | undefined) {

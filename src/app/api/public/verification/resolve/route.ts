@@ -14,6 +14,8 @@ import {
 } from "@/lib/verification/verifier-email-signal";
 import { computeVerificationConfidence } from "@/lib/verification/confidence";
 import { createNotification } from "@/lib/notifications/createNotification";
+import { readEffectiveCompanySubscriptionState } from "@/lib/billing/effectiveSubscription";
+import { normalizeCompanyVerificationStatusSnapshot } from "@/lib/verification/company-verification-status";
 
 type ResolvePayload = {
   token?: string;
@@ -24,20 +26,67 @@ type ResolvePayload = {
   company_name?: string;
 };
 
-const LEGACY_COMPANY_VERIFICATION_STATUSES = new Set(["unverified", "verified_document", "verified_paid"]);
-
 function asText(value: unknown, max = 300) {
   const text = String(value || "").trim();
   return text ? text.slice(0, max) : null;
 }
 
-function normalizeCompanyVerificationStatusSnapshot(value: unknown) {
-  const status = String(value || "").trim().toLowerCase();
-  if (!status) return null;
-  if (LEGACY_COMPANY_VERIFICATION_STATUSES.has(status)) return status;
-  if (status === "registered_in_verijob") return "verified_paid";
-  if (status === "unverified_external") return "unverified";
-  return "unverified";
+async function resolveSnapshotCompanyVerificationStatus(args: {
+  admin: any;
+  companyId: string | null;
+  verifierEmailSignal: ReturnType<typeof classifyVerifierEmail>;
+}) {
+  if (!args.companyId) {
+    return args.verifierEmailSignal.classification === "corporate" && args.verifierEmailSignal.company_match
+      ? "unverified_external"
+      : "unverified";
+  }
+
+  const [{ data: companyProfile }, { data: company }, { data: companyMember }, { data: companyOwnerProfile }] =
+    await Promise.all([
+      args.admin
+        .from("company_profiles")
+        .select("company_verification_status")
+        .eq("company_id", args.companyId)
+        .maybeSingle(),
+      args.admin
+        .from("companies")
+        .select("company_verification_status")
+        .eq("id", args.companyId)
+        .maybeSingle(),
+      args.admin
+        .from("company_members")
+        .select("user_id")
+        .eq("company_id", args.companyId)
+        .limit(1)
+        .maybeSingle(),
+      args.admin
+        .from("profiles")
+        .select("id")
+        .eq("role", "company")
+        .eq("active_company_id", args.companyId)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+  const persistedStatus = normalizeCompanyVerificationStatusSnapshot(
+    company?.company_verification_status || companyProfile?.company_verification_status || "unverified",
+  );
+  if (persistedStatus === "verified_document") return "verified_document";
+
+  const subscriptionUserId =
+    String(companyMember?.user_id || "").trim() || String(companyOwnerProfile?.id || "").trim() || null;
+
+  if (subscriptionUserId) {
+    const effectiveSubscription = await readEffectiveCompanySubscriptionState(args.admin, {
+      userId: subscriptionUserId,
+      companyId: args.companyId,
+    }).catch(() => null);
+    const subscriptionStatus = String(effectiveSubscription?.status || "").toLowerCase();
+    if (subscriptionStatus === "active" || subscriptionStatus === "trialing") return "verified_paid";
+  }
+
+  return "registered_in_verijob";
 }
 
 function json(status: number, body: any) {
@@ -130,14 +179,12 @@ export async function POST(req: Request) {
 
       if ((matchedProfile as any)?.active_company_id) {
         snapshotCompanyId = String((matchedProfile as any).active_company_id);
-        snapshotCompanyVerificationStatus = "verified_paid";
       }
     }
 
     let companyProfile: any = null;
     let company: any = null;
     if (snapshotCompanyId) {
-      snapshotCompanyVerificationStatus = "verified_paid";
       const { data: companyRow } = await admin
         .from("companies")
         .select("name")
@@ -165,6 +212,12 @@ export async function POST(req: Request) {
       companyName: snapshotCompanyName,
       companyWebsiteUrl: companyProfile?.website_url || null,
       companyContactEmail: companyProfile?.contact_email || null,
+    });
+
+    snapshotCompanyVerificationStatus = await resolveSnapshotCompanyVerificationStatus({
+      admin,
+      companyId: snapshotCompanyId,
+      verifierEmailSignal,
     });
 
     const confidence = computeVerificationConfidence({
@@ -349,7 +402,7 @@ export async function POST(req: Request) {
       snapshot: {
         company_id: snapshotCompanyId,
         company_name: snapshotCompanyName,
-        company_verification_status: snapshotCompanyVerificationStatus,
+        company_verification_status: normalizeCompanyVerificationStatusSnapshot(snapshotCompanyVerificationStatus),
       },
       confidence: {
         level: confidence.level,

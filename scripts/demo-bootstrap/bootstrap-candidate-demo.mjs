@@ -20,32 +20,6 @@ import {
 } from "./_shared.mjs";
 
 const STORAGE_PATH = path.join(AUTH_DIR, "candidate-demo.json");
-const EXPERIENCE_ROLE_PATTERNS = [/^puesto$/i, /^cargo$/i, /^job title$/i, /puesto/i, /cargo/i, /job title/i];
-const EXPERIENCE_COMPANY_PATTERNS = [/^empresa$/i, /^compa[nñ][ií]a$/i, /^company$/i, /empresa/i, /company/i];
-const EXPERIENCE_START_PATTERNS = [/^fecha inicio$/i, /^inicio$/i, /^start date$/i, /fecha.*inicio/i, /start date/i];
-const EXPERIENCE_END_PATTERNS = [/^fecha fin$/i, /^fin$/i, /^end date$/i, /fecha.*fin/i, /end date/i];
-const EXPERIENCE_DESCRIPTION_PATTERNS = [/descripci[oó]n breve/i, /^descripci[oó]n$/i, /^summary$/i, /^description$/i];
-const EXPERIENCE_CURRENT_PATTERNS = [/trabajo actualmente aqu[ií]/i, /actualmente/i, /current/i, /present/i];
-const EXPERIENCE_ADD_BUTTON_PATTERNS = [/a[nñ]adir experiencia/i, /nueva experiencia/i, /add experience/i];
-const EXPERIENCE_SAVE_BUTTON_PATTERNS = [/guardar experiencia/i, /guardar/i, /save experience/i, /save/i];
-const CV_OPEN_PATTERNS = [
-  /importar cv/i,
-  /subir cv/i,
-  /a[nñ]adir cv/i,
-  /cargar cv/i,
-  /upload cv/i,
-  /upload resume/i,
-  /import resume/i,
-  /extraer perfil desde cv/i,
-];
-const CV_ALREADY_PRESENT_PATTERNS = [
-  /importaci[oó]n completada/i,
-  /estado:/i,
-  /id del proceso/i,
-  /experiencias laborales detectadas/i,
-  /formaci[oó]n acad[eé]mica detectada/i,
-];
-const CV_SUBMIT_PATTERNS = [/extraer perfil desde cv/i, /subiendo/i, /procesando/i, /analizar cv/i];
 const PUBLIC_PROFILE_PATTERNS = [
   new RegExp(CANDIDATE_DEMO.fullName, "i"),
   /perfil verificable/i,
@@ -99,83 +73,6 @@ async function ensureCandidateProfileSeed(page) {
   }
 }
 
-async function findInputByPatterns(page, patterns, options = {}) {
-  const inputTypes = options.textarea ? "textarea" : 'input, textarea';
-
-  for (const pattern of patterns) {
-    const label = page.locator("label").filter({ hasText: pattern }).first();
-    if ((await label.count()) > 0) {
-      const field = label.locator(inputTypes).first();
-      if ((await field.count()) > 0 && (await field.isVisible().catch(() => false))) {
-        return field;
-      }
-    }
-  }
-
-  for (const pattern of patterns) {
-    const byLabel = page.getByLabel(pattern).first();
-    if ((await byLabel.count()) > 0 && (await byLabel.isVisible().catch(() => false))) {
-      return byLabel;
-    }
-  }
-
-  const placeholders = [
-    ...patterns,
-    /empresa/i,
-    /company/i,
-    /puesto/i,
-    /cargo/i,
-    /job title/i,
-    /aaaa-mm/i,
-  ];
-
-  for (const pattern of placeholders) {
-    const byPlaceholder = page.getByPlaceholder(pattern).first();
-    if ((await byPlaceholder.count()) > 0 && (await byPlaceholder.isVisible().catch(() => false))) {
-      return byPlaceholder;
-    }
-  }
-
-  const genericSelectors = options.textarea
-    ? ["textarea[name*='description' i]", "textarea[id*='description' i]", "textarea"]
-    : [
-        "input[name*='role' i]",
-        "input[name*='title' i]",
-        "input[name*='puesto' i]",
-        "input[name*='cargo' i]",
-        "input[id*='role' i]",
-        "input[id*='title' i]",
-        "input[id*='puesto' i]",
-        "input[id*='cargo' i]",
-        "input[name*='company' i]",
-        "input[name*='empresa' i]",
-        "input[id*='company' i]",
-        "input[id*='empresa' i]",
-        "input",
-      ];
-
-  for (const selector of genericSelectors) {
-    const field = page.locator(selector).first();
-    if ((await field.count()) > 0 && (await field.isVisible().catch(() => false))) {
-      return field;
-    }
-  }
-
-  return null;
-}
-
-async function clickFirstMatchingButton(page, patterns) {
-  for (const pattern of patterns) {
-    const button = page.getByRole("button", { name: pattern }).first();
-    if ((await button.count()) === 0) continue;
-    const visible = await button.isVisible().catch(() => false);
-    if (!visible) continue;
-    await button.click({ timeout: 4_000 }).catch(() => null);
-    return true;
-  }
-  return false;
-}
-
 async function hasExperienceCard(page, experience) {
   const roleVisible = await page.getByText(experience.roleTitle, { exact: false }).first().isVisible().catch(() => false);
   const companyVisible = await page.getByText(experience.companyName, { exact: false }).first().isVisible().catch(() => false);
@@ -189,67 +86,49 @@ async function hasExperienceCard(page, experience) {
   return combinedVisible;
 }
 
-async function openExperienceForm(page) {
-  await clickFirstMatchingButton(page, EXPERIENCE_ADD_BUTTON_PATTERNS);
-
-  const roleField =
-    (await findInputByPatterns(page, EXPERIENCE_ROLE_PATTERNS)) ||
-    (await findInputByPatterns(page, EXPERIENCE_COMPANY_PATTERNS));
-
-  return roleField;
-}
-
 async function seedSingleExperience(page, experience) {
-  const roleField = await openExperienceForm(page);
-  if (!roleField) return false;
-
-  const companyField = await findInputByPatterns(page, EXPERIENCE_COMPANY_PATTERNS);
-  const startField = await findInputByPatterns(page, EXPERIENCE_START_PATTERNS);
-  const endField = await findInputByPatterns(page, EXPERIENCE_END_PATTERNS);
-  const descriptionField = await findInputByPatterns(page, EXPERIENCE_DESCRIPTION_PATTERNS, { textarea: true });
-
-  if (!companyField || !startField) {
-    return false;
+  const addButton = page.getByRole("button", { name: /a[nñ]adir experiencia/i }).first();
+  if (await addButton.isVisible().catch(() => false)) {
+    await addButton.click({ timeout: 4_000 }).catch(() => null);
   }
+
+  const roleField = page.getByLabel(/^puesto$/i).first();
+  const companyField = page.getByLabel(/^empresa$/i).first();
+  const startField = page.getByLabel(/^fecha inicio$/i).first();
+  const endField = page.getByLabel(/^fecha fin$/i).first();
+  const currentCheckbox = page.getByLabel(/trabajo actualmente aqu[ií]/i).first();
+  const descriptionField = page.getByLabel(/descripci[oó]n breve/i).first();
+  const saveButton = page.getByRole("button", { name: /guardar experiencia/i }).first();
+
+  await roleField.waitFor({ state: "visible", timeout: 10_000 });
+  await companyField.waitFor({ state: "visible", timeout: 10_000 });
+  await startField.waitFor({ state: "visible", timeout: 10_000 });
 
   await roleField.fill(experience.roleTitle);
   await companyField.fill(experience.companyName);
   await startField.fill(experience.startDate);
 
   if (experience.isCurrent) {
-    for (const pattern of EXPERIENCE_CURRENT_PATTERNS) {
-      const checkbox = page.getByLabel(pattern).first();
-      if ((await checkbox.count()) > 0) {
-        await checkbox.check().catch(() => null);
-        break;
-      }
-
-      const toggleText = page.getByText(pattern, { exact: false }).first();
-      if ((await toggleText.count()) > 0) {
-        await toggleText.click().catch(() => null);
-        break;
-      }
-    }
-  } else if (endField) {
+    await currentCheckbox.check().catch(() => null);
+  } else {
     await endField.fill(experience.endDate);
   }
 
-  if (descriptionField) {
-    await descriptionField.fill(experience.description);
-  }
+  await descriptionField.fill(experience.description);
+  await saveButton.click({ timeout: 4_000 });
 
-  const saved = await clickFirstMatchingButton(page, EXPERIENCE_SAVE_BUTTON_PATTERNS);
-  if (!saved) return false;
-
-  await page.waitForTimeout(1_500);
+  await waitForText(page, "Experiencia guardada correctamente.", 10_000).catch(() => null);
+  await page.waitForTimeout(1_000);
   return hasExperienceCard(page, experience);
 }
 
 async function ensureExperienceRows(page) {
   try {
-    await page.goto(`${APP_URL}/candidate/experience?new=1#manual-experience`, {
+    await page.goto(`${APP_URL}/onboarding/experience?onboarding=1&intent=manual&new=1#manual-experience`, {
       waitUntil: "networkidle",
     });
+
+    await waitForText(page, "Nombre mínimo confirmado", 10_000).catch(() => null);
 
     const existingCount = await Promise.all(CANDIDATE_DEMO.experiences.map((experience) => hasExperienceCard(page, experience)));
     const existingEnough = existingCount.filter(Boolean).length >= CANDIDATE_DEMO.experiences.length;
@@ -277,139 +156,6 @@ async function ensureExperienceRows(page) {
   } catch (error) {
     console.warn("[demo-bootstrap] No pude sembrar experiencias por selector no compatible con la UI actual.");
     console.warn(`[demo-bootstrap] Continúo sin bloquear el bootstrap: ${String(error?.message || error)}`);
-  }
-}
-
-async function openCvUploaderFlow(page) {
-  for (const pattern of CV_OPEN_PATTERNS) {
-    const button = page.getByRole("button", { name: pattern }).first();
-    if ((await button.count()) > 0) {
-      const visible = await button.isVisible().catch(() => false);
-      if (visible) {
-        await button.click({ timeout: 4_000 }).catch(() => null);
-        await page.waitForTimeout(800);
-      }
-    }
-
-    const link = page.getByRole("link", { name: pattern }).first();
-    if ((await link.count()) > 0) {
-      const visible = await link.isVisible().catch(() => false);
-      if (visible) {
-        await link.click({ timeout: 4_000 }).catch(() => null);
-        await page.waitForTimeout(800);
-      }
-    }
-
-    const textNode = page.getByText(pattern, { exact: false }).first();
-    if ((await textNode.count()) > 0) {
-      const visible = await textNode.isVisible().catch(() => false);
-      if (visible) {
-        await textNode.click({ timeout: 4_000 }).catch(() => null);
-        await page.waitForTimeout(800);
-      }
-    }
-  }
-}
-
-async function hasCvAlreadyImported(page) {
-  for (const pattern of CV_ALREADY_PRESENT_PATTERNS) {
-    const visible = await page.getByText(pattern, { exact: false }).first().isVisible().catch(() => false);
-    if (visible) return true;
-  }
-  return false;
-}
-
-async function findCvFileInput(page) {
-  const selectors = [
-    'input[type="file"][accept*=".pdf"]',
-    'input[type="file"][accept*="application/pdf"]',
-    'input[type="file"][accept*=".docx"]',
-    'input[type="file"]',
-  ];
-
-  for (const selector of selectors) {
-    const locator = page.locator(selector);
-    const count = await locator.count().catch(() => 0);
-    for (let index = 0; index < count; index += 1) {
-      const candidate = locator.nth(index);
-      const attached = await candidate.isAttached().catch(() => false);
-      if (!attached) continue;
-      return candidate;
-    }
-  }
-
-  return null;
-}
-
-async function uploadCandidateCvIfPresent(page, assetMap) {
-  const cv = assetMap.get("candidate-cv-demo.pdf");
-  if (!cv?.exists) {
-    console.warn("[demo-bootstrap] Falta candidate-cv-demo.pdf. Se omite la subida del CV.");
-    return;
-  }
-
-  try {
-    await page.goto(`${APP_URL}/candidate/experience#cv-upload`, { waitUntil: "networkidle" });
-
-    if (await hasCvAlreadyImported(page)) {
-      console.log("[demo-bootstrap] El CV ya parece estar cargado o en proceso. No se duplica la subida.");
-      return;
-    }
-
-    await openCvUploaderFlow(page);
-    let input = await findCvFileInput(page);
-
-    if (!input) {
-      await page.waitForTimeout(1_500);
-      await openCvUploaderFlow(page);
-      input = await findCvFileInput(page);
-    }
-
-    if (!input) {
-      console.warn("[demo-bootstrap] No pude subir candidate-cv-demo.pdf por selector/upload flow no compatible con la UI actual.");
-      return;
-    }
-
-    await input.setInputFiles(cv.path, { timeout: 8_000 });
-
-    await clickFirstMatchingButton(page, CV_SUBMIT_PATTERNS).catch(() => null);
-    await page.waitForTimeout(2_000);
-  } catch (error) {
-    console.warn("[demo-bootstrap] No pude subir candidate-cv-demo.pdf por selector/upload flow no compatible con la UI actual.");
-    console.warn(`[demo-bootstrap] Continúo sin bloquear el bootstrap: ${String(error?.message || error)}`);
-  }
-}
-
-async function uploadCandidateEvidenceIfPresent(page, assetMap) {
-  const files = [
-    { name: "candidate-evidence-contract.pdf", evidenceType: "Contrato de trabajo" },
-    { name: "candidate-evidence-payroll.pdf", evidenceType: "Nómina" },
-  ];
-
-  await page.goto(`${APP_URL}/candidate/evidence`, { waitUntil: "networkidle" });
-
-  const experienceSelect = page.locator("select").nth(1);
-  const optionCount = await experienceSelect.locator("option").count().catch(() => 0);
-  if (optionCount < 2) {
-    console.warn("[demo-bootstrap] No hay experiencias disponibles para asociar evidencias.");
-    return;
-  }
-
-  const firstExperienceValue = await experienceSelect.locator("option").nth(1).getAttribute("value");
-  if (!firstExperienceValue) return;
-
-  for (const file of files) {
-    const asset = assetMap.get(file.name);
-    if (!asset?.exists) {
-      console.warn(`[demo-bootstrap] Falta ${file.name}. Se omite esta evidencia.`);
-      continue;
-    }
-
-    await page.locator("select").nth(0).selectOption({ label: file.evidenceType }).catch(() => null);
-    await experienceSelect.selectOption(firstExperienceValue);
-    await page.getByLabel("Archivo").setInputFiles(asset.path);
-    await page.getByRole("button", { name: /subir documentaci[oó]n/i }).click();
-    await page.waitForTimeout(2_000);
   }
 }
 
@@ -453,7 +199,6 @@ async function ensureCandidateShareReady(page) {
 async function main() {
   await ensureBaseDirs();
   const assetStatus = await getAssetStatus();
-  const assetMap = new Map(assetStatus.entries.map((entry) => [entry.name, entry]));
   if (assetStatus.missing.length > 0) {
     console.warn(`[demo-bootstrap] Faltan assets demo. Revisa ${assetStatus.readmePath}`);
   }
@@ -475,8 +220,6 @@ async function main() {
 
     await ensureCandidateProfileSeed(page);
     await ensureExperienceRows(page);
-    await uploadCandidateCvIfPresent(page, assetMap);
-    await uploadCandidateEvidenceIfPresent(page, assetMap);
     await completeCandidateOnboarding(page);
     const token = await ensureCandidateShareReady(page);
     await saveStorageState(context, STORAGE_PATH);

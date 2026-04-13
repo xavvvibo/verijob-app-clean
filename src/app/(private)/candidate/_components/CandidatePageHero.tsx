@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import TrustScoreRing from "@/components/candidate/TrustScoreRing";
 
 function clampScore(value: number) {
   if (!Number.isFinite(value)) return 0;
@@ -19,7 +20,7 @@ function CompactTrustScoreBadge() {
         const response = await fetch("/api/candidate/trust-score", { credentials: "include", cache: "no-store" });
         const json = await response.json().catch(() => ({}));
         if (!response.ok || cancelled) return;
-        setScore(Number(json?.score ?? 0));
+        setScore(Number(json?.trust_score ?? 0));
       } catch {
         if (!cancelled) setScore(0);
       }
@@ -31,20 +32,10 @@ function CompactTrustScoreBadge() {
   }, []);
 
   const safeScore = useMemo(() => clampScore(score ?? 0), [score]);
-  const progressStyle = {
-    background: `conic-gradient(rgb(15 23 42) ${safeScore * 3.6}deg, rgb(219 234 254) 0deg)`,
-  };
 
   return (
     <div className="inline-flex items-center gap-3 rounded-full border border-slate-200 bg-white/80 px-3 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur-sm">
-      <div
-        className="flex h-12 w-12 items-center justify-center rounded-full p-[4px] shadow-[0_0_18px_rgba(99,102,241,0.14)]"
-        style={progressStyle}
-      >
-        <div className="flex h-full w-full items-center justify-center rounded-full bg-white text-sm font-semibold text-slate-950">
-          {score == null ? "…" : safeScore}
-        </div>
-      </div>
+      <TrustScoreRing score={safeScore} label="Trust" size="compact" />
       <div className="min-w-0">
         <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Tu nivel de confianza</p>
         <p className="text-sm font-semibold text-slate-900">Trust score</p>

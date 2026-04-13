@@ -1,4 +1,5 @@
 import { createClient } from "@/utils/supabase/server";
+import { candidateFacingCompanyVerificationLabel } from "@/lib/verification/company-verification-status";
 import DeleteVerificationButton from "./DeleteVerificationButton";
 
 function toEsDate(value?: string | null) {
@@ -48,16 +49,6 @@ function buildCandidateFacingRequestSummary(value: any) {
   return lines.slice(0, 3);
 }
 
-function mapCompanyVerificationStatus(statusRaw: unknown) {
-  const status = String(statusRaw || "").toLowerCase();
-  if (status === "registered_in_verijob") return "Empresa registrada en VERIJOB";
-  if (status === "verified_paid") return "Empresa con plan activo";
-  if (status === "verified_document") return "Empresa verificadora validada documentalmente";
-  if (status === "unverified_external") return "Validación por Email corporativo";
-  if (status === "unverified") return "Empresa no verificada";
-  return "Estado de empresa no disponible";
-}
-
 function sanitizeCandidateRequestContext(value: any) {
   const requestContext = value && typeof value === "object" ? { ...value } : value;
   if (!requestContext || typeof requestContext !== "object") return requestContext;
@@ -99,7 +90,7 @@ export default async function CandidateVerificationPage(props: any) {
 
   const { data: vr } = await supabase
     .from("verification_requests")
-    .select("id,status,verification_channel,request_context,revoked_at,requested_by,requested_at,created_at,updated_at,resolved_at,resolution_notes,company_name_target,company_name_snapshot,company_verification_status_snapshot,employment_record_id")
+    .select("id,status,verification_channel,request_context,revoked_at,requested_by,requested_at,created_at,updated_at,resolved_at,resolution_notes,company_name_target,company_name_snapshot,company_verification_status_snapshot,trust_score_awarded,employment_record_id")
     .eq("id", id)
     .maybeSingle();
 
@@ -132,10 +123,12 @@ export default async function CandidateVerificationPage(props: any) {
     .maybeSingle();
 
   const statusLabel = mapStatus(vr.status, vr.revoked_at, vr.verification_channel);
-  const companyVerificationLabel = mapCompanyVerificationStatus(vr.company_verification_status_snapshot);
+  const companyVerificationLabel = candidateFacingCompanyVerificationLabel(vr.company_verification_status_snapshot);
   const companyName = vr.company_name_snapshot || er?.company_name_freeform || vr.company_name_target || "Empresa";
   const evidenceRows = Array.isArray(evidences) ? evidences : [];
   const candidateSummary = buildCandidateFacingRequestSummary(sanitizeCandidateRequestContext(vr.request_context));
+  const trustGlobal = Number(cp?.trust_score ?? 0);
+  const trustAwarded = Number(vr.trust_score_awarded ?? vr.request_context?.external_resolution?.trust_score_awarded ?? 0);
 
   return (
     <div className="p-8 space-y-6">
@@ -158,7 +151,7 @@ export default async function CandidateVerificationPage(props: any) {
           <span className="text-sm text-gray-600">{toEsDate(vr.requested_at)} · {toEsDate(vr.resolved_at)}</span>
         </div>
 
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           <div className="border border-gray-200 rounded-2xl p-4">
             <div className="text-xs text-gray-500">Periodo laboral</div>
             <div className="mt-1 text-sm font-semibold text-gray-900">
@@ -170,10 +163,25 @@ export default async function CandidateVerificationPage(props: any) {
             <div className="mt-1 text-sm font-semibold text-gray-900">{companyVerificationLabel}</div>
           </div>
           <div className="border border-gray-200 rounded-2xl p-4">
-            <div className="text-xs text-gray-500">Trust (perfil global)</div>
-            <div className="mt-1 text-xl font-semibold text-gray-900">{cp?.trust_score ?? 0}</div>
+            <div className="text-xs text-gray-500">Trust global actual</div>
+            <div className="mt-1 text-xl font-semibold text-gray-900">{trustGlobal}</div>
+          </div>
+          <div className="border border-gray-200 rounded-2xl p-4">
+            <div className="text-xs text-gray-500">Impacto de esta verificación</div>
+            <div className="mt-1 text-xl font-semibold text-gray-900">
+              {trustAwarded > 0 ? `+${trustAwarded}` : trustAwarded}
+            </div>
           </div>
         </div>
+
+        {trustAwarded > 0 ? (
+          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+            Esta resolución ha concedido <span className="font-semibold">+{trustAwarded} puntos</span> a esta verificación concreta.
+            <span className="block mt-1 text-emerald-800">
+              El trust global del perfil se muestra por separado y puede no reflejar este impacto de forma inmediata.
+            </span>
+          </div>
+        ) : null}
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className="border border-gray-200 rounded-2xl p-4">
