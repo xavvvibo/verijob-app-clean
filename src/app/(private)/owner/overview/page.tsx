@@ -896,7 +896,7 @@ async function OwnerOverviewServer({
       <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
         <h1 className="text-2xl font-semibold text-slate-900">Overview owner</h1>
         <p className="mt-1 text-sm text-slate-600">
-          Cockpit ejecutivo para seguir activación, operación, calidad de verificación y economía del negocio.
+          Centro de mando operativo. Prioriza salud del producto, operación diaria y negocio con métricas conectadas a datos reales o derivados explícitos.
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           {([
@@ -961,7 +961,7 @@ async function OwnerOverviewServer({
 
       <Section
         title="Métricas clave"
-        subtitle="Resume el estado actual del negocio, producto y actividad operativa."
+        subtitle="KPIs principales para leer producto, operación y negocio sin ruido secundario."
         processState="working"
         nextStep={`Revisa la variación de actividad y altas frente al periodo anterior de ${rangeLabel}.`}
       >
@@ -1008,101 +1008,12 @@ async function OwnerOverviewServer({
       </Section>
 
       <Section
-        title="Embudo de activación"
-        subtitle="Muestra el paso de usuario activo a conversión para detectar bloqueos."
-        processState={funnelStepRegistros === 0 ? "draft" : verifiedRate >= 40 ? "working" : "waiting_action"}
-        nextStep="Revisa el primer tramo con caída fuerte antes de empujar más adquisición."
+        title="Operación y calidad"
+        subtitle="Bloque principal para cola, resolución y estabilidad. Mantiene solo métricas con lectura operativa directa."
+        processState={failedJobs > 0 || pendingVerifications > 0 || openIssues > 0 ? "waiting_action" : "completed"}
+        nextStep="Ataca primero cola pendiente, incidencias abiertas y tiempos de resolución."
       >
-        <FunnelVisual
-          steps={[
-            { label: "Registros", value: funnelStepRegistros },
-            { label: "Onboarding completado", value: funnelStepOnboarding },
-            { label: "Perfil con experiencia", value: funnelStepExperience },
-            { label: "Evidencia subida", value: funnelStepEvidence },
-            { label: "Verificación solicitada", value: funnelStepVerificationRequested },
-            { label: "Perfil público generado", value: funnelStepPublicProfileGenerated },
-            { label: "Perfil verificado", value: funnelStepVerified },
-          ]}
-        />
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-7">
-          <FunnelStep step="Registros" value={funnelStepRegistros} note="Candidatos en profiles" />
-          <FunnelStep
-            step="Onboarding completado"
-            value={funnelStepOnboarding}
-            rate={pct(funnelStepOnboarding, funnelStepRegistros)}
-          />
-          <FunnelStep
-            step="Perfil con experiencia"
-            value={funnelStepExperience}
-            rate={profileReadyRate}
-          />
-          <FunnelStep
-            step="Evidencia subida"
-            value={funnelStepEvidence}
-            rate={evidenceRate}
-          />
-          <FunnelStep
-            step="Verificación solicitada"
-            value={funnelStepVerificationRequested}
-            rate={verificationRequestedRate}
-          />
-          <FunnelStep
-            step="Perfil público generado"
-            value={funnelStepPublicProfileGenerated}
-            rate={publicProfileGeneratedRate}
-          />
-          <FunnelStep
-            step="Perfil verificado"
-            value={funnelStepVerified}
-            rate={verifiedRate}
-            note="Al menos una verificación en estado verified"
-          />
-        </div>
-      </Section>
-
-      <Section
-        title="Distribución de confianza"
-        subtitle="Resume cómo evoluciona la confianza verificada dentro de la base de candidatos."
-        processState={trustInVerification > trustHigh ? "waiting_action" : "working"}
-        nextStep="Prioriza cohortes con baja confianza y alto potencial de verificación."
-      >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Alta confianza (>80)" value={String(trustHigh)} note={`Sobre ${candidatesTotal} candidatos`} />
-          <MetricCard title="Perfil verificado (60-79)" value={String(trustVerified)} note={`Sobre ${candidatesTotal} candidatos`} />
-          <MetricCard title="Señales verificadas (40-59)" value={String(trustSignals)} note={`Sobre ${candidatesTotal} candidatos`} />
-          <MetricCard title="En verificación (<40)" value={String(trustInVerification)} note={`Sobre ${candidatesTotal} candidatos`} />
-        </div>
-      </Section>
-
-      <Section
-        title="Resumen de crecimiento"
-        subtitle="Resume la salida comercial del flujo de captación y seguimiento activo."
-        processState={activeCampaigns > 0 ? "working" : "draft"}
-        nextStep={activeCampaigns > 0 ? "Convierte respuestas y demos en siguiente acción comercial." : "Activa campañas nuevas si quieres mover el embudo comercial."}
-      >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <MetricCard title="Leads descubiertos" value={String(growthTotals.leads)} note={`Campañas creadas en ${rangeLabel}`} />
-          <MetricCard title="Contactos encontrados" value={String(growthTotals.contacts)} note={`Campañas creadas en ${rangeLabel}`} />
-          <MetricCard title="Mensajes enviados" value={String(growthTotals.messages)} note={`Campañas creadas en ${rangeLabel}`} />
-          <MetricCard title="Respuestas" value={String(growthTotals.replies)} note={`Campañas creadas en ${rangeLabel}`} />
-          <MetricCard title="Demos agendadas" value={String(growthTotals.demos)} note={`Campañas creadas en ${rangeLabel}`} />
-        </div>
-      </Section>
-
-      <Section
-        title="Evolución de verificaciones por semana"
-        subtitle="Muestra la secuencia de solicitud a resolución para detectar cuellos de botella."
-        processState={weeklyRequested.some((value) => value > 0) ? "working" : "draft"}
-        nextStep="Compara el ritmo de entrada frente al cierre semanal para detectar acumulación."
-      >
-        <WeeklyVerificationChart
-          labels={weeklyLabels}
-          requested={weeklyRequested}
-          verified={weeklyVerified}
-        />
-      </Section>
-
-      <div className="grid gap-6 xl:grid-cols-2">
+        <div className="grid gap-6 xl:grid-cols-2">
         <Section
           title="Operaciones diarias"
           subtitle="Centraliza tareas que requieren revisión o seguimiento inmediato."
@@ -1142,44 +1053,12 @@ async function OwnerOverviewServer({
             <MetricCard title="Jobs pendientes" value={String(pendingJobs)} note={`Jobs fallidos ${failedJobs}`} />
           </div>
         </Section>
-      </div>
-
-      <Section
-        title="Integridad del sistema"
-        subtitle="Ayuda a detectar anomalías, fraude potencial o incoherencias operativas."
-        processState={suspiciousVerifications > 0 ? "waiting_action" : "completed"}
-        nextStep="Revisa duplicidades y empresas con rechazo alto antes de escalar automatización."
-      >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Verificaciones sospechosas" value={String(suspiciousVerifications)} note="Proxy por ratio de rechazo y duplicidad de evidencias" />
-          <MetricCard title="Evidencias duplicadas" value={String(duplicateEvidenceLinks)} note="Múltiples evidencias sobre la misma solicitud" />
-          <MetricCard title="Empresas con rechazo alto" value={String(highRejectCompanies)} note=">=50% de rechazo con volumen mínimo" />
-          <MetricCard title="Casos manuales abiertos" value={String(manualCasesOpen)} note="Incidencias + jobs fallidos en seguimiento" />
-        </div>
-      </Section>
-
-      <Section
-        title="Oportunidades de crecimiento"
-        subtitle="Señala segmentos, zonas o patrones con potencial comercial."
-        processState={growthOpportunities.length > 0 ? "waiting_action" : "completed"}
-        nextStep={growthOpportunities.length > 0 ? "Valida qué oportunidad merece activación comercial inmediata." : "Mantén monitorización hasta que aparezcan nuevas señales de expansión."}
-      >
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          {growthOpportunities.length === 0 ? (
-            <p className="text-sm text-slate-600">No se detectan oportunidades críticas con los umbrales actuales.</p>
-          ) : (
-            <ul className="space-y-2 text-sm text-slate-700">
-              {growthOpportunities.map((op, idx) => (
-                <li key={idx} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">{op}</li>
-              ))}
-            </ul>
-          )}
         </div>
       </Section>
 
       <Section
         title="Economía del negocio"
-        subtitle="Resume ingresos, planes, consumo y señales SaaS clave."
+        subtitle="Ingresos y suscripciones conectados a datos reales. Las métricas derivadas van etiquetadas como tal."
         processState={subscriptionsPastDue.length > 0 ? "waiting_action" : "working"}
         nextStep="Cruza altas, churn y MRR para decidir dónde corregir pricing o activación."
       >
@@ -1213,10 +1092,10 @@ async function OwnerOverviewServer({
       ) : null}
 
       <Section
-        title="Eventos recientes y críticos"
-        subtitle="Recoge la actividad reciente relevante del sistema."
+        title="Eventos recientes"
+        subtitle="Secuencia corta de eventos reales recientes para contexto, sin intentar actuar como timeline ejecutivo completo."
         processState={recentCriticalEvents.length > 0 ? "working" : "completed"}
-        nextStep={recentCriticalEvents.length > 0 ? "Usa la secuencia reciente para validar qué área necesita seguimiento." : "Sin eventos críticos recientes; mantén la observación normal."}
+        nextStep={recentCriticalEvents.length > 0 ? "Úsalo como contexto rápido; la operación principal está en los módulos específicos." : "Sin eventos recientes relevantes en el rango activo."}
       >
         <div className="grid gap-3 lg:grid-cols-2">
           {recentCriticalEvents.length ? (
@@ -1249,10 +1128,10 @@ async function OwnerOverviewServer({
       </Section>
 
       <Section
-        title="Acciones rápidas"
-        subtitle="Atajos para revisar, corregir o actuar sin salir del panel."
+        title="Módulos owner"
+        subtitle="Accesos a las superficies especializadas. Growth y adquisición quedan fuera del overview principal."
         processState="waiting_action"
-        nextStep="Abre el módulo correspondiente y resuelve el primer bloqueo operativo del día."
+        nextStep="Abre el módulo correspondiente cuando necesites más detalle o ejecución específica."
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <Link href="/owner/users" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
@@ -1271,9 +1150,9 @@ async function OwnerOverviewServer({
             Monetización
             <span className="mt-1 block text-xs font-normal text-slate-500">MRR {money(totalMrr)} · altas {rangeLabel} {subscriptionsNewRange}</span>
           </Link>
-          <Link href="/owner/growth" className="rounded-lg bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800">
-            Centro de crecimiento
-            <span className="mt-1 block text-xs font-normal text-blue-100">{activeCampaigns} campañas activas · {leadsInRange} leads en {rangeLabel}</span>
+          <Link href="/owner/growth" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
+            Growth
+            <span className="mt-1 block text-xs font-normal text-slate-500">{activeCampaigns} campañas activas · {leadsInRange} leads en {rangeLabel}</span>
           </Link>
           <Link href="/owner/company-acquisition" className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-900 hover:bg-slate-50">
             Empresas captadas por verificación
@@ -1284,145 +1163,8 @@ async function OwnerOverviewServer({
         </div>
       </Section>
 
-      <Section
-        title="Empresas captadas por verificación"
-        subtitle="Resume el flujo desde verificación a registro y conversión de empresa."
-        processState={verificationAcquisition.summary.impactedCompanies > 0 ? "working" : "draft"}
-        nextStep="Revisa si las empresas impactadas acaban entrando en onboarding y pago."
-      >
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard title="Impactadas" value={String(verificationAcquisition.summary.impactedCompanies)} note="Empresas con al menos una solicitud de verificación." />
-          <MetricCard title="Registradas" value={String(verificationAcquisition.summary.registeredFromVerification)} note="Registro atribuido a verificación con señal disponible en datos." />
-          <MetricCard title="Free" value={String(verificationAcquisition.summary.convertedToFree)} note="Onboarding completado y plan free." />
-          <MetricCard title="Pago" value={String(verificationAcquisition.summary.convertedToPaid)} note={`Conversión a pago · ${verificationAcquisition.summary.verificationToPaymentRate}% del total impactado`} />
-        </div>
-        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="px-3 py-3 text-left font-semibold text-slate-600">Empresa</th>
-                <th className="px-3 py-3 text-left font-semibold text-slate-600">Objetivo</th>
-                <th className="px-3 py-3 text-left font-semibold text-slate-600">Solicitudes</th>
-                <th className="px-3 py-3 text-left font-semibold text-slate-600">Conversión</th>
-                <th className="px-3 py-3 text-left font-semibold text-slate-600">Plan</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 bg-white">
-              {acquisitionPreview.length ? (
-                acquisitionPreview.map((row) => (
-                  <tr key={row.key}>
-                    <td className="px-3 py-3">
-                      <div className="font-semibold text-slate-900">{row.companyName}</div>
-                      <div className="mt-1 text-xs text-slate-500">{row.origin === "verification" ? "Captada por verificación" : row.origin === "preexisting" ? "Empresa preexistente" : "Origen no concluyente"}</div>
-                    </td>
-                    <td className="px-3 py-3 text-slate-700">
-                      <div>{row.targetEmail || "—"}</div>
-                      <div className="mt-1 text-xs text-slate-500">{row.targetDomain || "Dominio no concluyente"}</div>
-                    </td>
-                    <td className="px-3 py-3 text-slate-700">{row.requestsCount}</td>
-                    <td className="px-3 py-3 text-slate-700">{conversionStateLabel(row.conversionState)}</td>
-                    <td className="px-3 py-3 text-slate-700">{subscriptionStateLabel(row.subscriptionState)}</td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-slate-500">
-                    No hay impacto de verificación suficiente para construir el resumen todavía.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <div>
-          <Link href="/owner/company-acquisition" className="inline-flex rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-            Abrir módulo completo
-          </Link>
-        </div>
-      </Section>
-
-      <Section
-        title="Timeline global del sistema"
-        subtitle="Recoge la actividad reciente relevante del sistema."
-        processState="working"
-        nextStep="Usa el timeline para validar continuidad entre operación, growth y monetización."
-      >
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <ul className="space-y-2 text-sm text-slate-700">
-            {[
-              ...verifiedRows.filter((r: any) => isInRange(r.resolved_at || r.requested_at || r.created_at, rangeStartMs, now)).slice(0, 3).map((r: any) => ({
-                ts: String(r.resolved_at || r.requested_at || r.created_at || ""),
-                type: "verification_approved",
-                text: `Verificación aprobada · ${String((profileById.get(String(r.requested_by || "")) as any)?.full_name || "Candidato")}`,
-              })),
-              ...evidenceRows.filter((e: any) => isInRange(e.created_at, rangeStartMs, now)).slice(0, 3).map((e: any) => ({
-                ts: String(e.created_at || ""),
-                type: "evidence_uploaded",
-                text: `Evidencia subida · ${String((profileById.get(String(e.uploaded_by || "")) as any)?.full_name || "Usuario")}`,
-              })),
-              ...companiesForActivity.filter((c: any) => isInRange(c.created_at || c.updated_at, rangeStartMs, now)).slice(0, 2).map((c: any) => ({
-                ts: String(c.created_at || c.updated_at || ""),
-                type: "company_activity",
-                text: `Empresa activa · ${resolveCompanyDisplayName(companyById.get(String(c.id || "")) as any, "Tu empresa")}`,
-              })),
-              ...profiles.filter((p: any) => isInRange(p.created_at, rangeStartMs, now)).slice(0, 2).map((p: any) => ({
-                ts: String(p.created_at || ""),
-                type: "user_registered",
-                text: `Usuario registrado · ${String((profileById.get(String(p.id || "")) as any)?.full_name || "Usuario")}`,
-              })),
-              ...issues.filter((i: any) => isInRange(i.created_at, rangeStartMs, now)).slice(0, 2).map((i: any) => ({
-                ts: String(i.created_at || ""),
-                type: "issue_created",
-                text: "Incidencia operativa creada",
-              })),
-              ...campaigns.filter((c: any) => isInRange(c.created_at, rangeStartMs, now)).slice(0, 2).map((c: any) => ({
-                ts: String(c.created_at || ""),
-                type: "campaign_created",
-                text: "Campaña de crecimiento lanzada",
-              })),
-              ...subscriptionsActive.filter((s: any) => isInRange(s.created_at, rangeStartMs, now)).slice(0, 2).map((s: any) => ({
-                ts: String(s.created_at || ""),
-                type: "subscription_activated",
-                text: "Suscripción activada",
-              })),
-            ]
-              .filter((x: any) => x.ts)
-              .sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts))
-              .slice(0, 10)
-              .map((item, idx) => (
-                <li key={`${item.ts}-${idx}`} className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
-                  <span className="inline-flex items-center gap-2">
-                    <span className={`h-2 w-2 rounded-full ${
-                      item.type === "verification_approved" ? "bg-emerald-600" :
-                      item.type === "issue_created" ? "bg-rose-600" :
-                      item.type === "evidence_uploaded" ? "bg-indigo-600" :
-                      item.type === "campaign_created" ? "bg-blue-600" :
-                      item.type === "subscription_activated" ? "bg-violet-600" :
-                      "bg-slate-500"
-                    }`} />
-                    <span className="rounded-md border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-semibold uppercase text-slate-600">
-                      {item.type === "verification_approved" ? "Verificación" :
-                        item.type === "issue_created" ? "Incidencia" :
-                        item.type === "evidence_uploaded" ? "Evidencia" :
-                        item.type === "campaign_created" ? "Growth" :
-                        item.type === "subscription_activated" ? "Suscripción" :
-                        item.type === "user_registered" ? "Usuario" :
-                        "Empresa"}
-                    </span>
-                    <span>{item.text}</span>
-                  </span>
-                  <span className="text-xs text-slate-500">{new Date(item.ts).toLocaleString("es-ES")}</span>
-                </li>
-              ))}
-          </ul>
-          <p className="mt-3 text-xs text-slate-500">
-            Perfiles públicos activos: {activePublicProfiles} · Jobs de parsing pendientes: {pendingJobs} · Demos de campañas en {rangeLabel}: {demosInRange}.
-          </p>
-        </div>
-      </Section>
-
       <section className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
-        Definiciones: usuarios totales salen de auth.users; operación y estados salen de verification_requests/evidences/issue_reports; MRR y churn se derivan de subscriptions activas/canceladas.
+        Definiciones: usuarios totales salen de auth.users; operación y estados salen de verification_requests/evidences/issue_reports; MRR sale de subscriptions activas/trialing; ARPU, churn y señales globales son métricas derivadas.
       </section>
     </div>
   );
