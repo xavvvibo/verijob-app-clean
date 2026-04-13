@@ -13,6 +13,7 @@ import {
 import { resolveCompanyProfileAccessCredits } from "@/lib/company/profile-access-credits";
 import { resolveCompanyCandidateAccessMap } from "@/lib/company/profile-access";
 import { dispatchBackgroundJob } from "@/lib/jobs/background-processing";
+import { reconcileExternalVerificationCandidates } from "@/lib/company/reconcile-external-verification-candidates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -329,11 +330,16 @@ export async function GET() {
   try {
     const ctx = await resolveContext();
     if ((ctx as any).error) return (ctx as any).error;
-    const { companyId, membershipRole, companyName, admin } = ctx as any;
+    const { companyId, membershipRole, companyName, admin, user } = ctx as any;
+    await reconcileExternalVerificationCandidates({
+      admin,
+      companyId,
+      invitedByUserId: user?.id || null,
+    }).catch(() => {});
     const snapshot = await readInvitesSnapshot(admin, companyId);
     const profileAccessCredits = await resolveCompanyProfileAccessCredits({
       service: admin,
-      userId: String((ctx as any).user.id),
+      userId: String(user.id),
       companyId,
     });
 

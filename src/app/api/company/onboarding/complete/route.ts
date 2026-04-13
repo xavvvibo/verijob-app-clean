@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createRouteHandlerClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/service";
 import { trackEventAdmin } from "@/utils/analytics/trackEventAdmin";
+import { reconcileExternalVerificationCandidates } from "@/lib/company/reconcile-external-verification-candidates";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +103,12 @@ export async function POST() {
         },
         { onConflict: "company_id" },
       );
+
+    await reconcileExternalVerificationCandidates({
+      admin,
+      companyId,
+      invitedByUserId: user.id,
+    }).catch(() => {});
 
     await trackEventAdmin({
       event_name: "onboarding_completed",
