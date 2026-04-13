@@ -46,6 +46,16 @@ async function readCandidateTrustProfile(admin: any, candidateId: string): Promi
   };
 }
 
+function isMissingTrustRpcSignature(error: any) {
+  const message = String(error?.message || "");
+  const details = String(error?.details || "");
+  return (
+    String(error?.code || "") === "PGRST202" &&
+    (message.includes("calculate_candidate_trust_from_employment") ||
+      details.includes("calculate_candidate_trust_from_employment"))
+  );
+}
+
 export async function calculateTrustScore(candidateId: string): Promise<TrustResult> {
   const admin = createAdminSupabaseClient();
   return readCandidateTrustProfile(admin, candidateId);
@@ -54,10 +64,48 @@ export async function calculateTrustScore(candidateId: string): Promise<TrustRes
 export async function recalculateAndPersistCandidateTrustScore(candidateId: string): Promise<TrustResult> {
   const admin = createAdminSupabaseClient();
 
-  const { error } = await admin.rpc("calculate_candidate_trust_from_employment", {
+  let rpcResult = await admin.rpc("calculate_candidate_trust_from_employment", {
     user_id: candidateId,
   });
-  if (error) throw error;
 
-  return readCandidateTrustProfile(admin, candidateId);
+  if (rpcResult.error && isMissingTrustRpcSignature(rpcResult.error)) {
+    rpcResult = await admin.rpc("calculate_candidate_trust_from_employment", {
+      p_user_id: candidateId,
+    });
+  }
+
+  if (rpcResult.error) throw rpcResult.error;
+
+  let trust = await readCandidateTrustProfile(admin, candidateId);
+  const rpcScore = Number(rpcResult.data ?? 0);
+
+  if (trust.score <= 0 && Number.isFinite(rpcScore) && rpcScore > 0) {
+    const patchedBreakdown = {
+      ...(trust.breakdown || {}),
+      updated_at: new Date().toISOString(),
+      model: (trust.breakdown as any)?.model || "trust_model_v3_rpc_fallback",
+    };
+
+    const updateRes = await admin
+      .from("candidate_profiles")
+      .update({
+        trust_score: rpcScore,
+        trust_score_breakdown: patchedBreakdown,
+      })
+      .eq("user_id", candidateId)
+      .select("trust_score,trust_score_breakdown")
+      .maybeSingle();
+
+    if (!updateRes.error) {
+      trust = {
+        score: Number((updateRes.data as any)?.trust_score ?? rpcScore),
+        breakdown: {
+          ...(patchedBreakdown || {}),
+          ...asObject((updateRes.data as any)?.trust_score_breakdown),
+        },
+      };
+    }
+  }
+
+  return trust;
 }

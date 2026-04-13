@@ -772,7 +772,24 @@ export default function CandidateOverview() {
         setEmploymentRecords((employmentRes.data || []) as EmploymentRecordLite[]);
         setCandidateProfile(profileApiRes?.profile ?? null);
         setProfileCompletion((profileApiRes?.profile_completion || null) as ProfileCompletionPayload);
-        setTrustScore(typeof trustRes?.trust_score === "number" ? trustRes.trust_score : null);
+        let nextTrustScore = typeof trustRes?.trust_score === "number" ? trustRes.trust_score : null;
+        const hasVerifiedEmployment = Array.isArray(employmentRes.data)
+          ? employmentRes.data.some((row: any) => {
+              const status = String(row?.verification_status || "").trim().toLowerCase();
+              return status === "verified" || status === "approved" || status === "verified_document" || status === "verified_paid";
+            })
+          : false;
+        if ((nextTrustScore == null || Number(nextTrustScore) <= 0) && hasVerifiedEmployment) {
+          const trustRefreshRes = await fetch("/api/candidate/trust-score", {
+            method: "POST",
+            credentials: "include",
+            cache: "no-store",
+          }).then((r) => r.json().catch(() => ({})));
+          if (typeof trustRefreshRes?.trust_score === "number") {
+            nextTrustScore = trustRefreshRes.trust_score;
+          }
+        }
+        setTrustScore(nextTrustScore);
         setExperienceCount(Number(profileApiRes?.counts?.experience_count || 0));
         setSubscriptionPlan(subscriptionRes?.subscription?.plan || null);
         setError(null);
@@ -1004,18 +1021,26 @@ export default function CandidateOverview() {
                   </div>
                 ) : null}
 
-                <div className="mt-8 flex flex-col gap-5 md:flex-row md:items-center md:gap-8 xl:gap-10">
-                  <TrustRing score={metrics.score} stateTitle={trustState.title} />
-                  <div className="min-w-0 max-w-[30rem]">
-                    <p className="text-sm font-medium leading-6 text-slate-800">
-                      {metrics.score >= 60
-                        ? "Con este nivel de confianza, una empresa ya ve señales reales."
-                        : "Ahora mismo tu perfil puede pasar desapercibido frente a candidatos con señales verificadas."}
-                    </p>
+                <div className="mt-7 max-w-[42rem] rounded-[28px] border border-white/70 bg-white/72 p-4 shadow-[0_18px_42px_rgba(15,23,42,0.08)] backdrop-blur-sm sm:p-5">
+                  <div className="flex flex-col gap-5 md:flex-row md:items-center md:gap-6 xl:gap-8">
+                    <TrustRing score={metrics.score} stateTitle={trustState.title} />
+                    <div className="min-w-0 max-w-[30rem]">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Fortaleza del perfil</p>
+                      <p className="mt-2 text-base font-semibold leading-7 text-slate-900">
+                        {metrics.score >= 60
+                          ? "Tu perfil ya transmite señales reales y verificables para empresa."
+                          : "Tu perfil ya existe, pero todavía necesita más señales verificables para destacar."}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-slate-600">
+                        {metrics.verified > 0
+                          ? `Ya tienes ${metrics.verified} experiencia${metrics.verified === 1 ? "" : "s"} verificada${metrics.verified === 1 ? "" : "s"} y eso debería reflejarse en tu trust score global.`
+                          : "La forma más rápida de subir este bloque es combinar experiencia verificada y evidencia documental."}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="mt-7 flex flex-wrap items-center gap-3">
+                <div className="mt-6 flex flex-wrap items-center gap-3">
                   <VerificationBadge tone={metrics.verified > 0 ? "company_verified" : metrics.inProcess > 0 ? "in_progress" : "trust_visible"}>
                     {trustState.title}
                   </VerificationBadge>
@@ -1048,8 +1073,8 @@ export default function CandidateOverview() {
           </div>
         }
         right={
-        <div className={`mx-auto w-full max-w-[22rem] rounded-[22px] border p-4 shadow-[0_12px_26px_rgba(15,23,42,0.05)] backdrop-blur sm:p-5 xl:mx-0 xl:max-w-none ${opportunityCard.tone}`}>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Siguiente palanca</p>
+        <div className={`mx-auto w-full max-w-[22rem] rounded-[24px] border p-4 shadow-[0_16px_32px_rgba(15,23,42,0.06)] backdrop-blur sm:p-5 xl:mx-0 xl:max-w-none ${opportunityCard.tone}`}>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Siguiente mejor acción</p>
           <h2 className="mt-2 text-base font-semibold leading-tight text-slate-950 sm:text-[1.05rem]">{opportunityCard.title}</h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">{opportunityCard.body}</p>
           <Link

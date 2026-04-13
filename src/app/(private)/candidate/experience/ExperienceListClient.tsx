@@ -194,9 +194,10 @@ export default function ExperienceListClient({
     return { experiences };
   }
 
-  async function saveVisibility(nextRows: Row[], rowId: string) {
+  async function saveVisibility(previousRows: Row[], nextRows: Row[], rowId: string) {
     setSavingVisibilityId(rowId);
     setFeedback(null);
+    setRows(nextRows);
 
     try {
       const res = await fetch("/api/candidate/profile", {
@@ -211,10 +212,10 @@ export default function ExperienceListClient({
       if (!res.ok) {
         throw new Error(json?.error || "No se ha podido actualizar la visibilidad pública.");
       }
-      setRows(nextRows);
       setFeedback("Configuración pública actualizada. La vista pública ya refleja este cambio.", "success");
       router.refresh();
     } catch (error: any) {
+      setRows(previousRows);
       setFeedback(error?.message || "No se ha podido actualizar la visibilidad pública.", "error");
     } finally {
       setSavingVisibilityId(null);
@@ -226,7 +227,8 @@ export default function ExperienceListClient({
     patch: Partial<NonNullable<Row["public_visibility"]>>,
     planInfo?: PublicPlanInfo,
   ) {
-    const nextRows = rows.map((row) => {
+    const previousRows = rows;
+    const nextRows = previousRows.map((row) => {
       if (row.id !== rowId) return row;
       const current = row.public_visibility || { visible: true, featured: false };
       const nextVisibility = {
@@ -250,7 +252,7 @@ export default function ExperienceListClient({
       return;
     }
 
-    await saveVisibility(nextRows, rowId);
+    await saveVisibility(previousRows, nextRows, rowId);
   }
 
   async function saveRow(id: string) {
