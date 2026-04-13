@@ -397,11 +397,27 @@ export async function PATCH(req: Request, ctx: any) {
     const currentEntries = Array.isArray(processing.extracted_employment_entries)
       ? processing.extracted_employment_entries
       : [];
+    const fallbackGroupedEntries = Array.isArray(processing.grouped_employment_entries)
+      ? processing.grouped_employment_entries
+      : [];
+    const baseEntries =
+      currentEntries.length > 0
+        ? currentEntries
+        : fallbackGroupedEntries.flatMap((entry: any) => {
+            const sourceEntryIds = Array.isArray(entry?.source_entry_ids) && entry.source_entry_ids.length
+              ? entry.source_entry_ids
+              : [entry?.entry_id].filter(Boolean);
+            return sourceEntryIds.map((entryId: string) => ({
+              ...entry,
+              entry_id: String(entryId || "").trim(),
+              source_entry_ids: sourceEntryIds,
+            }));
+          });
     const summary = {
       linked_existing_count: 0,
       created_count: 0,
       ignored_count: 0,
-      auto_ignored_count: currentEntries.filter((entry: any) => String(entry?.ignored_reason || "").trim()).length,
+      auto_ignored_count: baseEntries.filter((entry: any) => String(entry?.ignored_reason || "").trim()).length,
       pending_count: 0,
       material_changes: false,
       linked_employment_record_ids: [] as string[],
@@ -413,7 +429,7 @@ export async function PATCH(req: Request, ctx: any) {
     const profileExperienceIdsToMark = new Set<string>();
 
     const nextEntries = [];
-    for (const currentEntry of currentEntries) {
+    for (const currentEntry of baseEntries) {
       const entryId = String(currentEntry?.entry_id || "").trim();
       const requested = updates.find((item: any) => String(item?.entry_id || "").trim() === entryId);
       if (!requested) {

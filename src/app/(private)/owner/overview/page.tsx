@@ -33,6 +33,17 @@ async function readOwnerVerificationRequests(admin: any) {
 
 type GlobalSignalLevel = "ok" | "warning" | "critical";
 
+function ownerSeverityMeta(level: GlobalSignalLevel) {
+  if (level === "ok") return { processState: "completed" as const, stateLabel: "OK" };
+  if (level === "warning") return { processState: "waiting_action" as const, stateLabel: "ATENCIÓN" };
+  return { processState: "failed" as const, stateLabel: "CRÍTICO" };
+}
+
+function metricValueOrNoBase(value: number, hasBase: boolean, formatter?: (value: number) => string) {
+  if (!hasBase) return "—";
+  return formatter ? formatter(value) : String(value);
+}
+
 function MetricCard({
   title,
   value,
@@ -932,7 +943,8 @@ async function OwnerOverviewServer({
       <Section
         title="Estado global del sistema"
         subtitle="Resume la salud operativa del sistema y te ayuda a detectar incidencias, crecimiento y monetización en un solo panel."
-        processState={globalSystemLevel === "critical" ? "failed" : globalSystemLevel === "warning" ? "waiting_action" : "completed"}
+        processState={ownerSeverityMeta(globalSystemLevel).processState}
+        stateLabel={ownerSeverityMeta(globalSystemLevel).stateLabel}
         nextStep={globalSystemLevel === "ok" ? "Mantener vigilancia sobre jobs, incidencias y cola de verificación." : "Prioriza el bloque con señal crítica antes de continuar con tareas no urgentes."}
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -962,7 +974,8 @@ async function OwnerOverviewServer({
       <Section
         title="Métricas clave"
         subtitle="KPIs principales para leer producto, operación y negocio sin ruido secundario."
-        processState="working"
+        processState="completed"
+        stateLabel="OK"
         nextStep={`Revisa la variación de actividad y altas frente al periodo anterior de ${rangeLabel}.`}
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -987,7 +1000,7 @@ async function OwnerOverviewServer({
           <MetricCard
             title={<span className="inline-flex items-center gap-2">MRR activo <OwnerTooltip text="Derivado fiable: suma de amount en suscripciones active/trialing." /></span>}
             value={money(totalMrr)}
-            note={`${subscriptionsActive.length} suscripciones activas · ${money(mrrRangeAdded)} añadidos en ${rangeLabel}`}
+            note={totalMrr === 0 ? "Sin ingresos aún." : `${subscriptionsActive.length} suscripciones activas · ${money(mrrRangeAdded)} añadidos en ${rangeLabel}`}
           />
         </div>
       </Section>
@@ -995,7 +1008,8 @@ async function OwnerOverviewServer({
       <Section
         title="Actividad de hoy"
         subtitle="Concentra la actividad diaria para validar tracción y carga operativa real."
-        processState={todayEventsTotal > 0 ? "working" : "draft"}
+        processState={todayEventsTotal > 0 ? "completed" : "waiting_action"}
+        stateLabel={todayEventsTotal > 0 ? "OK" : "ATENCIÓN"}
         nextStep={todayEventsTotal > 0 ? "Contrasta usuarios, empresas y eventos para detectar desbalance diario." : "Esperar nueva actividad registrada para consolidar el pulso del día."}
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -1010,7 +1024,8 @@ async function OwnerOverviewServer({
       <Section
         title="Operación y calidad"
         subtitle="Bloque principal para cola, resolución y estabilidad. Mantiene solo métricas con lectura operativa directa."
-        processState={failedJobs > 0 || pendingVerifications > 0 || openIssues > 0 ? "waiting_action" : "completed"}
+        processState={failedJobs > 0 || openIssues > 0 ? "failed" : pendingVerifications > 0 ? "waiting_action" : "completed"}
+        stateLabel={failedJobs > 0 || openIssues > 0 ? "CRÍTICO" : pendingVerifications > 0 ? "ATENCIÓN" : "OK"}
         nextStep="Ataca primero cola pendiente, incidencias abiertas y tiempos de resolución."
       >
         <div className="grid gap-6 xl:grid-cols-2">
@@ -1026,13 +1041,10 @@ async function OwnerOverviewServer({
             <MetricCard title="En revisión manual" value={String(statusCounts.reviewing)} />
             <MetricCard title="Verificaciones aprobadas" value={String(statusCounts.verified)} />
             <MetricCard title="Verificaciones rechazadas" value={String(statusCounts.rejected)} />
-            <MetricCard title="Verificaciones revocadas" value={String(statusCounts.revoked)} />
             <MetricCard title="Evidencias totales" value={String(evidencesTotal)} />
-            <MetricCard title="Evidencias pendientes de clasificación" value={String(evidencesWithoutStatus)} />
-            <MetricCard title="Evidencias sin vinculación" value={String(evidencesUnlinked)} note={`Vinculadas: ${evidencesLinked}`} />
             <MetricCard title="Incidencias abiertas" value={String(openIssues)} />
-            <MetricCard title={`Perfiles activos (${rangeLabel})`} value={String(activeProfiles)} />
-            <MetricCard title={`Empresas nuevas (${rangeLabel})`} value={String(companyProfilesCreatedInRange)} />
+            <MetricCard title="Evidencias sin vinculación" value={String(evidencesUnlinked)} note={`Vinculadas: ${evidencesLinked}`} />
+            <MetricCard title="Verificaciones >7d" value={String(pendingOldVerifications)} />
           </div>
         </Section>
 
@@ -1059,7 +1071,8 @@ async function OwnerOverviewServer({
       <Section
         title="Economía del negocio"
         subtitle="Ingresos y suscripciones conectados a datos reales. Las métricas derivadas van etiquetadas como tal."
-        processState={subscriptionsPastDue.length > 0 ? "waiting_action" : "working"}
+        processState={subscriptionsPastDue.length > 0 ? "waiting_action" : "completed"}
+        stateLabel={subscriptionsPastDue.length > 0 ? "ATENCIÓN" : "OK"}
         nextStep="Cruza altas, churn y MRR para decidir dónde corregir pricing o activación."
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1069,10 +1082,10 @@ async function OwnerOverviewServer({
           <MetricCard title="Suscripciones activas" value={String(subscriptionsActive.length)} />
           <MetricCard title={`Altas ${rangeLabel}`} value={String(subscriptionsNewRange)} note={deltaLabel(subscriptionsNewRange, subscriptionsNewPrevRange)} />
           <MetricCard title="Canceladas" value={String(subscriptionsCanceled.length)} />
-          <MetricCard title="ARPU candidato (derivado)" value={money(arpuCandidate)} note="MRR candidato / total candidatos" />
-          <MetricCard title="ARPU empresa (derivado)" value={money(arpuCompany)} note="MRR empresa / perfiles empresa" />
+          <MetricCard title="ARPU candidato (derivado)" value={metricValueOrNoBase(arpuCandidate, candidatesTotal > 0, money)} note={candidatesTotal > 0 ? "MRR candidato / total candidatos" : "Sin base suficiente"} />
+          <MetricCard title="ARPU empresa (derivado)" value={metricValueOrNoBase(arpuCompany, companiesUsersTotal > 0, money)} note={companiesUsersTotal > 0 ? "MRR empresa / perfiles empresa" : "Sin base suficiente"} />
           <MetricCard title="Conversión free → paid" value={`${freeToPaidRate}%`} note="Usuarios con suscripción activa sobre base total" />
-          <MetricCard title="Churn" value={`${churnApprox}%`} note="Canceladas sobre canceladas+activas" />
+          <MetricCard title="Churn" value={subscriptionsCanceled.length + subscriptionsActive.length > 0 ? `${churnApprox}%` : "—"} note={subscriptionsCanceled.length + subscriptionsActive.length > 0 ? "Canceladas sobre canceladas+activas" : "Sin base suficiente"} />
         </div>
       </Section>
 
@@ -1081,6 +1094,7 @@ async function OwnerOverviewServer({
           title="Alertas y anomalías"
           subtitle="Destaca incidencias o desviaciones que requieren atención."
           processState={alerts.some((alert) => alert.severity === "high") ? "failed" : "waiting_action"}
+          stateLabel={alerts.some((alert) => alert.severity === "high") ? "CRÍTICO" : "ATENCIÓN"}
           nextStep="Prioriza primero alertas de severidad alta y después las de seguimiento."
         >
           <div className="grid gap-3 lg:grid-cols-2">
@@ -1094,7 +1108,8 @@ async function OwnerOverviewServer({
       <Section
         title="Eventos recientes"
         subtitle="Secuencia corta de eventos reales recientes para contexto, sin intentar actuar como timeline ejecutivo completo."
-        processState={recentCriticalEvents.length > 0 ? "working" : "completed"}
+        processState="completed"
+        stateLabel="OK"
         nextStep={recentCriticalEvents.length > 0 ? "Úsalo como contexto rápido; la operación principal está en los módulos específicos." : "Sin eventos recientes relevantes en el rango activo."}
       >
         <div className="grid gap-3 lg:grid-cols-2">
@@ -1130,7 +1145,8 @@ async function OwnerOverviewServer({
       <Section
         title="Módulos owner"
         subtitle="Accesos a las superficies especializadas. Growth y adquisición quedan fuera del overview principal."
-        processState="waiting_action"
+        processState="completed"
+        stateLabel="OK"
         nextStep="Abre el módulo correspondiente cuando necesites más detalle o ejecución específica."
       >
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">

@@ -57,7 +57,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
   if (current.revoked_at) return json(409, { error: "verification_revoked" });
 
   const now = new Date().toISOString();
-  const nextStatus = decision === "approve" ? "approved" : decision === "reject" ? "rejected" : "reviewing";
+  const nextStatus = decision === "approve" ? "verified" : decision === "reject" ? "rejected" : "reviewing";
   const resolutionParts = [
     reviewNotes || null,
     decision === "reject" ? `Motivo rechazo: ${rejectionReason}` : null,
