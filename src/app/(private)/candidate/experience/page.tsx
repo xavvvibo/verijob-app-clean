@@ -229,6 +229,12 @@ export async function CandidateExperienceContent({
         requestContext: verification?.request_context,
       });
     })(),
+    has_exact_profile_request: (() => {
+      const { verification } = resolveLinkedVerification(r);
+      if (!verification || String(verification?.status || "").toLowerCase() === "rejected") return false;
+      const exactProfileExperienceId = String(verification?.request_context?.profile_experience_id || "").trim();
+      return exactProfileExperienceId !== "" && exactProfileExperienceId === String(r?.id || "").trim();
+    })(),
     public_visibility: {
       visible: visibilitySetting?.visible !== false,
       featured: visibilitySetting?.featured === true,

@@ -28,6 +28,24 @@ function experienceMatchKey(input: any) {
   ].join("|")
 }
 
+function isActiveVerificationStatus(status: unknown) {
+  const normalized = String(status || "").trim().toLowerCase()
+  return normalized !== "" && normalized !== "rejected" && normalized !== "expired" && normalized !== "revoked"
+}
+
+function findExistingRequestByProfileExperience(rows: any[], profileExperienceId: string) {
+  const normalizedProfileExperienceId = String(profileExperienceId || "").trim()
+  if (!normalizedProfileExperienceId) return null
+  return (
+    rows.find((row: any) => {
+      if (!isActiveVerificationStatus(row?.status)) return false
+      if (isVerificationExternallyResolved(row)) return false
+      const requestProfileExperienceId = String(row?.request_context?.profile_experience_id || "").trim()
+      return requestProfileExperienceId !== "" && requestProfileExperienceId === normalizedProfileExperienceId
+    }) || null
+  )
+}
+
 function getAppUrl() {
   return String(process.env.NEXT_PUBLIC_APP_URL || "https://app.verijob.es").replace(/\/+$/, "")
 }
@@ -331,18 +349,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     let activeLookupQuery = admin
       .from("verification_requests")
-      .select("id,status,resolved_at,external_resolved,external_token,external_token_expires_at")
+      .select("id,status,resolved_at,external_resolved,external_token,external_token_expires_at,request_context,company_id,company_name_target")
       .eq("requested_by", normalizedRequestedBy)
-      .eq("employment_record_id", normalizedEmploymentRecordId)
       .eq("verification_channel", "email")
-      .eq("external_email_target", normalizedEmail)
-      .neq("status", "revoked")
       .order("created_at", { ascending: false })
-      .limit(5)
-
-    activeLookupQuery = companyAssociation.companyId
-      ? activeLookupQuery.eq("company_id", companyAssociation.companyId)
-      : activeLookupQuery.is("company_id", null)
+      .limit(50)
 
     const activeLookup = await activeLookupQuery
 
@@ -354,7 +365,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const candidateExistingRows = Array.isArray(activeLookup.data) ? activeLookup.data : []
-    existingRequest = candidateExistingRows.find((row: any) => !isVerificationExternallyResolved(row)) || null
+    existingRequest = findExistingRequestByProfileExperience(candidateExistingRows, profileExperienceIdForUpdate)
 
     const candidateProfileLookup = await admin
       .from("profiles")
@@ -420,6 +431,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
           request_context: {
             ...existingContext,
             source: "candidate_verification_request",
+            profile_experience_id: profileExperienceIdForUpdate || null,
             company_email: normalizedEmail,
             company_name: normalizedCompanyName,
             role_title: normalizedRoleTitle,
@@ -490,6 +502,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (verificationRequestColumns.has("request_context")) {
       insertPayload.request_context = {
         source: "candidate_verification_request",
+        profile_experience_id: profileExperienceIdForUpdate || null,
         company_email: normalizedEmail,
         company_name: normalizedCompanyName,
         role_title: normalizedRoleTitle,
@@ -508,9 +521,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (error) {
       if (String(error?.code || "") === "23505") {
+        const duplicateLookup = await admin
+          .from("verification_requests")
+          .select("id,status,resolved_at,external_resolved,external_token,external_token_expires_at,request_context,company_id,company_name_target")
+          .eq("requested_by", normalizedRequestedBy)
+          .eq("verification_channel", "email")
+          .order("created_at", { ascending: false })
+          .limit(50)
+
+        const duplicateRows = Array.isArray(duplicateLookup.data) ? duplicateLookup.data : []
+        const exactDuplicate = findExistingRequestByProfileExperience(
+          duplicateRows,
+          profileExperienceIdForUpdate
+        )
+
+        if (exactDuplicate?.id) {
+          return res.status(200).json({
+            success: true,
+            already_exists: true,
+            id: exactDuplicate.id,
+            verification_request_id: exactDuplicate.id,
+          })
+        }
+
         return res.status(200).json({
-          success: true,
-          already_exists: true,
+          error: "verification_create_failed",
+          details: error.message,
+          code: error.code,
         })
       }
       return res.status(400).json({

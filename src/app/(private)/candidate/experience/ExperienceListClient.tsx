@@ -33,6 +33,7 @@ type Row = {
   last_action: string;
   source_label?: string | null;
   verification_labels?: string[] | null;
+  has_exact_profile_request?: boolean;
   public_visibility?: {
     visible: boolean;
     featured: boolean;
@@ -173,21 +174,31 @@ export default function ExperienceListClient({
     return nextRows.filter((row) => row.public_visibility?.featured === true).length;
   }
 
-  async function saveVisibility(previousRows: Row[], nextRows: Row[], rowId: string) {
-    setSavingVisibilityId(rowId);
+  async function saveVisibility(args: {
+    previousRows: Row[];
+    nextRows: Row[];
+    experienceId: string;
+    visible: boolean;
+    featured: boolean;
+  }) {
+    setSavingVisibilityId(args.experienceId);
     setFeedback(null);
-    setRows(nextRows);
-    const targetRow = nextRows.find((row) => row.id === rowId) || null;
-    const nextTargetVisibility = targetRow?.public_visibility || { visible: true, featured: false };
+    setRows(args.nextRows);
+
+    console.log("CALLING API VISIBILITY", {
+      experienceId: args.experienceId,
+      visible: args.visible,
+      featured: args.featured,
+    });
 
     try {
       const res = await fetch("/api/candidate/experience/visibility", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          experienceId: targetRow?.profile_experience_id || rowId,
-          visible: nextTargetVisibility.visible,
-          featured: nextTargetVisibility.featured,
+          experienceId: args.experienceId,
+          visible: args.visible,
+          featured: args.featured,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -197,7 +208,7 @@ export default function ExperienceListClient({
       setFeedback("Configuración pública actualizada. La vista pública ya refleja este cambio.", "success");
       router.refresh();
     } catch (error: any) {
-      setRows(previousRows);
+      setRows(args.previousRows);
       setFeedback(error?.message || "No se ha podido actualizar la visibilidad pública.", "error");
     } finally {
       setSavingVisibilityId(null);
@@ -228,7 +239,13 @@ export default function ExperienceListClient({
       to: nextTargetVisibility,
     });
 
-    await saveVisibility(previousRows, nextRows, rowId);
+    await saveVisibility({
+      previousRows,
+      nextRows,
+      experienceId: targetRow?.profile_experience_id || rowId,
+      visible: nextTargetVisibility.visible,
+      featured: nextTargetVisibility.featured,
+    });
   }
 
   async function saveRow(id: string) {
@@ -412,8 +429,9 @@ export default function ExperienceListClient({
         });
         const primaryVerificationBadge = verificationBadges[0] || null;
         const secondaryVerificationBadges = verificationBadges.slice(1, 3);
-        const canRequestVerification = row.status === "Sin verificar" || row.status === "Revocada";
-        const isVerificationInFlight = row.status === "Validación solicitada" || row.status === "En revisión";
+        const hasExactActiveRequest = row.has_exact_profile_request === true;
+        const canRequestVerification = !isVerified && !hasExactActiveRequest;
+        const isVerificationInFlight = hasExactActiveRequest;
         const highlightForVerification = firstVerifiableId === row.id;
 
         return (
