@@ -218,6 +218,33 @@ function createAdminClient() {
   )
 }
 
+async function getTableColumns(admin: any, tableName: string) {
+  const { data, error } = await admin
+    .from("information_schema.columns")
+    .select("column_name")
+    .eq("table_schema", "public")
+    .eq("table_name", tableName)
+
+  if (!error && Array.isArray(data) && data.length > 0) {
+    return new Set(data.map((row: any) => String(row?.column_name || "").trim()))
+  }
+
+  if (tableName === "verification_requests") {
+    return new Set([
+      "requested_by",
+      "employment_record_id",
+      "status",
+      "external_email_target",
+      "company_id",
+      "verification_channel",
+      "company_name_target",
+      "request_context",
+    ])
+  }
+
+  return new Set<string>()
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "method_not_allowed" })
@@ -262,6 +289,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     const admin = createAdminClient()
+    const verificationRequestColumns = await getTableColumns(admin, "verification_requests")
     const companyAssociation = await resolveVerificationCompanyAssociation({
       admin,
       targetEmail: normalizedEmail,
@@ -435,7 +463,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const emailDispatch = await dispatchVerificationEmail(repairedRequest)
 
       return res.status(200).json({
-        ok: true,
+        success: true,
         id: existingRequest.id,
         verification_request_id: existingRequest.id,
         employment_record_id: normalizedEmploymentRecordId,
@@ -451,15 +479,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       })
     }
 
-    const insertPayload = {
-      employment_record_id: normalizedEmploymentRecordId,
-      company_id: companyAssociation.companyId,
-      external_email_target: normalizedEmail,
-      verification_channel: "email",
-      status: "pending_company",
-      requested_by: normalizedRequestedBy,
-      company_name_target: normalizedCompanyName,
-      request_context: {
+    const insertPayload: Record<string, any> = {}
+    if (verificationRequestColumns.has("employment_record_id")) insertPayload.employment_record_id = normalizedEmploymentRecordId
+    if (verificationRequestColumns.has("company_id")) insertPayload.company_id = companyAssociation.companyId
+    if (verificationRequestColumns.has("external_email_target")) insertPayload.external_email_target = normalizedEmail
+    if (verificationRequestColumns.has("verification_channel")) insertPayload.verification_channel = "email"
+    if (verificationRequestColumns.has("status")) insertPayload.status = "pending_company"
+    if (verificationRequestColumns.has("requested_by")) insertPayload.requested_by = normalizedRequestedBy
+    if (verificationRequestColumns.has("company_name_target")) insertPayload.company_name_target = normalizedCompanyName
+    if (verificationRequestColumns.has("request_context")) {
+      insertPayload.request_context = {
         source: "candidate_verification_request",
         company_email: normalizedEmail,
         company_name: normalizedCompanyName,
@@ -468,7 +497,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         verifier_email_signal: verifierEmailSignal,
         owner_attention_required:
           verifierEmailSignal.owner_attention_required || !companyAssociation.companyId,
-      },
+      }
     }
 
     const { data, error } = await admin
@@ -478,8 +507,14 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .single()
 
     if (error) {
+      if (String(error?.code || "") === "23505") {
+        return res.status(200).json({
+          success: true,
+          already_exists: true,
+        })
+      }
       return res.status(400).json({
-        error: "verification_insert_failed",
+        error: "verification_create_failed",
         details: error.message,
         code: error.code,
       })
@@ -504,7 +539,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const emailDispatch = await dispatchVerificationEmail(data)
 
     return res.status(200).json({
-      ok: true,
+      success: true,
       id: data.id,
       verification_request_id: data.id,
       employment_record_id: normalizedEmploymentRecordId,

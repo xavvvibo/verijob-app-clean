@@ -33,6 +33,7 @@ export default function ProfileUnlockAction({
   const [isUnlocked, setIsUnlocked] = useState(alreadyUnlocked);
   const [remainingAccesses, setRemainingAccesses] = useState(Number(availableAccesses || 0));
   const [accessUnlockedUntil, setAccessUnlockedUntil] = useState<string | null>(unlockedUntil);
+  const [resultMessage, setResultMessage] = useState<string | null>(null);
 
   function formatDate(value: string | null) {
     if (!value) return null;
@@ -62,6 +63,8 @@ export default function ProfileUnlockAction({
         <p className="text-xs text-emerald-700">
           {unlockUntilLabel ? `Ya puedes volver a abrirlo sin consumir otro acceso dentro de la ventana activa hasta ${unlockUntilLabel}.` : "Ya puedes volver a abrirlo sin consumir otro acceso dentro de la ventana activa."}
         </p>
+        <p className="text-xs text-slate-600">Accesos disponibles: {remainingAccesses}</p>
+        {resultMessage ? <p className="text-xs font-medium text-emerald-700">{resultMessage}</p> : null}
       </div>
     );
   }
@@ -69,6 +72,7 @@ export default function ProfileUnlockAction({
   async function handleConfirmUnlock() {
     if (submitting) return;
     setError(null);
+    setResultMessage(null);
     if (remainingAccesses <= 0) {
       setError("No tienes accesos disponibles para abrir perfiles completos.");
       return;
@@ -95,16 +99,19 @@ export default function ProfileUnlockAction({
 
       const nextUnlockedAt = String(payload?.unlocked_at || "").trim() || new Date().toISOString();
       const nextUnlockedUntil = String(payload?.unlocked_until || "").trim() || null;
-      const nextRemainingAccesses = Number(payload?.remaining_accesses || 0);
+      const nextRemainingAccesses = Number((payload?.remaining ?? payload?.remaining_accesses) || 0);
+      const consumed = payload?.consumed === true;
       setIsUnlocked(true);
       setAccessUnlockedUntil(nextUnlockedUntil);
       setRemainingAccesses(nextRemainingAccesses);
+      setResultMessage(consumed ? `Acceso consumido correctamente. Saldo actual: ${nextRemainingAccesses}.` : `Este perfil ya estaba desbloqueado. Saldo actual: ${nextRemainingAccesses}.`);
       setOpen(false);
       window.dispatchEvent(
         new CustomEvent(COMPANY_PROFILE_UNLOCKED_EVENT, {
           detail: {
             candidateToken: candidateToken || null,
-            consumed: payload?.consumed === true,
+            consumed,
+            remaining: nextRemainingAccesses,
             remaining_accesses: nextRemainingAccesses,
             unlocked_at: nextUnlockedAt,
             unlocked_until: nextUnlockedUntil,
@@ -112,7 +119,6 @@ export default function ProfileUnlockAction({
           },
         }),
       );
-      router.push(href);
     } catch {
       setError("No se pudo abrir el perfil completo.");
     } finally {
@@ -132,6 +138,12 @@ export default function ProfileUnlockAction({
       >
         {primaryLabel}
       </button>
+
+      {resultMessage ? (
+        <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+          {resultMessage}
+        </div>
+      ) : null}
 
       {open ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">

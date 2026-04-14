@@ -83,8 +83,10 @@ export async function POST(_req: Request, ctx: { params: Promise<Params> }) {
 
   if (!accessState.consumes_credit) {
     return json(200, {
+      success: true,
       unlocked: true,
       consumed: false,
+      remaining: accessState.remaining_accesses,
       remaining_accesses: accessState.remaining_accesses,
       unlocked_at: accessState.unlocked_at,
       unlocked_until: accessState.unlocked_until,
@@ -137,8 +139,10 @@ export async function POST(_req: Request, ctx: { params: Promise<Params> }) {
   }
 
   return json(200, {
+    success: true,
     unlocked: true,
     consumed: true,
+    remaining: reloadedState.remaining_accesses,
     remaining_accesses: reloadedState.remaining_accesses,
     unlocked_at: reloadedState.unlocked_at,
     unlocked_until: reloadedState.unlocked_until,

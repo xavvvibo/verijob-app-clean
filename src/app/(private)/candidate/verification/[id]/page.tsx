@@ -14,11 +14,12 @@ function mapStatus(statusRaw: unknown, revokedAt?: string | null, verificationCh
   const status = String(statusRaw || "").toLowerCase();
   const channel = String(verificationChannel || "").toLowerCase();
   if (status === "verified" || status === "approved") {
-    return channel === "documentary" ? "Verificación documental completada" : "Verificación completada";
+    return channel === "documentary" ? "Verificado" : "Verificado";
   }
-  if (status === "pending_company") return "Pendiente de validación";
+  if (status === "pending_acceptance") return "Pendiente de respuesta";
+  if (status === "requested" || status === "pending_company") return "Pendiente empresa";
   if (status === "reviewing") return "En revisión";
-  if (status === "rejected") return "Rechazada";
+  if (status === "rejected") return "Rechazado";
   if (status === "revoked") return "Revocada";
   return "En verificación";
 }

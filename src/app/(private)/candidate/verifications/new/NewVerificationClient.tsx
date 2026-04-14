@@ -7,12 +7,14 @@ import { createClient } from "@/utils/supabase/client"
 export default function NewVerificationClient({ experiences = [] }: any) {
   const supabase = useMemo(() => createClient(), [])
   const [error, setError] = useState("")
+  const [success, setSuccess] = useState("")
   const [loading, setLoading] = useState(false)
   const [experienceId, setExperienceId] = useState(String(experiences[0]?.id ?? ""))
   const [email, setEmail] = useState("")
 
   const handleSubmit = async () => {
     setError("")
+    setSuccess("")
 
     const {
       data: { user },
@@ -59,7 +61,7 @@ export default function NewVerificationClient({ experiences = [] }: any) {
         return
       }
 
-      window.location.reload()
+      setSuccess(data?.already_exists ? "Solicitud ya existente. Seguimos usando esa misma validación." : "Solicitud enviada")
     } catch {
       setError("Error red")
     } finally {
@@ -110,6 +112,7 @@ export default function NewVerificationClient({ experiences = [] }: any) {
         </p>
       ) : null}
 
+      {success && <p className="text-sm text-emerald-700">{success}</p>}
       {error && <p style={{ color: "red" }}>{error}</p>}
     </div>
   )

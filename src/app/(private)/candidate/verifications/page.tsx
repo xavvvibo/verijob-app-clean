@@ -12,10 +12,11 @@ export const revalidate = 0;
 
 function statusLabel(status: string | null | undefined) {
   const raw = String(status || "").toLowerCase();
-  if (raw === "pending_company") return "Pendiente de validación";
+  if (raw === "pending_acceptance") return "Pendiente de respuesta";
+  if (raw === "requested" || raw === "pending_company") return "Pendiente empresa";
   if (raw === "reviewing") return "En revisión";
-  if (raw === "verified") return "Verificación completada";
-  if (raw === "rejected") return "Rechazada";
+  if (raw === "verified") return "Verificado";
+  if (raw === "rejected") return "Rechazado";
   if (raw === "revoked") return "Revocada";
   return "En seguimiento";
 }

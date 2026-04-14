@@ -52,9 +52,11 @@ const RECENT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const RECENT_THRESHOLD_TS = Date.now() - RECENT_WINDOW_MS;
 
 function statusLabel(v: string | null) {
-  if (v === "verified") return "Confirmada";
-  if (v === "pending_company" || v === "reviewing") return "Pendiente";
-  if (v === "rejected") return "Rechazada";
+  if (v === "verified") return "Verificado";
+  if (v === "pending_acceptance") return "Pendiente de respuesta";
+  if (v === "requested" || v === "pending_company") return "Pendiente empresa";
+  if (v === "reviewing") return "En revisión";
+  if (v === "rejected") return "Rechazado";
   if (v === "revoked") return "Revocada";
   return "Sin estado";
 }

@@ -670,10 +670,11 @@ function BreakdownBar({ label, value }: { label: string; value: number }) {
 
 function statusLabel(status?: string | null) {
   const s = String(status || "").toLowerCase();
-  if (s === "verified" || s === "approved") return "Verificada";
+  if (s === "verified" || s === "approved") return "Verificado";
+  if (s === "pending_acceptance") return "Pendiente de respuesta";
+  if (s === "requested" || s === "pending_company" || s === "verification_requested") return "Pendiente empresa";
   if (s === "reviewing") return "En revisión";
-  if (s === "pending_company" || s === "verification_requested") return "Verificación solicitada";
-  if (s === "rejected") return "Rechazada";
+  if (s === "rejected") return "Rechazado";
   if (s === "revoked") return "Revocada";
   if (s === "unverified") return "Sin verificar";
   return "En validación";

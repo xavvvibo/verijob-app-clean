@@ -9,7 +9,6 @@ import {
   getExperienceVerificationBadgeClasses,
   resolveExperienceVerificationBadges,
 } from "@/lib/candidate/experience-verification-badges";
-import { buildExperienceVisibilityKey } from "@/lib/candidate/profile-visibility";
 import { parseExperienceDateInput, toExperienceInputValue } from "@/lib/candidate/experience-date-input";
 
 const EXPERIENCE_CREATED_EVENT = "candidate:experience-created";
@@ -174,36 +173,21 @@ export default function ExperienceListClient({
     return nextRows.filter((row) => row.public_visibility?.featured === true).length;
   }
 
-  function buildVisibilityPayload(nextRows: Row[]) {
-    const experiences = Object.fromEntries(
-      nextRows.map((row) => {
-        const key = buildExperienceVisibilityKey({
-          profileExperienceId: row.profile_experience_id || row.id,
-        });
-        return [
-          key,
-          {
-            visible: row.public_visibility?.visible !== false,
-            featured: row.public_visibility?.featured === true,
-          },
-        ];
-      }),
-    );
-    return { experiences };
-  }
-
   async function saveVisibility(previousRows: Row[], nextRows: Row[], rowId: string) {
     setSavingVisibilityId(rowId);
     setFeedback(null);
     setRows(nextRows);
+    const targetRow = nextRows.find((row) => row.id === rowId) || null;
+    const nextTargetVisibility = targetRow?.public_visibility || { visible: true, featured: false };
 
     try {
-      const res = await fetch("/api/candidate/profile", {
-        method: "PUT",
-        credentials: "include",
+      const res = await fetch("/api/candidate/experience/visibility", {
+        method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          public_profile_settings: buildVisibilityPayload(nextRows),
+          experienceId: targetRow?.profile_experience_id || rowId,
+          visible: nextTargetVisibility.visible,
+          featured: nextTargetVisibility.featured,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -223,32 +207,26 @@ export default function ExperienceListClient({
   async function updateVisibility(
     rowId: string,
     patch: Partial<NonNullable<Row["public_visibility"]>>,
-    planInfo?: PublicPlanInfo,
   ) {
     const previousRows = rows;
+    const targetRow = previousRows.find((row) => row.id === rowId) || null;
+    const currentVisibility = targetRow?.public_visibility || { visible: true, featured: false };
     const nextRows = previousRows.map((row) => {
       if (row.id !== rowId) return row;
-      const current = row.public_visibility || { visible: true, featured: false };
       const nextVisibility = {
-        visible: patch.visible ?? current.visible,
-        featured: patch.featured ?? current.featured,
+        visible: patch.visible ?? currentVisibility.visible,
+        featured: patch.featured ?? currentVisibility.featured,
       };
       if (nextVisibility.featured) nextVisibility.visible = true;
       return { ...row, public_visibility: nextVisibility };
     });
+    const nextTargetVisibility = nextRows.find((row) => row.id === rowId)?.public_visibility || currentVisibility;
 
-    if (planInfo?.work != null && getVisibleRowCount(nextRows) > planInfo.work) {
-      setFeedback(`Tu plan ${planInfo.label} permite mostrar ${planInfo.visibilityLabel} en el perfil público. Ajusta qué experiencia dejas visible.`, "error");
-      return;
-    }
-
-    if (planInfo?.featured != null && getFeaturedRowCount(nextRows) > planInfo.featured) {
-      setFeedback(
-        `Tu plan ${planInfo.label} permite destacar ${planInfo.featured} experiencia${planInfo.featured === 1 ? "" : "s"} en el perfil público.`,
-        "error",
-      );
-      return;
-    }
+    console.log("TOGGLE VISIBILITY", {
+      experienceId: rowId,
+      from: currentVisibility,
+      to: nextTargetVisibility,
+    });
 
     await saveVisibility(previousRows, nextRows, rowId);
   }
@@ -615,16 +593,15 @@ export default function ExperienceListClient({
                             <input
                               type="checkbox"
                               checked={row.public_visibility?.visible !== false}
-                              disabled={isSavingVisibility}
                               onChange={(e) => {
-                                void updateVisibility(
-                                  row.id,
-                                  {
-                                    visible: e.target.checked,
-                                    featured: e.target.checked ? row.public_visibility?.featured === true : false,
-                                  },
-                                  publicPlan,
-                                );
+                                console.log("VISIBLE CHECKBOX CHANGE", {
+                                  experienceId: row.id,
+                                  checked: e.target.checked,
+                                });
+                                void updateVisibility(row.id, {
+                                  visible: e.target.checked,
+                                  featured: e.target.checked ? row.public_visibility?.featured === true : false,
+                                });
                               }}
                               className="mt-0.5"
                             />
@@ -639,16 +616,12 @@ export default function ExperienceListClient({
                             <input
                               type="checkbox"
                               checked={row.public_visibility?.featured === true}
-                              disabled={isSavingVisibility || row.public_visibility?.visible === false}
+                              disabled={row.public_visibility?.visible === false}
                               onChange={(e) => {
-                                void updateVisibility(
-                                  row.id,
-                                  {
-                                    featured: e.target.checked,
-                                    visible: e.target.checked ? true : row.public_visibility?.visible !== false,
-                                  },
-                                  publicPlan,
-                                );
+                                void updateVisibility(row.id, {
+                                  featured: e.target.checked,
+                                  visible: e.target.checked ? true : row.public_visibility?.visible !== false,
+                                });
                               }}
                               className="mt-0.5"
                             />
