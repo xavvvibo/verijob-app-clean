@@ -27,6 +27,16 @@ function normalizeText(value: unknown) {
   return String(value || "").trim();
 }
 
+function normalizeExperienceVisibilityStorageKey(rawKey: unknown) {
+  const key = normalizeText(rawKey);
+  if (!key) return "";
+  if (key.startsWith("exp:")) return key;
+  if (key.startsWith("profile:")) return `exp:${key.replace(/^profile:/, "").trim()}`;
+  if (key.startsWith("employment:")) return `exp:${key.replace(/^employment:/, "").trim()}`;
+  if (key.startsWith("item:")) return `exp:${key.replace(/^item:/, "").trim()}`;
+  return `exp:${key}`;
+}
+
 export function readCandidateRawConfig(candidateProfile: any) {
   return asObject(candidateProfile?.raw_cv_json);
 }
@@ -71,7 +81,9 @@ export function readPublicProfileSettings(candidateProfile: any): CandidatePubli
 
   for (const [key, value] of Object.entries(experiences)) {
     const item = asObject(value);
-    normalized[key] = {
+    const normalizedKey = normalizeExperienceVisibilityStorageKey(key);
+    if (!normalizedKey) continue;
+    normalized[normalizedKey] = {
       visible: item.visible !== false,
       featured: item.featured === true,
     };
@@ -93,13 +105,22 @@ export function buildExperienceVisibilityKey(input: {
   profileExperienceId?: string | null;
   fallbackId?: string | null;
 }) {
-  const employmentRecordId = normalizeText(input.employmentRecordId);
-  if (employmentRecordId) return `employment:${employmentRecordId}`;
   const profileExperienceId = normalizeText(input.profileExperienceId);
-  if (profileExperienceId) return `profile:${profileExperienceId}`;
-  const fallbackId = normalizeText(input.fallbackId);
-  if (fallbackId) return `item:${fallbackId}`;
+  if (profileExperienceId) return `exp:${profileExperienceId}`;
   return "";
+}
+
+function buildLegacyExperienceVisibilityKeys(input: {
+  employmentRecordId?: string | null;
+  profileExperienceId?: string | null;
+  fallbackId?: string | null;
+}) {
+  const keys = [
+    normalizeText(input.profileExperienceId) ? `profile:${normalizeText(input.profileExperienceId)}` : "",
+    normalizeText(input.employmentRecordId) ? `employment:${normalizeText(input.employmentRecordId)}` : "",
+    normalizeText(input.fallbackId) ? `item:${normalizeText(input.fallbackId)}` : "",
+  ].filter(Boolean);
+  return Array.from(new Set(keys));
 }
 
 export function getExperienceVisibilitySetting(
@@ -110,11 +131,8 @@ export function getExperienceVisibilitySetting(
     fallbackId?: string | null;
   },
 ) {
-  const keys = [
-    buildExperienceVisibilityKey({ employmentRecordId: input.employmentRecordId }),
-    buildExperienceVisibilityKey({ profileExperienceId: input.profileExperienceId }),
-    buildExperienceVisibilityKey({ fallbackId: input.fallbackId }),
-  ].filter(Boolean);
+  const stableKey = buildExperienceVisibilityKey(input);
+  const keys = stableKey ? [stableKey, ...buildLegacyExperienceVisibilityKeys(input)] : buildLegacyExperienceVisibilityKeys(input);
 
   for (const key of keys) {
     const setting = settings.experiences[key];

@@ -178,9 +178,7 @@ export default function ExperienceListClient({
     const experiences = Object.fromEntries(
       nextRows.map((row) => {
         const key = buildExperienceVisibilityKey({
-          employmentRecordId: row.employment_record_id,
           profileExperienceId: row.profile_experience_id || row.id,
-          fallbackId: row.id,
         });
         return [
           key,

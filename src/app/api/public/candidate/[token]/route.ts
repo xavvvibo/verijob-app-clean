@@ -521,22 +521,16 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
   const visibleExperiences = experiencesEnriched
     .filter((item: any) => {
       const setting = getExperienceVisibilitySetting(publicProfileSettings, {
-        employmentRecordId: item?.experience_id,
         profileExperienceId: item?.profile_experience_id,
-        fallbackId: item?.linked_verification_id || item?.experience_id,
       });
       return setting?.visible !== false;
     })
     .sort((a: any, b: any) => {
       const aSetting = getExperienceVisibilitySetting(publicProfileSettings, {
-        employmentRecordId: a?.experience_id,
         profileExperienceId: a?.profile_experience_id,
-        fallbackId: a?.linked_verification_id || a?.experience_id,
       });
       const bSetting = getExperienceVisibilitySetting(publicProfileSettings, {
-        employmentRecordId: b?.experience_id,
         profileExperienceId: b?.profile_experience_id,
-        fallbackId: b?.linked_verification_id || b?.experience_id,
       });
       if (!!aSetting?.featured !== !!bSetting?.featured) return aSetting?.featured ? -1 : 1;
       return 0;
@@ -545,9 +539,7 @@ export async function GET(_req: Request, ctx: { params: Promise<Params> }) {
     .filter((item: any) =>
       Boolean(
         getExperienceVisibilitySetting(publicProfileSettings, {
-          employmentRecordId: item?.experience_id,
           profileExperienceId: item?.profile_experience_id,
-          fallbackId: item?.linked_verification_id || item?.experience_id,
         })?.featured,
       ),
     )

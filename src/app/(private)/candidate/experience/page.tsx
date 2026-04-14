@@ -162,9 +162,7 @@ export async function CandidateExperienceContent({
       employmentBySignature.get(experienceMatchKey(r)) ||
       null;
     const visibilitySetting = getExperienceVisibilitySetting(publicProfileSettings, {
-      employmentRecordId: linkedEmploymentRecord?.id || null,
       profileExperienceId: r?.id || null,
-      fallbackId: linkedEmploymentRecord?.id || r?.id || null,
     });
     return {
     id: String(r.id),
