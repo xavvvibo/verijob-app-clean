@@ -110,8 +110,18 @@ export function getExperienceVisibilitySetting(
     fallbackId?: string | null;
   },
 ) {
-  const key = buildExperienceVisibilityKey(input);
-  return key ? settings.experiences[key] || null : null;
+  const keys = [
+    buildExperienceVisibilityKey({ employmentRecordId: input.employmentRecordId }),
+    buildExperienceVisibilityKey({ profileExperienceId: input.profileExperienceId }),
+    buildExperienceVisibilityKey({ fallbackId: input.fallbackId }),
+  ].filter(Boolean);
+
+  for (const key of keys) {
+    const setting = settings.experiences[key];
+    if (setting) return setting;
+  }
+
+  return null;
 }
 
 export function countFeaturedExperiences(settings: CandidatePublicProfileSettings) {

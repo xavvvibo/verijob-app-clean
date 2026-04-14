@@ -1021,10 +1021,10 @@ export default function CandidateOverview() {
                   </div>
                 ) : null}
 
-                <div className="mt-7 max-w-[46rem] rounded-[32px] border border-indigo-100/90 bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(239,246,255,0.88),rgba(224,231,255,0.88))] p-5 shadow-[0_24px_56px_rgba(15,23,42,0.1)] backdrop-blur-sm sm:p-6">
+                <div className="mt-7 max-w-[44rem] rounded-[32px] border border-indigo-100/90 bg-[linear-gradient(135deg,rgba(255,255,255,0.92),rgba(239,246,255,0.88),rgba(224,231,255,0.88))] p-5 shadow-[0_24px_56px_rgba(15,23,42,0.1)] backdrop-blur-sm sm:p-6">
                   <div className="flex flex-col gap-6 md:flex-row md:items-center md:gap-7 xl:gap-9">
                     <TrustRing score={metrics.score} stateTitle={trustState.title} />
-                    <div className="min-w-0 max-w-[31rem]">
+                    <div className="min-w-0 max-w-[27rem]">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">Fortaleza del perfil</p>
                       <p className="mt-2 text-lg font-semibold leading-8 text-slate-950">
                         {metrics.score >= 60
@@ -1036,19 +1036,16 @@ export default function CandidateOverview() {
                           ? `Ya tienes ${metrics.verified} experiencia${metrics.verified === 1 ? "" : "s"} verificada${metrics.verified === 1 ? "" : "s"} y esa señal ya empuja tu trust score global.`
                           : "La forma más rápida de subir este bloque es combinar experiencia verificada y evidencia documental."}
                       </p>
-                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                        <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Trust actual</p>
-                          <p className="mt-1 text-lg font-semibold text-slate-950">{metrics.score}/100</p>
-                        </div>
-                        <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Verificadas</p>
-                          <p className="mt-1 text-lg font-semibold text-slate-950">{metrics.verified}</p>
-                        </div>
-                        <div className="rounded-2xl border border-white/80 bg-white/80 px-4 py-3 shadow-[0_8px_24px_rgba(15,23,42,0.05)]">
-                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">En progreso</p>
-                          <p className="mt-1 text-lg font-semibold text-slate-950">{metrics.inProcess}</p>
-                        </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-800">
+                          {metrics.verified} verificadas
+                        </span>
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
+                          {metrics.inProcess > 0 ? `${metrics.inProcess} en curso` : "Sin procesos abiertos"}
+                        </span>
+                        <span className="rounded-full border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                          {metrics.evidences > 0 ? `${metrics.evidences} evidencias activas` : "Sin evidencias activas"}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1067,7 +1064,6 @@ export default function CandidateOverview() {
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {[
-                    { label: metrics.evidences > 0 ? `${metrics.evidences} evidencias activas` : "Sin evidencias activas", tone: metrics.evidences > 0 ? "violet" : "rose" as SignalTone },
                     { label: educationCount > 0 ? `${educationCount} formaciones visibles` : "Formación pendiente", tone: educationCount > 0 ? "blue" : "amber" as SignalTone },
                     { label: publicLanguages.length > 0 ? `${publicLanguages.length} idiomas visibles` : "Idiomas pendientes", tone: publicLanguages.length > 0 ? "green" : "amber" as SignalTone },
                   ].map((signal) => (
