@@ -51,7 +51,26 @@ function normalizeNullableText(value: unknown, max: number) {
 }
 
 function sameJson(a: unknown, b: unknown) {
-  return JSON.stringify(a) === JSON.stringify(b);
+  return stableJsonStringify(a) === stableJsonStringify(b);
+}
+
+function stableJsonStringify(value: unknown): string {
+  return JSON.stringify(sortJsonValue(value));
+}
+
+function sortJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortJsonValue);
+  }
+  if (value && typeof value === "object") {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = sortJsonValue((value as Record<string, unknown>)[key]);
+        return acc;
+      }, {});
+  }
+  return value;
 }
 
 function extractMissingColumnName(error: any) {

@@ -65,7 +65,7 @@ function resolveSize(size: TrustScoreRingSize) {
   if (size === "card") {
     return { box: 120, svg: 120, center: 60, stroke: 8, radius: 50, scoreClass: "text-2xl", labelClass: "text-[10px]" };
   }
-  return { box: 208, svg: 208, center: 104, stroke: 11, radius: 90, scoreClass: "text-[2.9rem]", labelClass: "text-[11px]" };
+  return { box: 228, svg: 228, center: 114, stroke: 12, radius: 97, scoreClass: "text-[3.15rem]", labelClass: "text-[11px]" };
 }
 
 export default function TrustScoreRing({
