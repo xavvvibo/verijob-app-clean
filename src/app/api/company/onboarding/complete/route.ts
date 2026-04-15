@@ -54,35 +54,6 @@ export async function POST() {
         await admin.from("profiles").update({ active_company_id: companyId }).eq("id", user.id);
       }
     }
-    if (!companyId) {
-      const { data: createdCompany, error: createCompanyErr } = await admin
-        .from("companies")
-        .insert({ name: makeFallbackCompanyName(user.email) })
-        .select("id")
-        .single();
-      if (createCompanyErr || !createdCompany?.id) {
-        return json(400, { error: "companies_create_failed", details: createCompanyErr?.message || null });
-      }
-      companyId = String(createdCompany.id);
-      const { error: membershipInsertErr } = await admin.from("company_members").insert({
-        company_id: companyId,
-        user_id: user.id,
-        role: "admin",
-      });
-      if (membershipInsertErr) {
-        return json(400, { error: "company_members_insert_failed", details: membershipInsertErr.message });
-      }
-      await admin.from("profiles").update({ active_company_id: companyId }).eq("id", user.id);
-      await admin
-        .from("company_profiles")
-        .upsert(
-          {
-            company_id: companyId,
-            contact_email: user.email || null,
-          },
-          { onConflict: "company_id" },
-        );
-    }
     if (!companyId) return json(400, { error: "no_active_company" });
 
     const nowIso = new Date().toISOString();

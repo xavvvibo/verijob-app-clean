@@ -14,6 +14,7 @@ import {
 import { deriveCompanyVerificationMethod } from "@/lib/company/verification-method";
 import { isCompanyLifecycleBlocked, readCompanyLifecycle } from "@/lib/company/lifecycle-guard";
 import { readEffectiveCompanySubscriptionState } from "@/lib/billing/effectiveSubscription";
+import { findCompanyByNormalizedTaxId, normalizeCompanyTaxId } from "@/lib/company/tax-id";
 
 const ROUTE_VERSION = "company-profile-v1";
 
@@ -273,40 +274,14 @@ async function resolveContext(supabase: any, admin: any) {
     }
   }
 
-  if (!companyId && profileRole === "company") {
-    const { data: createdCompany, error: createCompanyErr } = await admin
-      .from("companies")
-      .insert({ name: makeFallbackCompanyName(user.email) })
-      .select("id")
-      .single();
-    if (createCompanyErr || !createdCompany?.id) {
-      return {
-        error: NextResponse.json(
-          { error: "companies_create_failed", details: createCompanyErr?.message || null },
-          { status: 400 }
-        ),
-      };
-    }
-    companyId = String(createdCompany.id);
-    membershipRole = "admin";
-    const { error: memberInsertErr } = await admin.from("company_members").insert({
-      company_id: companyId,
-      user_id: user.id,
-      role: "admin",
-    });
-    if (memberInsertErr) {
-      return {
-        error: NextResponse.json(
-          { error: "company_members_insert_failed", details: memberInsertErr.message },
-          { status: 400 }
-        ),
-      };
-    }
-    await admin.from("profiles").update({ active_company_id: companyId, onboarding_completed: false }).eq("id", user.id);
-  }
-
   if (!companyId) {
-    return { error: NextResponse.json({ error: "no_active_company" }, { status: 400 }) };
+    return {
+      user,
+      companyId: null,
+      membershipRole: profileRole === "company" ? "admin" : "reviewer",
+      profileRole,
+      onboardingCompleted,
+    };
   }
 
   const { data: companyRow } = await admin.from("companies").select("id").eq("id", companyId).maybeSingle();
@@ -367,6 +342,8 @@ async function resolveContext(supabase: any, admin: any) {
     user,
     companyId: String(companyId),
     membershipRole,
+    profileRole,
+    onboardingCompleted,
   };
 }
 
@@ -378,6 +355,41 @@ export async function GET() {
     if ((ctx as any).error) return (ctx as any).error;
 
     const { user, companyId } = ctx as any;
+
+    if (!companyId) {
+      return NextResponse.json({
+        profile: {
+          company_id: null,
+          legal_name: "",
+          trade_name: "",
+          tax_id: "",
+          contact_email: user.email || "",
+          contact_phone: "",
+          contact_person_name: "",
+          contact_person_role: "",
+          sector: "",
+          subsector: "",
+          business_model: "",
+          market_segment: "",
+          operating_address: "",
+          company_verification_status: "unverified",
+          profile_completeness_score: 0,
+        },
+        verification_documents: [],
+        verification_documents_active_count: 0,
+        verification_documents_warning: null,
+        verification_documents_meta: null,
+        profile_completion: {
+          score: 0,
+          completed_count: 0,
+          total_count: 0,
+          missing_fields: [],
+          completed_fields: [],
+        },
+        membership_role: (ctx as any).membershipRole,
+        route_version: ROUTE_VERSION,
+      });
+    }
 
     const { data, error } = await admin
       .from("company_profiles")
@@ -537,27 +549,10 @@ export async function POST(request: Request) {
     const ctx = await resolveContext(supabase, admin);
     if ((ctx as any).error) return (ctx as any).error;
 
-    const { user, companyId, membershipRole } = ctx as any;
-    const companyLifecycle = await readCompanyLifecycle(admin, companyId);
-    if (!companyLifecycle.ok) {
-      return NextResponse.json({ error: "company_read_failed", details: companyLifecycle.error.message, route_version: ROUTE_VERSION }, { status: 400 });
-    }
-    if (isCompanyLifecycleBlocked(companyLifecycle.lifecycleStatus)) {
-      return NextResponse.json(
-        {
-          error: "company_inactive",
-          user_message: "La empresa está desactivada o cerrada. Reactívala desde ajustes antes de editar el perfil.",
-          route_version: ROUTE_VERSION,
-        },
-        { status: 423 },
-      );
-    }
-    if (membershipRole !== "admin") {
-      return NextResponse.json({ error: "forbidden", details: "Solo administradores pueden editar el perfil de empresa." }, { status: 403 });
-    }
+    const { user, companyId: initialCompanyId, membershipRole, profileRole } = ctx as any;
 
     const body = await request.json().catch(() => ({}));
-    const patch: Record<string, any> = { company_id: companyId };
+    const patch: Record<string, any> = { company_id: initialCompanyId };
 
     for (const key of ALLOWED_PATCH_FIELDS) {
       if (!(key in body)) continue;
@@ -576,6 +571,112 @@ export async function POST(request: Request) {
       } else {
         patch[key] = asTrimmedText(incoming);
       }
+    }
+
+    const normalizedTaxId = normalizeCompanyTaxId(patch.tax_id);
+    const existingCompanyByTax = normalizedTaxId
+      ? await findCompanyByNormalizedTaxId(admin, normalizedTaxId)
+      : { normalizedTaxId, company: null };
+
+    let companyId = initialCompanyId ? String(initialCompanyId) : null;
+    let effectiveMembershipRole = membershipRole;
+
+    if (existingCompanyByTax.company && (!companyId || existingCompanyByTax.company.company_id !== companyId)) {
+      const existingCompanyId = String(existingCompanyByTax.company.company_id);
+      const { data: existingMembership } = await admin
+        .from("company_members")
+        .select("role")
+        .eq("company_id", existingCompanyId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const alreadyMember = Boolean(existingMembership);
+      if (alreadyMember) {
+        companyId = existingCompanyId;
+        effectiveMembershipRole = String((existingMembership as any)?.role || "reviewer").toLowerCase();
+        await admin
+          .from("profiles")
+          .update({ active_company_id: companyId, role: "company" })
+          .eq("id", user.id);
+      } else {
+        return NextResponse.json(
+          {
+            error: "company_already_registered",
+            company_exists_by_tax_id: true,
+            already_member: false,
+            existing_company_id: existingCompanyId,
+            existing_company_name:
+              existingCompanyByTax.company.trade_name ||
+              existingCompanyByTax.company.legal_name ||
+              "Empresa",
+            normalized_tax_id: normalizedTaxId,
+            route_version: ROUTE_VERSION,
+          },
+          { status: 409 },
+        );
+      }
+    }
+
+    if (!companyId) {
+      const companyName =
+        String(patch.legal_name || "").trim() ||
+        String(patch.trade_name || "").trim() ||
+        makeFallbackCompanyName(user.email);
+
+      const { data: createdCompany, error: createCompanyErr } = await admin
+        .from("companies")
+        .insert({ name: companyName })
+        .select("id")
+        .single();
+      if (createCompanyErr || !createdCompany?.id) {
+        return NextResponse.json(
+          { error: "companies_create_failed", details: createCompanyErr?.message || null, route_version: ROUTE_VERSION },
+          { status: 400 }
+        );
+      }
+
+      companyId = String(createdCompany.id);
+      effectiveMembershipRole = "admin";
+      const { error: memberInsertErr } = await admin.from("company_members").insert({
+        company_id: companyId,
+        user_id: user.id,
+        role: "admin",
+      });
+      if (memberInsertErr) {
+        return NextResponse.json(
+          { error: "company_members_insert_failed", details: memberInsertErr.message, route_version: ROUTE_VERSION },
+          { status: 400 }
+        );
+      }
+      await admin
+        .from("profiles")
+        .update({ active_company_id: companyId, onboarding_completed: false, role: profileRole === "company" ? "company" : "company" })
+        .eq("id", user.id);
+    }
+
+    if (!companyId) {
+      return NextResponse.json({ error: "no_active_company", route_version: ROUTE_VERSION }, { status: 400 });
+    }
+
+    patch.company_id = companyId;
+    patch.tax_id = normalizedTaxId || null;
+
+    const companyLifecycle = await readCompanyLifecycle(admin, companyId);
+    if (!companyLifecycle.ok) {
+      return NextResponse.json({ error: "company_read_failed", details: companyLifecycle.error.message, route_version: ROUTE_VERSION }, { status: 400 });
+    }
+    if (isCompanyLifecycleBlocked(companyLifecycle.lifecycleStatus)) {
+      return NextResponse.json(
+        {
+          error: "company_inactive",
+          user_message: "La empresa está desactivada o cerrada. Reactívala desde ajustes antes de editar el perfil.",
+          route_version: ROUTE_VERSION,
+        },
+        { status: 423 },
+      );
+    }
+    if (effectiveMembershipRole !== "admin") {
+      return NextResponse.json({ error: "forbidden", details: "Solo administradores pueden editar el perfil de empresa." }, { status: 403 });
     }
 
     const candidateProfile = {
@@ -664,6 +765,9 @@ export async function POST(request: Request) {
         company_document_rejection_reason: documentVerification.rejection_reason,
       },
       profile_completion: completion,
+      company_exists_by_tax_id: Boolean(existingCompanyByTax.company),
+      already_member: Boolean(existingCompanyByTax.company),
+      existing_company_id: companyId,
       route_version: ROUTE_VERSION,
     });
   } catch (e: any) {

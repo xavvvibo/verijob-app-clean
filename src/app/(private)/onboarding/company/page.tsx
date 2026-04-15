@@ -16,6 +16,11 @@ type FieldErrors = {
   contact_email?: string;
   sector?: string;
 };
+type ExistingCompanyState = {
+  companyId: string;
+  companyName: string;
+  taxId: string | null;
+};
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -40,6 +45,8 @@ export default function CompanyOnboardingPage() {
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [existingCompany, setExistingCompany] = useState<ExistingCompanyState | null>(null);
+  const [accessRequestState, setAccessRequestState] = useState<"idle" | "saving" | "done" | "error">("idle");
   const [profile, setProfile] = useState<CompanyProfile>({
     legal_name: "",
     trade_name: "",
@@ -152,6 +159,8 @@ export default function CompanyOnboardingPage() {
     setSaving(true);
     setErr(null);
     setOk(null);
+    setExistingCompany(null);
+    setAccessRequestState("idle");
     try {
       const payload = {
         legal_name: profile.legal_name || null,
@@ -175,6 +184,14 @@ export default function CompanyOnboardingPage() {
         body: JSON.stringify(payload),
       });
       const saveData = await saveRes.json().catch(() => ({}));
+      if (saveRes.status === 409 && saveData?.error === "company_already_registered") {
+        setExistingCompany({
+          companyId: String(saveData?.existing_company_id || ""),
+          companyName: String(saveData?.existing_company_name || "Empresa"),
+          taxId: String(saveData?.normalized_tax_id || "").trim() || null,
+        });
+        return;
+      }
       if (!saveRes.ok) {
         setErr(saveData?.details || saveData?.error || "No se pudo guardar el perfil de empresa.");
         return;
@@ -194,6 +211,34 @@ export default function CompanyOnboardingPage() {
       setErr(e?.message || "No se pudo completar el setup de empresa.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onRequestAccess() {
+    if (!existingCompany) return;
+    setAccessRequestState("saving");
+    setErr(null);
+    try {
+      const res = await fetch("/api/company/onboarding/request-access", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          company_id: existingCompany.companyId,
+          company_name: existingCompany.companyName,
+          tax_id: existingCompany.taxId,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setAccessRequestState("error");
+        setErr(json?.details || json?.error || "No se pudo registrar la solicitud de acceso.");
+        return;
+      }
+      setAccessRequestState("done");
+      setOk("Solicitud de acceso enviada. Revisaremos el equipo correspondiente.");
+    } catch (e: any) {
+      setAccessRequestState("error");
+      setErr(e?.message || "No se pudo registrar la solicitud de acceso.");
     }
   }
 
@@ -224,6 +269,44 @@ export default function CompanyOnboardingPage() {
         </section>
 
         <section className="rounded-3xl border bg-white p-8 shadow-sm">
+          {existingCompany ? (
+            <div className="mb-6 rounded-3xl border border-amber-200 bg-amber-50 p-6">
+              <h2 className="text-xl font-semibold text-slate-900">Esta empresa ya está registrada en Verijob</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-700">
+                Hemos detectado que esta empresa ya existe en la plataforma. Puedes solicitar acceso para unirte al equipo y gestionar verificaciones desde una sola cuenta de empresa.
+              </p>
+              <p className="mt-3 text-sm font-medium text-slate-800">
+                Empresa detectada: {existingCompany.companyName}
+                {existingCompany.taxId ? ` · CIF/NIF ${existingCompany.taxId}` : ""}
+              </p>
+              <p className="mt-3 text-sm text-slate-600">
+                Si varias personas de tu empresa participan en selección o validación, podéis centralizarlo en un mismo espacio de trabajo.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={onRequestAccess}
+                  disabled={accessRequestState === "saving" || accessRequestState === "done"}
+                  className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
+                >
+                  {accessRequestState === "saving" ? "Enviando…" : accessRequestState === "done" ? "Solicitud enviada" : "Solicitar acceso al equipo"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExistingCompany(null);
+                    setErr(null);
+                    setOk(null);
+                    setAccessRequestState("idle");
+                  }}
+                  className="inline-flex rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Volver
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Razón social">
               <div className="space-y-1">
@@ -326,7 +409,7 @@ export default function CompanyOnboardingPage() {
             <button
               type="button"
               onClick={onSaveAndContinue}
-              disabled={saving || !isValid}
+              disabled={saving || !isValid || Boolean(existingCompany)}
               className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
             >
               {saving ? "Guardando…" : "Guardar y continuar"}
