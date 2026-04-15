@@ -33,8 +33,8 @@ export default async function VerifyExperiencePage({ params }: PageProps) {
   const hasCompanySession = Boolean(user && profile?.role === "company");
   const primaryCtaHref = hasCompanySession ? "/company" : "/signup?mode=company";
   const primaryCtaLabel = hasCompanySession ? "Ir a mi panel de empresa" : "Crear cuenta empresa";
-  const secondaryCtaHref = hasCompanySession ? "/company/requests" : "/precios";
-  const secondaryCtaLabel = hasCompanySession ? "Ver solicitudes" : "Ver planes";
+  const secondaryCtaHref = "/como-funciona";
+  const secondaryCtaLabel = "Ver cómo funciona";
 
   let rows: any[] | null = null;
   let error: any = null;
@@ -185,13 +185,12 @@ export default async function VerifyExperiencePage({ params }: PageProps) {
             </div>
           </div>
 
-          <div className="mt-5 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
-            Tu respuesta se aplicará solo a esta experiencia. Verijob también registrará el dominio y la coherencia de la validación para calcular su nivel de confianza.
-          </div>
         </section>
 
         <ResolveExperienceForm
           token={normalizedToken}
+          experienceCompanyName={companyName}
+          roleTitle={roleTitle}
           primaryCtaHref={primaryCtaHref}
           primaryCtaLabel={primaryCtaLabel}
           secondaryCtaHref={secondaryCtaHref}

@@ -11,6 +11,11 @@ import {
 } from "@/lib/company/company-profile";
 
 type CompanyProfile = Record<string, any>;
+type FieldErrors = {
+  legal_name?: string;
+  contact_email?: string;
+  sector?: string;
+};
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -34,6 +39,7 @@ export default function CompanyOnboardingPage() {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [profile, setProfile] = useState<CompanyProfile>({
     legal_name: "",
     trade_name: "",
@@ -89,8 +95,20 @@ export default function CompanyOnboardingPage() {
     return "área privada";
   }, [source]);
   const subsectorOptions = useMemo(() => getCompanySubsectorOptions(profile.sector), [profile.sector]);
+  const emailValue = String(profile.contact_email || "").trim();
+  const isValid =
+    String(profile.legal_name || "").trim() !== "" &&
+    emailValue !== "" &&
+    emailValue.includes("@") &&
+    String(profile.sector || "").trim() !== "";
 
   function setField(key: string, value: string) {
+    setFieldErrors((prev) => {
+      if (!prev[key as keyof FieldErrors]) return prev;
+      const next = { ...prev };
+      delete next[key as keyof FieldErrors];
+      return next;
+    });
     setProfile((prev) => {
       if (key === "sector") {
         const nextSubsectors = getCompanySubsectorOptions(value);
@@ -105,7 +123,32 @@ export default function CompanyOnboardingPage() {
     });
   }
 
+  function validateProfile(): FieldErrors {
+    const nextErrors: FieldErrors = {};
+    if (String(profile.legal_name || "").trim() === "") {
+      nextErrors.legal_name = "Campo obligatorio";
+    }
+    const normalizedEmail = String(profile.contact_email || "").trim();
+    if (normalizedEmail === "") {
+      nextErrors.contact_email = "Campo obligatorio";
+    } else if (!normalizedEmail.includes("@")) {
+      nextErrors.contact_email = "Campo obligatorio";
+    }
+    if (String(profile.sector || "").trim() === "") {
+      nextErrors.sector = "Campo obligatorio";
+    }
+    return nextErrors;
+  }
+
   async function onSaveAndContinue() {
+    const nextErrors = validateProfile();
+    setFieldErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      setErr(null);
+      setOk(null);
+      return;
+    }
+
     setSaving(true);
     setErr(null);
     setOk(null);
@@ -183,7 +226,10 @@ export default function CompanyOnboardingPage() {
         <section className="rounded-3xl border bg-white p-8 shadow-sm">
           <div className="grid gap-4 md:grid-cols-2">
             <Field label="Razón social">
-              <input value={profile.legal_name || ""} onChange={(e) => setField("legal_name", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm" />
+              <div className="space-y-1">
+                <input value={profile.legal_name || ""} onChange={(e) => setField("legal_name", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm" />
+                {fieldErrors.legal_name ? <p className="text-xs text-rose-600">{fieldErrors.legal_name}</p> : null}
+              </div>
             </Field>
             <Field label="Nombre comercial">
               <input value={profile.trade_name || ""} onChange={(e) => setField("trade_name", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm" />
@@ -202,20 +248,26 @@ export default function CompanyOnboardingPage() {
               </select>
             </Field>
             <Field label="Email corporativo">
-              <input value={profile.contact_email || ""} onChange={(e) => setField("contact_email", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm" />
+              <div className="space-y-1">
+                <input value={profile.contact_email || ""} onChange={(e) => setField("contact_email", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm" />
+                {fieldErrors.contact_email ? <p className="text-xs text-rose-600">{fieldErrors.contact_email}</p> : null}
+              </div>
             </Field>
             <Field label="Teléfono">
               <input value={profile.contact_phone || ""} onChange={(e) => setField("contact_phone", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm" />
             </Field>
             <Field label="Sector">
-              <select value={profile.sector || ""} onChange={(e) => setField("sector", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm">
-                <option value="">Selecciona sector</option>
-                {COMPANY_SECTOR_OPTIONS.map((option) => (
-                  <option key={option} value={option}>
-                    {option}
-                  </option>
-                ))}
-              </select>
+              <div className="space-y-1">
+                <select value={profile.sector || ""} onChange={(e) => setField("sector", e.target.value)} className="w-full rounded-xl border px-3 py-2.5 text-sm">
+                  <option value="">Selecciona sector</option>
+                  {COMPANY_SECTOR_OPTIONS.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+                {fieldErrors.sector ? <p className="text-xs text-rose-600">{fieldErrors.sector}</p> : null}
+              </div>
             </Field>
             <Field label="Subsector">
               <select value={profile.subsector || ""} onChange={(e) => setField("subsector", e.target.value)} disabled={!profile.sector} className="w-full rounded-xl border px-3 py-2.5 text-sm disabled:bg-slate-50">
@@ -274,7 +326,7 @@ export default function CompanyOnboardingPage() {
             <button
               type="button"
               onClick={onSaveAndContinue}
-              disabled={saving}
+              disabled={saving || !isValid}
               className="inline-flex rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
             >
               {saving ? "Guardando…" : "Guardar y continuar"}

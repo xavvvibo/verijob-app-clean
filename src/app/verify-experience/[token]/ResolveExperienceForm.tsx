@@ -4,6 +4,8 @@ import { useState } from "react";
 
 type Props = {
   token: string;
+  experienceCompanyName: string;
+  roleTitle: string;
   primaryCtaHref: string;
   primaryCtaLabel: string;
   secondaryCtaHref: string;
@@ -25,15 +27,10 @@ type ResultState = {
   detail?: string;
 };
 
-function confidenceLabel(level?: string) {
-  if (level === "high") return "Alta";
-  if (level === "medium") return "Media";
-  if (level === "low") return "Baja";
-  return "Sin clasificar";
-}
-
 export default function ResolveExperienceForm({
   token,
+  experienceCompanyName,
+  roleTitle,
   primaryCtaHref,
   primaryCtaLabel,
   secondaryCtaHref,
@@ -202,50 +199,28 @@ export default function ResolveExperienceForm({
         <div className="space-y-5">
           <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5">
             <div className="text-base font-semibold text-emerald-900">
-              Respuesta registrada correctamente
+              Validación completada
             </div>
             <p className="mt-2 text-sm leading-6 text-emerald-800">
-              La validación ha quedado registrada en Verijob.
+              Has confirmado una experiencia laboral en Verijob. Gracias a acciones como esta, las empresas pueden tomar mejores decisiones de contratación.
             </p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Resultado</div>
-              <div className="mt-2 text-sm font-semibold text-slate-900">
-                {result?.status === "verified" ? "Experiencia confirmada" : "Experiencia rechazada"}
-              </div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">Empresa</div>
+              <div className="mt-2 text-sm font-semibold text-slate-900">{experienceCompanyName}</div>
             </div>
 
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Nivel de confianza</div>
-              <div className="mt-2 text-sm font-semibold text-slate-900">
-                {confidenceLabel(result?.confidence?.level)}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Dominio verificador</div>
-              <div className="mt-2 text-sm font-semibold text-slate-900">
-                {result?.confidence?.verifier_email_domain || "No disponible"}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-500">Impacto en Trust Score</div>
-              <div className="mt-2 text-sm font-semibold text-slate-900">
-                {Number(result?.confidence?.trust_score_awarded || 0) > 0
-                  ? `+${result?.confidence?.trust_score_awarded} puntos`
-                  : "No suma Trust Score"}
-              </div>
+              <div className="text-xs uppercase tracking-wide text-slate-500">Puesto</div>
+              <div className="mt-2 text-sm font-semibold text-slate-900">{roleTitle}</div>
             </div>
           </div>
 
-          {result?.confidence?.match_note ? (
-            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-              {result.confidence.match_note}
-            </div>
-          ) : null}
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm leading-6 text-slate-700">
+            Verijob permite a empresas como la tuya acceder a perfiles con experiencia verificada, reduciendo errores en contratación y ahorrando tiempo en comprobaciones manuales.
+          </div>
 
           <div className="flex flex-wrap gap-3">
             <a
@@ -261,6 +236,8 @@ export default function ResolveExperienceForm({
               {secondaryCtaLabel}
             </a>
           </div>
+
+          <p className="text-sm text-slate-500">Empieza gratis. Sin compromiso.</p>
         </div>
       )}
     </section>
